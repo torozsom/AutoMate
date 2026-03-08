@@ -1,6 +1,11 @@
+using Microsoft.EntityFrameworkCore;
+using Services.Data;
 using Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<AutoMateDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

@@ -34,5 +34,5 @@ public class Project
     public ProjectConfiguration? Configuration { get; set; }
 
     /// A collection of deployments associated with the project.
-    public ICollection<Deployment> Deployment { get; set; } = [];
+    public ICollection<Deployment> Deployments { get; set; } = [];
 }
