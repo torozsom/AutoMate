@@ -1,8 +1,7 @@
 ﻿namespace Core.Entities;
 
-
 /// <summary>
-/// Represents a user of the application, identified by their GitHub username and email.
+///     Represents a user of the application, identified by their GitHub username and email.
 /// </summary>
 public class User
 {

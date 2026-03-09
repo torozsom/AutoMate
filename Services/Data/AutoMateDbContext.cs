@@ -4,13 +4,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Services.Data;
 
 /// <summary>
-/// The AutoMateDbContext class is responsible for managing the
-/// database context for the AutoMate application. It defines the
-/// DbSet properties for the User, Project, ProjectConfiguration,
-/// and Deployment entities, and configures the relationships between
-/// these entities using the OnModelCreating method.
+///     The AutoMateDbContext class is responsible for managing the
+///     database context for the AutoMate application. It defines the
+///     DbSet properties for the User, Project, ProjectConfiguration,
+///     and Deployment entities, and configures the relationships between
+///     these entities using the OnModelCreating method.
 /// </summary>
-/// <param name="options">The </param>
+/// <param name="options">The options to pass to the base class.</param>
 public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : DbContext(options)
 {
     /// The Users DbSet represents the collection of User entities in the database.
@@ -27,7 +27,7 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
 
 
     /// <summary>
-    /// Configures the entity relationships and constraints for the AutoMateDbContext.
+    ///     Configures the entity relationships and constraints for the AutoMateDbContext.
     /// </summary>
     /// <param name="modelBuilder">The model builder that helps in the configuration.</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)

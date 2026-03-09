@@ -2,10 +2,9 @@
 
 namespace Core.Entities;
 
-
 /// <summary>
-/// Represents a project created by a user, containing information
-/// about the project's source code, type, and associated configuration and deployments.
+///     Represents a project created by a user, containing information
+///     about the project's source code, type, and associated configuration and deployments.
 /// </summary>
 public class Project
 {

@@ -1,9 +1,8 @@
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-
+using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Web.Components;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,11 +19,15 @@ builder.Services.AddAuthentication(options =>
     .AddCookie()
     .AddGitHub(options =>
     {
-        options.ClientId = builder.Configuration["GitHub:ClientId"] ?? throw new InvalidOperationException("GitHub:ClientId is required");
-        options.ClientSecret = builder.Configuration["GitHub:ClientSecret"] ?? throw new InvalidOperationException("GitHub:ClientSecret is required");
+        options.ClientId = builder.Configuration["GitHub:ClientId"] ??
+                           throw new InvalidOperationException("GitHub:ClientId is required");
+        options.ClientSecret = builder.Configuration["GitHub:ClientSecret"] ??
+                               throw new InvalidOperationException("GitHub:ClientSecret is required");
         options.CallbackPath = new PathString("/signin-github");
         options.Scope.Add("user:email");
     });
+
+builder.Services.AddCascadingAuthenticationState();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -35,7 +38,7 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    app.UseExceptionHandler("/Error", true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
@@ -51,5 +54,14 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Map a GET endpoint for "/login" that initiates the authentication challenge
+// using the GitHub authentication scheme, redirecting the user to the GitHub
+// login page and then back to the root URL ("/") upon successful authentication.
+app.MapGet("/login", () =>
+    Results.Challenge(
+        new AuthenticationProperties { RedirectUri = "/" },
+        ["GitHub"])
+);
 
 app.Run();

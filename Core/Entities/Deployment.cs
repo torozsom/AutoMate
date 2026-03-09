@@ -2,10 +2,9 @@
 
 namespace Core.Entities;
 
-
 /// <summary>
-/// Represents a deployment of a project, including the
-/// time it was deployed, its status, and any logs associated with the deployment.
+///     Represents a deployment of a project, including the
+///     time it was deployed, its status, and any logs associated with the deployment.
 /// </summary>
 public class Deployment
 {

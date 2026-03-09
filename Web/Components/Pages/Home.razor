@@ -1,7 +1,21 @@
 ﻿@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Landing Page - AutoMate</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Welcome to AutoMate!</h1>
 
-Welcome to your new app.
+<AuthorizeView>
+    <Authorized>
+        <div class="alert alert-success mt-4">
+            Successful login! Welcome, <strong>@context.User.Identity?.Name</strong>!
+        </div>
+    </Authorized>
+
+    <NotAuthorized>
+        <p class="mt-4">Please log in with your GitHub account.</p>
+        <a href="/login" class="btn btn-primary">
+            Login with GitHub
+        </a>
+    </NotAuthorized>
+</AuthorizeView>
