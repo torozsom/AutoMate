@@ -7,9 +7,11 @@ using Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Add the database context to the services container, using PostgreSQL as the database provider.
 builder.Services.AddDbContext<AutoMateDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Add authentication services to the container, configuring cookie authentication as the default scheme and GitHub as an external authentication provider.
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
