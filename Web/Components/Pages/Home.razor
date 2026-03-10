@@ -1,8 +1,6 @@
 ﻿@page "/"
 @using Microsoft.AspNetCore.Components.Authorization
 
-<PageTitle>Landing Page - AutoMate</PageTitle>
-
 <h1>Welcome to AutoMate!</h1>
 
 <AuthorizeView>
@@ -13,9 +11,17 @@
     </Authorized>
 
     <NotAuthorized>
-        <p class="mt-4">Please log in with your GitHub account.</p>
-        <a href="/login" class="btn btn-primary">
-            Login with GitHub
-        </a>
+        <h3 class="mt-4">Your favorite tool for deployment automation!</h3>
+        <h4>Write the code, we will take care of the rest.</h4>
+        <p class="mt-4">
+            AutoMate can manage the DevOps lifecycle of your applications, from build to deployment and monitoring.
+            With AutoMate, you can easily:
+        </p>
+        <ul>
+            <li>set up pipelines</li>
+            <li>automate tasks</li>
+            <li>manage builds</li>
+            <li>CI/CD</li>
+        </ul>
     </NotAuthorized>
 </AuthorizeView>
