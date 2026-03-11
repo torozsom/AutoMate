@@ -38,6 +38,10 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Add services for Swagger/OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 // Build the application.
 var app = builder.Build();
 
@@ -47,6 +51,11 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+}
+else
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
 // Use status code pages that re-execute the request pipeline for a specific path ("/not-found") when a 404 status code is encountered.

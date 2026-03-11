@@ -1,27 +1,85 @@
 ﻿@page "/"
 @using Microsoft.AspNetCore.Components.Authorization
 
-<h1>Welcome to AutoMate!</h1>
-
 <AuthorizeView>
     <Authorized>
-        <div class="alert alert-success mt-4">
-            Successful login! Welcome, <strong>@context.User.Identity?.Name</strong>!
+        <div class="container mt-4">
+            <div class="dashboard-welcome">
+                <h2>Welcome, <strong>@context.User.Identity?.Name</strong>!</h2>
+                <p class="mb-0 text-muted">Here's what's happening with your deployments today.</p>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="action-card">
+                        <div class="feature-icon">🚀</div>
+                        <h4>New Deployment</h4>
+                        <p class="text-muted">Launch a new project deployment pipeline.</p>
+                        <button class="btn btn-primary mt-2">Start</button>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="action-card">
+                        <div class="feature-icon">📊</div>
+                        <h4>View Projects</h4>
+                        <p class="text-muted">Manage your existing projects and configurations.</p>
+                        <button class="btn btn-outline-primary mt-2">View All</button>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="action-card">
+                        <div class="feature-icon">⚡</div>
+                        <h4>System Status</h4>
+                        <p class="text-muted">All systems operational. No active incidents.</p>
+                        <span class="badge bg-success mt-2">Healthy</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </Authorized>
 
     <NotAuthorized>
-        <h3 class="mt-4">Your favorite tool for deployment automation!</h3>
-        <h4>Write the code, we will take care of the rest.</h4>
-        <p class="mt-4">
-            AutoMate can manage the DevOps lifecycle of your applications, from build to deployment and monitoring.
-            With AutoMate, you can easily:
-        </p>
-        <ul>
-            <li>set up pipelines</li>
-            <li>automate tasks</li>
-            <li>manage builds</li>
-            <li>CI/CD</li>
-        </ul>
+        <div class="hero-section">
+            <div class="hero-content">
+                <h1 class="hero-title">Welcome to AutoMate</h1>
+                <p class="hero-subtitle">
+                    Your favorite tool for deployment automation. Write the code, we handle the rest.
+                </p>
+                <a href="/login"><button class="btn btn-light btn-lg px-4 fw-bold">Get Started</button></a>
+            </div>
+        </div>
+
+        <div class="container mb-5">
+            <div class="row g-4">
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon">⚙️</div>
+                        <h4 class="feature-title">Pipelines</h4>
+                        <p class="text-muted">Set up robust deployment pipelines with ease.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon">🤖</div>
+                        <h4 class="feature-title">Automation</h4>
+                        <p class="text-muted">Automate repetitive tasks and save valuable time.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon">📦</div>
+                        <h4 class="feature-title">Builds</h4>
+                        <p class="text-muted">Manage your builds efficiently from a central dashboard.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon">🔄</div>
+                        <h4 class="feature-title">CI/CD</h4>
+                        <p class="text-muted">Seamless Continuous Integration and Delivery.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </NotAuthorized>
 </AuthorizeView>
