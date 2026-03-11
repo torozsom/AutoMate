@@ -89,5 +89,13 @@ app.MapGet("/login", () =>
         ["GitHub"])
 );
 
+// Map a POST endpoint for "/logout" that signs the user out of the application
+// by clearing the authentication cookie and then redirects them back to the root.
+app.MapPost("/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect("/");
+});
 
+// Run the application, starting the web server and listening for incoming HTTP requests.
 app.Run();

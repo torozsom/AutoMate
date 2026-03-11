@@ -1,4 +1,6 @@
 ﻿@using Microsoft.AspNetCore.Components.Authorization
+@inject IJSRuntime JS
+
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">AutoMate</a>
@@ -9,20 +11,60 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
-        <AuthorizeView>
-            <NotAuthorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="/register" Match="NavLinkMatch.All">
-                        <span class="bi bi-person-fill-left-nav-menu" aria-hidden="true"></span> Login | Register
-                    </NavLink>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
-
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
             </NavLink>
         </div>
+
+        <AuthorizeView>
+            <NotAuthorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/register">
+                        <span class="bi bi-person-fill-left-nav-menu" aria-hidden="true"></span> Login | Register
+                    </NavLink>
+                </div>
+            </NotAuthorized>
+            <Authorized>
+                <div class="nav-item px-3">
+                    <form action="logout" method="post">
+                        <AntiforgeryToken/>
+                        <button type="submit" class="nav-link btn btn-link" style="width: 100%; text-align: left;">
+                            <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Logout
+                        </button>
+                    </form>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        <div class="nav-item px-3 mt-auto">
+            <button class="nav-link btn btn-link" @onclick="ToggleTheme">
+                <span class="bi @(_isDarkMode ? "bi-moon-fill-nav-menu" : "bi-sun-fill-nav-menu")"
+                      aria-hidden="true"></span>
+                @(_isDarkMode ? "Dark Mode" : "Light Mode")
+            </button>
+        </div>
     </nav>
 </div>
+
+@code {
+    private bool _isDarkMode;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var theme = await JS.InvokeAsync<string>("window.getTheme");
+            _isDarkMode = theme == "dark";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        _isDarkMode = !_isDarkMode;
+        var theme = _isDarkMode ? "dark" : "light";
+        await JS.InvokeVoidAsync("window.setTheme", theme);
+    }
+
+}
