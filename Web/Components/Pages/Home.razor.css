@@ -26,13 +26,13 @@
 }
 
 .feature-card {
-    background: white;
+    background: #ececec;
     border-radius: 10px;
     padding: 30px;
     text-align: center;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     height: 100%;
-    border: 1px solid #eef2f6;
+    border: 1px solid #505050;
 }
 
 .feature-card:hover {
@@ -61,12 +61,12 @@
 }
 
 .action-card {
-    background: white;
+    background: #ececec;
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
     text-align: center;
-    border: 1px solid #eee;
+    border: 1px solid #505050;
     height: 100%;
     transition: all 0.2s;
 }
