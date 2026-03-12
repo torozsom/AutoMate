@@ -4,18 +4,19 @@ using Web.Components;
 
 namespace Web;
 
+
 /// <summary>
-/// Provides a centralized location for configuring application routes and endpoints.
-/// This class handles the registration of static assets, Razor components, and authentication endpoints.
+///     Provides a centralized location for configuring application routes and endpoints.
+///     This class handles the registration of static assets, Razor components, and authentication endpoints.
 /// </summary>
 public static class Routes
 {
     /// <summary>
-    /// Configures the HTTP request pipeline by mapping the application's routes.
-    /// This includes setting up static file serving, interactive server-side rendering for Blazor components,
-    /// and defining authentication endpoints for login and logout operations.
+    ///     Configures the HTTP request pipeline by mapping the application's routes.
+    ///     This includes setting up static file serving, interactive server-side rendering for Blazor components,
+    ///     and defining authentication endpoints for login and logout operations.
     /// </summary>
-    /// <param name="app">The <see cref="WebApplication"/> instance representing the running application.</param>
+    /// <param name="app">The <see cref="WebApplication" /> instance representing the running application.</param>
     public static void Configure(WebApplication app)
     {
         // Map static assets (like CSS, JavaScript, and images) to be served directly from the wwwroot folder.
