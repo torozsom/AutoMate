@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
+using Web.Extensions;
+using Web.Routes;
+using Web.Routes.Endpoints;
 
-namespace Web;
+namespace Web.Configs;
 
 
 /// <summary>
@@ -54,5 +57,11 @@ public static class ServiceConfiguration
         // Add services for Swagger/OpenAPI
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
+
+        // Register endpoints
+        builder.Services.AddEndpoint<StaticAssetsEndpoint>()
+            .AddEndpoint<RazorComponentsEndpoint>()
+            .AddEndpoint<LoginEndpoint>()
+            .AddEndpoint<LogoutEndpoint>();
     }
 }

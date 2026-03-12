@@ -1,6 +1,7 @@
 using Services.Data;
+using Web.Routes;
 
-namespace Web;
+namespace Web.Configs;
 
 
 /// <summary>
@@ -47,7 +48,10 @@ public static class AppConfiguration
         app.UseAntiforgery();
 
         // Configure endpoints
-        Routes.Configure(app);
+        var endpoints = app.Services.GetServices<IEndpoint>();
+        foreach(var endpoint in endpoints)
+            endpoint.Map(app);
+
     }
 
 

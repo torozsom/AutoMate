@@ -1,4 +1,4 @@
-using Web;
+using Web.Configs;
 
 
 // This is the main entry point for the ASP.NET Core web application.
