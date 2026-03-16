@@ -1,9 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Web.Routes;
 
 namespace Web.Routes.Endpoints;
-
 
 /// <summary>
 ///     Endpoint for logging out the user. It signs out the user from
@@ -20,4 +18,3 @@ public class LogoutEndpoint : IEndpoint
         });
     }
 }
-

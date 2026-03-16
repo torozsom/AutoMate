@@ -1,8 +1,6 @@
 using Web.Components;
-using Web.Routes;
 
 namespace Web.Routes.Endpoints;
-
 
 /// <summary>
 ///     Endpoint for Razor Components. This will map the root path to
@@ -15,4 +13,3 @@ public class RazorComponentsEndpoint : IEndpoint
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
     }
 }
-

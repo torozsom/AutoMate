@@ -1,7 +1,4 @@
-using Web.Routes;
-
 namespace Web.Routes.Endpoints;
-
 
 /// <summary>
 ///     Endpoint for serving static assets. This should be registered before
@@ -14,4 +11,3 @@ public class StaticAssetsEndpoint : IEndpoint
         app.MapStaticAssets();
     }
 }
-

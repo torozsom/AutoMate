@@ -2,11 +2,9 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Web.Extensions;
-using Web.Routes;
 using Web.Routes.Endpoints;
 
 namespace Web.Configs;
-
 
 /// <summary>
 ///     Provides a centralized location for configuring the services of the ASP.NET Core web application.

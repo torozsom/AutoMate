@@ -2,7 +2,6 @@ using Web.Routes;
 
 namespace Web.Extensions;
 
-
 /// <summary>
 ///     Extension methods for registering endpoints in the dependency injection container.
 ///     Endpoints are classes that implement the IEndpoint interface and define how to map routes to handlers.
@@ -16,11 +15,10 @@ public static class EndpointExtensions
     /// <param name="services"></param>
     /// <typeparam name="T"></typeparam>
     /// <returns></returns>
-    public static IServiceCollection AddEndpoint<T>(this IServiceCollection services) 
+    public static IServiceCollection AddEndpoint<T>(this IServiceCollection services)
         where T : class, IEndpoint
     {
         services.AddTransient<IEndpoint, T>();
         return services;
     }
 }
-

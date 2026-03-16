@@ -3,7 +3,6 @@ using Web.Routes;
 
 namespace Web.Configs;
 
-
 /// <summary>
 ///     Provides a centralized location for configuring the HTTP request pipeline of the ASP.NET Core web application.
 /// </summary>
@@ -49,9 +48,8 @@ public static class AppConfiguration
 
         // Configure endpoints
         var endpoints = app.Services.GetServices<IEndpoint>();
-        foreach(var endpoint in endpoints)
+        foreach (var endpoint in endpoints)
             endpoint.Map(app);
-
     }
 
 

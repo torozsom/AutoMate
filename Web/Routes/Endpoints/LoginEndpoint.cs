@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
-using Web.Routes;
 
 namespace Web.Routes.Endpoints;
-
 
 /// <summary>
 ///     Endpoint for handling user login. When accessed, it initiates
@@ -19,4 +17,3 @@ public class LoginEndpoint : IEndpoint
         );
     }
 }
-
