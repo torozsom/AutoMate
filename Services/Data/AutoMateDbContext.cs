@@ -35,6 +35,15 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.Entity<User>()
+            .HasDiscriminator<string>("UserType")
+            .HasValue<GitHubUser>("GitHub")
+            .HasValue<LocalUser>("Local");
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
+
+        modelBuilder.Entity<User>()
             .HasMany(u => u.Projects)
             .WithOne(p => p.User)
             .HasForeignKey(p => p.UserId);

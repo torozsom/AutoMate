@@ -113,20 +113,68 @@ namespace Services.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("GitHubAccessToken")
-                        .HasColumnType("text");
+                    b.Property<string>("UserType")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
-                    b.Property<string>("GitHubUsername")
+                    b.Property<string>("Username")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Email")
+                        .IsUnique();
+
                     b.ToTable("Users");
+
+                    b.HasDiscriminator<string>("UserType").HasValue("User");
+
+                    b.UseTphMappingStrategy();
+                });
+
+            modelBuilder.Entity("Core.Entities.GitHubUser", b =>
+                {
+                    b.HasBaseType("Core.Entities.User");
+
+                    b.Property<string>("AccessToken")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("text");
+
+                    b.HasDiscriminator().HasValue("GitHub");
+                });
+
+            modelBuilder.Entity("Core.Entities.LocalUser", b =>
+                {
+                    b.HasBaseType("Core.Entities.User");
+
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsEmailVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PasswordHash")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("VerificationTokenExpiry")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasDiscriminator().HasValue("Local");
                 });
 
             modelBuilder.Entity("Core.Entities.Deployment", b =>
