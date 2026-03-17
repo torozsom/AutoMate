@@ -1,19 +1,14 @@
-@page "/register"
+@page "/login"
 
-<PageTitle>Register</PageTitle>
+<PageTitle>Login</PageTitle>
 
 <div class="login-container">
     <div class="login-card">
         <div class="login-header">
-            <h2 class="login-title">Create an account!</h2>
+            <h2 class="login-title">Welcome back!</h2>
         </div>
 
-        <form>
-            <div class="mb-3">
-                <label for="username" class="form-label">Username</label>
-                <input type="text" class="form-control" id="username" placeholder="Enter your username">
-            </div>
-
+        <form action="login">
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
                 <input type="email" class="form-control" id="email" placeholder="Enter your email">
@@ -21,18 +16,13 @@
 
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
-                <input type="password" class="form-control" id="password" placeholder="Create a password">
-            </div>
-
-            <div class="mb-4">
-                <label for="confirmPassword" class="form-label">Confirm Password</label>
-                <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm your password">
+                <input type="password" class="form-control" id="password" placeholder="Enter your password">
             </div>
 
             <div class="row g-3">
                 <div class="col-md-6">
                     <button type="submit" class="btn btn-primary-custom text-white h-100">
-                        Create account for local projects only
+                        Login to your account
                     </button>
                 </div>
                 <div class="col-md-6">
@@ -41,6 +31,9 @@
                         Login with your Github account
                     </a>
                 </div>
+            </div>
+            <div class="mt-3">
+                <p style="text-align: center;">Don't have an account yet? <a href="/register">Register here</a></p>
             </div>
         </form>
     </div>
