@@ -1,3 +1,4 @@
+using Core.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
@@ -42,6 +43,42 @@ public static class ServiceConfiguration
 
                 options.CallbackPath = new PathString("/signin-github");
                 options.Scope.Add("user:email");
+
+                options.Events.OnCreatingTicket = async context =>
+                {
+                    string githubId = context.User.GetProperty("id").GetInt32().ToString();
+                    string username = context.User.GetProperty("login").GetString() ?? "Unknown";
+                    string email = context.User.GetProperty("email").GetString() ?? "no-email@github.com";
+
+                    string? avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem) ? avatarElem.GetString() : null;
+                    string? accessToken = context.AccessToken;
+
+                    var dbContext = context.HttpContext.RequestServices.GetRequiredService<AutoMateDbContext>();
+
+                    var existingUser = await dbContext.Users
+                        .OfType<GitHubUser>()
+                        .FirstOrDefaultAsync(u => u.AccountId == githubId);
+
+                    if (existingUser == null)
+                    {
+                        var newUser = new GitHubUser
+                        {
+                            AccountId = githubId,
+                            Username = username,
+                            Email = email,
+                            AvatarUrl = avatarUrl,
+                            AccessToken = accessToken
+                        };
+
+                        await dbContext.Users.AddAsync(newUser);
+                    }
+                    else
+                    {
+                        existingUser.AvatarUrl = avatarUrl;
+                        existingUser.AccessToken = accessToken;
+                    }
+                    await dbContext.SaveChangesAsync();
+                };
             });
 
         // Add a cascading authentication state provider to the services container, which allows
