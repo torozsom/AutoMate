@@ -6,11 +6,11 @@ namespace Web.Routes.Endpoints;
 ///     Endpoint for handling user login. When accessed, it initiates
 ///     the authentication process using GitHub as the provider.
 /// </summary>
-public class LoginEndpoint : IEndpoint
+public class GitHubLoginEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/login", () =>
+        app.MapGet("/gh-login", () =>
             Results.Challenge(
                 new AuthenticationProperties { RedirectUri = "/" },
                 ["GitHub"])

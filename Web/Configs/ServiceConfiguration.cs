@@ -59,7 +59,7 @@ public static class ServiceConfiguration
         // Register endpoints
         builder.Services.AddEndpoint<StaticAssetsEndpoint>()
             .AddEndpoint<RazorComponentsEndpoint>()
-            .AddEndpoint<LoginEndpoint>()
+            .AddEndpoint<GitHubLoginEndpoint>()
             .AddEndpoint<LogoutEndpoint>();
     }
 }
