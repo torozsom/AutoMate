@@ -1,0 +1,17 @@
+services:
+  automate_database:
+    image: postgres:latest
+    container_name: automate-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER={DB_USER}
+      - POSTGRES_PASSWORD={DB_PASSWORD}
+      - POSTGRES_DB=automate_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:
+    name: automate_pgdata
