@@ -1,4 +1,10 @@
 @page "/register"
+@using Core.Entities
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using Services.Data
+@inject AutoMateDbContext DbContext
+@inject NavigationManager NavigationManager
 
 <PageTitle>Register</PageTitle>
 
@@ -8,25 +14,34 @@
             <h2 class="login-title">Create an account!</h2>
         </div>
 
-        <form>
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                @ErrorMessage
+            </div>
+        }
+
+        <EditForm Model="Model" OnValidSubmit="HandleRegistration" FormName="LocalRegister">
+            <DataAnnotationsValidator />
+
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
-                <input type="text" class="form-control" id="username" placeholder="Enter your username">
+                <InputText @bind-Value="Model.Username" type="text" class="form-control" id="username" placeholder="Enter your username" />
             </div>
 
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
-                <input type="email" class="form-control" id="email" placeholder="Enter your email">
+                <InputText @bind-Value="Model.Email" type="email" class="form-control" id="email" placeholder="Enter your email" />
             </div>
 
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
-                <input type="password" class="form-control" id="password" placeholder="Create a password">
+                <InputText @bind-Value="Model.Password" type="password" class="form-control" id="password" placeholder="Create a password" />
             </div>
 
             <div class="mb-4">
                 <label for="confirmPassword" class="form-label">Confirm Password</label>
-                <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm your password">
+                <InputText @bind-Value="Model.ConfirmPassword" type="password" class="form-control" id="confirmPassword" placeholder="Confirm your password" />
             </div>
 
             <div class="row g-3">
@@ -42,6 +57,69 @@
                     </a>
                 </div>
             </div>
-        </form>
+        </EditForm>
     </div>
 </div>
+
+
+@using System.ComponentModel.DataAnnotations;
+
+@code {
+
+    /// <summary>
+    /// Model for user registration, containing validation attributes to ensure proper input.
+    /// </summary>
+    public class RegisterModel
+    {
+        [Required(ErrorMessage = "Email address required.")]
+        [EmailAddress(ErrorMessage = "Invalid email format.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Username required.")]
+        [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3-50 characters.")]
+        public string Username { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password required.")]
+        [MinLength(6, ErrorMessage = "Password must be at least 6 characters.")]
+        public string Password { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Password confirmation required.")]
+        [Compare(nameof(Password), ErrorMessage = "Passwords do not match.")]
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+
+
+    [SupplyParameterFromForm]
+    public RegisterModel Model { get; set; } = new();
+
+    public string? ErrorMessage { get; set; }
+
+    private async Task HandleRegistration()
+    {
+        ErrorMessage = null;
+
+        var emailExists = await DbContext.Users.AnyAsync(u => u.Email == Model.Email);
+        if (emailExists)
+        {
+            ErrorMessage = "This email address is already in use.";
+            return;
+        }
+
+        var newUser = new LocalUser
+        {
+            Email = Model.Email,
+            Username = Model.Username,
+            IsEmailVerified = false,
+            EmailVerificationToken = Guid.NewGuid().ToString(),
+            VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(24)
+        };
+
+        var hasher = new PasswordHasher<LocalUser>();
+        newUser.PasswordHash = hasher.HashPassword(newUser, Model.Password);
+
+        DbContext.Users.Add(newUser);
+        await DbContext.SaveChangesAsync();
+        NavigationManager.NavigateTo("/login?registered=true");
+    }
+
+}
