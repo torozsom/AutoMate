@@ -11,21 +11,32 @@
 <PageTitle>Email confirmation</PageTitle>
 
 <div class="container mt-5 text-center">
-    <h2>Email confirmation in progress...</h2>
-
-    @if (!string.IsNullOrEmpty(ErrorMessage))
+    @if (CheckEmail)
     {
-        <div class="alert alert-danger mt-4">
-            @ErrorMessage
-            <br />
-            <a href="/login" class="btn btn-outline-dark mt-3">Back to login page</a>
+        <h2>Check your email!</h2>
+        <div class="alert alert-info mt-4">
+            We have sent a confirmation link to your email address.
+            Please check your inbox and click the link to activate your account.
         </div>
     }
     else
     {
-        <div class="spinner-border text-primary mt-4" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
+        <h2>Email confirmation in progress...</h2>
+
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger mt-4">
+                @ErrorMessage
+                <br />
+                <a href="/login" class="btn btn-outline-dark mt-3">Back to login page</a>
+            </div>
+        }
+        else
+        {
+            <div class="spinner-border text-primary mt-4" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        }
     }
 </div>
 
@@ -34,10 +45,16 @@
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
+    [SupplyParameterFromQuery(Name = "checkemail")]
+    public bool CheckEmail { get; set; }
+
     private string? ErrorMessage { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
+        if (CheckEmail)
+            return;
+
         if (string.IsNullOrEmpty(Token))
         {
             ErrorMessage = "Invalid or missing token. Please check the link and try again.";
@@ -64,6 +81,6 @@
 
         await DbContext.SaveChangesAsync();
 
-        NavigationManager.NavigateTo("/login?registered=EmailConfirmed");
+        NavigationManager.NavigateTo("/login?verified=true");
     }
 }

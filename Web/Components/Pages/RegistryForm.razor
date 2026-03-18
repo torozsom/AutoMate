@@ -53,7 +53,7 @@
             <div class="row g-3">
                 <div class="col-md-6">
                     <button type="submit" class="btn btn-primary-custom text-white h-100">
-                        Create account for local projects only
+                        Create account
                     </button>
                 </div>
                 <div class="col-md-6">
@@ -135,9 +135,9 @@
         await EmailSender.SendEmailAsync(
             newUser.Email,
             "Confirm your registration to AutoMate!",
-            $"Welcome to AutoMate!\n\nPlease follow the link below for confirmation:\n{verificationLink}");
+            $"Welcome to AutoMate!\n\nPlease follow the link below for confirmation:\n\n{verificationLink}");
 
-        NavigationManager.NavigateTo("/login?registered=true");
+        NavigationManager.NavigateTo("/verify-email?checkemail=true");
     }
 
 }
