@@ -10,7 +10,7 @@ public class GitHubLoginEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/gh-login", () =>
+        app.MapGet("/api/auth/gh-login", () =>
             Results.Challenge(
                 new AuthenticationProperties { RedirectUri = "/" },
                 ["GitHub"])
