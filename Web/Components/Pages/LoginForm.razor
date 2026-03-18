@@ -8,7 +8,21 @@
             <h2 class="login-title">Welcome back!</h2>
         </div>
 
-        <form action="login">
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                @ErrorMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(RegisteredMessage))
+        {
+            <div class="alert alert-success" role="alert">
+                @RegisteredMessage
+            </div>
+        }
+
+        <form action="/api/auth/login" method="post">
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
                 <input type="email" class="form-control" id="email" placeholder="Enter your email">
@@ -38,3 +52,24 @@
         </form>
     </div>
 </div>
+
+
+@code {
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? ErrorMessage { get; set; }
+
+    [SupplyParameterFromQuery(Name = "registered")]
+    public string? RegisteredMessage { get; set; }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        if (RegisteredMessage == "true")
+        {
+            RegisteredMessage = "Registration successful! Please log in with your new account.";
+        }
+    }
+
+}
