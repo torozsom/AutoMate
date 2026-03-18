@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Services.Email;
+using Services.GitHub;
 using Web.Extensions;
 using Web.Routes.Endpoints;
 using Web.Routes.Endpoints.Auth;
@@ -98,7 +99,11 @@ public static class ServiceConfiguration
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
+        // Add services for sending emails
         builder.Services.AddScoped<IEmailSender, GmailEmailSender>();
+
+        // Add services for GitHub API interactions
+        builder.Services.AddHttpClient<IGitHubService, GitHubService>();
 
         // Register endpoints
         builder.Services.AddEndpoint<StaticAssetsEndpoint>()
