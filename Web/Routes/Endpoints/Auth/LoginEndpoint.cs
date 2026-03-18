@@ -9,6 +9,13 @@ using Services.Data;
 
 namespace Web.Routes.Endpoints.Auth;
 
+
+/// <summary>
+///    Endpoint for handling user login. It accepts email and password
+///     as form data, verifies the credentials against the database, and if valid,
+///     signs the user in using cookie authentication. If the credentials are invalid
+///     or the email is not verified, it redirects back to the login page with an error message.
+/// </summary>
 public class LoginEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app)

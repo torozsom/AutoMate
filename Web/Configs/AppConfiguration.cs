@@ -27,6 +27,7 @@ public static class AppConfiguration
         }
         else
         {
+            // Use Swagger/OpenAPI middleware for development environment to provide API documentation and testing capabilities.
             app.UseSwagger();
             app.UseSwaggerUI();
         }

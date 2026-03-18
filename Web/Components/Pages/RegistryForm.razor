@@ -74,7 +74,6 @@
 
 @code {
 
-
     /// <summary>
     ///     Model for user registration, containing validation attributes to ensure proper input.
     /// </summary>
@@ -98,12 +97,32 @@
     }
 
 
-    [SupplyParameterFromForm] public RegisterModel Model { get; set; } = new();
+    [SupplyParameterFromForm]
+    public RegisterModel? Model { get; set; }
 
     public string? ErrorMessage { get; set; }
 
+
+    /// Initializes the component and ensures that the Model is instantiated
+    /// to avoid null reference issues during form binding.
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Model ??= new RegisterModel();
+    }
+
+
+    /// <summary>
+    ///     Handles the registration process when the form is submitted.
+    ///     It checks for existing email, creates a new user, hashes the password,
+    ///     saves the user to the database, and sends a verification email with a unique token.
+    ///     Finally, it redirects the user to a page prompting them to check their email for verification.
+    ///
+    /// </summary>
     private async Task HandleRegistration()
     {
+        if (Model is null) return;
+
         ErrorMessage = null;
 
         var emailExists = await DbContext.Users.AnyAsync(u => u.Email == Model.Email);

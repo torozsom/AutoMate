@@ -51,6 +51,13 @@
 
     private string? ErrorMessage { get; set; }
 
+
+    /// <summary>
+    ///     Handles the email verification process when the component is initialized.
+    ///     It checks for the presence of a token, validates it against the database,
+    ///     and updates the user's email verification status accordingly. If the token is
+    ///     invalid or expired, it sets an appropriate error message to inform the user.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         if (CheckEmail)
@@ -62,7 +69,8 @@
             return;
         }
 
-        var user = await DbContext.Users.OfType<LocalUser>().FirstOrDefaultAsync(u => u.EmailVerificationToken == Token);
+        var user = await DbContext.Users.OfType<LocalUser>()
+            .FirstOrDefaultAsync(u => u.EmailVerificationToken == Token);
 
         if (user == null)
         {

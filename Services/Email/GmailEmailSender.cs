@@ -4,8 +4,23 @@ using Microsoft.Extensions.Configuration;
 
 namespace Services.Email;
 
+
+/// <summary>
+///     An implementation of the IEmailSender interface that uses Gmail's SMTP server to send emails.
+///     The sender's email, app password, and sender name are retrieved from the configuration settings.
+/// </summary>
+/// <param name="configuration"></param>
 public class GmailEmailSender(IConfiguration configuration) : IEmailSender
 {
+
+    /// <summary>
+    ///     Sends an email using Gmail's SMTP server. The sender's email,
+    ///     app password, and sender name are retrieved from the configuration.
+    /// </summary>
+    /// <param name="toEmail">The recipient's email address.</param>
+    /// <param name="subject">The subject of the email to be sent.</param>
+    /// <param name="message">The message of the email to be sent.</param>
+    /// <exception cref="InvalidOperationException"></exception>
     public async Task SendEmailAsync(string toEmail, string subject, string message)
     {
         var senderEmail = configuration["Email:SenderEmail"];

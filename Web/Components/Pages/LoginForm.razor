@@ -66,6 +66,11 @@
     [SupplyParameterFromQuery(Name = "verified")]
     public string? VerifiedMessage { get; set; }
 
+
+    /// <summary>
+    ///     Checks the query parameters for registration and verification messages
+    ///     and sets the appropriate success messages to be displayed on the login page.
+    /// </summary>
     protected override void OnInitialized()
     {
         base.OnInitialized();
