@@ -1,8 +1,8 @@
 @page "/verify-email"
 
 @using Core.Entities
-@using Services.Data
 @using Microsoft.EntityFrameworkCore
+@using Services.Data
 
 @inject AutoMateDbContext DbContext
 @inject NavigationManager NavigationManager
@@ -27,7 +27,7 @@
         {
             <div class="alert alert-danger mt-4">
                 @ErrorMessage
-                <br />
+                <br/>
                 <a href="/login" class="btn btn-outline-dark mt-3">Back to login page</a>
             </div>
         }
@@ -42,6 +42,7 @@
 
 
 @code {
+
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
@@ -83,4 +84,5 @@
 
         NavigationManager.NavigateTo("/login?verified=true");
     }
+
 }

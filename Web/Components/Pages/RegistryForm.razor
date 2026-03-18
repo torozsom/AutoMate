@@ -1,11 +1,11 @@
 @page "/register"
 
+@using System.ComponentModel.DataAnnotations
 @using Core.Entities
-@using Services.Email
-
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using Services.Data
+@using Services.Email
 
 @inject AutoMateDbContext DbContext
 @inject NavigationManager NavigationManager
@@ -28,26 +28,30 @@
         }
 
         <EditForm Model="Model" OnValidSubmit="HandleRegistration" FormName="LocalRegister">
-            <DataAnnotationsValidator />
+            <DataAnnotationsValidator/>
 
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
-                <InputText @bind-Value="Model.Username" type="text" class="form-control" id="username" placeholder="Enter your username" />
+                <InputText @bind-Value="Model.Username" type="text" class="form-control" id="username"
+                           placeholder="Enter your username"/>
             </div>
 
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
-                <InputText @bind-Value="Model.Email" type="email" class="form-control" id="email" placeholder="Enter your email" />
+                <InputText @bind-Value="Model.Email" type="email" class="form-control" id="email"
+                           placeholder="Enter your email"/>
             </div>
 
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
-                <InputText @bind-Value="Model.Password" type="password" class="form-control" id="password" placeholder="Create a password" />
+                <InputText @bind-Value="Model.Password" type="password" class="form-control" id="password"
+                           placeholder="Create a password"/>
             </div>
 
             <div class="mb-4">
                 <label for="confirmPassword" class="form-label">Confirm Password</label>
-                <InputText @bind-Value="Model.ConfirmPassword" type="password" class="form-control" id="confirmPassword" placeholder="Confirm your password" />
+                <InputText @bind-Value="Model.ConfirmPassword" type="password" class="form-control" id="confirmPassword"
+                           placeholder="Confirm your password"/>
             </div>
 
             <div class="row g-3">
@@ -68,13 +72,11 @@
 </div>
 
 
-@using System.ComponentModel.DataAnnotations;
-
 @code {
 
 
     /// <summary>
-    /// Model for user registration, containing validation attributes to ensure proper input.
+    ///     Model for user registration, containing validation attributes to ensure proper input.
     /// </summary>
     public class RegisterModel
     {
@@ -96,8 +98,7 @@
     }
 
 
-    [SupplyParameterFromForm]
-    public RegisterModel Model { get; set; } = new();
+    [SupplyParameterFromForm] public RegisterModel Model { get; set; } = new();
 
     public string? ErrorMessage { get; set; }
 
@@ -135,7 +136,7 @@
         await EmailSender.SendEmailAsync(
             newUser.Email,
             "Confirm your registration to AutoMate!",
-            $"Welcome to AutoMate!\n\nPlease follow the link below for confirmation:\n\n{verificationLink}");
+            "Welcome to AutoMate!\n\nPlease follow this link for verification:\n" + verificationLink);
 
         NavigationManager.NavigateTo("/verify-email?checkemail=true");
     }

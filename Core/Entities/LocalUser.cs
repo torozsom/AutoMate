@@ -5,7 +5,6 @@ namespace Core.Entities;
 /// </summary>
 public class LocalUser : User
 {
-
     /// The hashed password for the user.
     public string? PasswordHash { get; set; }
 
