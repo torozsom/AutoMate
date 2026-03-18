@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace Web.Routes.Endpoints.Auth;
 
+
+/// <summary>
+///     Endpoint for logging out the user. It clears the authentication cookie and redirects to the home page.
+/// </summary>
 public class LogoutEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app)
