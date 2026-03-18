@@ -4,6 +4,7 @@
 @using Core.DTO
 @using Core.Entities
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
 @using Services.Data
 @using Services.GitHub
 
@@ -71,9 +72,10 @@
     private bool _isGitHubUser = false;
 
     /// <summary>
-    ///     On component initialization, we check if the user is authenticated and
-    ///     if they have a GitHub access token. If they do, we fetch their repositories
-    ///     from GitHub. We also handle loading state and whether the user is recognized as a GitHub user.
+    ///     On component initialization, we check the user's authentication state.
+    ///     If authenticated, we attempt to find the user in our database. If the user
+    ///     is a GitHub user with a valid access token, we fetch their repositories from GitHub.
+    ///     We also handle loading states and potential issues with fetching repositories.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
@@ -82,16 +84,20 @@
 
         if (user.Identity is { IsAuthenticated: true })
         {
-            var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var nameIdentifier = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            User? dbUser = null;
 
-            if (Guid.TryParse(userIdString, out var userId))
+            if (Guid.TryParse(nameIdentifier, out var localUserId))
+                dbUser = await DbContext.Users.FindAsync(localUserId);
+
+            else if (!string.IsNullOrEmpty(nameIdentifier))
+                dbUser = await DbContext.Users.OfType<GitHubUser>()
+                    .FirstOrDefaultAsync(u => u.AccountId == nameIdentifier);
+
+            if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
             {
-                var dbUser = await DbContext.Users.FindAsync(userId);
-                if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
-                {
-                    _isGitHubUser = true;
-                    _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken);
-                }
+                _isGitHubUser = true;
+                _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken);
             }
         }
 
