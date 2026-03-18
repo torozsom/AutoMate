@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 
-namespace Web.Routes.Endpoints;
+namespace Web.Routes.Endpoints.Auth;
 
 /// <summary>
 ///     Endpoint for handling GitHub user login. When accessed, it initiates

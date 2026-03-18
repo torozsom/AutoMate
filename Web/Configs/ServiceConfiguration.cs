@@ -5,6 +5,7 @@ using Services.Data;
 using Services.Email;
 using Web.Extensions;
 using Web.Routes.Endpoints;
+using Web.Routes.Endpoints.Auth;
 
 namespace Web.Configs;
 
@@ -47,12 +48,14 @@ public static class ServiceConfiguration
 
                 options.Events.OnCreatingTicket = async context =>
                 {
-                    string githubId = context.User.GetProperty("id").GetInt32().ToString();
-                    string username = context.User.GetProperty("login").GetString() ?? "Unknown";
-                    string email = context.User.GetProperty("email").GetString() ?? "no-email@github.com";
+                    var githubId = context.User.GetProperty("id").GetInt32().ToString();
+                    var username = context.User.GetProperty("login").GetString() ?? "Unknown";
+                    var email = context.User.GetProperty("email").GetString() ?? "no-email@github.com";
 
-                    string? avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem) ? avatarElem.GetString() : null;
-                    string? accessToken = context.AccessToken;
+                    var avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem)
+                        ? avatarElem.GetString()
+                        : null;
+                    var accessToken = context.AccessToken;
 
                     var dbContext = context.HttpContext.RequestServices.GetRequiredService<AutoMateDbContext>();
 
@@ -78,6 +81,7 @@ public static class ServiceConfiguration
                         existingUser.AvatarUrl = avatarUrl;
                         existingUser.AccessToken = accessToken;
                     }
+
                     await dbContext.SaveChangesAsync();
                 };
             });

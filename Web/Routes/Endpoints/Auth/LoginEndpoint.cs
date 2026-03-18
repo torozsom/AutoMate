@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
 
-namespace Web.Routes.Endpoints;
+namespace Web.Routes.Endpoints.Auth;
 
 public class LoginEndpoint : IEndpoint
 {
@@ -44,9 +44,9 @@ public class LoginEndpoint : IEndpoint
 
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Email, user.Email)
+                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new(ClaimTypes.Name, user.Username),
+                new(ClaimTypes.Email, user.Email)
             };
 
             var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -54,7 +54,6 @@ public class LoginEndpoint : IEndpoint
 
             await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
             context.Response.Redirect("/");
-
         }).DisableAntiforgery();
     }
 }
