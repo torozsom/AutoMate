@@ -1,0 +1,100 @@
+@page "/github-repos"
+
+@using System.Security.Claims
+@using Core.DTO
+@using Core.Entities
+@using Microsoft.AspNetCore.Components.Authorization
+@using Services.Data
+@using Services.GitHub
+
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AutoMateDbContext DbContext
+@inject IGitHubService GitHubService
+
+
+<PageTitle>GitHub Repositories</PageTitle>
+
+<div class="container mt-4">
+    <h1>GitHub Repositories</h1>
+
+    <AuthorizeView>
+        <Authorized>
+            <p>Welcome, @context.User.Identity?.Name!</p>
+
+            @if (_isLoading)
+            {
+                <div class="spinner-border text-primary" role="status"></div>
+            }
+            else if (_githubRepos != null && _githubRepos.Any())
+            {
+                <h3 class="mt-4">Here are your GitHub repositories:</h3>
+                <div class="row mt-3">
+                    @foreach (var repo in _githubRepos)
+                    {
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        <i class="bi @(repo.IsPrivate ? "bi-lock-fill text-danger" : "bi-globe text-success")"></i>
+                                        @repo.Name
+                                    </h5>
+                                    <h6 class="card-subtitle mb-2 text-muted">@repo.Language</h6>
+                                    <p class="card-text small text-muted">Updated at: @repo.UpdatedAt.ToString("yyyy. MM. dd.")</p>
+                                    <a href="@repo.HtmlUrl" target="_blank" class="btn btn-sm btn-outline-dark">Show in GitHub</a>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else if (_isGitHubUser)
+            {
+                <div class="alert alert-warning">Could not find repositories or access expired.</div>
+            }
+            else
+            {
+                <div class="alert alert-info">You need to login with GitHub to access remote repositories.</div>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <p>Please log in to access remote repositories!</p>
+            <a href="/login" class="btn btn-primary">Login</a>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+
+@code {
+
+    private List<GitHubRepositoryDto>? _githubRepos;
+    private bool _isLoading = true;
+    private bool _isGitHubUser = false;
+
+    /// <summary>
+    ///     On component initialization, we check if the user is authenticated and
+    ///     if they have a GitHub access token. If they do, we fetch their repositories
+    ///     from GitHub. We also handle loading state and whether the user is recognized as a GitHub user.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity is { IsAuthenticated: true })
+        {
+            var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (Guid.TryParse(userIdString, out var userId))
+            {
+                var dbUser = await DbContext.Users.FindAsync(userId);
+                if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
+                {
+                    _isGitHubUser = true;
+                    _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken);
+                }
+            }
+        }
+
+        _isLoading = false;
+    }
+}

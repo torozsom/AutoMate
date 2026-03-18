@@ -37,6 +37,12 @@
             </Authorized>
         </AuthorizeView>
 
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="/github-repos">
+                <span class="bi bi-github" aria-hidden="true"></span> GitHub Repos
+            </NavLink>
+        </div>
+
         <div class="nav-item px-3 mt-auto">
             <button class="nav-link btn btn-link" @onclick="ToggleTheme">
                 <span class="bi @(_isDarkMode ? "bi-moon-fill-nav-menu" : "bi-sun-fill-nav-menu")"

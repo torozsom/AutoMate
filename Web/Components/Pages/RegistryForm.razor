@@ -32,26 +32,31 @@
 
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
-                <InputText @bind-Value="Model.Username" type="text" class="form-control" id="username"
-                           placeholder="Enter your username"/>
-            </div>
+                @if (Model != null)
+                {
+                    <InputText @bind-Value="Model.Username" type="text" class="form-control" id="username"
+                               placeholder="Enter your username"/>
+                    @:</div>
 
-            <div class="mb-3">
-                <label for="email" class="form-label">Email</label>
-                <InputText @bind-Value="Model.Email" type="email" class="form-control" id="email"
-                           placeholder="Enter your email"/>
-            </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <InputText @bind-Value="Model.Email" type="email" class="form-control" id="email"
+                                   placeholder="Enter your email"/>
+                    </div>
 
-            <div class="mb-3">
-                <label for="password" class="form-label">Password</label>
-                <InputText @bind-Value="Model.Password" type="password" class="form-control" id="password"
-                           placeholder="Create a password"/>
-            </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <InputText @bind-Value="Model.Password" type="password" class="form-control" id="password"
+                                   placeholder="Create a password"/>
+                    </div>
 
-            <div class="mb-4">
-                <label for="confirmPassword" class="form-label">Confirm Password</label>
-                <InputText @bind-Value="Model.ConfirmPassword" type="password" class="form-control" id="confirmPassword"
-                           placeholder="Confirm your password"/>
+                    @:<div class="mb-4">
+                    <label for="confirmPassword" class="form-label">Confirm Password</label>
+                    <InputText @bind-Value="Model.ConfirmPassword" type="password" class="form-control" id="confirmPassword"
+                               placeholder="Confirm your password"/>
+                }
+
+
             </div>
 
             <div class="row g-3">
