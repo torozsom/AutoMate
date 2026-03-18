@@ -1,10 +1,16 @@
 @page "/register"
+
 @using Core.Entities
+@using Services.Email
+
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using Services.Data
+
 @inject AutoMateDbContext DbContext
 @inject NavigationManager NavigationManager
+@inject IEmailSender EmailSender
+
 
 <PageTitle>Register</PageTitle>
 
@@ -66,6 +72,7 @@
 
 @code {
 
+
     /// <summary>
     /// Model for user registration, containing validation attributes to ensure proper input.
     /// </summary>
@@ -119,6 +126,17 @@
 
         DbContext.Users.Add(newUser);
         await DbContext.SaveChangesAsync();
+
+        var verificationLink = NavigationManager.GetUriWithQueryParameters(
+            NavigationManager.ToAbsoluteUri("/verify-email").ToString(),
+            new Dictionary<string, object?> { { "token", newUser.EmailVerificationToken } });
+
+
+        await EmailSender.SendEmailAsync(
+            newUser.Email,
+            "Confirm your registration to AutoMate!",
+            $"Welcome to AutoMate!\n\nPlease follow the link below for confirmation:\n{verificationLink}");
+
         NavigationManager.NavigateTo("/login?registered=true");
     }
 

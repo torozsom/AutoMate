@@ -2,6 +2,7 @@ using Core.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
+using Services.Email;
 using Web.Extensions;
 using Web.Routes.Endpoints;
 
@@ -92,6 +93,8 @@ public static class ServiceConfiguration
         // Add services for Swagger/OpenAPI
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
+
+        builder.Services.AddScoped<IEmailSender, GmailEmailSender>();
 
         // Register endpoints
         builder.Services.AddEndpoint<StaticAssetsEndpoint>()

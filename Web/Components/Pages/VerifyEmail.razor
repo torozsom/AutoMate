@@ -1,0 +1,69 @@
+@page "/verify-email"
+
+@using Core.Entities
+@using Services.Data
+@using Microsoft.EntityFrameworkCore
+
+@inject AutoMateDbContext DbContext
+@inject NavigationManager NavigationManager
+
+
+<PageTitle>Email confirmation</PageTitle>
+
+<div class="container mt-5 text-center">
+    <h2>Email confirmation in progress...</h2>
+
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger mt-4">
+            @ErrorMessage
+            <br />
+            <a href="/login" class="btn btn-outline-dark mt-3">Back to login page</a>
+        </div>
+    }
+    else
+    {
+        <div class="spinner-border text-primary mt-4" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    }
+</div>
+
+
+@code {
+    [SupplyParameterFromQuery(Name = "token")]
+    public string? Token { get; set; }
+
+    private string? ErrorMessage { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(Token))
+        {
+            ErrorMessage = "Invalid or missing token. Please check the link and try again.";
+            return;
+        }
+
+        var user = await DbContext.Users.OfType<LocalUser>().FirstOrDefaultAsync(u => u.EmailVerificationToken == Token);
+
+        if (user == null)
+        {
+            ErrorMessage = "Invalid token. No user found for the provided token.";
+            return;
+        }
+
+        if (user.VerificationTokenExpiry < DateTimeOffset.UtcNow)
+        {
+            ErrorMessage = "Confirmation token has expired. Please request a new verification email.";
+            return;
+        }
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.VerificationTokenExpiry = null;
+
+        await DbContext.SaveChangesAsync();
+
+        NavigationManager.NavigateTo("/login?registered=EmailConfirmed");
+    }
+}
