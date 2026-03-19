@@ -46,6 +46,7 @@ public static class ServiceConfiguration
 
                 options.CallbackPath = new PathString("/signin-github");
                 options.Scope.Add("user:email");
+                options.Scope.Add("repo");
 
                 options.Events.OnCreatingTicket = async context =>
                 {
