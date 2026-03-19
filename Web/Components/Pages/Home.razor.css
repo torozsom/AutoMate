@@ -75,3 +75,32 @@
     border-color: #2a5298;
     cursor: pointer;
 }
+
+[data-bs-theme="dark"] .hero-section {
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .feature-card {
+    background: #2b3035;
+    border-color: #495057;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .feature-icon {
+    color: #6ea8fe;
+}
+
+[data-bs-theme="dark"] .feature-title {
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .dashboard-welcome {
+    background-color: #2b3035;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .action-card {
+    background: #2b3035;
+    border-color: #495057;
+    color: #e0e0e0;
+}

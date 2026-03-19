@@ -140,3 +140,29 @@
     width: 2.5rem;
     height: 2.5rem;
 }
+
+[data-bs-theme="dark"] .login-card {
+    background: #212529;
+    border-color: #495057;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .login-title {
+    color: #6ea8fe;
+}
+
+[data-bs-theme="dark"] .form-label {
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] ::deep .form-control {
+    background-color: #2b3035;
+    border-color: #495057;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] ::deep .form-control:focus {
+    background-color: #2b3035;
+    border-color: #6ea8fe;
+    color: #fff;
+}

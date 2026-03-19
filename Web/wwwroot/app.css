@@ -6,6 +6,10 @@ a, .btn-link {
     color: #006bb7;
 }
 
+[data-bs-theme="dark"] a, [data-bs-theme="dark"] .btn-link {
+    color: #6ea8fe;
+}
+
 .btn-primary {
     color: #fff;
     background-color: #1b6ec2;
@@ -57,4 +61,16 @@ h1:focus {
 
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
+}
+
+[data-bs-theme="dark"] .btn:focus,
+[data-bs-theme="dark"] .btn:active:focus,
+[data-bs-theme="dark"] .btn-link.nav-link:focus,
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem var(--bs-body-bg), 0 0 0 0.25rem #258cfb;
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: var(--bs-secondary-bg);
 }
