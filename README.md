@@ -12,6 +12,18 @@
 
 ---
 
+## Screenshots
+
+<div align="center">
+  <img src="assets/homepage.png" width="600">
+  <img src="assets/loginpage.png" width="600">
+  <img src="assets/landingpage.png" width="600">
+  <img src="assets/githubrepos.png" width="600">
+  <img src="assets/localgitrepos.png" width="600">
+</div>
+
+---
+
 ## ✨ Current Features
 
 * **🔐 Hybrid Authentication System**
