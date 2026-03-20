@@ -8,7 +8,7 @@
 </div>
 
 
-<p align="center">**AutoMate** is a modern, self-hosted DevOps companion and project management platform built for developers. It bridges the gap between your source code and your hosting environment, allowing you to seamlessly discover, manage, and (soon) deploy your applications whether they are hosted on GitHub or reside locally on your machine.</p>
+<p align="center"><b>AutoMate</b> is a modern, self-hosted DevOps companion and project management platform built for developers. It bridges the gap between your source code and your hosting environment, allowing you to seamlessly discover, manage, and (soon) deploy your applications whether they are hosted on GitHub or reside locally on your machine.</p>
 
 ---
 
