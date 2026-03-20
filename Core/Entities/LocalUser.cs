@@ -5,15 +5,25 @@ namespace Core.Entities;
 /// </summary>
 public class LocalUser : User
 {
-    /// The hashed password for the user.
+    /// <summary>
+    /// Gets or sets the hashed password for the user.
+    /// This should never store the plain text password.
+    /// </summary>
     public string? PasswordHash { get; set; }
 
-    /// A flag indicating whether the user's email address has been verified.'
+    /// <summary>
+    /// Gets or sets a value indicating whether the user's email address has been verified.
+    /// </summary>
     public bool IsEmailVerified { get; set; }
 
-    /// The verification token for the user's email address.'
+    /// <summary>
+    /// Gets or sets the verification token sent to the user's email address.
+    /// Used for confirming email ownership.
+    /// </summary>
     public string? EmailVerificationToken { get; set; }
 
-    /// The timestamp when the verification token expires.
+    /// <summary>
+    /// Gets or sets the timestamp when the email verification token expires.
+    /// </summary>
     public DateTimeOffset? VerificationTokenExpiry { get; set; }
 }

@@ -8,30 +8,48 @@ namespace Core.Entities;
 /// </summary>
 public class Project
 {
-    /// The unique identifier for the project.
+    /// <summary>
+    /// Gets or sets the unique identifier for the project.
+    /// </summary>
     public Guid Id { get; set; }
 
-    /// The unique identifier of the user who owns the project.
+    /// <summary>
+    /// Gets or sets the unique identifier of the user who owns the project.
+    /// </summary>
     public Guid UserId { get; set; }
 
-    /// The name of the project, which is required for the application.
+    /// <summary>
+    /// Gets or sets the name of the project. This is a required field.
+    /// </summary>
     public required string Name { get; set; }
 
-    /// The type of source code for the project, represented by the SourceType enum.
+    /// <summary>
+    /// Gets or sets the source type (e.g., Local or Remote) for the project.
+    /// </summary>
     public required SourceType SourceType { get; set; }
 
-    /// The path or URL to the project's source code, which is required for the application.
+    /// <summary>
+    /// Gets or sets the path (for local) or URL (for remote) to the project's source code.
+    /// </summary>
     public required string SourcePathOrUrl { get; set; }
 
-    /// The type of application the project represents.
+    /// <summary>
+    /// Gets or sets the type of the application (e.g., WebApi, Blazor, Mvc).
+    /// </summary>
     public AppType AppType { get; set; }
 
-    /// A reference to the user who owns the project.
+    /// <summary>
+    /// Gets or sets the user who owns the project.
+    /// </summary>
     public User? User { get; set; }
 
-    /// A reference to the project's configuration settings.
+    /// <summary>
+    /// Gets or sets the configuration settings for the project.
+    /// </summary>
     public ProjectConfiguration? Configuration { get; set; }
 
-    /// A collection of deployments associated with the project.
+    /// <summary>
+    /// Gets or sets the collection of deployments associated with the project.
+    /// </summary>
     public ICollection<Deployment> Deployments { get; set; } = [];
 }
