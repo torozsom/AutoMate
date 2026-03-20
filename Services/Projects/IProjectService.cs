@@ -10,4 +10,6 @@ public interface IProjectService
 {
     Task<bool> AddLocalProjectAsync(Guid userId, string projectName, string sourcePath);
 
+
+    Task<bool> AddGitHubProjectAsync(Guid userId, string projectName, string gitUrl);
 }

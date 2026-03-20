@@ -7,16 +7,28 @@
 @using Microsoft.EntityFrameworkCore
 @using Services.Data
 @using Services.GitHub
+@using Services.Projects
 
 @inject AuthenticationStateProvider AuthStateProvider
 @inject AutoMateDbContext DbContext
+
 @inject IGitHubService GitHubService
+@inject IProjectService ProjectService
+@inject IServiceProvider ServiceProvider
 
 
 <PageTitle>GitHub Repositories</PageTitle>
 
 <div class="container mt-4">
     <h1>GitHub Repositories</h1>
+
+    @if (!string.IsNullOrEmpty(_statusMessage))
+    {
+        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show mt-3" role="alert">
+            @_statusMessage
+            <button type="button" class="btn-close" @onclick="() => _statusMessage = null" aria-label="Close"></button>
+        </div>
+    }
 
     <AuthorizeView>
         <Authorized>
@@ -42,6 +54,12 @@
                                     <h6 class="card-subtitle mb-2 text-muted">@repo.Language</h6>
                                     <p class="card-text small text-muted">Updated at: @repo.UpdatedAt.ToString("yyyy. MM. dd.")</p>
                                     <a href="@repo.HtmlUrl" target="_blank" class="btn btn-sm btn-outline-dark">Show in GitHub</a>
+
+                                    @if (repo.Language == "C#")
+                                    {
+                                        <button class="btn btn-sm btn-primary m-2" @onclick="() => SaveProjectAsync(repo)">Save</button>
+                                    }
+
                                 </div>
                             </div>
                         </div>
@@ -70,6 +88,10 @@
     private List<GitHubRepositoryDto>? _githubRepos;
     private bool _isLoading = true;
     private bool _isGitHubUser;
+
+    private string? _statusMessage;
+    private bool _isErrorStatus;
+
 
     /// <summary>
     ///     On component initialization, we check the user's authentication state.
@@ -102,5 +124,50 @@
         }
 
         _isLoading = false;
+    }
+
+
+    /// <summary>
+    ///     When the user clicks the "Save" button on a repository card, this method is called.
+    ///     It retrieves the current user's ID and attempts to save the selected GitHub repository
+    ///     as a project in our system. The method also handles success and error states, providing
+    ///     feedback to the user through status messages.
+    /// </summary>
+    /// <param name="repo"></param>
+    private async Task SaveProjectAsync(GitHubRepositoryDto repo)
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity?.IsAuthenticated ?? true)
+            return;
+
+        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!Guid.TryParse(userIdString, out var userId))
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+            var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
+
+            if (dbUser != null)
+                userId = dbUser.Id;
+        }
+
+        if (userId == Guid.Empty)
+            return;
+
+        var success = await ProjectService.AddGitHubProjectAsync(userId, repo.Name, repo.HtmlUrl);
+
+        if (success)
+        {
+            _statusMessage = $"{repo.Name} successfully saved!";
+            _isErrorStatus = false;
+        }
+        else
+        {
+            _statusMessage = $"{repo.Name} repository is already saved!";
+            _isErrorStatus = true;
+        }
     }
 }

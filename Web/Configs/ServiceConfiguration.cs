@@ -78,7 +78,7 @@ public static class ServiceConfiguration
                             AccessToken = accessToken
                         };
 
-                        await dbContext.Users.AddAsync(newUser);
+                        dbContext.Users.Add(newUser);
                     }
                     else
                     {
