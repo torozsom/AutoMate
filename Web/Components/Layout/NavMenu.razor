@@ -18,6 +18,7 @@
         </div>
 
         <AuthorizeView>
+
             <NotAuthorized>
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="/login">
@@ -25,7 +26,20 @@
                     </NavLink>
                 </div>
             </NotAuthorized>
+
             <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="/github-repos">
+                        <span class="bi bi-github-repos-nav-menu" aria-hidden="true"></span> GitHub Repos
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="local-repos">
+                        <span class="bi bi-folder2-open-nav-menu" aria-hidden="true"></span> Local Repos
+                    </NavLink>
+                </div>
+
                 <div class="nav-item px-3">
                     <form action="/api/auth/logout" method="post">
                         <AntiforgeryToken/>
@@ -35,13 +49,8 @@
                     </form>
                 </div>
             </Authorized>
-        </AuthorizeView>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="/github-repos">
-                <span class="bi bi-github-repos-nav-menu" aria-hidden="true"></span> GitHub Repos
-            </NavLink>
-        </div>
+        </AuthorizeView>
 
         <div class="nav-item px-3 mt-auto">
             <button class="nav-link btn btn-link" @onclick="ToggleTheme">

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Services.Email;
 using Services.GitHub;
+using Services.Scanner;
 using Web.Extensions;
 using Web.Routes.Endpoints;
 using Web.Routes.Endpoints.Auth;
@@ -105,6 +106,9 @@ public static class ServiceConfiguration
 
         // Add services for GitHub API interactions
         builder.Services.AddHttpClient<IGitHubService, GitHubService>();
+
+        // Add services for scanning local repositories
+        builder.Services.AddScoped<ILocalScannerService, LocalScannerService>();
 
         // Register endpoints
         builder.Services.AddEndpoint<StaticAssetsEndpoint>()
