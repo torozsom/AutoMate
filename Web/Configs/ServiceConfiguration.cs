@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Services.Email;
 using Services.GitHub;
+using Services.Projects;
 using Services.Scanner;
 using Web.Extensions;
 using Web.Routes.Endpoints;
@@ -77,7 +78,7 @@ public static class ServiceConfiguration
                             AccessToken = accessToken
                         };
 
-                        await dbContext.Users.AddAsync(newUser);
+                        dbContext.Users.Add(newUser);
                     }
                     else
                     {
@@ -109,6 +110,9 @@ public static class ServiceConfiguration
 
         // Add services for scanning local repositories
         builder.Services.AddScoped<ILocalScannerService, LocalScannerService>();
+
+        // Add services for project management
+        builder.Services.AddScoped<IProjectService, ProjectService>();
 
         // Register endpoints
         builder.Services.AddEndpoint<StaticAssetsEndpoint>()
