@@ -8,6 +8,7 @@ namespace Web.Routes.Endpoints.Auth;
 /// </summary>
 public class GitHubLoginEndpoint : IEndpoint
 {
+    /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/auth/github-login", () =>

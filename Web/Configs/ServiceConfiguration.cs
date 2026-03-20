@@ -22,8 +22,8 @@ public static class ServiceConfiguration
     ///     This method is responsible for registering the application's services with the dependency injection container,
     ///     including the database context, authentication services, and Razor components.
     /// </summary>
-    /// <param name="builder"></param>
-    /// <exception cref="InvalidOperationException"></exception>
+    /// <param name="builder">The WebApplicationBuilder used to configure services.</param>
+    /// <exception cref="InvalidOperationException">Thrown when required configuration values are missing (e.g., GitHub ClientId/ClientSecret).</exception>
     public static void Configure(WebApplicationBuilder builder)
     {
         // Add the database context to the services container, using PostgreSQL as the database provider.

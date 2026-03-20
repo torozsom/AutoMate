@@ -5,6 +5,12 @@ using Services.Data;
 
 namespace Services.Projects;
 
+/// <summary>
+///     Service class responsible for managing projects within the application.
+///     It handles operations such as adding local and GitHub projects,
+///     and interacting with the database to persist project information.
+/// </summary>
+/// <param name="context">The database context.</param>
 public class ProjectService(AutoMateDbContext context) : IProjectService
 {
 
@@ -15,7 +21,7 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
     /// <param name="userId">The user ID of the project's owner.</param>
     /// <param name="projectName">The name of the project to be saved.</param>
     /// <param name="sourcePath">The source path of the project.</param>
-    /// <returns></returns>
+    /// <returns>A task that returns true if the project was added successfully, or false if it already exists.</returns>
     public async Task<bool> AddLocalProjectAsync(Guid userId, string projectName, string sourcePath)
     {
         var alreadyExists = await context.Projects
@@ -45,7 +51,7 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
     /// <param name="userId">The user ID of the project's owner.</param>
     /// <param name="projectName">The name of the project to be saved.</param>
     /// <param name="gitUrl">The git URL of the remote repository.</param>
-    /// <returns></returns>
+    /// <returns>A task that returns true if the project was added successfully, or false if it already exists.</returns>
     public async Task<bool> AddGitHubProjectAsync(Guid userId, string projectName, string gitUrl)
     {
         var alreadyExists = await context.Projects

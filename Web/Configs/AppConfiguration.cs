@@ -12,7 +12,7 @@ public static class AppConfiguration
     ///     Configures the HTTP request pipeline for the ASP.NET Core web application.
     ///     This method sets up middleware components for error handling, security, authentication, and routing.
     /// </summary>
-    /// <param name="app"></param>
+    /// <param name="app">The WebApplication instance to configure.</param>
     public static void Configure(WebApplication app)
     {
         // Perform database connectivity check
@@ -58,7 +58,7 @@ public static class AppConfiguration
     ///     Checks the database connectivity at application startup by attempting to connect to the database using the
     ///     configured DbContext.
     /// </summary>
-    /// <param name="app"></param>
+    /// <param name="app">The WebApplication instance used to create a scope for retrieving the DbContext.</param>
     private static void CheckDatabaseConnectivity(WebApplication app)
     {
         // Testing database connectivity at startup.

@@ -8,6 +8,7 @@ namespace Web.Routes.Endpoints;
 /// </summary>
 public class RazorComponentsEndpoint : IEndpoint
 {
+    /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapRazorComponents<App>().AddInteractiveServerRenderMode();

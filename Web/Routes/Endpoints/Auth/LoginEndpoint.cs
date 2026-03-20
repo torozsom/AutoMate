@@ -18,14 +18,16 @@ namespace Web.Routes.Endpoints.Auth;
 /// </summary>
 public class LoginEndpoint : IEndpoint
 {
+    /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/login", async (
-            HttpContext context,
             [FromForm] string email,
-            [FromForm] string password) =>
+            [FromForm] string password,
+            HttpContext context,
+            IPasswordHasher<LocalUser> passwordHasher,
+            AutoMateDbContext dbContext) =>
         {
-            var dbContext = context.RequestServices.GetRequiredService<AutoMateDbContext>();
             var user = await dbContext.Users.OfType<LocalUser>().FirstOrDefaultAsync(u => u.Email == email);
 
             if (user == null)
@@ -34,8 +36,7 @@ public class LoginEndpoint : IEndpoint
                 return;
             }
 
-            var hasher = new PasswordHasher<LocalUser>();
-            var verificationResult = hasher.VerifyHashedPassword(user, user.PasswordHash!, password);
+            var verificationResult = passwordHasher.VerifyHashedPassword(user, user.PasswordHash!, password);
 
             if (verificationResult == PasswordVerificationResult.Failed)
             {

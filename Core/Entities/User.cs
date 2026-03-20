@@ -5,18 +5,29 @@
 /// </summary>
 public abstract class User
 {
-    /// The unique identifier for the user.
+    /// <summary>
+    /// Gets or sets the unique identifier for the user.
+    /// </summary>
     public Guid Id { get; set; }
 
-    /// The username to display for the user.
+    /// <summary>
+    /// Gets or sets the username of the user.
+    /// </summary>
     public required string Username { get; set; }
 
-    /// The email address of the user, which is required for the application.
+    /// <summary>
+    /// Gets or sets the email address of the user.
+    /// </summary>
     public required string Email { get; set; }
 
-    /// The timestamp when the user was created, defaulting to the current UTC time.
+    /// <summary>
+    /// Gets or sets the timestamp when the user was created.
+    /// Defaults to the current UTC time.
+    /// </summary>
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    /// A collection of projects associated with the user.
+    /// <summary>
+    /// Gets or sets the collection of projects owned by the user.
+    /// </summary>
     public ICollection<Project> Projects { get; set; } = [];
 }

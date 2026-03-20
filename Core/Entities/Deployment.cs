@@ -8,21 +8,35 @@ namespace Core.Entities;
 /// </summary>
 public class Deployment
 {
-    /// The unique identifier for the deployment.
+    /// <summary>
+    /// Gets or sets the unique identifier for the deployment.
+    /// </summary>
     public Guid Id { get; set; }
 
-    /// The unique identifier of the project associated with this deployment.
+    /// <summary>
+    /// Gets or sets the unique identifier of the project associated with this deployment.
+    /// </summary>
     public Guid ProjectId { get; set; }
 
-    /// The timestamp when the deployment was created, defaulting to the current UTC time.
+    /// <summary>
+    /// Gets or sets the timestamp when the deployment was created.
+    /// Defaults to the current UTC time.
+    /// </summary>
     public DateTimeOffset DeployedAt { get; set; } = DateTimeOffset.UtcNow;
 
-    /// The current status of the deployment, represented by the DeploymentStatus enum.
+    /// <summary>
+    /// Gets or sets the current status of the deployment.
+    /// </summary>
     public DeploymentStatus Status { get; set; }
 
-    /// Any logs or output generated during the deployment process, which can be null if no logs are available.
+    /// <summary>
+    /// Gets or sets any logs or output generated during the deployment process.
+    /// This property can be null if no logs are available.
+    /// </summary>
     public string? Logs { get; set; }
 
-    /// A reference to the associated project, which can be null if the project is not loaded or has been deleted.
+    /// <summary>
+    /// Gets or sets a reference to the project associated with this deployment.
+    /// </summary>
     public Project? Project { get; set; }
 }

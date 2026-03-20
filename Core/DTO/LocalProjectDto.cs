@@ -6,13 +6,19 @@ namespace Core.DTO;
 /// </summary>
 public class LocalProjectDto
 {
-    /// The name of the project.
+    /// <summary>
+    /// Gets or sets the name of the project.
+    /// </summary>
     public string Name { get; set; } = string.Empty;
 
-    /// The path to the project on the local file system.
+    /// <summary>
+    /// Gets or sets the full path to the project directory on the local file system.
+    /// </summary>
     public string Path { get; set; } = string.Empty;
 
-    /// Indicates whether the project is a .NET project.
+    /// <summary>
+    /// Gets or sets a value indicating whether the project is a valid .NET project.
+    /// </summary>
     public bool IsDotNetProject { get; set; }
 
 }

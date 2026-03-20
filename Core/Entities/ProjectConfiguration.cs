@@ -6,24 +6,40 @@
 /// </summary>
 public class ProjectConfiguration
 {
-    /// The unique identifier for the project configuration.
+    /// <summary>
+    /// Gets or sets the unique identifier for the project configuration.
+    /// </summary>
     public Guid Id { get; set; }
 
-    /// The unique identifier of the project associated with this configuration.
+    /// <summary>
+    /// Gets or sets the unique identifier of the project associated with this configuration.
+    /// </summary>
     public Guid ProjectId { get; set; }
 
-    /// The .NET version to use for the project, which is required for the application.
+    /// <summary>
+    /// Gets or sets the .NET version to use for the project (e.g., "net8.0").
+    /// </summary>
     public required string DotNetVersion { get; set; }
 
-    /// The port to expose for the project, which can be null if no port is specified.
+    /// <summary>
+    /// Gets or sets the port number to expose for the project.
+    /// A null value indicates no specific port is configured.
+    /// </summary>
     public int? ExposedPort { get; set; }
 
-    /// A boolean value to decide if the project needs a database.
+    /// <summary>
+    /// Gets or sets a value indicating whether the project requires a database.
+    /// </summary>
     public bool RequiresDb { get; set; }
 
-    /// A boolean value to decide if the project is to be published or just be run on localhost.
+    /// <summary>
+    /// Gets or sets a value indicating whether the project is publicly accessible
+    /// or restricted to localhost.
+    /// </summary>
     public bool IsPublic { get; set; }
 
-    /// A reference to the associated project, which can be null if the project is not loaded or has been deleted.
+    /// <summary>
+    /// Gets or sets a reference to the project associated with this configuration.
+    /// </summary>
     public Project? Project { get; set; }
 }
