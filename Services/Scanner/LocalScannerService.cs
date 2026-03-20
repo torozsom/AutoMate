@@ -36,8 +36,8 @@ public class LocalScannerService : ILocalScannerService
     ///     Recursively scans the directory for Git repositories and identifies .NET projects.
     ///     Skips common build and dependency folders, as well as hidden directories.
     /// </summary>
-    /// <param name="currentPath"></param>
-    /// <param name="result"></param>
+    /// <param name="currentPath">The current directory path being scanned.</param>
+    /// <param name="result">The list to accumulate found local projects.</param>
     private void ScanDirectory(string currentPath, List<LocalProjectDto> result)
     {
         try

@@ -8,5 +8,10 @@ namespace Services.GitHub;
 /// </summary>
 public interface IGitHubService
 {
+    /// <summary>
+    ///     Retrieves a list of repositories for the authenticated user.
+    /// </summary>
+    /// <param name="accessToken">The GitHub access token for authentication.</param>
+    /// <returns>A task that represents the asynchronous operation. The task result contains a list of <see cref="GitHubRepositoryDto"/>.</returns>
     Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken);
 }

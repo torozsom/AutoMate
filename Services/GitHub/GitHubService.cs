@@ -13,7 +13,11 @@ public class GitHubService : IGitHubService
 {
     private readonly HttpClient _httpClient;
 
-    /// The constructor initializes the HttpClient with the base URL and sets the User-Agent header.
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="GitHubService"/> class.
+    ///     It configures the HttpClient with the base URL and sets the User-Agent header required by GitHub API.
+    /// </summary>
+    /// <param name="httpClient">The HttpClient instance used for making HTTP requests.</param>
     public GitHubService(HttpClient httpClient)
     {
         _httpClient = httpClient;

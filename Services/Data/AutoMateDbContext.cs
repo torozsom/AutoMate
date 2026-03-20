@@ -13,16 +13,24 @@ namespace Services.Data;
 /// <param name="options">The options to pass to the base class.</param>
 public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : DbContext(options)
 {
-    /// The Users DbSet represents the collection of User entities in the database.
+    /// <summary>
+    /// Gets or sets the collection of User entities in the database.
+    /// </summary>
     public DbSet<User> Users { get; set; }
 
-    /// The Projects DbSet represents the collection of Project entities in the database.
+    /// <summary>
+    /// Gets or sets the collection of Project entities in the database.
+    /// </summary>
     public DbSet<Project> Projects { get; set; }
 
-    /// The ProjectConfigurations DbSet represents the collection of ProjectConfiguration entities in the database.
+    /// <summary>
+    /// Gets or sets the collection of ProjectConfiguration entities in the database.
+    /// </summary>
     public DbSet<ProjectConfiguration> ProjectConfigurations { get; set; }
 
-    /// The Deployments DbSet represents the collection of Deployment entities in the database.
+    /// <summary>
+    /// Gets or sets the collection of Deployment entities in the database.
+    /// </summary>
     public DbSet<Deployment> Deployments { get; set; }
 
 
