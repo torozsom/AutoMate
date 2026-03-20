@@ -34,7 +34,7 @@
         <div class="col-md-7">
             <div class="input-group">
                 <span class="input-group-text"><i class="bi bi-folder2"></i></span>
-                <input type="text" class="form-control" placeholder="Pl: C:\Dev vagy /home/user/projects" @bind="_searchPath" @bind:event="oninput" @onkeyup="HandleKeyUp" />
+                <input type="text" class="form-control" placeholder="E.g.: C:\Dev or /home/user/projects" @bind="_searchPath" @bind:event="oninput" @onkeyup="HandleKeyUp" />
                 <button class="btn btn-primary" @onclick="StartScan" disabled="@(string.IsNullOrWhiteSpace(_searchPath) || _isScanning)">
                     @if (_isScanning)
                     {
@@ -153,7 +153,7 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Hiba a scannelés során: {ex.Message}");
+            Console.WriteLine($"Error during scanning: {ex.Message}");
             _localProjects = [];
         }
         finally
@@ -169,7 +169,7 @@
     ///     Handles the key up event on the input field. If the Enter key is pressed
     ///     and the search path is valid, it triggers the scanning process.
     /// </summary>
-    /// <param name="e"></param>
+    /// <param name="e">The keyboard event arguments, used to check for the Enter key.</param>
     private async Task HandleKeyUp(KeyboardEventArgs e)
     {
         if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchPath) && !_isScanning)

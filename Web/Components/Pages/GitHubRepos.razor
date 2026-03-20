@@ -133,7 +133,7 @@
     ///     as a project in our system. The method also handles success and error states, providing
     ///     feedback to the user through status messages.
     /// </summary>
-    /// <param name="repo"></param>
+    /// <param name="repo">The DTO representing the GitHub repository to be saved.</param>
     private async Task SaveProjectAsync(GitHubRepositoryDto repo)
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();

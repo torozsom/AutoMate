@@ -6,6 +6,7 @@ namespace Web.Routes.Endpoints;
 /// </summary>
 public class StaticAssetsEndpoint : IEndpoint
 {
+    /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapStaticAssets();

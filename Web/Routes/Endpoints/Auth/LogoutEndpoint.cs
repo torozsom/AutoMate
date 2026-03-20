@@ -9,6 +9,7 @@ namespace Web.Routes.Endpoints.Auth;
 /// </summary>
 public class LogoutEndpoint : IEndpoint
 {
+    /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/logout", async (HttpContext context) =>

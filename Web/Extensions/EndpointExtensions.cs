@@ -12,9 +12,9 @@ public static class EndpointExtensions
     ///     Registers an endpoint of type T in the dependency injection container.
     ///     The endpoint must implement the IEndpoint interface.
     /// </summary>
-    /// <param name="services"></param>
-    /// <typeparam name="T"></typeparam>
-    /// <returns></returns>
+    /// <param name="services">The IServiceCollection to add the endpoint to.</param>
+    /// <typeparam name="T">The type of the endpoint to register, which must implement IEndpoint.</typeparam>
+    /// <returns>The IServiceCollection so that additional calls can be chained.</returns>
     public static IServiceCollection AddEndpoint<T>(this IServiceCollection services)
         where T : class, IEndpoint
     {
