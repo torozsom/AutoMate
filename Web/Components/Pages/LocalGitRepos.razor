@@ -1,36 +1,102 @@
 @page "/local-repos"
 
 @using Microsoft.AspNetCore.Components.Authorization
-@using Core.Entities
+@using Core.DTO
+@using Services.Scanner
 
-@inject AuthenticationStateProvider AuthStateProvider
+@inject ILocalScannerService ScannerService
 
 
 <PageTitle>Local Git Repositories</PageTitle>
 
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Local Git Repositories</h1>
-        <button class="btn btn-primary">
-            <i class="bi bi-search"></i> Search On Device
-        </button>
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-5">
+            <h1>Local Git Repositories</h1>
+        </div>
+
+        <div class="col-md-7">
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-folder2"></i></span>
+                <input type="text" class="form-control" placeholder="Pl: C:\Dev vagy /home/user/projects" @bind="_searchPath" @bind:event="oninput" @onkeyup="HandleKeyUp" />
+                <button class="btn btn-primary" @onclick="StartScan" disabled="@(string.IsNullOrWhiteSpace(_searchPath) || _isScanning)">
+                    @if (_isScanning)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Scanning...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-search me-1"></i>
+                        <span>Start scan</span>
+                    }
+                </button>
+            </div>
+        </div>
     </div>
 
     <AuthorizeView>
         <Authorized>
-            <div class="alert alert-info shadow-sm">
-                <i class="bi bi-info-circle-fill me-2"></i>
-                You will be able to see all the Git repositories on your device, and manage them directly from AutoMate.
-            </div>
 
-            <div class="text-center mt-5 text-muted">
-                <i class="bi bi-folder2-open display-1"></i>
-                <p class="mt-3 lead">Click on the button above to start searching for Git repos locally.</p>
-            </div>
+            @if (_hasScanned && !_isScanning)
+            {
+                if (_localProjects == null || !_localProjects.Any())
+                {
+                    <div class="alert alert-warning text-center mt-4">
+                        <i class="bi bi-exclamation-triangle display-4"></i>
+                        <p class="mt-3 lead">We could not find any Git projects within the given folder. <strong>@_lastSearchedPath</strong></p>
+                    </div>
+                }
+                else
+                {
+                    <h3 class="mt-4 mb-3">Projects found: @_localProjects.Count</h3>
+
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                        @foreach (var project in _localProjects)
+                        {
+                            <div class="col">
+                                <div class="card h-100 shadow-sm @(project.IsDotNetProject ? "border-primary" : "border-secondary opacity-75")">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <h5 class="card-title text-truncate" title="@project.Name">
+                                                <i class="bi @(project.IsDotNetProject ? "bi-box-seam text-primary" : "bi-file-earmark-code text-secondary") me-2"></i>
+                                                @project.Name
+                                            </h5>
+                                        </div>
+                                        <p class="card-text text-muted small mt-2 text-truncate" title="@project.Path">
+                                            <i class="bi bi-hdd me-1"></i> @project.Path
+                                        </p>
+                                    </div>
+                                    <div class="card-footer bg-transparent @(project.IsDotNetProject ? "border-primary" : "border-secondary")">
+                                        @if (project.IsDotNetProject)
+                                        {
+                                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> .NET Project</span>
+                                            <button class="btn btn-sm btn-outline-primary float-end">Select</button>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary"><i class="bi bi-dash-circle me-1"></i> Other</span>
+                                            <span class="small text-muted float-end mt-1">Not supported</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            }
+            else if (!_isScanning)
+            {
+                <div class="text-center mt-5 text-muted">
+                    <i class="bi bi-folder2-open display-1"></i>
+                    <p class="mt-3 lead">Choose a folder and click on the button above!</p>
+                </div>
+            }
+
         </Authorized>
         <NotAuthorized>
             <div class="alert alert-warning">
-                To access this page, please <a href="/login" class="alert-link">log in</a>.
+                Please log in for scanning your local folders for Git projects.
             </div>
         </NotAuthorized>
     </AuthorizeView>
@@ -38,5 +104,56 @@
 
 
 @code {
-    // Ide jön majd a C# logika, amikor bekötjük a LocalScannerService-t!
+    private string _searchPath = string.Empty;
+    private string _lastSearchedPath = string.Empty;
+
+    private bool _isScanning;
+    private bool _hasScanned;
+
+    private List<LocalProjectDto>? _localProjects;
+
+
+    /// <summary>
+    ///     Starts the scanning process for Git projects in the specified folder.
+    ///     It updates the UI state accordingly and handles any exceptions that may occur during scanning.
+    /// </summary>
+    private async Task StartScan()
+    {
+        if (string.IsNullOrWhiteSpace(_searchPath)) return;
+
+        _isScanning = true;
+        _hasScanned = false;
+        _lastSearchedPath = _searchPath;
+        _localProjects = null;
+
+        StateHasChanged();
+
+        try
+        {
+            _localProjects = await Task.Run(() => ScannerService.ScanForProjectsAsync(_searchPath));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Hiba a scannelés során: {ex.Message}");
+            _localProjects = [];
+        }
+        finally
+        {
+            _isScanning = false;
+            _hasScanned = true;
+            StateHasChanged();
+        }
+    }
+
+
+    /// <summary>
+    ///     Handles the key up event on the input field. If the Enter key is pressed
+    ///     and the search path is valid, it triggers the scanning process.
+    /// </summary>
+    /// <param name="e"></param>
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchPath) && !_isScanning)
+            await StartScan();
+    }
 }
