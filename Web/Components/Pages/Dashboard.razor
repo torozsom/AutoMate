@@ -1,0 +1,130 @@
+@page "/dashboard"
+
+@using Core.Entities
+@using Core.Enums
+@using Services.Projects
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@using Services.Data
+
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IProjectService ProjectService
+@inject IServiceProvider ServiceProvider
+
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Dashboard</h1>
+
+        <div class="dropdown">
+            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-plus-lg me-1"></i> New Project
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                <li><a class="dropdown-item" href="/local-repos"><i class="bi bi-folder2-open me-2 text-warning"></i>Local Projects</a></li>
+                <li><a class="dropdown-item" href="/gh-repos"><i class="bi bi-github me-2"></i>Remote repositories</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <AuthorizeView>
+        <Authorized>
+            @if (_isLoading)
+            {
+                <div class="d-flex justify-content-center mt-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                </div>
+            }
+            else if (_projects == null || !_projects.Any())
+            {
+                <div class="text-center mt-5 text-muted bg-light p-5 rounded-3 border border-dashed">
+                    <i class="bi bi-rocket-takeoff display-1 text-secondary opacity-50"></i>
+                    <h3 class="mt-4">No projects were saved yet.</h3>
+                    <p class="lead">Start building your own DevOps environment!</p>
+                    <div class="mt-4">
+                        <a href="/local-repos" class="btn btn-outline-primary mx-2">Search Locally</a>
+                        <a href="/gh-repos" class="btn btn-outline-dark mx-2">Get GitHub Repositories</a>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+                    @foreach (var project in _projects)
+                    {
+                        <div class="col">
+                            <div class="card h-100 shadow-sm border-1">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <h5 class="card-title fw-bold text-truncate mb-0" title="@project.Name">
+                                            @if (project.SourceType == SourceType.Remote)
+                                            {
+                                                <i class="bi bi-github me-2"></i>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-folder2-open me-2 text-warning"></i>
+                                            }
+                                            @project.Name
+                                        </h5>
+
+                                        <span class="badge rounded-pill bg-light text-dark border"><i class="bi bi-circle-fill text-secondary small me-1"></i> Not Deployed</span>
+                                    </div>
+
+                                    <p class="text-muted small text-truncate mt-3 mb-1" title="@project.SourcePathOrUrl">
+                                        <i class="bi bi-link-45deg"></i> @project.SourcePathOrUrl
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-transparent border-top-0 pt-0">
+                                    <button class="btn btn-success w-100" disabled>
+                                        <i class="bi bi-play-fill me-1"></i> Deploy (Soon)
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <div class="alert alert-warning">
+                Log in to see your projects!
+            </div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+
+@code {
+    private bool _isLoading = true;
+    private List<Project>? _projects;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity is { IsAuthenticated: true })
+        {
+            var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (Guid.TryParse(userIdString, out var userId))
+                _projects = await ProjectService.GetProjectsAsync(userId);
+
+            else if (!string.IsNullOrEmpty(userIdString))
+            {
+                using var scope = ServiceProvider.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+                var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
+
+                if (dbUser != null)
+                    _projects = await ProjectService.GetProjectsAsync(dbUser.Id);
+            }
+        }
+
+        _isLoading = false;
+    }
+}

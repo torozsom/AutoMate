@@ -66,6 +66,7 @@ public class LocalScannerService : ILocalScannerService
 
                 var isDotNet = files.Any(f =>
                     f.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
+                    f.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
                     f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
 
                 result.Add(new LocalProjectDto
