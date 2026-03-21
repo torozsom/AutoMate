@@ -1,4 +1,5 @@
 using Core.DTO;
+using Core.Entities;
 
 namespace Services.Projects;
 
@@ -25,4 +26,11 @@ public interface IProjectService
     /// <param name="gitUrl">The URL of the GitHub repository.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is true if the project was added successfully; otherwise, false.</returns>
     Task<bool> AddGitHubProjectAsync(Guid userId, string projectName, string gitUrl);
+
+    /// <summary>
+    ///    Retrieves a list of projects associated with a specific user.
+    /// </summary>
+    /// <param name="userId">The unique identifier of the user getting their projects.</param>
+    /// <returns></returns>
+    Task<List<Project>> GetProjectsAsync(Guid userId);
 }

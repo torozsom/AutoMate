@@ -73,4 +73,18 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
         return true;
     }
 
+
+    /// <summary>
+    ///     Retrieves a list of projects associated with a specific user. The method queries the database
+    ///     for projects that match the provided user ID and returns them as a list. This allows users to
+    ///     view all their projects in the application.
+    /// </summary>
+    /// <param name="userId"></param>
+    /// <returns></returns>
+    public async Task<List<Project>> GetProjectsAsync(Guid userId)
+    {
+        return await context.Projects
+            .Where(p =>p.UserId == userId)
+            .ToListAsync();
+    }
 }
