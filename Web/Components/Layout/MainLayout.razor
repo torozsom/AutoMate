@@ -1,12 +1,37 @@
 ﻿@inherits LayoutComponentBase
 
+@using Services.Docker
+@inject IDockerService DockerService
+
+
 <div class="page">
     <div class="sidebar">
         <NavMenu/>
     </div>
 
     <main>
-        <div class="top-row px-4">
+        <div class="top-row px-4 d-flex justify-content-between align-items-center shadow-sm">
+            <div>
+                @switch (_isDockerRunning)
+                {
+                    case null:
+                        <span class="spinner-border spinner-border-sm text-secondary me-2" role="status"></span>
+                        <span class="text-muted small">Connecting to Docker...</span>
+                        break;
+                    case true:
+                        <div class="docker-status-pill bg-success bg-opacity-10 border border-success border-opacity-25 text-success" title="Docker Engine Online">
+                            <div class="blob green"></div>
+                            <i class="bi bi-docker me-1"></i> Docker Online
+                        </div>
+                        break;
+                    default:
+                        <div class="docker-status-pill bg-danger bg-opacity-10 border border-danger border-opacity-25 text-danger" title="Docker Engine Offline">
+                            <div class="blob red"></div>
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i> Docker Offline
+                        </div>
+                        break;
+                }
+            </div>
             <a href="/swagger" target="_blank">OpenAPI</a>
         </div>
         <article class="content px-4">
@@ -20,3 +45,18 @@
     <a href="." class="reload">Reload</a>
     <span class="dismiss">🗙</span>
 </div>
+
+
+@code {
+
+    private bool? _isDockerRunning;
+
+    /// <summary>
+    ///     On component initialization, check if the Docker Engine is responsive
+    ///     by pinging it through the injected DockerService.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        _isDockerRunning = await DockerService.PingAsync();
+    }
+}

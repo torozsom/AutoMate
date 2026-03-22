@@ -2,6 +2,7 @@ using Core.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
+using Services.Docker;
 using Services.Email;
 using Services.GitHub;
 using Services.Projects;
@@ -113,6 +114,9 @@ public static class ServiceConfiguration
 
         // Add services for project management
         builder.Services.AddScoped<IProjectService, ProjectService>();
+
+        // Add services for Docker operations
+        builder.Services.AddScoped<IDockerService, DockerService>();
 
         // Register endpoints
         builder.Services.AddEndpoint<StaticAssetsEndpoint>()
