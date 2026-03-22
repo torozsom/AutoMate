@@ -102,6 +102,17 @@
     private bool _isLoading = true;
     private List<Project>? _projects;
 
+
+    /// <summary>
+    ///     On initialization, we check if the user is authenticated. If they are,
+    ///     we attempt to retrieve their projects using their user ID. If the user ID
+    ///     is not a valid GUID (which may be the case for GitHub users), we look up the
+    ///     user in the database using their GitHub account ID and then retrieve their projects
+    ///     using the internal user ID.
+    ///
+    ///     If the user is not authenticated, we simply set the loading state to false, which
+    ///     will trigger the UI to show the appropriate message for unauthenticated users.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
