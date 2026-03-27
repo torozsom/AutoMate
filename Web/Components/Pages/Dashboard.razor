@@ -25,7 +25,7 @@
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                 <li><a class="dropdown-item" href="/local-repos"><i class="bi bi-folder2-open me-2 text-warning"></i>Local Projects</a></li>
-                <li><a class="dropdown-item" href="/gh-repos"><i class="bi bi-github me-2"></i>Remote repositories</a></li>
+                <li><a class="dropdown-item" href="/github-repos"><i class="bi bi-github me-2"></i>Remote repositories</a></li>
             </ul>
         </div>
     </div>
@@ -46,7 +46,7 @@
                     <p class="lead">Start building your own DevOps environment!</p>
                     <div class="mt-4">
                         <a href="/local-repos" class="btn btn-outline-primary mx-2">Search Locally</a>
-                        <a href="/gh-repos" class="btn btn-outline-dark mx-2">Get GitHub Repositories</a>
+                        <a href="/github-repos" class="btn btn-outline-dark mx-2">Get GitHub Repositories</a>
                     </div>
                 </div>
             }
@@ -78,9 +78,13 @@
                                         <i class="bi bi-link-45deg"></i> @project.SourcePathOrUrl
                                     </p>
                                 </div>
-                                <div class="card-footer bg-transparent border-top-0 pt-0">
-                                    <button class="btn btn-success w-100" disabled>
-                                        <i class="bi bi-play-fill me-1"></i> Deploy (Soon)
+                                <div class="card-footer bg-transparent border-top-0 pt-0 d-flex gap-2">
+                                    <button class="btn btn-success flex-grow-1" disabled>
+                                        <i class="bi bi-play-fill me-1"></i> Deploy
+                                    </button>
+
+                                    <button class="btn btn-outline-danger" @onclick="() => DeleteProject(project.Id)" title="Remove project">
+                                        <i class="bi bi-trash3">Remove</i>
                                     </button>
                                 </div>
                             </div>
@@ -101,7 +105,19 @@
 @code {
     private bool _isLoading = true;
     private List<Project>? _projects;
+    private Guid _currentUserId;
 
+
+    /// <summary>
+    ///     On initialization, we check if the user is authenticated. If they are,
+    ///     we attempt to retrieve their projects using their user ID. If the user ID
+    ///     is not a valid GUID (which may be the case for GitHub users), we look up the
+    ///     user in the database using their GitHub account ID and then retrieve their projects
+    ///     using the internal user ID.
+    ///
+    ///     If the user is not authenticated, we simply set the loading state to false, which
+    ///     will trigger the UI to show the appropriate message for unauthenticated users.
+    /// </summary>
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
@@ -112,7 +128,7 @@
             var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
             if (Guid.TryParse(userIdString, out var userId))
-                _projects = await ProjectService.GetProjectsAsync(userId);
+                _currentUserId = userId;
 
             else if (!string.IsNullOrEmpty(userIdString))
             {
@@ -121,10 +137,32 @@
                 var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
 
                 if (dbUser != null)
-                    _projects = await ProjectService.GetProjectsAsync(dbUser.Id);
+                    _currentUserId = dbUser.Id;
             }
+
+            if (_currentUserId != Guid.Empty)
+                _projects = await ProjectService.GetProjectsAsync(_currentUserId);
+
         }
 
         _isLoading = false;
+    }
+
+
+    /// <summary>
+    ///     Deletes a project by its ID. This method first checks if the current user ID is valid.
+    ///     If it is, it calls the project service to delete the project.
+    /// </summary>
+    /// <param name="projectId"></param>
+    private async Task DeleteProject(Guid projectId)
+    {
+        if (_currentUserId == Guid.Empty)
+            return;
+
+        var success = await ProjectService
+            .DeleteProjectAsync(projectId, _currentUserId);
+
+        if (success && _projects != null)
+            _projects.RemoveAll(p => p.Id == projectId);
     }
 }

@@ -87,4 +87,25 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
             .Where(p =>p.UserId == userId)
             .ToListAsync();
     }
+
+
+    /// <summary>
+    ///     Deletes a project associated with a specific user from the database.
+    ///     Checks if the project exists before attempting to delete it.
+    /// </summary>
+    /// <param name="projectId">The unique identifier of the project to be deleted.</param>
+    /// <param name="userId">The unique identifier of the user who owns the project.</param>
+    /// <returns>A task that returns true if the project was deleted successfully, or false if the project does not exist.</returns>
+    public async Task<bool> DeleteProjectAsync(Guid projectId, Guid userId)
+    {
+        var project = await context.Projects
+            .FirstOrDefaultAsync(p => p.Id == projectId && p.UserId == userId);
+
+        if (project == null)
+            return false;
+
+        context.Projects.Remove(project);
+        await context.SaveChangesAsync();
+        return true;
+    }
 }

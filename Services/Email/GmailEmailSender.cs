@@ -20,7 +20,7 @@ public class GmailEmailSender(IConfiguration configuration) : IEmailSender
     /// <param name="toEmail">The recipient's email address.</param>
     /// <param name="subject">The subject of the email to be sent.</param>
     /// <param name="message">The message of the email to be sent.</param>
-    /// <exception cref="InvalidOperationException"></exception>
+    /// <exception cref="InvalidOperationException">Throws if email sender credentials are not configured.</exception>
     public async Task SendEmailAsync(string toEmail, string subject, string message)
     {
         var senderEmail = configuration["Email:SenderEmail"];

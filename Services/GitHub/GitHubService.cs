@@ -31,7 +31,7 @@ public class GitHubService : IGitHubService
     ///     Retrieves the list of repositories for the authenticated user using the provided access token.
     /// </summary>
     /// <param name="accessToken">The access token of the authenticated user.</param>
-    /// <returns></returns>
+    /// <returns>A list of GitHubRepositoryDto objects representing the user's repositories.</returns>
     public async Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken)
     {
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
