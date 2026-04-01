@@ -1,9 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using Core.Entities;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
-using Services.Data;
 using Services.Email;
 
 namespace Web.Components.Pages;
@@ -17,13 +13,10 @@ namespace Web.Components.Pages;
 public partial class RegistryForm : ComponentBase
 {
     [Inject]
-    private AutoMateDbContext DbContext { get; set; } = null!;
-
-    [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
 
     [Inject]
-    private IEmailSender EmailSender { get; set; } = null!;
+    private IAuthService AuthService { get; set; } = null!;
 
 
     /// <summary>
@@ -78,37 +71,19 @@ public partial class RegistryForm : ComponentBase
 
         ErrorMessage = null;
 
-        var emailExists = await DbContext.Users.AnyAsync(u => u.Email == Model.Email);
-        if (emailExists)
+        var success = await AuthService.RegisterAsync(
+            Model.Username,
+            Model.Email,
+            Model.Password,
+            token => NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("/verify-email").ToString(),
+                new Dictionary<string, object?> { { "token", token } }));
+
+        if (!success)
         {
             ErrorMessage = "This email address is already in use.";
             return;
         }
-
-        var newUser = new LocalUser
-        {
-            Email = Model.Email,
-            Username = Model.Username,
-            IsEmailVerified = false,
-            EmailVerificationToken = Guid.NewGuid().ToString(),
-            VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(24)
-        };
-
-        var hasher = new PasswordHasher<LocalUser>();
-        newUser.PasswordHash = hasher.HashPassword(newUser, Model.Password);
-
-        DbContext.Users.Add(newUser);
-        await DbContext.SaveChangesAsync();
-
-        var verificationLink = NavigationManager.GetUriWithQueryParameters(
-            NavigationManager.ToAbsoluteUri("/verify-email").ToString(),
-            new Dictionary<string, object?> { { "token", newUser.EmailVerificationToken } });
-
-
-        await EmailSender.SendEmailAsync(
-            newUser.Email,
-            "Confirm your registration to AutoMate!",
-            "Welcome to AutoMate!\n\nPlease follow this link for verification:\n" + verificationLink);
 
         NavigationManager.NavigateTo("/verify-email?checkemail=true");
     }

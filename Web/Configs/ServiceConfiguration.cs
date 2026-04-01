@@ -1,4 +1,3 @@
-using Core.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
@@ -62,32 +61,8 @@ public static class ServiceConfiguration
                         : null;
                     var accessToken = context.AccessToken;
 
-                    var dbContext = context.HttpContext.RequestServices.GetRequiredService<AutoMateDbContext>();
-
-                    var existingUser = await dbContext.Users
-                        .OfType<GitHubUser>()
-                        .FirstOrDefaultAsync(u => u.AccountId == githubId);
-
-                    if (existingUser == null)
-                    {
-                        var newUser = new GitHubUser
-                        {
-                            AccountId = githubId,
-                            Username = username,
-                            Email = email,
-                            AvatarUrl = avatarUrl,
-                            AccessToken = accessToken
-                        };
-
-                        dbContext.Users.Add(newUser);
-                    }
-                    else
-                    {
-                        existingUser.AvatarUrl = avatarUrl;
-                        existingUser.AccessToken = accessToken;
-                    }
-
-                    await dbContext.SaveChangesAsync();
+                    var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
+                    await authService.CreateOrUpdateGitHubUserAsync(githubId, username, email, avatarUrl, accessToken);
                 };
             });
 
@@ -105,6 +80,9 @@ public static class ServiceConfiguration
 
         // Add services for sending emails
         builder.Services.AddScoped<IEmailSender, GmailEmailSender>();
+
+        // Add services for authentication and user management
+        builder.Services.AddScoped<IAuthService, AuthService>();
 
         // Add services for GitHub API interactions
         builder.Services.AddHttpClient<IGitHubService, GitHubService>();

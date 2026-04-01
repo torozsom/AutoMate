@@ -1,7 +1,5 @@
-using Core.Entities;
 using Microsoft.AspNetCore.Components;
-using Microsoft.EntityFrameworkCore;
-using Services.Data;
+using Services.Email;
 
 namespace Web.Components.Pages;
 
@@ -17,7 +15,7 @@ namespace Web.Components.Pages;
 public partial class VerifyEmail : ComponentBase
 {
     [Inject]
-    private AutoMateDbContext DbContext { get; set; } = null!;
+    private IAuthService AuthService { get; set; } = null!;
 
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
@@ -48,26 +46,14 @@ public partial class VerifyEmail : ComponentBase
             return;
         }
 
-        var user = await DbContext.Users.OfType<LocalUser>()
-            .FirstOrDefaultAsync(u => u.EmailVerificationToken == Token);
+        var success = await AuthService.VerifyEmailAsync(Token);
 
-        if (user == null)
+        if (!success)
         {
-            ErrorMessage = "Invalid token. No user found for the provided token.";
+            ErrorMessage = "Invalid token or token has expired. Please check the link and try again.";
             return;
         }
 
-        if (user.VerificationTokenExpiry < DateTimeOffset.UtcNow)
-        {
-            ErrorMessage = "Confirmation token has expired. Please request a new verification email.";
-            return;
-        }
-
-        user.IsEmailVerified = true;
-        user.EmailVerificationToken = null;
-        user.VerificationTokenExpiry = null;
-
-        await DbContext.SaveChangesAsync();
         NavigationManager.NavigateTo("/login?verified=true");
     }
 }
