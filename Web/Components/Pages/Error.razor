@@ -1,5 +1,4 @@
 ﻿@page "/Error"
-@using System.Diagnostics
 
 <PageTitle>Error</PageTitle>
 
@@ -26,16 +25,3 @@
     and restarting the app.
 </p>
 
-
-@code {
-
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
-
-    private string? RequestId { get; set; }
-    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
-
-    /// Initializes the component by setting the RequestId based on the current activity or HTTP context trace identifier.
-    protected override void OnInitialized() =>
-        RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
-}

@@ -1,11 +1,8 @@
 using System.Security.Claims;
-using Core.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Services.Data;
+using Services.Auth;
 
 namespace Web.Routes.Endpoints.Auth;
 
@@ -26,27 +23,13 @@ public class LoginEndpoint : IEndpoint
             [FromForm] string email,
             [FromForm] string password) =>
         {
-            var dbContext = context.RequestServices.GetRequiredService<AutoMateDbContext>();
-            var user = await dbContext.Users.OfType<LocalUser>().FirstOrDefaultAsync(u => u.Email == email);
+            var authService = context.RequestServices.GetRequiredService<IAuthService>();
+            var (user, errorMessage) = await authService.LoginAsync(email, password);
 
             if (user == null)
             {
-                context.Response.Redirect("/login?error=Invalid%20credentials");
-                return;
-            }
-
-            var hasher = new PasswordHasher<LocalUser>();
-            var verificationResult = hasher.VerifyHashedPassword(user, user.PasswordHash!, password);
-
-            if (verificationResult == PasswordVerificationResult.Failed)
-            {
-                context.Response.Redirect("/login?error=Invalid%20credentials");
-                return;
-            }
-
-            if (!user.IsEmailVerified)
-            {
-                context.Response.Redirect("/login?error=Email%20not%20verified");
+                var encodedError = Uri.EscapeDataString(errorMessage ?? "Invalid credentials");
+                context.Response.Redirect($"/login?error={encodedError}");
                 return;
             }
 

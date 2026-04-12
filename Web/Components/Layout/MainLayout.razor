@@ -1,8 +1,5 @@
 ﻿@inherits LayoutComponentBase
 
-@using Services.Docker
-@inject IDockerService DockerService
-
 
 <div class="page">
     <div class="sidebar">
@@ -46,17 +43,3 @@
     <span class="dismiss">🗙</span>
 </div>
 
-
-@code {
-
-    private bool? _isDockerRunning;
-
-    /// <summary>
-    ///     On component initialization, check if the Docker Engine is responsive
-    ///     by pinging it through the injected DockerService.
-    /// </summary>
-    protected override async Task OnInitializedAsync()
-    {
-        _isDockerRunning = await DockerService.PingAsync();
-    }
-}

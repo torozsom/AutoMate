@@ -1,4 +1,3 @@
-using Core.DTO;
 using Core.Entities;
 
 namespace Services.Projects;
