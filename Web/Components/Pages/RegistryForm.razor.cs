@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Components;
-using Services.Email;
+using Services.Auth;
 
 namespace Web.Components.Pages;
 

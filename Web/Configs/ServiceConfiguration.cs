@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
+using Services.Auth;
 using Services.Data;
 using Services.Docker;
 using Services.Email;
