@@ -79,6 +79,13 @@ public static class ServiceConfiguration
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
+        // Add services for caching, using Redis as the distributed cache provider.
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = builder.Configuration.GetConnectionString("Redis");
+            options.InstanceName = "AutoMate_";
+        });
+
         // Add services for sending emails
         builder.Services.AddScoped<IEmailSender, GmailEmailSender>();
 
