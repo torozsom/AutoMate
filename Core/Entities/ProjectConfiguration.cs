@@ -14,7 +14,7 @@ public class ProjectConfiguration
     /// <summary>
     /// Gets or sets the unique identifier of the project associated with this configuration.
     /// </summary>
-    public Guid ProjectId { get; set; }
+    public Guid CsProjectId { get; set; }
 
     /// <summary>
     /// Gets or sets the .NET version to use for the project (e.g., "net8.0").
@@ -41,5 +41,5 @@ public class ProjectConfiguration
     /// <summary>
     /// Gets or sets a reference to the project associated with this configuration.
     /// </summary>
-    public Project? Project { get; set; }
+    public CsProject CsProject { get; set; } = null!;
 }

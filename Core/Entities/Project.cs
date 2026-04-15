@@ -44,12 +44,7 @@ public class Project
     public User? User { get; set; }
 
     /// <summary>
-    /// Gets or sets the configuration settings for the project.
+    /// Gets or sets the collection of C# projects in the application.
     /// </summary>
-    public ProjectConfiguration? Configuration { get; set; }
-
-    /// <summary>
-    /// Gets or sets the collection of deployments associated with the project.
-    /// </summary>
-    public ICollection<Deployment> Deployments { get; set; } = [];
+    public ICollection<CsProject> CsProjects { get; set; } = [];
 }

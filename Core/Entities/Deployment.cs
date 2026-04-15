@@ -16,7 +16,7 @@ public class Deployment
     /// <summary>
     /// Gets or sets the unique identifier of the project associated with this deployment.
     /// </summary>
-    public Guid ProjectId { get; set; }
+    public Guid CsProjectId { get; set; }
 
     /// <summary>
     /// Gets or sets the timestamp when the deployment was created.
@@ -38,5 +38,5 @@ public class Deployment
     /// <summary>
     /// Gets or sets a reference to the project associated with this deployment.
     /// </summary>
-    public Project? Project { get; set; }
+    public CsProject? CsProject { get; set; }
 }
