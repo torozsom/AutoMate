@@ -1,3 +1,4 @@
+using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -13,32 +14,47 @@ namespace Services.Projects;
 /// <param name="context">The database context.</param>
 public class ProjectService(AutoMateDbContext context) : IProjectService
 {
-
     /// <summary>
     ///     Adds a local project to the database for a specific user. Checks if a project
     ///     with the same source path already exists for the user before adding.
     /// </summary>
     /// <param name="userId">The user ID of the project's owner.</param>
-    /// <param name="projectName">The name of the project to be saved.</param>
-    /// <param name="sourcePath">The source path of the project.</param>
+    /// <param name="project">The project information to be saved.</param>
+    /// <param name="csproject">The C# project file information.</param>
     /// <returns>A task that returns true if the project was added successfully, or false if it already exists.</returns>
-    public async Task<bool> AddLocalProjectAsync(Guid userId, string projectName, string sourcePath)
+    public async Task<bool> AddLocalProjectAsync(Guid userId, LocalProjectDto project, CsProjectDto csproject)
     {
-        var alreadyExists = await context.Projects
-            .AnyAsync(p => p.UserId == userId && p.SourceType == SourceType.Local && p.SourcePathOrUrl == sourcePath);
+        var proj = await context.Projects
+            .Include(p => p.CsProjects)
+            .FirstOrDefaultAsync(p => p.UserId == userId
+                                      && p.SourceType == SourceType.Local
+                                      && p.SourcePathOrUrl == project.Path);
+        if (proj == null)
+        {
+            proj = new Project
+            {
+                UserId = userId,
+                Name = project.Name,
+                SourceType = SourceType.Local,
+                SourcePathOrUrl = project.Path,
+                CsProjects = []
+            };
+            context.Projects.Add(proj);
+        }
 
-        if (alreadyExists)
+        var csprojExists = proj.CsProjects.Any(csp => csp.Path == csproject.Path);
+        if (csprojExists)
             return false;
 
-        var project = new Project
+        var csproj = new CsProject
         {
-            UserId = userId,
-            Name = projectName,
-            SourceType = SourceType.Local,
-            SourcePathOrUrl = sourcePath,
+            ProjectId = proj.Id,
+            Name = csproject.Name,
+            Path = csproject.Path,
+            IsWebProject = csproject.IsWebProject
         };
 
-        context.Projects.Add(project);
+        proj.CsProjects.Add(csproj);
         await context.SaveChangesAsync();
         return true;
     }
@@ -84,7 +100,7 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
     public async Task<List<Project>> GetProjectsAsync(Guid userId)
     {
         return await context.Projects
-            .Where(p =>p.UserId == userId)
+            .Where(p => p.UserId == userId)
             .ToListAsync();
     }
 

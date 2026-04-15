@@ -3,11 +3,11 @@ using Microsoft.AspNetCore.Components;
 namespace Web.Components.Pages;
 
 /// <summary>
-/// Represents a login form component used for user authentication.
+///     Represents a login form component used for user authentication.
 /// </summary>
 /// <remarks>
-/// The component can display messages related to user registration, email verification,
-/// and error handling by extracting parameters from the query string.
+///     The component can display messages related to user registration, email verification,
+///     and error handling by extracting parameters from the query string.
 /// </remarks>
 public partial class LoginForm : ComponentBase
 {

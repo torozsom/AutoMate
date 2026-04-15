@@ -11,40 +11,35 @@ using Services.Scanner;
 
 namespace Web.Components.Pages;
 
-
 /// <summary>
-/// The LocalGitRepos component is responsible for displaying a list of local Git projects
-/// that have been scanned and saved to the user's account. It also allows the user to search
-/// for and save new projects.
+///     The LocalGitRepos component is responsible for displaying a list of local Git projects
+///     that have been scanned and saved to the user's account. It also allows the user to search
+///     for and save new projects.
 /// </summary>
 public partial class LocalGitRepos : ComponentBase
 {
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+    private bool _hasScanned;
 
-    [Inject]
-    private ILocalScannerService ScannerService { get; set; } = null!;
+    private bool _isErrorStatus;
 
-    [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
+    private bool _isScanning;
 
-    [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = null!;
+    private string _lastSearchedPath = string.Empty;
+
+    private List<LocalProjectDto>? _localProjects;
 
 
     private string _searchPath = string.Empty;
 
-    private string _lastSearchedPath = string.Empty;
-
-    private bool _isScanning;
-
-    private bool _hasScanned;
-
     private string? _statusMessage;
 
-    private bool _isErrorStatus;
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    private List<LocalProjectDto>? _localProjects;
+    [Inject] private ILocalScannerService ScannerService { get; set; } = null!;
+
+    [Inject] private IProjectService ProjectService { get; set; } = null!;
+
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
 
 
     /// <summary>
@@ -98,7 +93,8 @@ public partial class LocalGitRepos : ComponentBase
     ///     It also updates the status message based on the success of the operation.
     /// </summary>
     /// <param name="project">The DTO of the Local Project to be saved.</param>
-    private async Task SaveProjectAsync(LocalProjectDto project)
+    /// <param name="csproject">The DTO of the CsProject to be saved</param>
+    private async Task SaveProjectAsync(LocalProjectDto project, CsProjectDto csproject)
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
@@ -111,8 +107,13 @@ public partial class LocalGitRepos : ComponentBase
         }
 
         var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = Guid.Empty;
 
-        if (!Guid.TryParse(userIdString, out var userId))
+        if (Guid.TryParse(userIdString, out var parsedId))
+        {
+            userId = parsedId;
+        }
+        else if (!string.IsNullOrEmpty(userIdString))
         {
             using var scope = ServiceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
@@ -125,16 +126,16 @@ public partial class LocalGitRepos : ComponentBase
         if (userId == Guid.Empty)
             return;
 
-        var success = await ProjectService.AddLocalProjectAsync(userId, project.Name, project.Path);
+        var success = await ProjectService.AddLocalProjectAsync(userId, project, csproject);
 
         if (success)
         {
-            _statusMessage = $"{project.Name} successfully saved!";
+            _statusMessage = $"{csproject.Name} successfully saved!";
             _isErrorStatus = false;
         }
         else
         {
-            _statusMessage = $"{project.Name} already exists!";
+            _statusMessage = $"{csproject.Name} already exists!";
             _isErrorStatus = true;
         }
     }

@@ -5,9 +5,8 @@ namespace Web.Components.Layout;
 
 public partial class NavMenu : ComponentBase
 {
-    [Inject] private IJSRuntime JS { get; set; } = null!;
-
     private bool _isDarkMode;
+    [Inject] private IJSRuntime JS { get; set; } = null!;
 
     /// <summary>
     ///     On the first render, we check the user's theme preference from
@@ -26,7 +25,7 @@ public partial class NavMenu : ComponentBase
 
 
     /// <summary>
-    ///    This method toggles the theme between light and dark modes. It updates the
+    ///     This method toggles the theme between light and dark modes. It updates the
     ///     _isDarkMode field and calls a JavaScript function to apply the selected theme.
     ///     The JavaScript function is expected to handle the actual theme switching logic,
     ///     such as adding or removing CSS classes or updating the document's data attributes.

@@ -7,7 +7,8 @@
 
     @if (!string.IsNullOrEmpty(_statusMessage))
     {
-        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show mt-3" role="alert">
+        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show mt-3"
+             role="alert">
             @_statusMessage
             <button type="button" class="btn-close" @onclick="() => _statusMessage = null" aria-label="Close"></button>
         </div>
@@ -35,12 +36,16 @@
                                         @repo.Name
                                     </h5>
                                     <h6 class="card-subtitle mb-2 text-muted">@repo.Language</h6>
-                                    <p class="card-text small text-muted">Updated at: @repo.UpdatedAt.ToString("yyyy. MM. dd.")</p>
-                                    <a href="@repo.HtmlUrl" target="_blank" class="btn btn-sm btn-outline-dark">Show in GitHub</a>
+                                    <p class="card-text small text-muted">Updated
+                                        at: @repo.UpdatedAt.ToString("yyyy. MM. dd.")</p>
+                                    <a href="@repo.HtmlUrl" target="_blank" class="btn btn-sm btn-outline-dark">Show in
+                                        GitHub</a>
 
                                     @if (repo.Language == "C#")
                                     {
-                                        <button class="btn btn-sm btn-primary m-2" @onclick="() => SaveProjectAsync(repo)">Save</button>
+                                        <button class="btn btn-sm btn-primary m-2"
+                                                @onclick="() => SaveProjectAsync(repo)">Save
+                                        </button>
                                     }
 
                                 </div>

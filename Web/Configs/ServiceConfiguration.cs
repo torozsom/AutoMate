@@ -24,7 +24,10 @@ public static class ServiceConfiguration
     ///     including the database context, authentication services, and Razor components.
     /// </summary>
     /// <param name="builder">The WebApplicationBuilder used to configure services.</param>
-    /// <exception cref="InvalidOperationException">Thrown when required configuration values are missing (e.g., GitHub ClientId/ClientSecret).</exception>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown when required configuration values are missing (e.g., GitHub
+    ///     ClientId/ClientSecret).
+    /// </exception>
     public static void Configure(WebApplicationBuilder builder)
     {
         // Add the database context to the services container, using PostgreSQL as the database provider.
@@ -78,6 +81,13 @@ public static class ServiceConfiguration
         // Add services for Swagger/OpenAPI
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
+
+        // Add services for caching, using Redis as the distributed cache provider.
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = builder.Configuration.GetConnectionString("Redis");
+            options.InstanceName = "AutoMate_";
+        });
 
         // Add services for sending emails
         builder.Services.AddScoped<IEmailSender, GmailEmailSender>();

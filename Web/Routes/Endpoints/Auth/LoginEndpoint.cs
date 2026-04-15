@@ -6,7 +6,6 @@ using Services.Auth;
 
 namespace Web.Routes.Endpoints.Auth;
 
-
 /// <summary>
 ///     Endpoint for handling user login. It accepts email and password
 ///     as form data, verifies the credentials against the database, and if valid,

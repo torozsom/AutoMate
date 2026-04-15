@@ -15,7 +15,8 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
 
 
     /// <inheritdoc />
-    public async Task<bool> RegisterAsync(string username, string email, string password, Func<string, string> verificationLinkFactory)
+    public async Task<bool> RegisterAsync(string username, string email, string password,
+        Func<string, string> verificationLinkFactory)
     {
         var emailExists = await dbContext.Users.AnyAsync(u => u.Email == email);
         if (emailExists)
@@ -53,10 +54,7 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
             .OfType<LocalUser>()
             .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
 
-        if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < DateTimeOffset.UtcNow)
-        {
-            return false;
-        }
+        if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < DateTimeOffset.UtcNow) return false;
 
         user.IsEmailVerified = true;
         user.EmailVerificationToken = null;
@@ -91,7 +89,8 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
 
 
     /// <inheritdoc />
-    public async Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl, string? accessToken)
+    public async Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
+        string? accessToken)
     {
         var existingUser = await dbContext.Users
             .OfType<GitHubUser>()

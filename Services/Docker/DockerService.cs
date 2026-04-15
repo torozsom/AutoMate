@@ -5,9 +5,8 @@ using Services.Data;
 
 namespace Services.Docker;
 
-
 /// <summary>
-///     The <see cref="DockerService"/> class provides functionality to interact with the Docker daemon.
+///     The <see cref="DockerService" /> class provides functionality to interact with the Docker daemon.
 ///     It allows checking the availability of the Docker service and is designed to handle Docker-related
 ///     operations, such as building and deploying projects. The service is initialized with a database context,
 ///     which can be used for any necessary interactions with the database related to Docker operations. The class
@@ -20,7 +19,7 @@ public class DockerService : IDockerService, IDisposable
 
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="DockerService"/> class. It sets up
+    ///     Initializes a new instance of the <see cref="DockerService" /> class. It sets up
     ///     the Docker client configuration based on the operating system. For Windows, it
     ///     uses a named pipe to connect to the Docker daemon, while for Unix-based systems,
     ///     it uses a Unix socket. The constructor also accepts a database context for potential
@@ -36,6 +35,19 @@ public class DockerService : IDockerService, IDisposable
             : new Uri("unix:///var/run/docker.sock");
 
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
+    }
+
+
+    /// <summary>
+    ///     Disposes of the Docker client resources when the service is no longer needed.
+    ///     This method is important for releasing any unmanaged resources held by the
+    ///     Docker client and ensuring that connections to the Docker daemon are properly closed.
+    ///     By implementing the IDisposable interface, this service can be used in a using
+    ///     statement or disposed of manually to free up resources efficiently.
+    /// </summary>
+    public void Dispose()
+    {
+        _client.Dispose();
     }
 
 
@@ -57,16 +69,6 @@ public class DockerService : IDockerService, IDisposable
             return false;
         }
     }
-
-
-    /// <summary>
-    ///     Disposes of the Docker client resources when the service is no longer needed.
-    ///     This method is important for releasing any unmanaged resources held by the
-    ///     Docker client and ensuring that connections to the Docker daemon are properly closed.
-    ///     By implementing the IDisposable interface, this service can be used in a using
-    ///     statement or disposed of manually to free up resources efficiently.
-    /// </summary>
-    public void Dispose() =>_client.Dispose();
 
 
     public async Task<Deployment?> BuildAndDeployLocalProjectAsync(Project project)

@@ -5,9 +5,8 @@ namespace Web.Components.Layout;
 
 public partial class MainLayout : LayoutComponentBase
 {
-    [Inject] private IDockerService DockerService { get; set; } = null!;
-
     private bool? _isDockerRunning;
+    [Inject] private IDockerService DockerService { get; set; } = null!;
 
     /// <summary>
     ///     On component initialization, check if the Docker Engine is responsive

@@ -7,22 +7,22 @@
 public enum DeploymentStatus
 {
     /// <summary>
-    /// The deployment is pending and has not yet started.
+    ///     The deployment is pending and has not yet started.
     /// </summary>
     Pending,
 
     /// <summary>
-    /// The deployment is currently in progress.
+    ///     The deployment is currently in progress.
     /// </summary>
     InProgress,
 
     /// <summary>
-    /// The deployment has completed successfully.
+    ///     The deployment has completed successfully.
     /// </summary>
     Succeeded,
 
     /// <summary>
-    /// The deployment failed to complete.
+    ///     The deployment failed to complete.
     /// </summary>
     Failed
 }

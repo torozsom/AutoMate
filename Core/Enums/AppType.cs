@@ -7,17 +7,17 @@
 public enum AppType
 {
     /// <summary>
-    /// Represents a Web API application.
+    ///     Represents a Web API application.
     /// </summary>
     WebApi,
 
     /// <summary>
-    /// Represents a Blazor application.
+    ///     Represents a Blazor application.
     /// </summary>
     Blazor,
 
     /// <summary>
-    /// Represents an ASP.NET MVC application.
+    ///     Represents an ASP.NET MVC application.
     /// </summary>
     Mvc
 }

@@ -1,6 +1,5 @@
 namespace Services.Email;
 
-
 /// <summary>
 ///     Interface for sending emails. This can be implemented using
 ///     various email service providers (e.g., SMTP, SendGrid, etc.).

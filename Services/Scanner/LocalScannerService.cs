@@ -1,5 +1,5 @@
+using System.Xml.Linq;
 using Core.DTO;
-
 
 namespace Services.Scanner;
 
@@ -11,7 +11,6 @@ namespace Services.Scanner;
 /// </summary>
 public class LocalScannerService : ILocalScannerService
 {
-
     /// <summary>
     ///     Scans the specified root directory and its subdirectories for Git repositories.
     ///     For each Git repository found, it checks for the presence of .NET project files
@@ -62,25 +61,57 @@ public class LocalScannerService : ILocalScannerService
 
             if (isGitRepo)
             {
+                var csprojFiles = FindCsprojFilesSafe(currentPath);
                 var files = Directory.GetFiles(currentPath);
 
                 var isDotNet = files.Any(f =>
                     f.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
                     f.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
-                    f.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase));
+                    csprojFiles.Count > 0);
+
+                var subProjects = new List<CsProjectDto>();
+
+                foreach (var csproj in csprojFiles)
+                {
+                    var isWeb = false;
+                    try
+                    {
+                        var doc = XDocument.Load(csproj);
+                        var sdkAttribute = doc.Root?.Attribute("Sdk")?.Value;
+                        if (sdkAttribute != null && sdkAttribute.Contains("Microsoft.NET.Sdk.Web"))
+                            isWeb = true;
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        Console.WriteLine($"Error parsing .csproj file: {csproj}. Exception: {ex.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Unexpected error parsing .csproj file: {csproj}. Exception: {ex.Message}");
+                    }
+
+                    subProjects.Add(new CsProjectDto
+                    {
+                        Name = Path.GetFileNameWithoutExtension(csproj),
+                        Path = csproj,
+                        IsWebProject = isWeb
+                    });
+                }
 
                 result.Add(new LocalProjectDto
                 {
                     Name = dirName,
                     Path = currentPath,
-                    IsDotNetProject = isDotNet
+                    IsDotNetProject = isDotNet,
+                    CsProjects = subProjects
                 });
+
                 return;
             }
 
             foreach (var dir in directories)
-                    if (!Path.GetFileName(dir).Equals(".git", StringComparison.OrdinalIgnoreCase))
-                        ScanDirectory(dir, result);
+                if (!Path.GetFileName(dir).Equals(".git", StringComparison.OrdinalIgnoreCase))
+                    ScanDirectory(dir, result);
         }
         catch (UnauthorizedAccessException)
         {
@@ -90,5 +121,49 @@ public class LocalScannerService : ILocalScannerService
         {
             Console.WriteLine("Error scanning directory: " + currentPath);
         }
+    }
+
+
+    /// <summary>
+    ///     Safely searches for .csproj files within the specified root directory
+    ///     and all its subdirectories, excluding certain directories like "bin",
+    ///     "obj", "node_modules", and hidden directories.
+    /// </summary>
+    /// <param name="rootDir">The root directory to start searching for .csproj files.</param>
+    /// <returns>A list of file paths to the .csproj files found.</returns>
+    private List<string> FindCsprojFilesSafe(string rootDir)
+    {
+        var result = new List<string>();
+        var queue = new Queue<string>();
+        queue.Enqueue(rootDir);
+
+        while (queue.Count > 0)
+        {
+            var currentPath = queue.Dequeue();
+            try
+            {
+                var dirName = new DirectoryInfo(currentPath).Name;
+
+                if (currentPath != rootDir &&
+                    (dirName.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
+                     dirName.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
+                     dirName.Equals("node_modules", StringComparison.OrdinalIgnoreCase) ||
+                     dirName.StartsWith('.'))) continue;
+
+                result.AddRange(Directory.GetFiles(currentPath, "*.csproj"));
+                foreach (var subDir in Directory.GetDirectories(currentPath))
+                    queue.Enqueue(subDir);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Console.WriteLine("Access denied to directory: " + currentPath);
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Error scanning directory: " + currentPath);
+            }
+        }
+
+        return result;
     }
 }
