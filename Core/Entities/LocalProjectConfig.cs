@@ -4,7 +4,7 @@
 ///     Represents the configuration settings for a project, including the .NET version to use,
 ///     the port to expose, whether a database is required, and whether the project is public or private.
 /// </summary>
-public class ProjectConfiguration
+public class LocalProjectConfig
 {
     /// <summary>
     ///     Gets or sets the unique identifier for the project configuration.
@@ -39,7 +39,13 @@ public class ProjectConfiguration
     public bool IsPublic { get; set; }
 
     /// <summary>
+    ///     Gets or sets environment variables for the Docker container in JSON format.
+    ///     Useful for passing connection strings or API keys securely.
+    /// </summary>
+    public string? EnvironmentVariablesJson { get; set; }
+
+    /// <summary>
     ///     Gets or sets a reference to the project associated with this configuration.
     /// </summary>
-    public CsProject CsProject { get; set; } = null!;
+    public CsProject? CsProject { get; set; }
 }
