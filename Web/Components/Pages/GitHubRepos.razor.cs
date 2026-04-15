@@ -10,40 +10,33 @@ using Services.Projects;
 
 namespace Web.Components.Pages;
 
-
 /// <summary>
-/// The GitHubRepos component is responsible for retrieving and displaying a list of GitHub repositories
-/// associated with the authenticated user. It checks the user's authentication state and integrates
-/// with the database to determine if the user is a GitHub user. If a valid GitHub access token is available,
-/// the component leverages the GitHub service to fetch the repositories.
+///     The GitHubRepos component is responsible for retrieving and displaying a list of GitHub repositories
+///     associated with the authenticated user. It checks the user's authentication state and integrates
+///     with the database to determine if the user is a GitHub user. If a valid GitHub access token is available,
+///     the component leverages the GitHub service to fetch the repositories.
 /// </summary>
 public partial class GitHubRepos : ComponentBase
 {
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
-
-    [Inject]
-    private AutoMateDbContext DbContext { get; set; } = null!;
-
-    [Inject]
-    private IGitHubService GitHubService { get; set; } = null!;
-
-    [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
-
-    [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = null!;
-
-
     private List<GitHubRepositoryDto>? _githubRepos;
 
-    private bool _isLoading = true;
+    private bool _isErrorStatus;
 
     private bool _isGitHubUser;
 
+    private bool _isLoading = true;
+
     private string? _statusMessage;
 
-    private bool _isErrorStatus;
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+
+    [Inject] private AutoMateDbContext DbContext { get; set; } = null!;
+
+    [Inject] private IGitHubService GitHubService { get; set; } = null!;
+
+    [Inject] private IProjectService ProjectService { get; set; } = null!;
+
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
 
 
     /// <summary>

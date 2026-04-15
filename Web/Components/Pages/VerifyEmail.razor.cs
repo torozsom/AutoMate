@@ -3,7 +3,6 @@ using Services.Auth;
 
 namespace Web.Components.Pages;
 
-
 /// <summary>
 ///     This component handles the email verification process for users.
 ///     When a user clicks on the verification link sent to their email,
@@ -14,11 +13,9 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class VerifyEmail : ComponentBase
 {
-    [Inject]
-    private IAuthService AuthService { get; set; } = null!;
+    [Inject] private IAuthService AuthService { get; set; } = null!;
 
-    [Inject]
-    private NavigationManager NavigationManager { get; set; } = null!;
+    [Inject] private NavigationManager NavigationManager { get; set; } = null!;
 
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }

@@ -14,7 +14,6 @@ namespace Services.Projects;
 /// <param name="context">The database context.</param>
 public class ProjectService(AutoMateDbContext context) : IProjectService
 {
-
     /// <summary>
     ///     Adds a local project to the database for a specific user. Checks if a project
     ///     with the same source path already exists for the user before adding.
@@ -101,7 +100,7 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
     public async Task<List<Project>> GetProjectsAsync(Guid userId)
     {
         return await context.Projects
-            .Where(p =>p.UserId == userId)
+            .Where(p => p.UserId == userId)
             .ToListAsync();
     }
 

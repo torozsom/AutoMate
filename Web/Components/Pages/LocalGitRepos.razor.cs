@@ -11,40 +11,35 @@ using Services.Scanner;
 
 namespace Web.Components.Pages;
 
-
 /// <summary>
-/// The LocalGitRepos component is responsible for displaying a list of local Git projects
-/// that have been scanned and saved to the user's account. It also allows the user to search
-/// for and save new projects.
+///     The LocalGitRepos component is responsible for displaying a list of local Git projects
+///     that have been scanned and saved to the user's account. It also allows the user to search
+///     for and save new projects.
 /// </summary>
 public partial class LocalGitRepos : ComponentBase
 {
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+    private bool _hasScanned;
 
-    [Inject]
-    private ILocalScannerService ScannerService { get; set; } = null!;
+    private bool _isErrorStatus;
 
-    [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
+    private bool _isScanning;
 
-    [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = null!;
+    private string _lastSearchedPath = string.Empty;
+
+    private List<LocalProjectDto>? _localProjects;
 
 
     private string _searchPath = string.Empty;
 
-    private string _lastSearchedPath = string.Empty;
-
-    private bool _isScanning;
-
-    private bool _hasScanned;
-
     private string? _statusMessage;
 
-    private bool _isErrorStatus;
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    private List<LocalProjectDto>? _localProjects;
+    [Inject] private ILocalScannerService ScannerService { get; set; } = null!;
+
+    [Inject] private IProjectService ProjectService { get; set; } = null!;
+
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
 
 
     /// <summary>

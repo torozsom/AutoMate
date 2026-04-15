@@ -14,14 +14,21 @@ public interface IAuthService
     /// <param name="email">The email address for the new user.</param>
     /// <param name="password">The plain-text password for the new user.</param>
     /// <param name="verificationLinkFactory">A function that takes a verification token and returns a full verification URL.</param>
-    /// <returns>A task that represents the asynchronous operation. Returns true if registration was successful; otherwise, false if the email already exists.</returns>
-    Task<bool> RegisterAsync(string username, string email, string password, Func<string, string> verificationLinkFactory);
+    /// <returns>
+    ///     A task that represents the asynchronous operation. Returns true if registration was successful; otherwise,
+    ///     false if the email already exists.
+    /// </returns>
+    Task<bool> RegisterAsync(string username, string email, string password,
+        Func<string, string> verificationLinkFactory);
 
     /// <summary>
     ///     Verifies a user's email address using a verification token.
     /// </summary>
     /// <param name="token">The verification token.</param>
-    /// <returns>A task that represents the asynchronous operation. Returns true if verification was successful; otherwise, false.</returns>
+    /// <returns>
+    ///     A task that represents the asynchronous operation. Returns true if verification was successful; otherwise,
+    ///     false.
+    /// </returns>
     Task<bool> VerifyEmailAsync(string token);
 
     /// <summary>
@@ -29,7 +36,10 @@ public interface IAuthService
     /// </summary>
     /// <param name="email">The email address of the user.</param>
     /// <param name="password">The plain-text password of the user.</param>
-    /// <returns>A task that represents the asynchronous operation. Returns the authenticated user if successful; otherwise, null.</returns>
+    /// <returns>
+    ///     A task that represents the asynchronous operation. Returns the authenticated user if successful; otherwise,
+    ///     null.
+    /// </returns>
     Task<(LocalUser? User, string? ErrorMessage)> LoginAsync(string email, string password);
 
     /// <summary>
@@ -41,5 +51,6 @@ public interface IAuthService
     /// <param name="avatarUrl">The URL of the user's GitHub avatar.</param>
     /// <param name="accessToken">The GitHub access token.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
-    Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl, string? accessToken);
+    Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
+        string? accessToken);
 }

@@ -9,7 +9,7 @@ namespace Services.Docker;
 public interface IDockerService
 {
     /// <summary>
-    /// Checks if the Docker daemon is running and accessible by sending a ping request.
+    ///     Checks if the Docker daemon is running and accessible by sending a ping request.
     /// </summary>
     /// <returns>A boolean indicator if the daemon is available.</returns>
     Task<bool> PingAsync();

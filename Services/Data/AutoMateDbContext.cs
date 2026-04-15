@@ -14,27 +14,27 @@ namespace Services.Data;
 public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : DbContext(options)
 {
     /// <summary>
-    /// Gets or sets the collection of User entities in the database.
+    ///     Gets or sets the collection of User entities in the database.
     /// </summary>
     public DbSet<User> Users { get; set; }
 
     /// <summary>
-    /// Gets or sets the collection of Project entities in the database.
+    ///     Gets or sets the collection of Project entities in the database.
     /// </summary>
     public DbSet<Project> Projects { get; set; }
 
     /// <summary>
-    /// Gets or sets the collection of CsProject entities in the database.
+    ///     Gets or sets the collection of CsProject entities in the database.
     /// </summary>
     public DbSet<CsProject> CsProjects { get; set; }
 
     /// <summary>
-    /// Gets or sets the collection of ProjectConfiguration entities in the database.
+    ///     Gets or sets the collection of ProjectConfiguration entities in the database.
     /// </summary>
     public DbSet<ProjectConfiguration> ProjectConfigurations { get; set; }
 
     /// <summary>
-    /// Gets or sets the collection of Deployment entities in the database.
+    ///     Gets or sets the collection of Deployment entities in the database.
     /// </summary>
     public DbSet<Deployment> Deployments { get; set; }
 

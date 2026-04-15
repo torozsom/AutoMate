@@ -1,6 +1,5 @@
-using Core.DTO;
 using System.Xml.Linq;
-
+using Core.DTO;
 
 namespace Services.Scanner;
 
@@ -12,7 +11,6 @@ namespace Services.Scanner;
 /// </summary>
 public class LocalScannerService : ILocalScannerService
 {
-
     /// <summary>
     ///     Scans the specified root directory and its subdirectories for Git repositories.
     ///     For each Git repository found, it checks for the presence of .NET project files
@@ -75,7 +73,7 @@ public class LocalScannerService : ILocalScannerService
 
                 foreach (var csproj in csprojFiles)
                 {
-                    bool isWeb = false;
+                    var isWeb = false;
                     try
                     {
                         var doc = XDocument.Load(csproj);
@@ -112,8 +110,8 @@ public class LocalScannerService : ILocalScannerService
             }
 
             foreach (var dir in directories)
-                    if (!Path.GetFileName(dir).Equals(".git", StringComparison.OrdinalIgnoreCase))
-                        ScanDirectory(dir, result);
+                if (!Path.GetFileName(dir).Equals(".git", StringComparison.OrdinalIgnoreCase))
+                    ScanDirectory(dir, result);
         }
         catch (UnauthorizedAccessException)
         {
@@ -127,9 +125,9 @@ public class LocalScannerService : ILocalScannerService
 
 
     /// <summary>
-    /// Safely searches for .csproj files within the specified root directory
-    /// and all its subdirectories, excluding certain directories like "bin",
-    /// "obj", "node_modules", and hidden directories.
+    ///     Safely searches for .csproj files within the specified root directory
+    ///     and all its subdirectories, excluding certain directories like "bin",
+    ///     "obj", "node_modules", and hidden directories.
     /// </summary>
     /// <param name="rootDir">The root directory to start searching for .csproj files.</param>
     /// <returns>A list of file paths to the .csproj files found.</returns>

@@ -1,12 +1,10 @@
-using Core.DTO;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Core.DTO;
 using Microsoft.Extensions.Caching.Distributed;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace Services.GitHub;
-
 
 /// <summary>
 ///     Service class responsible for interacting with the GitHub API
@@ -14,12 +12,12 @@ namespace Services.GitHub;
 /// </summary>
 public class GitHubService : IGitHubService
 {
-    private readonly HttpClient _httpClient;
     private readonly IDistributedCache _cache;
+    private readonly HttpClient _httpClient;
 
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="GitHubService"/> class.
+    ///     Initializes a new instance of the <see cref="GitHubService" /> class.
     ///     It configures the HttpClient with the base URL and sets the User-Agent header required by GitHub API.
     /// </summary>
     /// <param name="httpClient">The HttpClient instance used for making HTTP requests.</param>
@@ -73,5 +71,4 @@ public class GitHubService : IGitHubService
 
         return repositories;
     }
-
 }

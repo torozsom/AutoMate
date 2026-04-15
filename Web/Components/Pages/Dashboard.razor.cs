@@ -8,28 +8,24 @@ using Services.Projects;
 
 namespace Web.Components.Pages;
 
-
 /// <summary>
-/// Represents a dashboard component that displays user-specific project data.
-/// This component is responsible for verifying user authentication and fetching
-/// the associated projects based on the authenticated user's ID.
+///     Represents a dashboard component that displays user-specific project data.
+///     This component is responsible for verifying user authentication and fetching
+///     the associated projects based on the authenticated user's ID.
 /// </summary>
 public partial class Dashboard : ComponentBase
 {
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
-
-    [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
-
-    [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = null!;
+    private Guid _currentUserId;
 
     private bool _isLoading = true;
 
     private List<Project>? _projects;
 
-    private Guid _currentUserId;
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+
+    [Inject] private IProjectService ProjectService { get; set; } = null!;
+
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
 
 
     /// <summary>
@@ -38,7 +34,6 @@ public partial class Dashboard : ComponentBase
     ///     is not a valid GUID (which may be the case for GitHub users), we look up the
     ///     user in the database using their GitHub account ID and then retrieve their projects
     ///     using the internal user ID.
-    ///
     ///     If the user is not authenticated, we simply set the loading state to false, which
     ///     will trigger the UI to show the appropriate message for unauthenticated users.
     /// </summary>
@@ -52,7 +47,9 @@ public partial class Dashboard : ComponentBase
             var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
             if (Guid.TryParse(userIdString, out var userId))
+            {
                 _currentUserId = userId;
+            }
 
             else if (!string.IsNullOrEmpty(userIdString))
             {
@@ -66,7 +63,6 @@ public partial class Dashboard : ComponentBase
 
             if (_currentUserId != Guid.Empty)
                 _projects = await ProjectService.GetProjectsAsync(_currentUserId);
-
         }
 
         _isLoading = false;
