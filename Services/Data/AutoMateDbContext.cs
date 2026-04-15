@@ -24,6 +24,11 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
     public DbSet<Project> Projects { get; set; }
 
     /// <summary>
+    /// Gets or sets the collection of CsProject entities in the database.
+    /// </summary>
+    public DbSet<CsProject> CsProjects { get; set; }
+
+    /// <summary>
     /// Gets or sets the collection of ProjectConfiguration entities in the database.
     /// </summary>
     public DbSet<ProjectConfiguration> ProjectConfigurations { get; set; }
@@ -54,16 +59,19 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
         modelBuilder.Entity<User>()
             .HasMany(u => u.Projects)
             .WithOne(p => p.User)
-            .HasForeignKey(p => p.UserId);
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<Project>()
-            .HasOne(p => p.Configuration)
-            .WithOne(pc => pc.Project)
-            .HasForeignKey<ProjectConfiguration>(pc => pc.ProjectId);
+            .HasMany(p => p.CsProjects)
+            .WithOne(csp => csp.Project)
+            .HasForeignKey(csp => csp.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<Project>()
-            .HasMany(p => p.Deployments)
-            .WithOne(d => d.Project)
-            .HasForeignKey(d => d.ProjectId);
+        modelBuilder.Entity<CsProject>()
+            .HasMany(csp => csp.Deployments)
+            .WithOne(d => d.CsProject)
+            .HasForeignKey(d => d.CsProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }
