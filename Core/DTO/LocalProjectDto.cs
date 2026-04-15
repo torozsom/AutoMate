@@ -3,7 +3,7 @@ namespace Core.DTO;
 /// <summary>
 ///     Data Transfer Object (DTO) representing a local project on the file system.
 /// </summary>
-public class LocalProjectDto
+public record LocalProjectDto
 {
     /// <summary>
     ///     Gets or sets the name of the project.

@@ -9,7 +9,7 @@ namespace Core.DTO;
 ///     the repository's ID, name, full name, URL, privacy status,
 ///     primary programming language, and last updated timestamp.
 /// </summary>
-public class GitHubRepositoryDto
+public record GitHubRepositoryDto
 {
     /// <summary>
     ///     Gets or sets the unique identifier of the repository.

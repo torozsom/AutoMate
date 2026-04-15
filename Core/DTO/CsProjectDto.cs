@@ -3,7 +3,7 @@ namespace Core.DTO;
 /// <summary>
 ///     Represents a C# project within a solution.
 /// </summary>
-public class CsProjectDto
+public record CsProjectDto
 {
     /// <summary>
     ///     Gets or sets the name of the csproject.
