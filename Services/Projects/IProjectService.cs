@@ -1,3 +1,4 @@
+using Core.DTO;
 using Core.Entities;
 
 namespace Services.Projects;
@@ -12,10 +13,10 @@ public interface IProjectService
     ///     Adds a project from a local file path.
     /// </summary>
     /// <param name="userId">The unique identifier of the user adding the project.</param>
-    /// <param name="projectName">The name of the project.</param>
-    /// <param name="sourcePath">The file system path where the project is located.</param>
+    /// <param name="project">The project information.</param>
+    /// <param name="csproj">The C# project file information.</param>
     /// <returns>A task that represents the asynchronous operation. The task result is true if the project was added successfully; otherwise, false.</returns>
-    Task<bool> AddLocalProjectAsync(Guid userId, string projectName, string sourcePath);
+    Task<bool> AddLocalProjectAsync(Guid userId, LocalProjectDto project, CsProjectDto csproject);
 
     /// <summary>
     ///     Adds a project from a GitHub repository URL.
