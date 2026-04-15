@@ -98,7 +98,8 @@ public partial class LocalGitRepos : ComponentBase
     ///     It also updates the status message based on the success of the operation.
     /// </summary>
     /// <param name="project">The DTO of the Local Project to be saved.</param>
-    private async Task SaveProjectAsync(LocalProjectDto project)
+    /// <param name="csproject">The DTO of the CsProject to be saved</param>
+    private async Task SaveProjectAsync(LocalProjectDto project, CsProjectDto csproject)
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
@@ -111,8 +112,13 @@ public partial class LocalGitRepos : ComponentBase
         }
 
         var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = Guid.Empty;
 
-        if (!Guid.TryParse(userIdString, out var userId))
+        if (Guid.TryParse(userIdString, out var parsedId))
+        {
+            userId = parsedId;
+        }
+        else if (!string.IsNullOrEmpty(userIdString))
         {
             using var scope = ServiceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
@@ -125,16 +131,16 @@ public partial class LocalGitRepos : ComponentBase
         if (userId == Guid.Empty)
             return;
 
-        var success = await ProjectService.AddLocalProjectAsync(userId, project.Name, project.Path);
+        var success = await ProjectService.AddLocalProjectAsync(userId, project, csproject);
 
         if (success)
         {
-            _statusMessage = $"{project.Name} successfully saved!";
+            _statusMessage = $"{csproject.Name} successfully saved!";
             _isErrorStatus = false;
         }
         else
         {
-            _statusMessage = $"{project.Name} already exists!";
+            _statusMessage = $"{csproject.Name} already exists!";
             _isErrorStatus = true;
         }
     }
