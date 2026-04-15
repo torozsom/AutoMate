@@ -1,6 +1,8 @@
+using System.Formats.Tar;
 using System.Runtime.InteropServices;
-using Core.Entities;
+using System.Text.Json;
 using Docker.DotNet;
+using Docker.DotNet.Models;
 using Services.Data;
 
 namespace Services.Docker;
@@ -51,12 +53,7 @@ public class DockerService : IDockerService, IDisposable
     }
 
 
-    /// <summary>
-    ///     Checks if the Docker daemon is running and accessible by sending a ping request.
-    ///     If the ping is successful, it returns true; otherwise, it catches any exceptions
-    ///     and returns false, indicating that the Docker daemon is not available.
-    /// </summary>
-    /// <returns>Returns true if Docker daemon is available, false otherwise.</returns>
+    /// <inheritdoc />
     public async Task<bool> PingAsync()
     {
         try
@@ -71,8 +68,85 @@ public class DockerService : IDockerService, IDisposable
     }
 
 
-    public async Task<Deployment?> BuildAndDeployLocalProjectAsync(Project project)
+    /// <inheritdoc />
+    public async Task<bool> BuildImageAsync(string sourcePath, string imageTag)
     {
-        throw new NotImplementedException();
+        var tempTarFilePath = Path.GetTempFileName();
+
+        try
+        {
+            await TarFile.CreateFromDirectoryAsync(sourcePath, tempTarFilePath, false);
+            await using var fileStream = File.OpenRead(tempTarFilePath);
+
+            var buildParameters = new ImageBuildParameters { Tags = [imageTag] };
+            await _client.Images.BuildImageFromDockerfileAsync(
+                buildParameters,
+                fileStream,
+                null,
+                null,
+                new Progress<JSONMessage>(msg => { }));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error building image: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            if (File.Exists(tempTarFilePath))
+                File.Delete(tempTarFilePath);
+        }
+    }
+
+
+    /// <inheritdoc />
+    public async Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort,
+        int containerPort = 8080,
+        string? envVarsJson = null)
+    {
+        try
+        {
+            var envList = new List<string>();
+            if (!string.IsNullOrEmpty(envVarsJson))
+            {
+                var envDict = JsonSerializer.Deserialize<Dictionary<string, string>>(envVarsJson);
+                if (envDict != null)
+                    envList.AddRange(envDict.Select(kv => $"{kv.Key}={kv.Value}"));
+            }
+
+            var createParams = new CreateContainerParameters
+            {
+                Image = imageTag,
+                Name = containerName,
+                Env = envList,
+
+                ExposedPorts = new Dictionary<string, EmptyStruct>
+                {
+                    { $"{containerPort}/tcp", default }
+                },
+
+                HostConfig = new HostConfig
+                {
+                    PortBindings = new Dictionary<string, IList<PortBinding>>
+                    {
+                        {
+                            $"{containerPort}/tcp",
+                            [new PortBinding { HostPort = hostPort.ToString() }]
+                        }
+                    }
+                }
+            };
+
+            var response = await _client.Containers.CreateContainerAsync(createParams);
+            var containerId = response.ID;
+            var started = await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters());
+            return started ? containerId : null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error starting container: {ex.Message}");
+            return null;
+        }
     }
 }
