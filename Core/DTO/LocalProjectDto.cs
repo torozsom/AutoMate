@@ -21,4 +21,8 @@ public class LocalProjectDto
     /// </summary>
     public bool IsDotNetProject { get; set; }
 
+    /// <summary>
+    /// Gets or sets the list of csprojects within the solution of the app.
+    /// </summary>
+    public IEnumerable<CsProjectDto> CsProjects { get; set; } = [];
 }
