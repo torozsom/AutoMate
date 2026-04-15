@@ -20,4 +20,10 @@
         <PackageReference Include="Scriban" Version="7.1.0"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <None Update="Templating\Templates\*.scriban">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
 </Project>
