@@ -36,8 +36,12 @@ public class ProjectScannerService : IProjectScannerService
         var visitedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var projectsToProcess = new Queue<(string Path, ProjectMetadataDto Metadata)>();
 
+        var fullFilePath = Path.GetFullPath(filePath);
+        allProjectPaths.Add(fullFilePath);
+        visitedPaths.Add(fullFilePath);
+
         // Start with the main project
-        projectsToProcess.Enqueue((Path.GetFullPath(filePath), mainMetadata));
+        projectsToProcess.Enqueue((fullFilePath, mainMetadata));
 
         // Process the queue of projects to scan their references recursively
         while (projectsToProcess.Count > 0)
@@ -78,11 +82,11 @@ public class ProjectScannerService : IProjectScannerService
     /// </summary>
     /// <param name="xmlContent">The XML content of the project file to scan.</param>
     /// <returns>
-    /// A <see cref="ProjectMetadataDto" /> object containing information about the project's
-    /// target framework, .NET version, package references, project references, and other metadata.
+    ///     A <see cref="ProjectMetadataDto" /> object containing information about the project's
+    ///     target framework, .NET version, package references, project references, and other metadata.
     /// </returns>
     /// <exception cref="XmlException">
-    /// Thrown when the provided XML content is not well-formed or cannot be parsed.
+    ///     Thrown when the provided XML content is not well-formed or cannot be parsed.
     /// </exception>
     public Task<ProjectMetadataDto> ScanCsprojFileContentAsync(string xmlContent)
     {
