@@ -1,4 +1,5 @@
 using Scriban;
+using Microsoft.Extensions.Logging;
 
 namespace Services.Templating;
 
@@ -8,7 +9,17 @@ namespace Services.Templating;
 /// </summary>
 public class TemplateService : ITemplateService
 {
-    private readonly string _templatesDirectory = Path.Combine(AppContext.BaseDirectory, "Templating", "Templates");
+    private readonly ILogger<TemplateService> _logger;
+    private readonly string _templatesDirectory;
+
+    public TemplateService(ILogger<TemplateService> logger)
+    {
+        _logger = logger;
+        _templatesDirectory = Path.Combine(AppContext.BaseDirectory, "Templating", "Templates");
+
+        if (!Directory.Exists(_templatesDirectory))
+            _logger.LogWarning("Templates directory: {Directory} not found. Using default templates.", _templatesDirectory);
+    }
 
     /// <summary>
     ///     Generates the content of a Dockerfile based on a predefined Scriban template and project details.
