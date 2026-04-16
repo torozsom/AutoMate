@@ -3,35 +3,28 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Docker.DotNet;
 using Docker.DotNet.Models;
-using Services.Data;
 
 namespace Services.Docker;
 
 /// <summary>
 ///     The <see cref="DockerService" /> class provides functionality to interact with the Docker daemon.
 ///     It allows checking the availability of the Docker service and is designed to handle Docker-related
-///     operations, such as building and deploying projects. The service is initialized with a database context,
-///     which can be used for any necessary interactions with the database related to Docker operations. The class
-///     also implements the IDisposable interface to ensure proper resource management when working with the Docker client.
+///     operations, such as building and deploying projects. The class also implements the IDisposable interface
+///     to ensure proper resource management when working with the Docker client.
 /// </summary>
 public class DockerService : IDockerService, IDisposable
 {
     private readonly DockerClient _client;
-    private readonly AutoMateDbContext _dbContext;
 
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DockerService" /> class. It sets up
     ///     the Docker client configuration based on the operating system. For Windows, it
     ///     uses a named pipe to connect to the Docker daemon, while for Unix-based systems,
-    ///     it uses a Unix socket. The constructor also accepts a database context for potential
-    ///     interactions with the database related to Docker operations.
+    ///     it uses a Unix socket.
     /// </summary>
-    /// <param name="dbContext">Database context for Docker operations.</param>
-    public DockerService(AutoMateDbContext dbContext)
+    public DockerService()
     {
-        _dbContext = dbContext;
-
         var dockerUri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? new Uri("npipe://./pipe/docker_engine")
             : new Uri("unix:///var/run/docker.sock");
@@ -82,21 +75,33 @@ public class DockerService : IDockerService, IDisposable
     /// </returns>
     public async Task<bool> BuildImageAsync(string sourcePath, string imageTag)
     {
-        var tempTarFilePath = Path.GetTempFileName();
+        var tempTarFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.tar");
 
         try
         {
             await TarFile.CreateFromDirectoryAsync(sourcePath, tempTarFilePath, false);
-            await using var fileStream = File.OpenRead(tempTarFilePath);
+            await using var fileStream = new FileStream(tempTarFilePath, FileMode.Open, FileAccess.Read);
 
             var buildParameters = new ImageBuildParameters { Tags = [imageTag] };
+
+            var buildErrorOccurred = false;
             await _client.Images.BuildImageFromDockerfileAsync(
                 buildParameters,
                 fileStream,
                 null,
                 null,
-                new Progress<JSONMessage>(msg => { }));
-            return true;
+                new Progress<JSONMessage>(msg =>
+                {
+                    if (!string.IsNullOrEmpty(msg.Stream))
+                        Console.Write(msg.Stream);
+
+                    if (!string.IsNullOrEmpty(msg.ErrorMessage))
+                    {
+                        Console.WriteLine($"[DOCKER ERROR]: {msg.ErrorMessage}");
+                        buildErrorOccurred = true;
+                    }
+                }));
+            return !buildErrorOccurred;
         }
         catch (Exception ex)
         {
