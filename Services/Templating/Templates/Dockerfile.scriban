@@ -1,20 +1,26 @@
 FROM mcr.microsoft.com/dotnet/sdk:{{ dotnet_version }} AS build
 WORKDIR /src
 
-# Copy csproj and restore as distinct layers
-COPY ["{{ project_name }}/{{ project_name }}.csproj", "{{ project_name }}/"]
-RUN dotnet restore "{{ project_name }}/{{ project_name }}.csproj"
+# Copy the project files
+{{ for project in projects }}
+COPY ["{{ project.relative_path }}", "{{ project.folder }}/"]
+{{ end }}
 
-# Copy everything else and build
+# Restore the main project
+RUN dotnet restore "{{ main_project_relative_path }}"
+
+# Copy the remaining files
 COPY . .
-WORKDIR "/src/{{ project_name }}"
+
+# Build the main project
+WORKDIR "/src/{{ main_project_folder }}"
 RUN dotnet build "{{ project_name }}.csproj" -c Release -o /app/build
 
-# Publish the application
+# Publish the main project
 FROM build AS publish
 RUN dotnet publish "{{ project_name }}.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-# Final stage/image
+# Create the final image
 FROM mcr.microsoft.com/dotnet/aspnet:{{ dotnet_version }} AS final
 WORKDIR /app
 EXPOSE {{ exposed_port }}
