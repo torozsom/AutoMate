@@ -32,6 +32,9 @@ public static class ServiceConfiguration
     /// </exception>
     public static void Configure(WebApplicationBuilder builder)
     {
+        // Add logging services to the services container.
+        builder.Services.AddLogging();
+
         // Add the database context to the services container, using PostgreSQL as the database provider.
         builder.Services.AddDbContext<AutoMateDbContext>(options =>
             options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -106,6 +109,9 @@ public static class ServiceConfiguration
 
         // Add services for orchestrating deployments
         builder.Services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+
+        // Add a hosted service to periodically clean up deployment artifacts.
+        builder.Services.AddHostedService<DeploymentCleanupHostedService>();
 
         // Add services for project management
         builder.Services.AddScoped<IProjectService, ProjectService>();
