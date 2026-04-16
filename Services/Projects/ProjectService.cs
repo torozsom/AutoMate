@@ -51,7 +51,14 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
             ProjectId = proj.Id,
             Name = csproject.Name,
             Path = csproject.Path,
-            IsWebProject = csproject.IsWebProject
+            IsWebProject = csproject.IsWebProject,
+            Configuration = new LocalProjectConfig
+            {
+                DotNetVersion = "10.0",
+                ExposedPort = 8080,
+                RequiresDb = false,
+                IsPublic = false
+            }
         };
 
         proj.CsProjects.Add(csproj);
@@ -100,6 +107,7 @@ public class ProjectService(AutoMateDbContext context) : IProjectService
     public async Task<List<Project>> GetProjectsAsync(Guid userId)
     {
         return await context.Projects
+            .Include(p => p.CsProjects)
             .Where(p => p.UserId == userId)
             .ToListAsync();
     }

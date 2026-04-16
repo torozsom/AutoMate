@@ -31,7 +31,7 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
     /// <summary>
     ///     Gets or sets the collection of ProjectConfiguration entities in the database.
     /// </summary>
-    public DbSet<ProjectConfiguration> ProjectConfigurations { get; set; }
+    public DbSet<LocalProjectConfig> LocalProjectConfigs { get; set; }
 
     /// <summary>
     ///     Gets or sets the collection of Deployment entities in the database.
@@ -66,6 +66,12 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
             .HasMany(p => p.CsProjects)
             .WithOne(csp => csp.Project)
             .HasForeignKey(csp => csp.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CsProject>()
+            .HasOne(csp => csp.Configuration)
+            .WithOne(c => c.CsProject)
+            .HasForeignKey<LocalProjectConfig>(c => c.CsProjectId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<CsProject>()

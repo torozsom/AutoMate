@@ -1,5 +1,3 @@
-using Core.Entities;
-
 namespace Services.Docker;
 
 /// <summary>
@@ -8,18 +6,15 @@ namespace Services.Docker;
 /// </summary>
 public interface IDockerService
 {
-    /// <summary>
-    ///     Checks if the Docker daemon is running and accessible by sending a ping request.
-    /// </summary>
-    /// <returns>A boolean indicator if the daemon is available.</returns>
+    /// Checks if the Docker daemon is available and responsive.
     Task<bool> PingAsync();
 
-    /// <summary>
-    ///     Builds a Docker image from the specified project and deploys it as a container.
-    ///     The method returns the deployment information if the build and deployment process
-    ///     is successful, or null if it fails.
-    /// </summary>
-    /// <param name="project">The project to deploy.</param>
-    /// <returns>Returns deployment information if successful, null otherwise.</returns>
-    Task<Deployment?> BuildAndDeployLocalProjectAsync(Project project);
+
+    /// Builds a Docker image from a source code directory.
+    Task<bool> BuildImageAsync(string sourcePath, string imageTag);
+
+
+    /// Starts a Docker container from a specified image, mapping the given host port to the container port.
+    Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort, int containerPort = 8080,
+        string? envVarsJson = null);
 }

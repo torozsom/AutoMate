@@ -35,7 +35,7 @@ public partial class LocalGitRepos : ComponentBase
 
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    [Inject] private ILocalScannerService ScannerService { get; set; } = null!;
+    [Inject] private ILocalSystemScannerService SystemScannerService { get; set; } = null!;
 
     [Inject] private IProjectService ProjectService { get; set; } = null!;
 
@@ -59,7 +59,7 @@ public partial class LocalGitRepos : ComponentBase
 
         try
         {
-            _localProjects = await Task.Run(() => ScannerService.ScanForProjectsAsync(_searchPath));
+            _localProjects = await Task.Run(() => SystemScannerService.ScanForProjectsAsync(_searchPath));
         }
         catch (Exception ex)
         {

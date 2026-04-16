@@ -9,7 +9,7 @@ namespace Services.Scanner;
 ///     the ILocalScannerService interface, providing a method to scan a specified root directory
 ///     and its subdirectories for Git repositories.
 /// </summary>
-public class LocalScannerService : ILocalScannerService
+public class LocalSystemScannerService : ILocalSystemScannerService
 {
     /// <summary>
     ///     Scans the specified root directory and its subdirectories for Git repositories.
@@ -28,6 +28,38 @@ public class LocalScannerService : ILocalScannerService
         ScanDirectory(rootPath, result);
 
         return Task.FromResult(result);
+    }
+
+
+    /// <summary>
+    ///     Finds the root directory of the solution for a given project file path by traversing
+    ///     upward through the directory hierarchy. A solution root is identified by the presence
+    ///     of a .git folder or solution files (*.sln, *.slnx) in the directory.
+    /// </summary>
+    /// <param name="projectFilePath">The full path to the project file for which the solution root is to be located.</param>
+    /// <returns>
+    ///     The full path to the solution root directory. If no solution root is found, it returns the directory of the
+    ///     provided project file.
+    /// </returns>
+    /// <exception cref="FileNotFoundException">Thrown if the specified project file path does not exist or is invalid.</exception>
+    public Task<string> FindSolutionRootAsync(string projectFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(projectFilePath) || !File.Exists(projectFilePath))
+            throw new FileNotFoundException($"The project file '{projectFilePath}' does not exist.");
+
+        var currentDir = new DirectoryInfo(Path.GetDirectoryName(projectFilePath) ?? string.Empty);
+        while (currentDir != null)
+        {
+            if (Directory.Exists(Path.Combine(currentDir.FullName, ".git"))
+                || currentDir.GetFiles("*.sln").Length > 0
+                || currentDir.GetFiles("*.slnx").Length > 0)
+                return Task.FromResult(currentDir.FullName);
+
+            currentDir = currentDir.Parent;
+        }
+
+        var fallbackDir = Path.GetDirectoryName(projectFilePath) ?? string.Empty;
+        return Task.FromResult(fallbackDir);
     }
 
 

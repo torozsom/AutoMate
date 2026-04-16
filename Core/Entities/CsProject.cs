@@ -38,7 +38,7 @@ public class CsProject
     /// <summary>
     ///     Gets or sets the reference to the project configuration associated with this C# project.
     /// </summary>
-    public ProjectConfiguration? Configuration { get; set; }
+    public LocalProjectConfig? Configuration { get; set; }
 
     /// <summary>
     ///     Gets or sets the collection of deployments associated with this C# project.
