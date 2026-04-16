@@ -53,7 +53,10 @@ public class DockerService : IDockerService, IDisposable
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Checks if the Docker daemon is available and responsive by sending a ping request.
+    /// </summary>
+    /// <returns>A boolean indicating if the Docker daemon is available.</returns>
     public async Task<bool> PingAsync()
     {
         try
@@ -68,7 +71,15 @@ public class DockerService : IDockerService, IDisposable
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Builds a Docker image from a specified source directory and tags it with the provided image tag.
+    /// </summary>
+    /// <param name="sourcePath">The path to the source directory containing the Dockerfile and associated build context.</param>
+    /// <param name="imageTag">The tag to assign to the built Docker image.</param>
+    /// <returns>
+    ///     A task representing the asynchronous operation, returning true if the image was successfully built,
+    ///     otherwise false.
+    /// </returns>
     public async Task<bool> BuildImageAsync(string sourcePath, string imageTag)
     {
         var tempTarFilePath = Path.GetTempFileName();
@@ -100,7 +111,17 @@ public class DockerService : IDockerService, IDisposable
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Starts a Docker container asynchronously based on the provided configuration parameters.
+    ///     This includes specifying the image, container name, ports, and optional environment variables.
+    ///     Returns the ID of the started container if successful, or null if the operation fails.
+    /// </summary>
+    /// <param name="imageTag">The tag of the Docker image to use for the container.</param>
+    /// <param name="containerName">The name to assign to the container.</param>
+    /// <param name="hostPort">The port on the host machine to bind to the container's port.</param>
+    /// <param name="containerPort">The port within the container to be exposed, with a default value of 8080.</param>
+    /// <param name="envVarsJson">Optional JSON string specifying environment variables to pass to the container.</param>
+    /// <returns>The ID of the started container if the operation is successful, or null if it fails.</returns>
     public async Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort,
         int containerPort = 8080,
         string? envVarsJson = null)

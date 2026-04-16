@@ -14,7 +14,21 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
     private readonly PasswordHasher<LocalUser> _passwordHasher = new();
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Registers a new user by creating their account, saving their details in the database, and sending a verification
+    ///     email.
+    /// </summary>
+    /// <param name="username">The username of the user being registered.</param>
+    /// <param name="email">The email address of the user being registered.</param>
+    /// <param name="password">The password for the user's account, which will be hashed before saving.</param>
+    /// <param name="verificationLinkFactory">
+    ///     A factory method to generate the email verification link using the token
+    ///     provided.
+    /// </param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation. Returns true if the registration is successful, or false if
+    ///     the email address is already in use.
+    /// </returns>
     public async Task<bool> RegisterAsync(string username, string email, string password,
         Func<string, string> verificationLinkFactory)
     {
@@ -47,7 +61,15 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Verifies the user's email address by validating the provided email verification token
+    ///     and updating the user's record if the token is valid and not expired.
+    /// </summary>
+    /// <param name="token">The email verification token sent to the user.</param>
+    /// <returns>
+    ///     A task that represents the asynchronous operation. Returns true if the email verification is successful, or
+    ///     false if the token is invalid, expired, or the user is already verified.
+    /// </returns>
     public async Task<bool> VerifyEmailAsync(string token)
     {
         var user = await dbContext.Users
@@ -65,7 +87,15 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Authenticates a user by verifying their credentials and email verification status.
+    /// </summary>
+    /// <param name="email">The email address of the user attempting to log in.</param>
+    /// <param name="password">The password provided by the user for authentication.</param>
+    /// <returns>
+    ///     A task representing the asynchronous operation. Returns a tuple containing the authenticated user as
+    ///     <see cref="LocalUser" /> if successful, or null with an error message if authentication fails.
+    /// </returns>
     public async Task<(LocalUser? User, string? ErrorMessage)> LoginAsync(string email, string password)
     {
         var user = await dbContext.Users
@@ -88,7 +118,15 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Creates a new GitHub user account or updates an existing one in the database.
+    /// </summary>
+    /// <param name="githubId">The unique identifier for the user provided by GitHub.</param>
+    /// <param name="username">The username of the GitHub account.</param>
+    /// <param name="email">The email address associated with the GitHub account.</param>
+    /// <param name="avatarUrl">The URL of the GitHub user's avatar image, if available.</param>
+    /// <param name="accessToken">The OAuth access token provided for accessing GitHub APIs on behalf of the user.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public async Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
         string? accessToken)
     {
