@@ -6,12 +6,6 @@ namespace Services.Email;
 /// </summary>
 public interface IEmailSender
 {
-    /// <summary>
-    ///     Sends an email asynchronously.
-    /// </summary>
-    /// <param name="toEmail">The recipient's email address.</param>
-    /// <param name="subject">The subject of the email.</param>
-    /// <param name="message">The body content of the email.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
+    /// Sends an email with the specified subject and message asynchronously.
     Task SendEmailAsync(string toEmail, string subject, string message);
 }

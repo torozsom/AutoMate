@@ -6,23 +6,13 @@ namespace Services.Templating;
 /// </summary>
 public interface ITemplateService
 {
-    /// <summary>
-    ///     Generates the content of a Dockerfile for a .NET project.
-    /// </summary>
-    /// <param name="projectName">The name of the C# project (e.g., "MyWebApi").</param>
-    /// <param name="dotNetVersion">The target .NET version (e.g., "10.0").</param>
-    /// <param name="exposedPort">The port the application listens on (e.g., 8080).</param>
-    /// <returns>The generated Dockerfile content as a string.</returns>
-    Task<string> GenerateDockerfileAsync(string projectName, string dotNetVersion, int exposedPort);
+    /// Generates a Dockerfile based on the provided project name, .NET version, exposed port, and project paths.
+    Task<string> GenerateDockerfileAsync(string projectName, string dotNetVersion,
+        int exposedPort, HashSet<string> allProjectPaths, string solutionRoot);
 
-    /// <summary>
-    ///     Generates a standard .dockerignore file to prevent build artifacts from bloating the image.
-    /// </summary>
-    /// <returns>The generated .dockerignore content as a string.</returns>
+    /// Generates the content of a .dockerignore file using a predefined template.
     Task<string> GenerateDockerIgnoreAsync();
 
-    /// <summary>
-    ///     Saves the generated content to the specified file path.
-    /// </summary>
+    /// Saves a file to the specified directory with the specified name and content.
     Task SaveFileAsync(string targetDirectory, string fileName, string content);
 }
