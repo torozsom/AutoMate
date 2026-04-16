@@ -9,7 +9,7 @@ namespace Services.Scanner;
 ///     the ILocalScannerService interface, providing a method to scan a specified root directory
 ///     and its subdirectories for Git repositories.
 /// </summary>
-public class LocalScannerService : ILocalScannerService
+public class LocalSystemScannerService : ILocalSystemScannerService
 {
     /// <summary>
     ///     Scans the specified root directory and its subdirectories for Git repositories.

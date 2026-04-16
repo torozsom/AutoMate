@@ -99,7 +99,7 @@ public static class ServiceConfiguration
         builder.Services.AddHttpClient<IGitHubService, GitHubService>();
 
         // Add services for scanning local repositories
-        builder.Services.AddScoped<ILocalScannerService, LocalScannerService>();
+        builder.Services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
 
         // Add services for project management
         builder.Services.AddScoped<IProjectService, ProjectService>();
