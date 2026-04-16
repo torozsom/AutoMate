@@ -5,8 +5,10 @@ using Services.Data;
 using Services.Docker;
 using Services.Email;
 using Services.GitHub;
+using Services.Orchestration;
 using Services.Projects;
 using Services.Scanner;
+using Services.Templating;
 using Web.Extensions;
 using Web.Routes.Endpoints;
 using Web.Routes.Endpoints.Auth;
@@ -89,23 +91,34 @@ public static class ServiceConfiguration
             options.InstanceName = "AutoMate_";
         });
 
-        // Add services for sending emails
-        builder.Services.AddScoped<IEmailSender, GmailEmailSender>();
 
         // Add services for authentication and user management
         builder.Services.AddScoped<IAuthService, AuthService>();
 
+        // Add services for Docker operations
+        builder.Services.AddScoped<IDockerService, DockerService>();
+
+        // Add services for sending emails
+        builder.Services.AddScoped<IEmailSender, GmailEmailSender>();
+
         // Add services for GitHub API interactions
         builder.Services.AddHttpClient<IGitHubService, GitHubService>();
 
-        // Add services for scanning local repositories
-        builder.Services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
+        // Add services for orchestrating deployments
+        builder.Services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
 
         // Add services for project management
         builder.Services.AddScoped<IProjectService, ProjectService>();
 
-        // Add services for Docker operations
-        builder.Services.AddScoped<IDockerService, DockerService>();
+        // Add services for scanning local repositories
+        builder.Services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
+
+        // Add services for scanning projects for references and dependencies
+        builder.Services.AddScoped<IProjectScannerService, ProjectScannerService>();
+
+        // Add services for templating
+        builder.Services.AddScoped<ITemplateService, TemplateService>();
+
 
         // Register endpoints
         builder.Services.AddEndpoint<StaticAssetsEndpoint>()
