@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using Core.Entities;
+using Core.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
+using Services.Orchestration;
 using Services.Projects;
 
 namespace Web.Components.Pages;
@@ -15,17 +17,18 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class Dashboard : ComponentBase
 {
+    private readonly Dictionary<Guid, bool> _deployingStates = new();
     private Guid _currentUserId;
+    private string? _globalErrorMessage;
 
+    private string? _globalSuccessMessage;
     private bool _isLoading = true;
-
     private List<Project>? _projects;
 
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
-
     [Inject] private IProjectService ProjectService { get; set; } = null!;
-
     [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
+    [Inject] private ILocalDeploymentOrchestrator DeploymentOrchestrator { get; set; } = null!;
 
 
     /// <summary>
@@ -50,7 +53,6 @@ public partial class Dashboard : ComponentBase
             {
                 _currentUserId = userId;
             }
-
             else if (!string.IsNullOrEmpty(userIdString))
             {
                 using var scope = ServiceProvider.CreateScope();
@@ -84,5 +86,60 @@ public partial class Dashboard : ComponentBase
 
         if (success && _projects != null)
             _projects.RemoveAll(p => p.Id == projectId);
+    }
+
+
+    /// <summary>
+    ///     Deploys a project asynchronously. This method verifies if the project is a local
+    ///     web project and initiates its deployment. It manages the deployment state,
+    ///     displays appropriate success or error messages, and updates the UI accordingly.
+    /// </summary>
+    /// <param name="project">
+    ///     The project to be deployed, containing details such as ID, name, source type, and associated C#
+    ///     projects.
+    /// </param>
+    /// <return>Returns a <see cref="Task" /> that represents the asynchronous operation.</return>
+    private async Task DeployProjectAsync(Project project)
+    {
+        if (project.SourceType == SourceType.Remote)
+        {
+            _globalErrorMessage = "This feature is not yet available for remote projects.";
+            return;
+        }
+
+        var csProjectToDeploy = project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+        if (csProjectToDeploy == null)
+        {
+            _globalErrorMessage = $"No web project found in '{project.Name}' to deploy.";
+            return;
+        }
+
+        try
+        {
+            _globalErrorMessage = null;
+            _globalSuccessMessage = null;
+            _deployingStates[project.Id] = true;
+            StateHasChanged();
+
+            var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(csProjectToDeploy.Id);
+            _globalSuccessMessage =
+                $"The '{project.Name}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";
+        }
+        catch (Exception ex)
+        {
+            _globalErrorMessage = $"Failed to deploy '{project.Name}': {ex.Message}";
+        }
+        finally
+        {
+            _deployingStates[project.Id] = false;
+            StateHasChanged();
+        }
+    }
+
+
+    // Helper method to check if a project is currently being deployed.
+    private bool IsDeploying(Guid projectId)
+    {
+        return _deployingStates.GetValueOrDefault(projectId, false);
     }
 }

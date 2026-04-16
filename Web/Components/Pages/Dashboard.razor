@@ -21,6 +21,21 @@
         </div>
     </div>
 
+    @if (!string.IsNullOrEmpty(_globalErrorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @_globalErrorMessage
+            <button type="button" class="btn-close" @onclick="() => _globalErrorMessage = null"></button>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(_globalSuccessMessage))
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @_globalSuccessMessage
+            <button type="button" class="btn-close" @onclick="() => _globalSuccessMessage = null"></button>
+        </div>
+    }
+
     <AuthorizeView>
         <Authorized>
             @if (_isLoading)
@@ -72,12 +87,25 @@
                                     </p>
                                 </div>
                                 <div class="card-footer bg-transparent border-top-0 pt-0 d-flex gap-2">
-                                    <button class="btn btn-success flex-grow-1" disabled>
-                                        <i class="bi bi-play-fill me-1"></i> Deploy
+
+                                    <button class="btn btn-success flex-grow-1"
+                                            @onclick="() => DeployProjectAsync(project)"
+                                            disabled="@IsDeploying(project.Id)">
+                                        @if (IsDeploying(project.Id))
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-1" role="status"
+                                                  aria-hidden="true"></span>
+                                            <span>Deploying...</span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-play-fill me-1"></i>
+                                            <span>Deploy</span>
+                                        }
                                     </button>
 
                                     <button class="btn btn-outline-danger" @onclick="() => DeleteProject(project.Id)"
-                                            title="Remove project">
+                                            title="Remove project" disabled="@IsDeploying(project.Id)">
                                         <i class="bi bi-trash3">Remove</i>
                                     </button>
                                 </div>
