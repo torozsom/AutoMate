@@ -46,14 +46,27 @@ public class TemplateService : ITemplateService
         var template = Template.Parse(templateContent);
 
         var mainProjectPath =
-            allProjectPaths.First(p => p.EndsWith($"{projectName}.csproj", StringComparison.OrdinalIgnoreCase));
-        var mainProjectRelativePath = Path.GetRelativePath(solutionRoot, mainProjectPath).Replace('\\', '/');
-        var mainProjectFolder = Path.GetDirectoryName(mainProjectRelativePath)?.Replace('\\', '/') ?? string.Empty;
+            allProjectPaths.FirstOrDefault(p =>
+                p.EndsWith($"{projectName}.csproj", StringComparison.OrdinalIgnoreCase));
 
-        var projectsData = allProjectPaths.Select(path => new
+        if (mainProjectPath == null)
+            throw new InvalidOperationException(
+                $"Main project file '{projectName}.csproj' not found in provided paths.");
+
+        var mainProjectRelativePath = Path.GetRelativePath(solutionRoot, mainProjectPath).Replace('\\', '/');
+        var mainDir = Path.GetDirectoryName(mainProjectRelativePath)?.Replace('\\', '/');
+        var mainProjectFolder = string.IsNullOrEmpty(mainDir) ? "." : mainDir;
+
+        var projectsData = allProjectPaths.Select(path =>
         {
-            relative_path = Path.GetRelativePath(solutionRoot, path).Replace('\\', '/'),
-            folder = Path.GetDirectoryName(Path.GetRelativePath(solutionRoot, path))?.Replace('\\', '/') ?? string.Empty
+            var relPath = Path.GetRelativePath(solutionRoot, path).Replace('\\', '/');
+            var dir = Path.GetDirectoryName(relPath)?.Replace('\\', '/');
+
+            return new
+            {
+                relative_path = relPath,
+                folder = string.IsNullOrEmpty(dir) ? "." : dir
+            };
         }).ToList();
 
         var result = await template.RenderAsync(new
