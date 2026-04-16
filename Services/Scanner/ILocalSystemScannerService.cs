@@ -9,4 +9,7 @@ public interface ILocalSystemScannerService
 {
     /// Scans the specified root directory and its subdirectories for Git repositories.
     Task<List<LocalProjectDto>> ScanForProjectsAsync(string rootPath);
+
+    /// Finds the root directory of a solution by traversing up the directory tree.
+    Task<string> FindSolutionRootAsync(string projectFilePath);
 }
