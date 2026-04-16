@@ -8,9 +8,9 @@ namespace Services.Scanner;
 /// </summary>
 public interface IProjectScannerService
 {
-    ///
+    /// Scans the provided XML content to extract solution-wide metadata.
     Task<ProjectMetadataDto> ScanProjectContentAsync(string xmlContent);
 
     /// Scans a .csproj file located at the specified file path to extract project metadata.
-    Task<ProjectMetadataDto> ScanLocalProjectAsync(string filePath);
+    Task<ProjectMetadataDto> ScanCsprojFileContentAsync(string filePath);
 }
