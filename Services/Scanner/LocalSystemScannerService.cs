@@ -73,13 +73,14 @@ public class LocalSystemScannerService : ILocalSystemScannerService
     {
         try
         {
+            // Check if the current directory is a symbolic link or a junction point to avoid infinite loops
             var dirInfo = new DirectoryInfo(currentPath);
-
             if (dirInfo.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 return;
 
             var dirName = dirInfo.Name;
 
+            // Skip common build and dependency folders, as well as hidden directories
             if (dirName.Equals("bin", StringComparison.OrdinalIgnoreCase) ||
                 dirName.Equals("obj", StringComparison.OrdinalIgnoreCase) ||
                 dirName.Equals("node_modules", StringComparison.OrdinalIgnoreCase) ||
@@ -91,11 +92,13 @@ public class LocalSystemScannerService : ILocalSystemScannerService
             var isGitRepo =
                 directories.Any(d => Path.GetFileName(d).Equals(".git", StringComparison.OrdinalIgnoreCase));
 
+            // If the current directory is a Git repository, check for .NET projects
             if (isGitRepo)
             {
                 var csprojFiles = FindCsprojFilesSafe(currentPath);
                 var files = Directory.GetFiles(currentPath);
 
+                // Check if the directory contains any .sln or .csproj files to determine if it's a .NET project
                 var isDotNet = files.Any(f =>
                     f.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
                     f.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase) ||
@@ -103,11 +106,13 @@ public class LocalSystemScannerService : ILocalSystemScannerService
 
                 var subProjects = new List<CsProjectDto>();
 
+                // For each .csproj file found, determine if it's a web project
                 foreach (var csproj in csprojFiles)
                 {
                     var isWeb = false;
                     try
                     {
+                        // Load the .csproj file as XML and check for the Sdk attribute to identify if it's a web project
                         var doc = XDocument.Load(csproj);
                         var sdkAttribute = doc.Root?.Attribute("Sdk")?.Value;
                         if (sdkAttribute != null && sdkAttribute.Contains("Microsoft.NET.Sdk.Web"))
@@ -121,7 +126,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
                     {
                         Console.WriteLine($"Unexpected error parsing .csproj file: {csproj}. Exception: {ex.Message}");
                     }
-
+                    // Add the .csproj file to the list of sub-projects
                     subProjects.Add(new CsProjectDto
                     {
                         Name = Path.GetFileNameWithoutExtension(csproj),
@@ -129,7 +134,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
                         IsWebProject = isWeb
                     });
                 }
-
+                // Add the directory to the result list
                 result.Add(new LocalProjectDto
                 {
                     Name = dirName,
@@ -140,7 +145,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
 
                 return;
             }
-
+            // If it's not a Git repository, continue scanning subdirectories
             foreach (var dir in directories)
                 if (!Path.GetFileName(dir).Equals(".git", StringComparison.OrdinalIgnoreCase))
                     ScanDirectory(dir, result);
@@ -169,6 +174,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
         var queue = new Queue<string>();
         queue.Enqueue(rootDir);
 
+        // Use a breadth-first search to traverse the directory structure
         while (queue.Count > 0)
         {
             var currentPath = queue.Dequeue();
@@ -182,6 +188,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
                      dirName.Equals("node_modules", StringComparison.OrdinalIgnoreCase) ||
                      dirName.StartsWith('.'))) continue;
 
+                // Add .csproj files from the current directory to the result list
                 result.AddRange(Directory.GetFiles(currentPath, "*.csproj"));
                 foreach (var subDir in Directory.GetDirectories(currentPath))
                     queue.Enqueue(subDir);

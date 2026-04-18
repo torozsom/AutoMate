@@ -34,6 +34,7 @@ public class DeploymentCleanupHostedService(
 
         try
         {
+            // Query the database for deployments that are stuck in "Building" or "Starting" status.
             var stuckDeployments = await dbContext.Deployments
                 .Where(d => d.Status == DeploymentStatus.Building || d.Status == DeploymentStatus.Starting)
                 .ToListAsync(cancellationToken);
@@ -42,6 +43,7 @@ public class DeploymentCleanupHostedService(
             {
                 logger.LogWarning("{Count} stuck deployments found. They will be set to 'Failed' status.", stuckDeployments.Count);
 
+                // Update the status of each stuck deployment to "Failed" and append a log message indicating the reason.
                 foreach (var deployment in stuckDeployments)
                 {
                     deployment.Status = DeploymentStatus.Failed;

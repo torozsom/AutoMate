@@ -9,16 +9,17 @@ namespace Services.Templating;
 /// </summary>
 public class TemplateService : ITemplateService
 {
-    private readonly ILogger<TemplateService> _logger;
     private readonly string _templatesDirectory;
 
     public TemplateService(ILogger<TemplateService> logger)
     {
-        _logger = logger;
         _templatesDirectory = Path.Combine(AppContext.BaseDirectory, "Templating", "Templates");
 
         if (!Directory.Exists(_templatesDirectory))
-            _logger.LogWarning("Templates directory: {Directory} not found. Using default templates.", _templatesDirectory);
+        {
+            logger.LogError("Templates directory not found at: {TemplatesDirectory}", _templatesDirectory);
+            throw new DirectoryNotFoundException($"Templates directory not found at: {_templatesDirectory}");
+        }
     }
 
     /// <summary>
@@ -52,10 +53,15 @@ public class TemplateService : ITemplateService
     public async Task<string> GenerateDockerfileAsync(string projectName, string dotNetVersion,
         int exposedPort, HashSet<string> allProjectPaths, string solutionRoot)
     {
+        if (!File.Exists(Path.Combine(_templatesDirectory, "Dockerfile.scriban")))
+            throw new FileNotFoundException("Dockerfile template not found.");
+
+        // Load and parse the Dockerfile template
         var templatePath = Path.Combine(_templatesDirectory, "Dockerfile.scriban");
         var templateContent = await File.ReadAllTextAsync(templatePath);
         var template = Template.Parse(templateContent);
 
+        // Find the main project file based on the provided project name
         var mainProjectPath =
             allProjectPaths.FirstOrDefault(p =>
                 p.EndsWith($"{projectName}.csproj", StringComparison.OrdinalIgnoreCase));
@@ -64,10 +70,12 @@ public class TemplateService : ITemplateService
             throw new InvalidOperationException(
                 $"Main project file '{projectName}.csproj' not found in provided paths.");
 
+        // Compute relative paths for all projects and the main project to be used in the template
         var mainProjectRelativePath = Path.GetRelativePath(solutionRoot, mainProjectPath).Replace('\\', '/');
         var mainDir = Path.GetDirectoryName(mainProjectRelativePath)?.Replace('\\', '/');
         var mainProjectFolder = string.IsNullOrEmpty(mainDir) ? "." : mainDir;
 
+        // Build a list of project data with relative paths and folders for the template context
         var projectsData = allProjectPaths.Select(path =>
         {
             var relPath = Path.GetRelativePath(solutionRoot, path).Replace('\\', '/');
@@ -80,6 +88,7 @@ public class TemplateService : ITemplateService
             };
         }).ToList();
 
+        // Render the Dockerfile template with the provided data and return the generated content
         var result = await template.RenderAsync(new
         {
             project_name = projectName,

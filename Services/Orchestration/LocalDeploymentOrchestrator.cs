@@ -32,6 +32,7 @@ public class LocalDeploymentOrchestrator(AutoMateDbContext dbContext, ILocalSyst
     /// </exception>
     public async Task<Deployment> DeployLocalProjectAsync(Guid csProjectId)
     {
+        // Retrieve the C# project and its configuration from the database
         var csProject = await dbContext.CsProjects
             .Include(csp => csp.Configuration)
             .FirstOrDefaultAsync(csp => csp.Id == csProjectId);
@@ -52,14 +53,17 @@ public class LocalDeploymentOrchestrator(AutoMateDbContext dbContext, ILocalSyst
             DeployedAt = DateTimeOffset.UtcNow
         };
 
+        // Save the deployment to the database
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync();
 
         try
         {
+            // Find the solution root and scan the project to gather necessary metadata for Dockerfile generation
             var solutionRoot = await systemScanner.FindSolutionRootAsync(csProject.Path);
             var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
 
+            // Generate Dockerfile and Dockerignore based on the project metadata
             var dockerfileContent = await templateService.GenerateDockerfileAsync(
                 csProject.Name,
                 metadata.DotNetVersion,
@@ -68,9 +72,12 @@ public class LocalDeploymentOrchestrator(AutoMateDbContext dbContext, ILocalSyst
                 solutionRoot);
 
             var dockerIgnoreContent = await templateService.GenerateDockerIgnoreAsync();
+
+            // Save the Dockerfile and Dockerignore to the project root directory
             await templateService.SaveFileAsync(solutionRoot, "Dockerfile", dockerfileContent);
             await templateService.SaveFileAsync(solutionRoot, ".dockerignore", dockerIgnoreContent);
 
+            // Build the Docker image using the generated Dockerfile
             var buildSuccess = await dockerService.BuildImageAsync(solutionRoot, imageTag);
             if (!buildSuccess)
             {
@@ -78,9 +85,11 @@ public class LocalDeploymentOrchestrator(AutoMateDbContext dbContext, ILocalSyst
                 throw new Exception($"Failed to build Docker image for project {csProject.Name}");
             }
 
+            // Update deployment status to "Starting" before attempting to run the container
             deployment.Status = DeploymentStatus.Starting;
             await dbContext.SaveChangesAsync();
 
+            // Start the container using the generated image tag
             var containerId = await dockerService.StartContainerAsync(
                 imageTag,
                 containerName,
@@ -94,6 +103,7 @@ public class LocalDeploymentOrchestrator(AutoMateDbContext dbContext, ILocalSyst
                 throw new Exception($"Failed to start container for project {csProject.Name}");
             }
 
+            // Update deployment with the container ID and set status to "Running"
             deployment.DockerContainerId = containerId;
             deployment.Status = DeploymentStatus.Running;
             await dbContext.SaveChangesAsync();
@@ -104,6 +114,7 @@ public class LocalDeploymentOrchestrator(AutoMateDbContext dbContext, ILocalSyst
         {
             deployment.Status = DeploymentStatus.Failed;
             deployment.Logs = $"Deployment failed: {ex.Message}";
+            Console.WriteLine(ex.Message);
             await dbContext.SaveChangesAsync();
             throw;
         }
