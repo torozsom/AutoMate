@@ -1,5 +1,5 @@
-using Scriban;
 using Microsoft.Extensions.Logging;
+using Scriban;
 
 namespace Services.Templating;
 

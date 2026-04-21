@@ -4,7 +4,6 @@ using System.Text.Json;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
-using Ignore;
 
 namespace Services.Docker;
 
@@ -37,6 +36,16 @@ public class DockerService : IDockerService, IDisposable
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
     }
 
+    /// <summary>
+    ///     Disposes of the resources used by the DockerService instance.
+    ///     This method ensures that the Docker client is properly disposed of,
+    /// </summary>
+    public void Dispose()
+    {
+        _client.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
 
     /// <summary>
     ///     Checks if the Docker daemon is available and responsive by sending a ping request.
@@ -52,44 +61,6 @@ public class DockerService : IDockerService, IDisposable
         catch (Exception)
         {
             return false;
-        }
-    }
-
-
-    /// <summary>
-    ///     Creates a tar context by packaging the specified source directory into a tar file.
-    ///     The method respects the .dockerignore file, if present, to exclude certain files and directories
-    ///     from being included in the tar. If no .dockerignore file exists, a default set of ignored paths is used.
-    /// </summary>
-    /// <param name="sourceDirectory">The source directory containing the files to be packaged into the tar file.</param>
-    /// <param name="targetTarFilePath">The file path where the created tar file will be saved.</param>
-    private async Task CreateTarContextAsync(string sourceDirectory, string targetTarFilePath)
-    {
-        if (!Directory.Exists(sourceDirectory))
-            throw new DirectoryNotFoundException($"Source directory '{sourceDirectory}' does not exist.");
-
-        // Initilize the ignore rules
-        var ignore = new Ignore.Ignore();
-        var dockerIgnorePath = Path.Combine(sourceDirectory, ".dockerignore");
-
-        if (File.Exists(dockerIgnorePath))
-        {
-            var lines = await File.ReadAllLinesAsync(dockerIgnorePath);
-            ignore.Add(lines);
-        }
-        else ignore.Add(["bin/", "obj/", ".git/", ".vs/"]);
-
-        // Create the tar file
-        await using var fileStream = new FileStream(targetTarFilePath, FileMode.Create, FileAccess.Write);
-        await using var tarWriter = new TarWriter(fileStream);
-
-        // Add all files to the tar respecting the ignore rules
-        var allFiles = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories);
-        foreach (var filePath in allFiles)
-        {
-            var relativePath = Path.GetRelativePath(sourceDirectory, filePath).Replace('\\', '/');
-            if (!ignore.IsIgnored(relativePath))
-                await tarWriter.WriteEntryAsync(filePath, relativePath);
         }
     }
 
@@ -227,14 +198,44 @@ public class DockerService : IDockerService, IDisposable
         }
     }
 
-    /// <summary>
-    ///    Disposes of the resources used by the DockerService instance.
-    ///    This method ensures that the Docker client is properly disposed of,
-    /// </summary>
-    public void Dispose()
-    {
-        _client.Dispose();
-        GC.SuppressFinalize(this);
-    }
 
+    /// <summary>
+    ///     Creates a tar context by packaging the specified source directory into a tar file.
+    ///     The method respects the .dockerignore file, if present, to exclude certain files and directories
+    ///     from being included in the tar. If no .dockerignore file exists, a default set of ignored paths is used.
+    /// </summary>
+    /// <param name="sourceDirectory">The source directory containing the files to be packaged into the tar file.</param>
+    /// <param name="targetTarFilePath">The file path where the created tar file will be saved.</param>
+    private async Task CreateTarContextAsync(string sourceDirectory, string targetTarFilePath)
+    {
+        if (!Directory.Exists(sourceDirectory))
+            throw new DirectoryNotFoundException($"Source directory '{sourceDirectory}' does not exist.");
+
+        // Initilize the ignore rules
+        var ignore = new Ignore.Ignore();
+        var dockerIgnorePath = Path.Combine(sourceDirectory, ".dockerignore");
+
+        if (File.Exists(dockerIgnorePath))
+        {
+            var lines = await File.ReadAllLinesAsync(dockerIgnorePath);
+            ignore.Add(lines);
+        }
+        else
+        {
+            ignore.Add(["bin/", "obj/", ".git/", ".vs/"]);
+        }
+
+        // Create the tar file
+        await using var fileStream = new FileStream(targetTarFilePath, FileMode.Create, FileAccess.Write);
+        await using var tarWriter = new TarWriter(fileStream);
+
+        // Add all files to the tar respecting the ignore rules
+        var allFiles = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories);
+        foreach (var filePath in allFiles)
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, filePath).Replace('\\', '/');
+            if (!ignore.IsIgnored(relativePath))
+                await tarWriter.WriteEntryAsync(filePath, relativePath);
+        }
+    }
 }

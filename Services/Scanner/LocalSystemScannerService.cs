@@ -126,6 +126,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
                     {
                         Console.WriteLine($"Unexpected error parsing .csproj file: {csproj}. Exception: {ex.Message}");
                     }
+
                     // Add the .csproj file to the list of sub-projects
                     subProjects.Add(new CsProjectDto
                     {
@@ -134,6 +135,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
                         IsWebProject = isWeb
                     });
                 }
+
                 // Add the directory to the result list
                 result.Add(new LocalProjectDto
                 {
@@ -145,6 +147,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
 
                 return;
             }
+
             // If it's not a Git repository, continue scanning subdirectories
             foreach (var dir in directories)
                 if (!Path.GetFileName(dir).Equals(".git", StringComparison.OrdinalIgnoreCase))

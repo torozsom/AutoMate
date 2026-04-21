@@ -1,9 +1,9 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.EntityFrameworkCore;
-using Services.Data;
 using Core.Enums;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Services.Data;
 
 namespace Services.Orchestration;
 
@@ -17,13 +17,13 @@ public class DeploymentCleanupHostedService(
     : IHostedService
 {
     /// <summary>
-    /// Executes tasks at application startup to clean up any deployments stuck in "Building" or "Starting" status.
+    ///     Executes tasks at application startup to clean up any deployments stuck in "Building" or "Starting" status.
     /// </summary>
     /// <param name="cancellationToken">
-    /// A token to monitor for cancellation requests, passed from the host.
+    ///     A token to monitor for cancellation requests, passed from the host.
     /// </param>
     /// <returns>
-    /// A task that represents the asynchronous cleanup operation.
+    ///     A task that represents the asynchronous cleanup operation.
     /// </returns>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -41,7 +41,8 @@ public class DeploymentCleanupHostedService(
 
             if (stuckDeployments.Count > 0)
             {
-                logger.LogWarning("{Count} stuck deployments found. They will be set to 'Failed' status.", stuckDeployments.Count);
+                logger.LogWarning("{Count} stuck deployments found. They will be set to 'Failed' status.",
+                    stuckDeployments.Count);
 
                 // Update the status of each stuck deployment to "Failed" and append a log message indicating the reason.
                 foreach (var deployment in stuckDeployments)
@@ -49,6 +50,7 @@ public class DeploymentCleanupHostedService(
                     deployment.Status = DeploymentStatus.Failed;
                     deployment.Logs += "\n[System]: Deployment marked as failed due to timeout or unexpected error.";
                 }
+
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
             else
@@ -64,5 +66,8 @@ public class DeploymentCleanupHostedService(
 
 
     /// This method is called when the application is stopping. Now it simply returns a completed task.
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
 }
