@@ -57,43 +57,54 @@
                 {
                     <h3 class="mt-4 mb-3">Projects found: @_localProjects.Count</h3>
 
-                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
                         @foreach (var project in _localProjects)
                         {
-                            <div class="card mb-3 shadow-sm">
-                                <div class="card-header bg-light">
-                                    <h5 class="mb-0"><i class="bi bi-folder-fill text-warning me-2"></i> @project.Name
-                                    </h5>
-                                    <small class="text-muted">@project.Path</small>
-                                </div>
-                                <div class="card-body p-0">
-                                    <ul class="list-group list-group-flush">
-                                        @foreach (var subProj in project.CsProjects)
-                                        {
-                                            <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
-                                                <div>
-                                                    <i class="bi bi-filetype-cs me-2 text-primary"></i> @subProj.Name
+                            <div class="col">
+                                <div class="card mb-3 shadow border-black border-1 bg-white">
+                                    <div class="card-header bg-light">
+                                        <h5 class="mb-0"><i
+                                                class="bi bi-folder-fill text-warning me-2"></i> @project.Name
+                                        </h5>
+                                        <small class="text-muted">@project.Path</small>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <ul class="list-group list-group-flush">
+                                            @if (!project.CsProjects.Any())
+                                            {
+                                                <li class="list-group-item bg-transparent">
+                                                    <div class="text-center">
+                                                        <p class="mt-3">No subprojects found in this app.</p>
+                                                    </div>
+                                                </li>
+                                            }
+                                            @foreach (var subProj in project.CsProjects)
+                                            {
+                                                <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
+                                                    <div>
+                                                        <i class="bi bi-filetype-cs me-2 text-primary"></i> @subProj.Name
+                                                        @if (subProj.IsWebProject)
+                                                        {
+                                                            <span
+                                                                class="badge bg-success bg-opacity-10 text-success border border-success ms-2">Web App</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span
+                                                                class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary ms-2">Library</span>
+                                                        }
+                                                    </div>
                                                     @if (subProj.IsWebProject)
                                                     {
-                                                        <span
-                                                            class="badge bg-success bg-opacity-10 text-success border border-success ms-2">Web App</span>
+                                                        <button class="btn btn-sm btn-outline-primary"
+                                                                @onclick="() => SaveProjectAsync(project, subProj)">
+                                                            Select
+                                                        </button>
                                                     }
-                                                    else
-                                                    {
-                                                        <span
-                                                            class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary ms-2">Library</span>
-                                                    }
-                                                </div>
-                                                @if (subProj.IsWebProject)
-                                                {
-                                                    <button class="btn btn-sm btn-outline-primary"
-                                                            @onclick="() => SaveProjectAsync(project, subProj)">
-                                                        Select
-                                                    </button>
-                                                }
-                                            </li>
-                                        }
-                                    </ul>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
                                 </div>
                             </div>
                         }

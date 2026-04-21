@@ -13,7 +13,9 @@
 
     <ItemGroup>
         <PackageReference Include="Docker.DotNet" Version="3.125.15"/>
+        <PackageReference Include="Ignore" Version="0.2.1"/>
         <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.6"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.6"/>
         <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.6"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1"/>
         <PackageReference Include="Octokit" Version="14.0.0"/>

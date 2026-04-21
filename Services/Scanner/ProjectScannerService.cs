@@ -90,9 +90,11 @@ public class ProjectScannerService : IProjectScannerService
     /// </exception>
     public Task<ProjectMetadataDto> ScanCsprojFileContentAsync(string xmlContent)
     {
+        // Parse the XML content of the project file
         var document = XDocument.Parse(xmlContent);
         var targetFramework = document.Descendants("TargetFramework").FirstOrDefault()?.Value;
 
+        // If TargetFramework is not specified, default to .NET 10.0
         if (string.IsNullOrEmpty(targetFramework))
             targetFramework = "net10.0";
 
@@ -100,12 +102,15 @@ public class ProjectScannerService : IProjectScannerService
             ? targetFramework[3..]
             : "10.0";
 
+        // Check if the project is a web project by looking for the Sdk attribute in the root element
         var sdkAttribute = document.Root?.Attribute("Sdk")?.Value;
         var isWebProject = sdkAttribute != null
                            && sdkAttribute.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase);
 
+        // Extract the UserSecretsId if it exists
         var userSecretsId = document.Descendants("UserSecretsId").FirstOrDefault()?.Value;
 
+        // Extract package references and project references
         var packageReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var pr in document.Descendants("PackageReference"))
         {
@@ -115,6 +120,7 @@ public class ProjectScannerService : IProjectScannerService
                 packageReferences[include] = version;
         }
 
+        // Extract project references
         var projectReferences = new List<string>();
         foreach (var pr in document.Descendants("ProjectReference"))
         {
@@ -125,6 +131,7 @@ public class ProjectScannerService : IProjectScannerService
             projectReferences.Add(normalizedPath);
         }
 
+        // Create and return the metadata DTO with the extracted information
         var metadata = new ProjectMetadataDto
         {
             TargetFramework = targetFramework,

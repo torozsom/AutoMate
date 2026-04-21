@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Docker.DotNet;
 using Docker.DotNet.Models;
+using Microsoft.Extensions.Logging;
 
 namespace Services.Docker;
 
@@ -15,6 +16,7 @@ namespace Services.Docker;
 public class DockerService : IDockerService, IDisposable
 {
     private readonly DockerClient _client;
+    private readonly ILogger<DockerService> _logger;
 
 
     /// <summary>
@@ -23,8 +25,10 @@ public class DockerService : IDockerService, IDisposable
     ///     uses a named pipe to connect to the Docker daemon, while for Unix-based systems,
     ///     it uses a Unix socket.
     /// </summary>
-    public DockerService()
+    public DockerService(ILogger<DockerService> logger)
     {
+        _logger = logger;
+
         var dockerUri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? new Uri("npipe://./pipe/docker_engine")
             : new Uri("unix:///var/run/docker.sock");
@@ -32,17 +36,14 @@ public class DockerService : IDockerService, IDisposable
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
     }
 
-
     /// <summary>
-    ///     Disposes of the Docker client resources when the service is no longer needed.
-    ///     This method is important for releasing any unmanaged resources held by the
-    ///     Docker client and ensuring that connections to the Docker daemon are properly closed.
-    ///     By implementing the IDisposable interface, this service can be used in a using
-    ///     statement or disposed of manually to free up resources efficiently.
+    ///     Disposes of the resources used by the DockerService instance.
+    ///     This method ensures that the Docker client is properly disposed of,
     /// </summary>
     public void Dispose()
     {
         _client.Dispose();
+        GC.SuppressFinalize(this);
     }
 
 
@@ -79,12 +80,18 @@ public class DockerService : IDockerService, IDisposable
 
         try
         {
-            await TarFile.CreateFromDirectoryAsync(sourcePath, tempTarFilePath, false);
-            await using var fileStream = new FileStream(tempTarFilePath, FileMode.Open, FileAccess.Read);
+            _logger.LogInformation("Building Docker image from source directory: {SourcePath}", sourcePath);
 
+            // Create a tar context from the source directory
+            await CreateTarContextAsync(sourcePath, tempTarFilePath);
+            await using var fileStream = new FileStream(tempTarFilePath, FileMode.Open, FileAccess.Read);
             var buildParameters = new ImageBuildParameters { Tags = [imageTag] };
 
             var buildErrorOccurred = false;
+
+            _logger.LogInformation("Starting Docker build for image tag: {ImageTag}", imageTag);
+
+            // Build the image and capture the output messages to log progress and errors
             await _client.Images.BuildImageFromDockerfileAsync(
                 buildParameters,
                 fileStream,
@@ -97,15 +104,19 @@ public class DockerService : IDockerService, IDisposable
 
                     if (!string.IsNullOrEmpty(msg.ErrorMessage))
                     {
-                        Console.WriteLine($"[DOCKER ERROR]: {msg.ErrorMessage}");
+                        _logger.LogError("[DOCKER ERROR]: {ObjErrorMessage}", msg.ErrorMessage);
                         buildErrorOccurred = true;
                     }
                 }));
+
+            if (!buildErrorOccurred)
+                _logger.LogInformation("Docker image '{ImageTag}' built successfully.", imageTag);
+
             return !buildErrorOccurred;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error building image: {ex.Message}");
+            _logger.LogError("Error building image: {ExMessage}", ex.Message);
             return false;
         }
         finally
@@ -133,14 +144,22 @@ public class DockerService : IDockerService, IDisposable
     {
         try
         {
+            _logger.LogInformation("Starting container with image tag: {ImageTag}, " +
+                                   "container name: {ContainerName}, " +
+                                   "host port: {HostPort}, " +
+                                   "container port: {ContainerPort}",
+                imageTag, containerName, hostPort, containerPort);
+
             var envList = new List<string>();
             if (!string.IsNullOrEmpty(envVarsJson))
             {
+                _logger.LogInformation("Starting container with environment variables: {EnvVarsJson}", envVarsJson);
                 var envDict = JsonSerializer.Deserialize<Dictionary<string, string>>(envVarsJson);
                 if (envDict != null)
                     envList.AddRange(envDict.Select(kv => $"{kv.Key}={kv.Value}"));
             }
 
+            // Configure the container creation parameters
             var createParams = new CreateContainerParameters
             {
                 Image = imageTag,
@@ -164,15 +183,59 @@ public class DockerService : IDockerService, IDisposable
                 }
             };
 
+            // Start the container
             var response = await _client.Containers.CreateContainerAsync(createParams);
             var containerId = response.ID;
             var started = await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters());
+
+            _logger.LogInformation("Container '{ContainerId}' started successfully.", containerId);
             return started ? containerId : null;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error starting container: {ex.Message}");
+            _logger.LogError("Error starting container: {ExMessage}", ex.Message);
             return null;
+        }
+    }
+
+
+    /// <summary>
+    ///     Creates a tar context by packaging the specified source directory into a tar file.
+    ///     The method respects the .dockerignore file, if present, to exclude certain files and directories
+    ///     from being included in the tar. If no .dockerignore file exists, a default set of ignored paths is used.
+    /// </summary>
+    /// <param name="sourceDirectory">The source directory containing the files to be packaged into the tar file.</param>
+    /// <param name="targetTarFilePath">The file path where the created tar file will be saved.</param>
+    private async Task CreateTarContextAsync(string sourceDirectory, string targetTarFilePath)
+    {
+        if (!Directory.Exists(sourceDirectory))
+            throw new DirectoryNotFoundException($"Source directory '{sourceDirectory}' does not exist.");
+
+        // Initilize the ignore rules
+        var ignore = new Ignore.Ignore();
+        var dockerIgnorePath = Path.Combine(sourceDirectory, ".dockerignore");
+
+        if (File.Exists(dockerIgnorePath))
+        {
+            var lines = await File.ReadAllLinesAsync(dockerIgnorePath);
+            ignore.Add(lines);
+        }
+        else
+        {
+            ignore.Add(["bin/", "obj/", ".git/", ".vs/"]);
+        }
+
+        // Create the tar file
+        await using var fileStream = new FileStream(targetTarFilePath, FileMode.Create, FileAccess.Write);
+        await using var tarWriter = new TarWriter(fileStream);
+
+        // Add all files to the tar respecting the ignore rules
+        var allFiles = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories);
+        foreach (var filePath in allFiles)
+        {
+            var relativePath = Path.GetRelativePath(sourceDirectory, filePath).Replace('\\', '/');
+            if (!ignore.IsIgnored(relativePath))
+                await tarWriter.WriteEntryAsync(filePath, relativePath);
         }
     }
 }

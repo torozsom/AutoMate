@@ -40,8 +40,10 @@ public class GitHubService : IGitHubService
     /// <returns>A list of GitHubRepositoryDto objects representing the user's repositories.</returns>
     public async Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken, bool forceRefresh)
     {
+        // Create a unique cache key based on the access token to store the user's repositories
         var cacheKey = $"github_repos_{accessToken}";
 
+        // Check if the repositories are already cached and not expired
         if (!forceRefresh)
         {
             var cachedJson = await _cache.GetStringAsync(cacheKey);
@@ -53,19 +55,21 @@ public class GitHubService : IGitHubService
             }
         }
 
+        // Set the Authorization header with the Bearer token for authentication
         _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
+        // Make the API request to retrieve the user's repositories
         var response = await _httpClient.GetAsync("user/repos?sort=updated&per_page=100");
         if (!response.IsSuccessStatusCode)
             return [];
 
         var repositories = await response.Content.ReadFromJsonAsync<List<GitHubRepositoryDto>>() ?? [];
 
+        // Cache the repositories for 10 minutes
         var cacheOptions = new DistributedCacheEntryOptions
         {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
         };
-
         var serializedRepos = JsonSerializer.Serialize(repositories);
         await _cache.SetStringAsync(cacheKey, serializedRepos, cacheOptions);
 
