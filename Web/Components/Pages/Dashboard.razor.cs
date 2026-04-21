@@ -45,16 +45,18 @@ public partial class Dashboard : ComponentBase
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
+        // Check if the user is authenticated
         if (user.Identity is { IsAuthenticated: true })
         {
+            // Try to get the user ID from the claims
             var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
             if (Guid.TryParse(userIdString, out var userId))
             {
                 _currentUserId = userId;
             }
             else if (!string.IsNullOrEmpty(userIdString))
             {
+                // If the user ID is not a valid GUID, it might be a GitHub account ID.
                 using var scope = ServiceProvider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
                 var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
@@ -63,6 +65,7 @@ public partial class Dashboard : ComponentBase
                     _currentUserId = dbUser.Id;
             }
 
+            // If we have a valid user ID, fetch the projects for that user.
             if (_currentUserId != Guid.Empty)
                 _projects = await ProjectService.GetProjectsAsync(_currentUserId);
         }
@@ -101,12 +104,14 @@ public partial class Dashboard : ComponentBase
     /// <return>Returns a <see cref="Task" /> that represents the asynchronous operation.</return>
     private async Task DeployProjectAsync(Project project)
     {
+        // Ensure the project is a local one before attempting deployment
         if (project.SourceType == SourceType.Remote)
         {
             _globalErrorMessage = "This feature is not yet available for remote projects.";
             return;
         }
 
+        // Find the C# project associated with the main project that is marked as a web project
         var csProjectToDeploy = project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
         if (csProjectToDeploy == null)
         {
@@ -121,6 +126,7 @@ public partial class Dashboard : ComponentBase
             _deployingStates[project.Id] = true;
             StateHasChanged();
 
+            // Initiate the deployment process using the deployment orchestrator service
             var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(csProjectToDeploy.Id);
             _globalSuccessMessage =
                 $"The '{project.Name}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";

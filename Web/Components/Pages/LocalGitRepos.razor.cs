@@ -59,6 +59,7 @@ public partial class LocalGitRepos : ComponentBase
 
         try
         {
+            // Attempt to scan for local Git projects in the specified folder
             _localProjects = await Task.Run(() => SystemScannerService.ScanForProjectsAsync(_searchPath));
         }
         catch (Exception ex)
@@ -106,6 +107,7 @@ public partial class LocalGitRepos : ComponentBase
             return;
         }
 
+        // Attempt to find the user in the database
         var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var userId = Guid.Empty;
 
@@ -115,6 +117,7 @@ public partial class LocalGitRepos : ComponentBase
         }
         else if (!string.IsNullOrEmpty(userIdString))
         {
+            // If the user ID is not a valid GUID, attempt to find a GitHub user
             using var scope = ServiceProvider.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
             var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
@@ -126,6 +129,7 @@ public partial class LocalGitRepos : ComponentBase
         if (userId == Guid.Empty)
             return;
 
+        // Attempt to save the project to the user's account
         var success = await ProjectService.AddLocalProjectAsync(userId, project, csproject);
 
         if (success)

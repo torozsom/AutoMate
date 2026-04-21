@@ -14,14 +14,15 @@ namespace Web.Components.Pages;
 public partial class VerifyEmail : ComponentBase
 {
     [Inject] private IAuthService AuthService { get; set; } = null!;
-
     [Inject] private NavigationManager NavigationManager { get; set; } = null!;
+
 
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
     [SupplyParameterFromQuery(Name = "checkemail")]
     public bool CheckEmail { get; set; }
+
 
     private string? ErrorMessage { get; set; }
 
@@ -43,6 +44,7 @@ public partial class VerifyEmail : ComponentBase
             return;
         }
 
+        // Validate the token and update the user's email verification status
         var success = await AuthService.VerifyEmailAsync(Token);
 
         if (!success)

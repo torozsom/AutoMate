@@ -47,21 +47,26 @@ public partial class GitHubRepos : ComponentBase
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        // Check if the user is authenticated
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
         if (user.Identity is { IsAuthenticated: true })
         {
+            // Attempt to find the user in the database
             var nameIdentifier = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             User? dbUser = null;
 
+            // First, try to parse the NameIdentifier as a GUID to find a local user
             if (Guid.TryParse(nameIdentifier, out var localUserId))
                 dbUser = await DbContext.Users.FindAsync(localUserId);
 
+            // If not found as a local user, try to find a GitHub user by the NameIdentifier
             else if (!string.IsNullOrEmpty(nameIdentifier))
                 dbUser = await DbContext.Users.OfType<GitHubUser>()
                     .FirstOrDefaultAsync(u => u.AccountId == nameIdentifier);
 
+            // If we found a GitHub user with a valid access token, fetch their repositories
             if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
             {
                 _isGitHubUser = true;
@@ -82,14 +87,17 @@ public partial class GitHubRepos : ComponentBase
     /// <param name="repo">The DTO representing the GitHub repository to be saved.</param>
     private async Task SaveProjectAsync(GitHubRepositoryDto repo)
     {
+        // Return if the user is not authenticated
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
         if (!user.Identity?.IsAuthenticated ?? true)
             return;
 
+        // Attempt to retrieve the user's ID from the claims
         var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
+        // If the user ID is not a valid GUID, it might be a GitHub account ID
         if (!Guid.TryParse(userIdString, out var userId))
         {
             using var scope = ServiceProvider.CreateScope();
@@ -103,6 +111,7 @@ public partial class GitHubRepos : ComponentBase
         if (userId == Guid.Empty)
             return;
 
+        // Attempt to save the GitHub repository as a project in our system
         var success = await ProjectService.AddGitHubProjectAsync(userId, repo.Name, repo.HtmlUrl);
 
         if (success)
