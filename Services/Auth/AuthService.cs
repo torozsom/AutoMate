@@ -3,17 +3,15 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Services.Email;
-using Microsoft.AspNetCore.DataProtection;
 
 namespace Services.Auth;
 
 /// <summary>
 ///     Service implementation for handling user authentication, registration, and email verification.
 /// </summary>
-public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender, IDataProtectionProvider dataProtectionProvider) : IAuthService
+public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) : IAuthService
 {
     private readonly PasswordHasher<LocalUser> _passwordHasher = new();
-    private readonly IDataProtector _dataProtector = dataProtectionProvider.CreateProtector("AutoMate.GitHubTokenProtector");
 
 
     /// <summary>
@@ -132,8 +130,6 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender, 
     public async Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
         string? accessToken)
     {
-        var encryptedToken = accessToken != null ? _dataProtector.Protect(accessToken) : null;
-
         var existingUser = await dbContext.Users
             .OfType<GitHubUser>()
             .FirstOrDefaultAsync(u => u.AccountId == githubId);
@@ -146,7 +142,7 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender, 
                 Username = username,
                 Email = email,
                 AvatarUrl = avatarUrl,
-                AccessToken = encryptedToken
+                AccessToken = accessToken
             };
 
             dbContext.Users.Add(newUser);
@@ -154,7 +150,7 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender, 
         else
         {
             existingUser.AvatarUrl = avatarUrl;
-            existingUser.AccessToken = encryptedToken;
+            existingUser.AccessToken = accessToken;
         }
 
         await dbContext.SaveChangesAsync();

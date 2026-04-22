@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Services.Auth;
 using Services.Data;
@@ -35,6 +36,11 @@ public static class ServiceConfiguration
     {
         // Add logging services to the services container.
         builder.Services.AddLogging();
+
+        // Add data protection services to the services container.
+        builder.Services.AddDataProtection()
+            .PersistKeysToDbContext<AutoMateDbContext>()
+            .SetApplicationName("AutoMate");
 
         // Add the database context to the services container, using PostgreSQL as the database provider.
         builder.Services.AddDbContext<AutoMateDbContext>(options =>
