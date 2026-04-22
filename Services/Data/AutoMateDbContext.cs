@@ -1,5 +1,8 @@
 using Core.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Services.Data;
 
@@ -11,7 +14,9 @@ namespace Services.Data;
 ///     these entities using the OnModelCreating method.
 /// </summary>
 /// <param name="options">The options to pass to the base class.</param>
-public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : DbContext(options)
+public class AutoMateDbContext(
+    DbContextOptions<AutoMateDbContext> options,
+    IDataProtectionProvider dataProtectionProvider) : DbContext(options), IDataProtectionKeyContext
 {
     /// <summary>
     ///     Gets or sets the collection of User entities in the database.
@@ -38,6 +43,11 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
     /// </summary>
     public DbSet<Deployment> Deployments { get; set; }
 
+    /// <summary>
+    ///     Gets or sets the collection of DataProtectionKey entities in the database.
+    /// </summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
+
 
     /// <summary>
     ///     Configures the entity relationships and constraints for the AutoMateDbContext.
@@ -46,6 +56,13 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        var protector = dataProtectionProvider.CreateProtector("AutoMate.GitHubTokenProtector");
+
+        var tokenConverter = new ValueConverter<string?, string?>(
+            plainText => plainText != null ? protector.Protect(plainText) : null,
+            encryptedText => encryptedText != null ? protector.Unprotect(encryptedText) : null
+        );
 
         modelBuilder.Entity<User>()
             .HasDiscriminator<string>("UserType")
@@ -61,6 +78,10 @@ public class AutoMateDbContext(DbContextOptions<AutoMateDbContext> options) : Db
             .WithOne(p => p.User)
             .HasForeignKey(p => p.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GitHubUser>()
+            .Property(gu => gu.AccessToken)
+            .HasConversion(tokenConverter);
 
         modelBuilder.Entity<Project>()
             .HasMany(p => p.CsProjects)

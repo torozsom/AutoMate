@@ -38,6 +38,9 @@ public static class AppConfiguration
         // Redirect HTTP requests to HTTPS.
         app.UseHttpsRedirection();
 
+        // Use rate limiting middleware to limit the number of requests per IP address.
+        app.UseRateLimiter();
+
         // Use authentication middleware allowing users to log in and access protected resources.
         app.UseAuthentication();
 

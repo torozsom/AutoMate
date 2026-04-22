@@ -1,4 +1,6 @@
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Services.Auth;
 using Services.Data;
@@ -34,6 +36,11 @@ public static class ServiceConfiguration
     {
         // Add logging services to the services container.
         builder.Services.AddLogging();
+
+        // Add data protection services to the services container.
+        builder.Services.AddDataProtection()
+            .PersistKeysToDbContext<AutoMateDbContext>()
+            .SetApplicationName("AutoMate");
 
         // Add the database context to the services container, using PostgreSQL as the database provider.
         builder.Services.AddDbContext<AutoMateDbContext>(options =>
@@ -78,6 +85,35 @@ public static class ServiceConfiguration
         // Add a cascading authentication state provider to the services container, which allows
         // components to access the current authentication state and react to changes in authentication status.
         builder.Services.AddCascadingAuthenticationState();
+
+        // Add rate limiting services to the container
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            {
+                // Use the user's identity name as the partition key if authenticated, otherwise use the remote IP address.
+                var partitionKey = context.User.Identity?.IsAuthenticated == true
+                    ? context.User.Identity.Name!
+                    : context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+                // Create a fixed window rate limiter that allows 100 requests per minute for each partition key.
+                return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+                {
+                    AutoReplenishment = true,
+                    PermitLimit = 100,
+                    Window = TimeSpan.FromMinutes(1)
+                });
+            });
+
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        });
+
+        // Add authorization services to the container, setting a fallback policy
+        // that requires all users to be authenticated by default.
+        builder.Services.AddAuthorizationBuilder()
+                .SetFallbackPolicy(new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build());
 
         // Add services to the container.
         builder.Services.AddRazorComponents()
