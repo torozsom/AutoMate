@@ -15,6 +15,6 @@ public class GitHubLoginEndpoint : IEndpoint
             Results.Challenge(
                 new AuthenticationProperties { RedirectUri = "/" },
                 ["GitHub"])
-        );
+        ).AllowAnonymous();
     }
 }

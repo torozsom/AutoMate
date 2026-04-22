@@ -44,6 +44,6 @@ public class LoginEndpoint : IEndpoint
 
             await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
             context.Response.Redirect("/");
-        }).DisableAntiforgery();
+        }).DisableAntiforgery().AllowAnonymous();
     }
 }

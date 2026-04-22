@@ -9,6 +9,6 @@ public class StaticAssetsEndpoint : IEndpoint
     /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
-        app.MapStaticAssets();
+        app.MapStaticAssets().AllowAnonymous();
     }
 }
