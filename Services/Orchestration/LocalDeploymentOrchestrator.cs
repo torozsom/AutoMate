@@ -1,8 +1,8 @@
-using System.Text.Json;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Services.Data;
 using Services.Docker;
 using Services.Scanner;
@@ -19,12 +19,12 @@ public class LocalDeploymentOrchestrator(
     ILocalSystemScannerService systemScanner,
     IProjectScannerService projectScanner,
     ITemplateService templateService,
-    IDockerService dockerService)
+    IDockerService dockerService,
+    ILogger<LocalDeploymentOrchestrator> logger)
     : ILocalDeploymentOrchestrator
 {
     /// <summary>
-    ///     Deploys a local project using the provided project ID. The method handles the process
-    ///     of building a Docker image and container for the project and updating the deployment status.
+    ///     Deploys a local .NET project by orchestrating the entire process.
     /// </summary>
     /// <param name="config">The configuration for the deployment.</param>
     /// <returns>
@@ -40,22 +40,22 @@ public class LocalDeploymentOrchestrator(
     /// </exception>
     public async Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config)
     {
+        logger.LogInformation("Starting Deployment Process for {Project}", config.ProjectName);
+
         var csProject = await dbContext.CsProjects
             .FirstOrDefaultAsync(csp => csp.Id == config.CsProjectId);
 
         if (csProject == null)
-            throw new InvalidOperationException($"Project not found for ID: {config.CsProjectId}");
-
-        var safeProjectName = csProject.Name.ToLowerInvariant().Replace(" ", "");
-        var shortId = csProject.Id.ToString()[..8];
-        var imageTag = $"automate-{safeProjectName}:{shortId}";
-        var containerName = $"automate-{safeProjectName}-run";
+        {
+            logger.LogError("Database record for CsProject {Id} not found!", config.CsProjectId);
+            throw new InvalidOperationException("Project not found.");
+        }
 
         var deployment = new Deployment
         {
             CsProjectId = csProject.Id,
             Status = DeploymentStatus.Building,
-            ImageTag = imageTag
+            ImageTag = $"automate-{csProject.Name.ToLower()}:{csProject.Id.ToString()[..8]}"
         };
 
         // Save the deployment to the database
@@ -64,65 +64,52 @@ public class LocalDeploymentOrchestrator(
 
         try
         {
-            // Find the solution root and scan the project to gather necessary metadata for Dockerfile generation
+            logger.LogInformation("Step 1: Locating solution root...");
             var solutionRoot = await systemScanner.FindSolutionRootAsync(csProject.Path);
+            logger.LogInformation("Solution root found at: {Path}", solutionRoot);
+
+            logger.LogInformation("Step 2: Scanning project content for metadata...");
             var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
 
-            // Generate Dockerfile and .dockerignore content based on the scanned metadata and save them to the solution root
+            logger.LogInformation("Step 3: Generating Infrastructure-as-Code files...");
             var dockerfileContent = await templateService.GenerateDockerfileAsync(
-                csProject.Name,
-                metadata.DotNetVersion,
-                config.ExposedPort,
-                metadata.AllProjectPaths,
-                solutionRoot);
-
+                csProject.Name, metadata.DotNetVersion, 8080, metadata.AllProjectPaths, solutionRoot);
             var dockerIgnoreContent = await templateService.GenerateDockerIgnoreAsync();
+            var composeContent = await templateService.GenerateDockerComposeAsync(config);
 
-            // Save the Dockerfile and Dockerignore to the project root directory
+            logger.LogInformation("Step 4: Saving files to disk...");
             await templateService.SaveFileAsync(solutionRoot, "Dockerfile", dockerfileContent);
             await templateService.SaveFileAsync(solutionRoot, ".dockerignore", dockerIgnoreContent);
+            await templateService.SaveFileAsync(solutionRoot, "docker-compose.yml", composeContent);
+            logger.LogInformation("Configuration files saved successfully.");
 
-            // Build the Docker image using the generated Dockerfile
-            var buildSuccess = await dockerService.BuildImageAsync(solutionRoot, imageTag);
-            if (!buildSuccess)
-            {
-                deployment.Status = DeploymentStatus.Failed;
-                throw new Exception($"Failed to build Docker image for project {csProject.Name}");
-            }
-
+            logger.LogInformation("Step 5: Invoking Docker Compose...");
             deployment.Status = DeploymentStatus.Starting;
             await dbContext.SaveChangesAsync();
 
-            // Serialize the custom environment variables to JSON format to pass them to the Docker container
-            var envVarsJson = JsonSerializer.Serialize(config.CustomEnvVars);
+            var success = await dockerService.RunDockerComposeUpAsync(solutionRoot, config.ProjectName);
 
-            // Start the Docker container with the specified image, ports, and environment variables
-            var containerId = await dockerService.StartContainerAsync(
-                imageTag,
-                containerName,
-                config.ExposedPort,
-                8080,
-                envVarsJson
-            );
-
-            if (string.IsNullOrEmpty(containerId))
+            if (!success)
             {
                 deployment.Status = DeploymentStatus.Failed;
-                throw new Exception($"Failed to start container for project {csProject.Name}");
+                await dbContext.SaveChangesAsync();
+                logger.LogError("Step 5 Failed: Docker Compose could not start the services.");
+                throw new Exception("Docker Compose process returned an error. Check server logs.");
             }
 
-            deployment.DockerContainerId = containerId;
+            logger.LogInformation("Step 6: Finalizing deployment record...");
             deployment.Status = DeploymentStatus.Running;
-            deployment.Logs = "Container started successfully, visit http://localhost:" + config.ExposedPort;
+            deployment.Logs = $"System live at http://localhost:{config.ExposedPort}";
             await dbContext.SaveChangesAsync();
 
+            logger.LogInformation("--- Deployment Finished Successfully ---");
             return deployment;
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Deployment failed during execution.");
             deployment.Status = DeploymentStatus.Failed;
-            deployment.Logs = $"Deployment failed: {ex.Message}";
-            Console.WriteLine(ex.Message);
+            deployment.Logs = $"Error: {ex.Message}";
             await dbContext.SaveChangesAsync();
             throw;
         }
