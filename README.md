@@ -16,9 +16,9 @@
 
 <div align="center">
   <img src="assets/homepage.png" width="600">
-  <img src="assets/loginpage.png" width="600">
-  <img src="assets/landingpage.png" width="600">
-  <img src="assets/githubrepos.png" width="600">
+  <img src="assets/dashboard.png" width="600">
+  <img src="assets/configform.png" width="600">
+  <img src="assets/registrypage.png" width="600">
   <img src="assets/localgitrepos.png" width="600">
 </div>
 
@@ -44,6 +44,15 @@
     * Automatically detects Git repositories and `.NET` projects (`.sln`, `.csproj`).
     * Enterprise-grade safety: handles symlinks and ignores build artifacts (`bin`, `obj`, `node_modules`).
       
+* **💾 Project Registration & Management**
+    * Persist scanned local and GitHub projects into the PostgreSQL database.
+    * Maintain clear tracking of projects and their metadata.
+
+* **🐳 Automated Docker Deployments**
+    * Direct communication with the local Docker daemon.
+    * Analyzes `.NET` projects and dynamically generates Infrastructure-as-Code files (`Dockerfile`, `.dockerignore`, `docker-compose.yml`) on the fly.
+    * One-click deployment to spin up containers locally, accompanied by an automated background deployment cleanup service.
+      
 * **🏗️ Clean Architecture**
     * Strict separation of concerns into `Core` (Entities/DTOs), `Services` (Business Logic), and `Web` (Blazor UI & Minimal APIs).
 
@@ -51,10 +60,9 @@
 
 ## 🗺️ Roadmap (Upcoming Features)
 
-- [ ] **Project Registration:** Save scanned local and GitHub projects into the database.
-- [ ] **Docker Engine Integration:** Communicate directly with the local Docker daemon.
-- [ ] **Automated Deployments:** Generate `Dockerfile`s on the fly and spin up containers with a single click.
 - [ ] **Live Logs & Monitoring:** View real-time container logs directly from the Blazor dashboard.
+- [ ] **Cloud Provider Integration:** Deploy directly to AWS, Azure, or DigitalOcean.
+- [ ] **CI/CD Pipeline Generation:** Automatically create GitHub Actions workflows for continuous integration.
 
 ---
 
