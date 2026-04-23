@@ -1,5 +1,9 @@
+using System.Net;
+using System.Net.Sockets;
+using System.Xml;
 using System.Xml.Linq;
 using Core.DTO;
+using Core.Entities;
 
 namespace Services.Scanner;
 
@@ -143,5 +147,89 @@ public class ProjectScannerService : IProjectScannerService
         };
 
         return Task.FromResult(metadata);
+    }
+
+
+    /// <summary>
+    ///    Analyzes the dependencies of a given project and its associated C# project file (.csproj) to determine
+    ///    if the project requires a database and identifies the type of database based on the presence of specific
+    ///    package references.
+    /// </summary>
+    /// <param name="project">The project to be analyzed.</param>
+    /// <param name="csProject">The web based C# project.</param>
+    /// <returns></returns>
+    public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject)
+    {
+        var config = new DeploymentConfigDto
+        {
+            ProjectId = project.Id,
+            CsProjectId = csProject.Id,
+            ProjectName = project.Name,
+            ExposedPort = GetAvailablePort(),
+            RequiresDb = false,
+            DbType = "PostgreSQL"
+        };
+
+        try
+        {
+            if (File.Exists(csProject.Path))
+            {
+                var csprojContent = await File.ReadAllTextAsync(csProject.Path);
+                var xml = XDocument.Parse(csprojContent);
+
+                var packageReferences = xml.Descendants()
+                    .Where(x => x.Name.LocalName == "PackageReference")
+                    .Select(x => x.Attribute("Include")?.Value)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToList();
+
+                if (packageReferences.Any(p => p!.Contains("Npgsql") || p.Contains("PostgreSQL")))
+                {
+                    config.RequiresDb = true;
+                    config.DbType = "PostgreSQL";
+                }
+                else if (packageReferences.Any(p => p!.Contains("Pomelo.EntityFrameworkCore.MySql") || p.Contains("MySql.Data")))
+                {
+                    config.RequiresDb = true;
+                    config.DbType = "MySQL";
+                }
+                else if (packageReferences.Any(p => p!.Contains("Microsoft.EntityFrameworkCore.SqlServer")))
+                {
+                    config.RequiresDb = true;
+                    config.DbType = "SQLServer";
+                }
+                else if (packageReferences.Any(p => p!.Contains("MongoDB.Driver")))
+                {
+                    config.RequiresDb = true;
+                    config.DbType = "MongoDB";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error scanning csproj dependencies: {ex.Message}");
+        }
+
+        return config;
+    }
+
+
+    /// <summary>
+    ///     Determines and returns an available port on the local machine. This method creates a temporary
+    ///     listener to identify a free port and then releases it for future use.
+    /// </summary>
+    /// <returns>
+    ///     An integer representing a port number that is currently available for use.
+    /// </returns>
+    /// <exception cref="SocketException">
+    ///     Thrown when an error occurs while accessing the network during the process of finding an available port.
+    /// </exception>
+    private static int GetAvailablePort()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint) listener.LocalEndpoint).Port;
+        listener.Stop();
+        return port;
     }
 }

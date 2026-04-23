@@ -1,0 +1,74 @@
+services:
+  web:
+    container_name: {{ project_name | string.downcase }}-web
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "{{ exposed_port }}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT={{ environment_name }}
+
+      {{- if requires_db }}
+      # --- Automatically generated connection strings for the db ---
+      {{- if db_type == 'PostgreSQL' }}
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database={{ db_name }};Username={{ db_user }};Password={{ db_password }}
+      {{- else if db_type == 'MySQL' }}
+      - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database={{ db_name }};Uid={{ db_user }};Pwd={{ db_password }}
+      {{- else if db_type == 'SQLServer' }}
+      - ConnectionStrings__DefaultConnection=Server=db,1433;Database={{ db_name }};User Id={{ db_user }};Password={{ db_password }};TrustServerCertificate=True
+      {{- else if db_type == 'MongoDB' }}
+      - ConnectionStrings__DefaultConnection=mongodb://{{ db_user_encoded }}:{{ db_password_encoded }}@db:27017/{{ db_name }}?authSource=admin
+      {{- end }}
+      {{- end }}
+
+      # --- User defined environmental variables ---
+      {{- for env_var in custom_env_vars }}
+      - {{ env_var.key }}={{ env_var.value }}
+      {{- end }}
+
+    {{- if requires_db }}
+    depends_on:
+      - db
+    {{- end }}
+
+{{ if requires_db }}
+  db:
+    container_name: {{ project_name | string.downcase }}-db
+    {{- if db_type == 'PostgreSQL' }}
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER={{ db_user }}
+      - POSTGRES_PASSWORD={{ db_password }}
+      - POSTGRES_DB={{ db_name }}
+    ports:
+      - "5432"
+
+    {{- else if db_type == 'MySQL' }}
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD={{ db_password }}
+      - MYSQL_DATABASE={{ db_name }}
+      - MYSQL_USER={{ db_user }}
+      - MYSQL_PASSWORD={{ db_password }}
+    ports:
+      - "3306"
+
+    {{- else if db_type == 'SQLServer' }}
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD={{ db_password }}
+    ports:
+      - "1433"
+
+    {{- else if db_type == 'MongoDB' }}
+    image: mongo:latest
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME={{ db_user }}
+      - MONGO_INITDB_ROOT_PASSWORD={{ db_password }}
+      - MONGO_INITDB_DATABASE={{ db_name }}
+    ports:
+      - "27017"
+    {{- end }}
+{{ end }}

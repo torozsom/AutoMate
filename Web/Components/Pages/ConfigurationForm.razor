@@ -1,0 +1,107 @@
+<div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content bg-dark text-light border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">Configure Deployment: @Config.ProjectName</h5>
+                <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="OnCancel"></button>
+            </div>
+
+            <div class="modal-body">
+                <h6 class="text-primary mb-3">Basic Settings</h6>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label">Environment</label>
+                        <select class="form-select bg-dark text-light border-secondary" @bind="Config.EnvironmentName">
+                            <option value="Development">Development</option>
+                            <option value="Staging">Staging</option>
+                            <option value="Production">Production</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Exposed Port (Host)</label>
+                        <input type="number" class="form-control bg-dark text-light border-secondary"
+                               @bind="Config.ExposedPort"/>
+                    </div>
+                </div>
+
+                <hr class="border-secondary"/>
+
+                <h6 class="text-primary mb-3">Services & Database</h6>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="requireDb" @bind="Config.RequiresDb">
+                    <label class="form-check-label" for="requireDb">Enable Database Service</label>
+                </div>
+
+                @if (Config.RequiresDb)
+                {
+                    <div class="bg-secondary bg-opacity-10 p-3 rounded mb-4">
+                        <div class="row g-3 mb-3">
+                            <div class="col-12">
+                                <label class="form-label">Database Engine</label>
+                                <select class="form-select bg-dark text-light border-secondary" @bind="Config.DbType">
+                                    <option value="PostgreSQL">PostgreSQL</option>
+                                    <option value="MySQL">MySQL</option>
+                                    <option value="SQLServer">Microsoft SQL Server</option>
+                                    <option value="MongoDB">MongoDB</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Database Name</label>
+                                <input type="text" class="form-control bg-dark text-light border-secondary"
+                                       @bind="Config.DbName"/>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-control bg-dark text-light border-secondary"
+                                       @bind="Config.DbUser"/>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Password</label>
+                                <input type="text" class="form-control bg-dark text-light border-secondary"
+                                       @bind="Config.DbPassword"/>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <hr class="border-secondary"/>
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-primary mb-0">Custom Environment Variables</h6>
+                    <button class="btn btn-sm btn-outline-success" @onclick="AddEmptyEnvVar">+ Add Variable</button>
+                </div>
+
+                @foreach (var key in Config.CustomEnvVars.Keys.ToList())
+                {
+                    <div class="row g-2 mb-2 align-items-center">
+                        <div class="col-5">
+                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                                   placeholder="KEY (e.g. API_TOKEN)"
+                                   value="@key" @onchange="@(e => UpdateEnvVarKey(key, e.Value?.ToString()))"/>
+                        </div>
+                        <div class="col-6">
+                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                                   placeholder="Value"
+                                   value="@Config.CustomEnvVars[key]"
+                                   @onchange="@(e => UpdateEnvVarValue(key, e.Value?.ToString()))"/>
+                        </div>
+                        <div class="col-1 text-end">
+                            <button class="btn btn-sm btn-outline-danger" @onclick="@(() => RemoveEnvVar(key))">
+                                <i class="bi bi-trash"></i> X
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" @onclick="OnCancel">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="ConfirmDeploy">
+                    <i class="bi bi-rocket-takeoff"></i> Start Deployment
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

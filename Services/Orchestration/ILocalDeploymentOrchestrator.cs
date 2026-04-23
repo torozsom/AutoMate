@@ -1,3 +1,4 @@
+using Core.DTO;
 using Core.Entities;
 
 namespace Services.Orchestration;
@@ -9,5 +10,5 @@ namespace Services.Orchestration;
 public interface ILocalDeploymentOrchestrator
 {
     /// Initiates the deployment process for a local .NET project.
-    Task<Deployment> DeployLocalProjectAsync(Guid csProjectId);
+    Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config);
 }

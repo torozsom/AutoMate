@@ -4,13 +4,8 @@
 ///     Represents the configuration settings for a project, including the .NET version to use,
 ///     the port to expose, whether a database is required, and whether the project is public or private.
 /// </summary>
-public class LocalProjectConfig
+public class LocalProjectConfig : BaseEntity
 {
-    /// <summary>
-    ///     Gets or sets the unique identifier for the project configuration.
-    /// </summary>
-    public Guid Id { get; set; }
-
     /// <summary>
     ///     Gets or sets the unique identifier of the project associated with this configuration.
     /// </summary>

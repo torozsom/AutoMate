@@ -1,4 +1,5 @@
 using Core.DTO;
+using Core.Entities;
 
 namespace Services.Scanner;
 
@@ -13,4 +14,6 @@ public interface IProjectScannerService
 
     /// Scans a .csproj file located at the specified file path to extract project metadata.
     Task<ProjectMetadataDto> ScanCsprojFileContentAsync(string filePath);
+
+    Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject);
 }

@@ -1,8 +1,8 @@
-using System.Net;
-using System.Net.Sockets;
+using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Services.Data;
 using Services.Docker;
 using Services.Scanner;
@@ -19,16 +19,14 @@ public class LocalDeploymentOrchestrator(
     ILocalSystemScannerService systemScanner,
     IProjectScannerService projectScanner,
     ITemplateService templateService,
-    IDockerService dockerService)
+    IDockerService dockerService,
+    ILogger<LocalDeploymentOrchestrator> logger)
     : ILocalDeploymentOrchestrator
 {
     /// <summary>
-    ///     Deploys a local project using the provided project ID. The method handles the process
-    ///     of building a Docker image and container for the project and updating the deployment status.
+    ///     Deploys a local .NET project by orchestrating the entire process.
     /// </summary>
-    /// <param name="csProjectId">
-    ///     The GUID representing the unique identifier of the project to be deployed.
-    /// </param>
+    /// <param name="config">The configuration for the deployment.</param>
     /// <returns>
     ///     A <see cref="Task" /> representing the asynchronous operation, with a result of type
     ///     <see cref="Deployment" />, which contains details of the deployment, such as status,
@@ -40,27 +38,24 @@ public class LocalDeploymentOrchestrator(
     /// <exception cref="Exception">
     ///     Thrown if an unexpected error occurs during the deployment process.
     /// </exception>
-    public async Task<Deployment> DeployLocalProjectAsync(Guid csProjectId)
+    public async Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config)
     {
-        // Retrieve the C# project and its configuration from the database
+        logger.LogInformation("Starting Deployment Process for {Project}", config.ProjectName);
+
         var csProject = await dbContext.CsProjects
-            .Include(csp => csp.Configuration)
-            .FirstOrDefaultAsync(csp => csp.Id == csProjectId);
+            .FirstOrDefaultAsync(csp => csp.Id == config.CsProjectId);
 
-        if (csProject?.Configuration == null)
-            throw new InvalidOperationException($"Project or configuration not found for ID: {csProjectId}");
-
-        var safeProjectName = csProject.Name.ToLowerInvariant().Replace(" ", "");
-        var shortId = csProject.Id.ToString()[..8];
-        var imageTag = $"automate-{safeProjectName}:{shortId}";
-        var containerName = $"automate-{safeProjectName}-run";
+        if (csProject == null)
+        {
+            logger.LogError("Database record for CsProject {Id} not found!", config.CsProjectId);
+            throw new InvalidOperationException("Project not found.");
+        }
 
         var deployment = new Deployment
         {
             CsProjectId = csProject.Id,
             Status = DeploymentStatus.Building,
-            ImageTag = imageTag,
-            DeployedAt = DateTimeOffset.UtcNow
+            ImageTag = $"automate-{csProject.Name.ToLower()}:{csProject.Id.ToString()[..8]}"
         };
 
         // Save the deployment to the database
@@ -69,89 +64,54 @@ public class LocalDeploymentOrchestrator(
 
         try
         {
-            // Find the solution root and scan the project to gather necessary metadata for Dockerfile generation
+            logger.LogInformation("Step 1: Locating solution root...");
             var solutionRoot = await systemScanner.FindSolutionRootAsync(csProject.Path);
+            logger.LogInformation("Solution root found at: {Path}", solutionRoot);
+
+            logger.LogInformation("Step 2: Scanning project content for metadata...");
             var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
 
-            // Generate Dockerfile and Dockerignore based on the project metadata
+            logger.LogInformation("Step 3: Generating Infrastructure-as-Code files...");
             var dockerfileContent = await templateService.GenerateDockerfileAsync(
-                csProject.Name,
-                metadata.DotNetVersion,
-                csProject.Configuration.ExposedPort ?? 8080,
-                metadata.AllProjectPaths,
-                solutionRoot);
-
+                csProject.Name, metadata.DotNetVersion, 8080, metadata.AllProjectPaths, solutionRoot);
             var dockerIgnoreContent = await templateService.GenerateDockerIgnoreAsync();
+            var composeContent = await templateService.GenerateDockerComposeAsync(config);
 
-            // Save the Dockerfile and Dockerignore to the project root directory
+            logger.LogInformation("Step 4: Saving files to disk...");
             await templateService.SaveFileAsync(solutionRoot, "Dockerfile", dockerfileContent);
             await templateService.SaveFileAsync(solutionRoot, ".dockerignore", dockerIgnoreContent);
+            await templateService.SaveFileAsync(solutionRoot, "docker-compose.yml", composeContent);
+            logger.LogInformation("Configuration files saved successfully.");
 
-            // Build the Docker image using the generated Dockerfile
-            var buildSuccess = await dockerService.BuildImageAsync(solutionRoot, imageTag);
-            if (!buildSuccess)
-            {
-                deployment.Status = DeploymentStatus.Failed;
-                throw new Exception($"Failed to build Docker image for project {csProject.Name}");
-            }
-
-            // Determine an available port on the local machine to map to the container's exposed port
-            var dynamicHostPort = GetAvailablePort();
-            var containerInternalPort = csProject.Configuration.ExposedPort ?? 8080;
-
-            // Update deployment status to "Starting" before attempting to run the container
+            logger.LogInformation("Step 5: Invoking Docker Compose...");
             deployment.Status = DeploymentStatus.Starting;
             await dbContext.SaveChangesAsync();
 
-            // Start the container using the generated image tag
-            var containerId = await dockerService.StartContainerAsync(
-                imageTag,
-                containerName,
-                dynamicHostPort,
-                containerInternalPort,
-                csProject.Configuration.EnvironmentVariablesJson);
+            var success = await dockerService.RunDockerComposeUpAsync(solutionRoot, config.ProjectName);
 
-            if (string.IsNullOrEmpty(containerId))
+            if (!success)
             {
                 deployment.Status = DeploymentStatus.Failed;
-                throw new Exception($"Failed to start container for project {csProject.Name}");
+                await dbContext.SaveChangesAsync();
+                logger.LogError("Step 5 Failed: Docker Compose could not start the services.");
+                throw new Exception("Docker Compose process returned an error. Check server logs.");
             }
 
-            // Update deployment with the container ID and set status to "Running"
-            deployment.DockerContainerId = containerId;
+            logger.LogInformation("Step 6: Finalizing deployment record...");
             deployment.Status = DeploymentStatus.Running;
-            deployment.Logs = "Container started successfully, visit http://localhost:" + dynamicHostPort;
+            deployment.Logs = $"System live at http://localhost:{config.ExposedPort}";
             await dbContext.SaveChangesAsync();
 
+            logger.LogInformation("--- Deployment Finished Successfully ---");
             return deployment;
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "Deployment failed during execution.");
             deployment.Status = DeploymentStatus.Failed;
-            deployment.Logs = $"Deployment failed: {ex.Message}";
-            Console.WriteLine(ex.Message);
+            deployment.Logs = $"Error: {ex.Message}";
             await dbContext.SaveChangesAsync();
             throw;
         }
-    }
-
-
-    /// <summary>
-    ///     Determines and returns an available port on the local machine. This method creates a temporary
-    ///     listener to identify a free port and then releases it for future use.
-    /// </summary>
-    /// <returns>
-    ///     An integer representing a port number that is currently available for use.
-    /// </returns>
-    /// <exception cref="SocketException">
-    ///     Thrown when an error occurs while accessing the network during the process of finding an available port.
-    /// </exception>
-    private int GetAvailablePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 }

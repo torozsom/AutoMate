@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Services.Auth;
@@ -111,7 +112,7 @@ public static class ServiceConfiguration
         // Add authorization services to the container, setting a fallback policy
         // that requires all users to be authenticated by default.
         builder.Services.AddAuthorizationBuilder()
-                .SetFallbackPolicy(new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder()
                 .RequireAuthenticatedUser()
                 .Build());
 

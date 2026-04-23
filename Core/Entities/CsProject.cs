@@ -3,13 +3,8 @@ namespace Core.Entities;
 /// <summary>
 ///     Represents a C# project within a solution.
 /// </summary>
-public class CsProject
+public class CsProject : BaseEntity
 {
-    /// <summary>
-    ///     Gets or sets the unique identifier for the C# project.
-    /// </summary>
-    public Guid Id { get; set; }
-
     /// <summary>
     ///     Gets or sets the unique identifier of the project associated with this C# project.
     /// </summary>

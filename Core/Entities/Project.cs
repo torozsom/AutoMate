@@ -6,13 +6,8 @@ namespace Core.Entities;
 ///     Represents a project created by a user, containing information
 ///     about the project's source code, type, and associated configuration and deployments.
 /// </summary>
-public class Project
+public class Project : BaseEntity
 {
-    /// <summary>
-    ///     Gets or sets the unique identifier for the project.
-    /// </summary>
-    public Guid Id { get; set; }
-
     /// <summary>
     ///     Gets or sets the unique identifier of the user who owns the project.
     /// </summary>
