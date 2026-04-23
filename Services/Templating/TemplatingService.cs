@@ -1,3 +1,4 @@
+using Core.DTO;
 using Microsoft.Extensions.Logging;
 using Scriban;
 
@@ -139,5 +140,54 @@ public class TemplateService : ITemplateService
 
         var filePath = Path.Combine(targetDirectory, fileName);
         await File.WriteAllTextAsync(filePath, content);
+    }
+
+
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="config"></param>
+    /// <returns></returns>
+    /// <exception cref="InvalidOperationException"></exception>
+    public async Task<string> GenerateDockerComposeAsync(DeploymentConfigDto config)
+    {
+        // Check if the template file exists
+        var templatePath = Path.Combine(_templatesDirectory, "docker-compose.scriban");
+        if  (!File.Exists(templatePath))
+            throw new FileNotFoundException($"Template not found at: {templatePath}");
+
+        var templateContent = await File.ReadAllTextAsync(templatePath);
+
+        // Parse the template and check for errors
+        var template = Template.Parse(templateContent);
+        if (template.HasErrors)
+        {
+            var errors = string.Join(", ", template.Messages.Select(m => m.Message));
+            throw new InvalidOperationException($"Error parsing docker-compose template: {errors}");
+        }
+
+        // Build the model for the template rendering, including all necessary properties from the DeploymentConfigDto
+        var model = new
+        {
+            project_name = config.ProjectName,
+            environment_name = config.EnvironmentName,
+            exposed_port = config.ExposedPort,
+            requires_db = config.RequiresDb,
+            db_type = config.DbType,
+            db_name = config.DbName,
+            db_user = config.DbUser,
+            db_password = config.DbPassword,
+
+            db_user_encoded = Uri.EscapeDataString(config.DbUser ?? ""),
+            db_password_encoded = Uri.EscapeDataString(config.DbPassword ?? ""),
+
+            // Convert the custom environment variables dictionary to a list of key-value pairs for easier use in the template
+            custom_env_vars = config.CustomEnvVars.Select(kvp => new { key = kvp.Key, value = kvp.Value }).ToList()
+        };
+
+        // Render the template with the provided model and return the generated docker-compose.yml content
+        var result = await template.RenderAsync(model);
+
+        return result;
     }
 }

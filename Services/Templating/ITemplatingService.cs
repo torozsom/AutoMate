@@ -1,3 +1,5 @@
+using Core.DTO;
+
 namespace Services.Templating;
 
 /// <summary>
@@ -15,4 +17,7 @@ public interface ITemplateService
 
     /// Saves a file to the specified directory with the specified name and content.
     Task SaveFileAsync(string targetDirectory, string fileName, string content);
+
+    /// Generates a docker-compose.yml file based on the provided deployment configuration.
+    Task<string> GenerateDockerComposeAsync(DeploymentConfigDto config);
 }
