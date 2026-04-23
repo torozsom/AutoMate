@@ -4,7 +4,7 @@ namespace Core.DTO;
 ///     Represents the configuration settings required for deploying a .NET project, including project details,
 ///     environment settings, database configuration, and custom environment variables.
 /// </summary>
-public class ProjectDeploymentConfigDto
+public class DeploymentConfigDto
 {
     /// <summary>
     ///     A unique identifier for the project being deployed, used to associate
