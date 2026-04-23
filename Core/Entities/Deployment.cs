@@ -6,23 +6,12 @@ namespace Core.Entities;
 ///     Represents a deployment of a project, including the
 ///     time it was deployed, its status, and any logs associated with the deployment.
 /// </summary>
-public class Deployment
+public class Deployment : BaseEntity
 {
-    /// <summary>
-    ///     Gets or sets the unique identifier for the deployment.
-    /// </summary>
-    public Guid Id { get; set; }
-
     /// <summary>
     ///     Gets or sets the unique identifier of the project associated with this deployment.
     /// </summary>
     public Guid CsProjectId { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the timestamp when the deployment was created.
-    ///     Defaults to the current UTC time.
-    /// </summary>
-    public DateTimeOffset DeployedAt { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>
     ///     Gets or sets the current status of the deployment.
