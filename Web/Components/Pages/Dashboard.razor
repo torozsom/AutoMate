@@ -6,19 +6,6 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Dashboard</h1>
-
-        <div class="dropdown">
-            <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown"
-                    aria-expanded="false">
-                <i class="bi bi-plus-lg me-1"></i> New Project
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                <li><a class="dropdown-item" href="/local-repos"><i class="bi bi-folder2-open me-2 text-warning"></i>Local
-                        Projects</a></li>
-                <li><a class="dropdown-item" href="/github-repos"><i class="bi bi-github me-2"></i>Remote
-                        repositories</a></li>
-            </ul>
-        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_globalErrorMessage))
