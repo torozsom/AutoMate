@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Services.Orchestration;
 using Services.Projects;
+using Services.Scanner;
 
 namespace Web.Components.Pages;
 
@@ -19,7 +20,7 @@ namespace Web.Components.Pages;
 public partial class Dashboard : ComponentBase
 {
     private readonly Dictionary<Guid, bool> _deployingStates = new();
-    private ProjectDeploymentConfigDto? _currentDeployConfig;
+    private DeploymentConfigDto? _currentDeployConfig;
     private Guid _currentUserId;
     private string? _globalErrorMessage;
 
@@ -33,6 +34,8 @@ public partial class Dashboard : ComponentBase
     [Inject] private IProjectService ProjectService { get; set; } = null!;
     [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
     [Inject] private ILocalDeploymentOrchestrator DeploymentOrchestrator { get; set; } = null!;
+
+    [Inject] private IProjectScannerService ProjectScanner { get; set; } = null!;
 
 
     /// <summary>
@@ -97,6 +100,9 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
+    ///    Initiates the deployment process for a given project. If the project is local,
+    ///    it looks for a web project within the solution. If a web project is found, it analyzes
+    ///    the project's dependencies to prepare the deployment configuration.
     /// </summary>
     /// <param name="project"></param>
     private async Task DeployProjectAsync(Project project)
@@ -114,17 +120,16 @@ public partial class Dashboard : ComponentBase
             return;
         }
 
-        _currentDeployConfig = new ProjectDeploymentConfigDto
+        try
         {
-            ProjectId = project.Id,
-            CsProjectId = csProjectToDeploy.Id,
-            ProjectName = project.Name,
-            ExposedPort = 8080,
-            RequiresDb = true,
-            DbType = "PostgreSQL"
-        };
-
-        _showConfigModal = true;
+            _globalErrorMessage = null;
+            _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(project, csProjectToDeploy);
+            _showConfigModal = true;
+        }
+        catch (Exception ex)
+        {
+            _globalErrorMessage = $"Failed to analyze project dependencies: {ex.Message}";
+        }
     }
 
 
@@ -140,7 +145,7 @@ public partial class Dashboard : ComponentBase
     /// <summary>
     /// </summary>
     /// <param name="finalConfig"></param>
-    private async Task ExecuteDeploymentAsync(ProjectDeploymentConfigDto finalConfig)
+    private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
         _showConfigModal = false;
 
@@ -150,8 +155,9 @@ public partial class Dashboard : ComponentBase
             _globalSuccessMessage = null;
             _deployingStates[finalConfig.ProjectId] = true;
             StateHasChanged();
+            
+            var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
 
-            var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig.CsProjectId);
             _globalSuccessMessage =
                 $"The '{finalConfig.ProjectName}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";
         }
