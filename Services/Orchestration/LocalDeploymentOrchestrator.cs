@@ -1,5 +1,5 @@
-using System.Net;
-using System.Net.Sockets;
+using System.Text.Json;
+using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -26,9 +26,7 @@ public class LocalDeploymentOrchestrator(
     ///     Deploys a local project using the provided project ID. The method handles the process
     ///     of building a Docker image and container for the project and updating the deployment status.
     /// </summary>
-    /// <param name="csProjectId">
-    ///     The GUID representing the unique identifier of the project to be deployed.
-    /// </param>
+    /// <param name="config">The configuration for the deployment.</param>
     /// <returns>
     ///     A <see cref="Task" /> representing the asynchronous operation, with a result of type
     ///     <see cref="Deployment" />, which contains details of the deployment, such as status,
@@ -40,15 +38,13 @@ public class LocalDeploymentOrchestrator(
     /// <exception cref="Exception">
     ///     Thrown if an unexpected error occurs during the deployment process.
     /// </exception>
-    public async Task<Deployment> DeployLocalProjectAsync(Guid csProjectId)
+    public async Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config)
     {
-        // Retrieve the C# project and its configuration from the database
         var csProject = await dbContext.CsProjects
-            .Include(csp => csp.Configuration)
-            .FirstOrDefaultAsync(csp => csp.Id == csProjectId);
+            .FirstOrDefaultAsync(csp => csp.Id == config.CsProjectId);
 
-        if (csProject?.Configuration == null)
-            throw new InvalidOperationException($"Project or configuration not found for ID: {csProjectId}");
+        if (csProject == null)
+            throw new InvalidOperationException($"Project not found for ID: {config.CsProjectId}");
 
         var safeProjectName = csProject.Name.ToLowerInvariant().Replace(" ", "");
         var shortId = csProject.Id.ToString()[..8];
@@ -72,11 +68,11 @@ public class LocalDeploymentOrchestrator(
             var solutionRoot = await systemScanner.FindSolutionRootAsync(csProject.Path);
             var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
 
-            // Generate Dockerfile and Dockerignore based on the project metadata
+            // Generate Dockerfile and .dockerignore content based on the scanned metadata and save them to the solution root
             var dockerfileContent = await templateService.GenerateDockerfileAsync(
                 csProject.Name,
                 metadata.DotNetVersion,
-                csProject.Configuration.ExposedPort ?? 8080,
+                config.ExposedPort,
                 metadata.AllProjectPaths,
                 solutionRoot);
 
@@ -94,21 +90,20 @@ public class LocalDeploymentOrchestrator(
                 throw new Exception($"Failed to build Docker image for project {csProject.Name}");
             }
 
-            // Determine an available port on the local machine to map to the container's exposed port
-            var dynamicHostPort = GetAvailablePort();
-            var containerInternalPort = csProject.Configuration.ExposedPort ?? 8080;
-
-            // Update deployment status to "Starting" before attempting to run the container
             deployment.Status = DeploymentStatus.Starting;
             await dbContext.SaveChangesAsync();
 
-            // Start the container using the generated image tag
+            // Serialize the custom environment variables to JSON format to pass them to the Docker container
+            var envVarsJson = JsonSerializer.Serialize(config.CustomEnvVars);
+
+            // Start the Docker container with the specified image, ports, and environment variables
             var containerId = await dockerService.StartContainerAsync(
                 imageTag,
                 containerName,
-                dynamicHostPort,
-                containerInternalPort,
-                csProject.Configuration.EnvironmentVariablesJson);
+                config.ExposedPort,
+                8080,
+                envVarsJson
+            );
 
             if (string.IsNullOrEmpty(containerId))
             {
@@ -116,10 +111,9 @@ public class LocalDeploymentOrchestrator(
                 throw new Exception($"Failed to start container for project {csProject.Name}");
             }
 
-            // Update deployment with the container ID and set status to "Running"
             deployment.DockerContainerId = containerId;
             deployment.Status = DeploymentStatus.Running;
-            deployment.Logs = "Container started successfully, visit http://localhost:" + dynamicHostPort;
+            deployment.Logs = "Container started successfully, visit http://localhost:" + config.ExposedPort;
             await dbContext.SaveChangesAsync();
 
             return deployment;
@@ -132,25 +126,5 @@ public class LocalDeploymentOrchestrator(
             await dbContext.SaveChangesAsync();
             throw;
         }
-    }
-
-
-    /// <summary>
-    ///     Determines and returns an available port on the local machine. This method creates a temporary
-    ///     listener to identify a free port and then releases it for future use.
-    /// </summary>
-    /// <returns>
-    ///     An integer representing a port number that is currently available for use.
-    /// </returns>
-    /// <exception cref="SocketException">
-    ///     Thrown when an error occurs while accessing the network during the process of finding an available port.
-    /// </exception>
-    private int GetAvailablePort()
-    {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
     }
 }
