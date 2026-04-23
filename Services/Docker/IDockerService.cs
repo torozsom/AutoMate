@@ -17,4 +17,8 @@ public interface IDockerService
     /// Starts a Docker container from a specified image, mapping the given host port to the container port.
     Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort, int containerPort = 8080,
         string? envVarsJson = null);
+
+
+    /// Executes the 'docker-compose up' command in the specified working directory.
+    Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName);
 }

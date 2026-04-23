@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Formats.Tar;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -236,6 +237,61 @@ public class DockerService : IDockerService, IDisposable
             var relativePath = Path.GetRelativePath(sourceDirectory, filePath).Replace('\\', '/');
             if (!ignore.IsIgnored(relativePath))
                 await tarWriter.WriteEntryAsync(filePath, relativePath);
+        }
+    }
+
+
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="workingDir"></param>
+    /// <param name="projectName"></param>
+    /// <returns></returns>
+    public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName)
+    {
+        var safeProjectName = projectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
+
+        _logger.LogInformation("Starting 'docker compose up -d' in {Directory}", workingDir);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = $"compose -p {safeProjectName} up -d --build",
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process();
+        process.StartInfo = startInfo;
+
+        process.OutputDataReceived += (_, e) => { if (e.Data != null) _logger.LogInformation("[Docker STDOUT]: {Data}", e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) _logger.LogWarning("[Docker STDERR]: {Data}", e.Data); };
+
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(8));
+            await process.WaitForExitAsync(cts.Token);
+
+            if (process.ExitCode != 0)
+            {
+                _logger.LogError("Docker Compose failed with exit code {Code}", process.ExitCode);
+                return false;
+            }
+
+            _logger.LogInformation("Docker Compose started successfully.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Critical error while launching Docker process.");
+            return false;
         }
     }
 }
