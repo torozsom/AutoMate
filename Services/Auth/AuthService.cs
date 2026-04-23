@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Core.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -41,7 +42,7 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
             Email = email,
             Username = username,
             IsEmailVerified = false,
-            EmailVerificationToken = Guid.NewGuid().ToString(),
+            EmailVerificationToken = GenerateSecureToken(),
             VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(24)
         };
 
@@ -52,10 +53,20 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
 
         var verificationLink = verificationLinkFactory(newUser.EmailVerificationToken);
 
-        await emailSender.SendEmailAsync(
-            newUser.Email,
-            "Confirm your registration to AutoMate!",
-            "Welcome to AutoMate!\n\nPlease follow this link for verification:\n" + verificationLink);
+        try
+        {
+            await emailSender.SendEmailAsync(
+                newUser.Email,
+                "Confirm your registration to AutoMate!",
+                "Welcome to AutoMate!\n\nPlease follow this link for verification:\n" + verificationLink);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("An error occured while trying to send the verification email! Error: " + ex.Message);
+            dbContext.Users.Remove(newUser);
+            await dbContext.SaveChangesAsync();
+            return false;
+        }
 
         return true;
     }
@@ -149,10 +160,29 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
         }
         else
         {
+            existingUser.Username = username;
+            existingUser.Email = email;
             existingUser.AvatarUrl = avatarUrl;
             existingUser.AccessToken = accessToken;
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+
+    /// <summary>
+    ///     Generates a secure random token for email verification purposes. The token is created
+    ///     using a cryptographically secure random number generator and is encoded in a URL-safe
+    ///     Base64 format, ensuring it can be safely included in email verification links without
+    ///     issues related to special characters.
+    /// </summary>
+    /// <returns></returns>
+    private static string GenerateSecureToken()
+    {
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(tokenBytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
     }
 }
