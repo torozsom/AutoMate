@@ -112,6 +112,13 @@
                             </div>
                         </div>
                     }
+                    @if (_showConfigModal && _currentDeployConfig != null)
+                    {
+                        <ConfigurationForm
+                            Config="_currentDeployConfig"
+                            OnCancel="CancelDeployment"
+                            OnDeployConfirmed="ExecuteDeploymentAsync" />
+                    }
                 </div>
             }
         </Authorized>

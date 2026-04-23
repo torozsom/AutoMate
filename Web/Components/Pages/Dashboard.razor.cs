@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.AspNetCore.Components;
@@ -24,6 +25,9 @@ public partial class Dashboard : ComponentBase
     private string? _globalSuccessMessage;
     private bool _isLoading = true;
     private List<Project>? _projects;
+
+    private bool _showConfigModal;
+    private ProjectDeploymentConfigDto? _currentDeployConfig;
 
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
     [Inject] private IProjectService ProjectService { get; set; } = null!;
@@ -93,25 +97,17 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
-    ///     Deploys a project asynchronously. This method verifies if the project is a local
-    ///     web project and initiates its deployment. It manages the deployment state,
-    ///     displays appropriate success or error messages, and updates the UI accordingly.
+    ///
     /// </summary>
-    /// <param name="project">
-    ///     The project to be deployed, containing details such as ID, name, source type, and associated C#
-    ///     projects.
-    /// </param>
-    /// <return>Returns a <see cref="Task" /> that represents the asynchronous operation.</return>
+    /// <param name="project"></param>
     private async Task DeployProjectAsync(Project project)
     {
-        // Ensure the project is a local one before attempting deployment
         if (project.SourceType == SourceType.Remote)
         {
             _globalErrorMessage = "This feature is not yet available for remote projects.";
             return;
         }
 
-        // Find the C# project associated with the main project that is marked as a web project
         var csProjectToDeploy = project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
         if (csProjectToDeploy == null)
         {
@@ -119,25 +115,55 @@ public partial class Dashboard : ComponentBase
             return;
         }
 
+        _currentDeployConfig = new ProjectDeploymentConfigDto
+        {
+            ProjectId = project.Id,
+            CsProjectId = csProjectToDeploy.Id,
+            ProjectName = project.Name,
+            ExposedPort = 8080,
+            RequiresDb = true,
+            DbType = "PostgreSQL"
+        };
+
+        _showConfigModal = true;
+    }
+
+
+    /// <summary>
+    ///
+    /// </summary>
+    private void CancelDeployment()
+    {
+        _showConfigModal = false;
+        _currentDeployConfig = null;
+    }
+
+
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="finalConfig"></param>
+    private async Task ExecuteDeploymentAsync(ProjectDeploymentConfigDto finalConfig)
+    {
+        _showConfigModal = false;
+
         try
         {
             _globalErrorMessage = null;
             _globalSuccessMessage = null;
-            _deployingStates[project.Id] = true;
+            _deployingStates[finalConfig.ProjectId] = true;
             StateHasChanged();
 
-            // Initiate the deployment process using the deployment orchestrator service
-            var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(csProjectToDeploy.Id);
-            _globalSuccessMessage =
-                $"The '{project.Name}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";
+            var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig.CsProjectId);
+            _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";
         }
         catch (Exception ex)
         {
-            _globalErrorMessage = $"Failed to deploy '{project.Name}': {ex.Message}";
+            _globalErrorMessage = $"Failed to deploy '{finalConfig.ProjectName}': {ex.Message}";
         }
         finally
         {
-            _deployingStates[project.Id] = false;
+            _deployingStates[finalConfig.ProjectId] = false;
             StateHasChanged();
         }
     }
