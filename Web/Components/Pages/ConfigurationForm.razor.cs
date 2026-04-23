@@ -16,13 +16,13 @@ public partial class ConfigurationForm : ComponentBase
     ///     environment settings, database configuration, and custom environment variables.
     /// </summary>
     [Parameter]
-    public ProjectDeploymentConfigDto Config { get; set; } = new();
+    public DeploymentConfigDto Config { get; set; } = new();
 
     /// <summary>
     ///     An event callback that is invoked when the user confirms the deployment with the specified configuration.
     /// </summary>
     [Parameter]
-    public EventCallback<ProjectDeploymentConfigDto> OnDeployConfirmed { get; set; }
+    public EventCallback<DeploymentConfigDto> OnDeployConfirmed { get; set; }
 
     /// <summary>
     ///     An event callback that is invoked when the user cancels the deployment configuration process.
