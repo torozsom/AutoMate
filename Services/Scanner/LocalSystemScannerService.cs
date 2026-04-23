@@ -69,7 +69,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
     /// </summary>
     /// <param name="currentPath">The current directory path being scanned.</param>
     /// <param name="result">The list to accumulate found local projects.</param>
-    private void ScanDirectory(string currentPath, List<LocalProjectDto> result)
+    private static void ScanDirectory(string currentPath, List<LocalProjectDto> result)
     {
         try
         {
@@ -171,7 +171,7 @@ public class LocalSystemScannerService : ILocalSystemScannerService
     /// </summary>
     /// <param name="rootDir">The root directory to start searching for .csproj files.</param>
     /// <returns>A list of file paths to the .csproj files found.</returns>
-    private List<string> FindCsprojFilesSafe(string rootDir)
+    private static List<string> FindCsprojFilesSafe(string rootDir)
     {
         var result = new List<string>();
         var queue = new Queue<string>();
