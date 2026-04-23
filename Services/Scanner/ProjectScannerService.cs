@@ -150,6 +150,14 @@ public class ProjectScannerService : IProjectScannerService
     }
 
 
+    /// <summary>
+    ///    Analyzes the dependencies of a given project and its associated C# project file (.csproj) to determine
+    ///    if the project requires a database and identifies the type of database based on the presence of specific
+    ///    package references.
+    /// </summary>
+    /// <param name="project">The project to be analyzed.</param>
+    /// <param name="csProject">The web based C# project.</param>
+    /// <returns></returns>
     public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject)
     {
         var config = new DeploymentConfigDto

@@ -1,5 +1,8 @@
 namespace Core.Entities;
 
+/// <summary>
+///    Represents the base entity class that all other entities in the application will inherit from.
+/// </summary>
 public abstract class BaseEntity
 {
     /// <summary>

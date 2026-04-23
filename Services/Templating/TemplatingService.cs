@@ -144,10 +144,10 @@ public class TemplateService : ITemplateService
 
 
     /// <summary>
-    ///
+    ///     Generates the content of a docker-compose.yml file based on a predefined Scriban template and deployment configuration.
     /// </summary>
-    /// <param name="config"></param>
-    /// <returns></returns>
+    /// <param name="config">The deployment configuration for the YAML file.</param>
+    /// <returns>The content of the docker compose file.</returns>
     /// <exception cref="InvalidOperationException"></exception>
     public async Task<string> GenerateDockerComposeAsync(DeploymentConfigDto config)
     {

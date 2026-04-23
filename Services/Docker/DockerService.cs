@@ -242,10 +242,10 @@ public class DockerService : IDockerService, IDisposable
 
 
     /// <summary>
-    ///
+    ///     Executes the 'docker compose up -d' command in a specified working directory with a given project name.
     /// </summary>
-    /// <param name="workingDir"></param>
-    /// <param name="projectName"></param>
+    /// <param name="workingDir">The working directory where the docker command should be run.</param>
+    /// <param name="projectName">The name of the project to be containerized.</param>
     /// <returns></returns>
     public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName)
     {
