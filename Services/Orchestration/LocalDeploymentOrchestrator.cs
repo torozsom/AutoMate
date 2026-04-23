@@ -59,8 +59,7 @@ public class LocalDeploymentOrchestrator(
         {
             CsProjectId = csProject.Id,
             Status = DeploymentStatus.Building,
-            ImageTag = imageTag,
-            DeployedAt = DateTimeOffset.UtcNow
+            ImageTag = imageTag
         };
 
         // Save the deployment to the database

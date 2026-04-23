@@ -8,29 +8,34 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class ConfigurationForm : ComponentBase
 {
+    /// A counter used to generate unique keys for new environment variables added by the user.
+    private int _newVarCounter = 1;
+
     /// <summary>
     ///     The deployment configuration settings for the project being deployed, including project details,
     ///     environment settings, database configuration, and custom environment variables.
     /// </summary>
-    [Parameter] public ProjectDeploymentConfigDto Config { get; set; } = new();
+    [Parameter]
+    public ProjectDeploymentConfigDto Config { get; set; } = new();
 
     /// <summary>
     ///     An event callback that is invoked when the user confirms the deployment with the specified configuration.
     /// </summary>
-    [Parameter] public EventCallback<ProjectDeploymentConfigDto> OnDeployConfirmed { get; set; }
+    [Parameter]
+    public EventCallback<ProjectDeploymentConfigDto> OnDeployConfirmed { get; set; }
 
     /// <summary>
-    ///    An event callback that is invoked when the user cancels the deployment configuration process.
+    ///     An event callback that is invoked when the user cancels the deployment configuration process.
     /// </summary>
-    [Parameter] public EventCallback OnCancel { get; set; }
-
-    ///  A counter used to generate unique keys for new environment variables added by the user.
-    private int _newVarCounter = 1;
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
 
 
     /// <summary>
-    ///    Invoked when the user confirms the deployment configuration. This method triggers the OnDeployConfirmed event callback,
-    ///    passing the current deployment configuration (Config) to the parent component or service that will handle the deployment process.
+    ///     Invoked when the user confirms the deployment configuration. This method triggers the OnDeployConfirmed event
+    ///     callback,
+    ///     passing the current deployment configuration (Config) to the parent component or service that will handle the
+    ///     deployment process.
     /// </summary>
     private async Task ConfirmDeploy()
     {
@@ -39,7 +44,6 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///
     /// </summary>
     private void AddEmptyEnvVar()
     {
@@ -75,7 +79,7 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///    Updates the value of an existing environment variable in the deployment configuration based on the specified key.
+    ///     Updates the value of an existing environment variable in the deployment configuration based on the specified key.
     /// </summary>
     /// <param name="key">The key of the variable to be updated.</param>
     /// <param name="newValue">The new value to be set for the variable.</param>

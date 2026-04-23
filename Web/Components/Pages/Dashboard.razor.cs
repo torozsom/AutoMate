@@ -19,6 +19,7 @@ namespace Web.Components.Pages;
 public partial class Dashboard : ComponentBase
 {
     private readonly Dictionary<Guid, bool> _deployingStates = new();
+    private ProjectDeploymentConfigDto? _currentDeployConfig;
     private Guid _currentUserId;
     private string? _globalErrorMessage;
 
@@ -27,7 +28,6 @@ public partial class Dashboard : ComponentBase
     private List<Project>? _projects;
 
     private bool _showConfigModal;
-    private ProjectDeploymentConfigDto? _currentDeployConfig;
 
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
     [Inject] private IProjectService ProjectService { get; set; } = null!;
@@ -97,7 +97,6 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
-    ///
     /// </summary>
     /// <param name="project"></param>
     private async Task DeployProjectAsync(Project project)
@@ -130,7 +129,6 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
-    ///
     /// </summary>
     private void CancelDeployment()
     {
@@ -140,7 +138,6 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
-    ///
     /// </summary>
     /// <param name="finalConfig"></param>
     private async Task ExecuteDeploymentAsync(ProjectDeploymentConfigDto finalConfig)
@@ -155,7 +152,8 @@ public partial class Dashboard : ComponentBase
             StateHasChanged();
 
             var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig.CsProjectId);
-            _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";
+            _globalSuccessMessage =
+                $"The '{finalConfig.ProjectName}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";
         }
         catch (Exception ex)
         {

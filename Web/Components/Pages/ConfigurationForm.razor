@@ -19,11 +19,12 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Exposed Port (Host)</label>
-                        <input type="number" class="form-control bg-dark text-light border-secondary" @bind="Config.ExposedPort" />
+                        <input type="number" class="form-control bg-dark text-light border-secondary"
+                               @bind="Config.ExposedPort"/>
                     </div>
                 </div>
 
-                <hr class="border-secondary" />
+                <hr class="border-secondary"/>
 
                 <h6 class="text-primary mb-3">Services & Database</h6>
                 <div class="form-check form-switch mb-3">
@@ -48,21 +49,24 @@
                         <div class="row g-3">
                             <div class="col-md-4">
                                 <label class="form-label">Database Name</label>
-                                <input type="text" class="form-control bg-dark text-light border-secondary" @bind="Config.DbName" />
+                                <input type="text" class="form-control bg-dark text-light border-secondary"
+                                       @bind="Config.DbName"/>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Username</label>
-                                <input type="text" class="form-control bg-dark text-light border-secondary" @bind="Config.DbUser" />
+                                <input type="text" class="form-control bg-dark text-light border-secondary"
+                                       @bind="Config.DbUser"/>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Password</label>
-                                <input type="text" class="form-control bg-dark text-light border-secondary" @bind="Config.DbPassword" />
+                                <input type="text" class="form-control bg-dark text-light border-secondary"
+                                       @bind="Config.DbPassword"/>
                             </div>
                         </div>
                     </div>
                 }
 
-                <hr class="border-secondary" />
+                <hr class="border-secondary"/>
 
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="text-primary mb-0">Custom Environment Variables</h6>
@@ -73,12 +77,15 @@
                 {
                     <div class="row g-2 mb-2 align-items-center">
                         <div class="col-5">
-                            <input type="text" class="form-control bg-dark text-light border-secondary" placeholder="KEY (e.g. API_TOKEN)"
-                                   value="@key" @onchange="@(e => UpdateEnvVarKey(key, e.Value?.ToString()))" />
+                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                                   placeholder="KEY (e.g. API_TOKEN)"
+                                   value="@key" @onchange="@(e => UpdateEnvVarKey(key, e.Value?.ToString()))"/>
                         </div>
                         <div class="col-6">
-                            <input type="text" class="form-control bg-dark text-light border-secondary" placeholder="Value"
-                                   value="@Config.CustomEnvVars[key]" @onchange="@(e => UpdateEnvVarValue(key, e.Value?.ToString()))" />
+                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                                   placeholder="Value"
+                                   value="@Config.CustomEnvVars[key]"
+                                   @onchange="@(e => UpdateEnvVarValue(key, e.Value?.ToString()))"/>
                         </div>
                         <div class="col-1 text-end">
                             <button class="btn btn-sm btn-outline-danger" @onclick="@(() => RemoveEnvVar(key))">
