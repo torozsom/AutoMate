@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using Core.DTO;
@@ -13,6 +14,9 @@ namespace Services.Scanner;
 /// </summary>
 public class ProjectScannerService : IProjectScannerService
 {
+    private static readonly string DbProvidersJsonPath
+        = Path.Combine(AppContext.BaseDirectory, "Scanner", "database-providers.json");
+
     /// <summary>
     ///     Scans a solution's project files (.csproj) to extract metadata such as target frameworks,
     ///     dependencies, and project references.
@@ -183,25 +187,30 @@ public class ProjectScannerService : IProjectScannerService
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .ToList();
 
-                if (packageReferences.Any(p => p!.Contains("Npgsql") || p.Contains("PostgreSQL")))
+                if (File.Exists(DbProvidersJsonPath))
                 {
-                    config.RequiresDb = true;
-                    config.DbType = "PostgreSQL";
+                    var jsonContent = await File.ReadAllTextAsync(DbProvidersJsonPath);
+                    var providerRules = JsonSerializer.Deserialize<List<DbProviderRuleDto>>(jsonContent);
+
+                    if (providerRules != null)
+                    {
+                        foreach (var rule in providerRules)
+                        {
+                            bool isMatch = packageReferences.Any(projPkg =>
+                                rule.Packages.Any(rulePkg => projPkg!.Contains(rulePkg, StringComparison.OrdinalIgnoreCase)));
+
+                            if (isMatch)
+                            {
+                                config.RequiresDb = true;
+                                config.DbType = rule.DbType;
+                                break;
+                            }
+                        }
+                    }
                 }
-                else if (packageReferences.Any(p => p!.Contains("Pomelo.EntityFrameworkCore.MySql") || p.Contains("MySql.Data")))
+                else
                 {
-                    config.RequiresDb = true;
-                    config.DbType = "MySQL";
-                }
-                else if (packageReferences.Any(p => p!.Contains("Microsoft.EntityFrameworkCore.SqlServer")))
-                {
-                    config.RequiresDb = true;
-                    config.DbType = "SQLServer";
-                }
-                else if (packageReferences.Any(p => p!.Contains("MongoDB.Driver")))
-                {
-                    config.RequiresDb = true;
-                    config.DbType = "MongoDB";
+                    Console.WriteLine("Database providers configuration file not found. Skipping database type detection.");
                 }
             }
         }

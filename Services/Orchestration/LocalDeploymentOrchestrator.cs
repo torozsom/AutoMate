@@ -72,18 +72,9 @@ public class LocalDeploymentOrchestrator(
             var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
 
             logger.LogInformation("Step 3: Generating Infrastructure-as-Code files...");
-            var dockerfileContent = await templateService.GenerateDockerfileAsync(
-                csProject.Name, metadata.DotNetVersion, 8080, metadata.AllProjectPaths, solutionRoot);
-            var dockerIgnoreContent = await templateService.GenerateDockerIgnoreAsync();
-            var composeContent = await templateService.GenerateDockerComposeAsync(config);
+            await templateService.GenerateAndSaveAllTemplatesAsync(config, metadata, csProject.Name, solutionRoot);
 
-            logger.LogInformation("Step 4: Saving files to disk...");
-            await templateService.SaveFileAsync(solutionRoot, "Dockerfile", dockerfileContent);
-            await templateService.SaveFileAsync(solutionRoot, ".dockerignore", dockerIgnoreContent);
-            await templateService.SaveFileAsync(solutionRoot, "docker-compose.yml", composeContent);
-            logger.LogInformation("Configuration files saved successfully.");
-
-            logger.LogInformation("Step 5: Invoking Docker Compose...");
+            logger.LogInformation("Step 4: Invoking Docker Compose...");
             deployment.Status = DeploymentStatus.Starting;
             await dbContext.SaveChangesAsync();
 

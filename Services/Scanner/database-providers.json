@@ -1,0 +1,26 @@
+[
+  {
+    "DbType": "PostgreSQL",
+    "Packages": [ "Npgsql", "PostgreSQL" ]
+  },
+  {
+    "DbType": "MySQL",
+    "Packages": [ "Pomelo.EntityFrameworkCore.MySql", "MySql.Data" ]
+  },
+  {
+    "DbType": "SQLServer",
+    "Packages": [ "Microsoft.EntityFrameworkCore.SqlServer", "System.Data.SqlClient" ]
+  },
+  {
+    "DbType": "MongoDB",
+    "Packages": [ "MongoDB.Driver" ]
+  },
+  {
+    "DbType": "Redis",
+    "Packages": [ "StackExchange.Redis", "Microsoft.Extensions.Caching.StackExchangeRedis" ]
+  },
+  {
+    "DbType": "Oracle",
+    "Packages": [ "Oracle.EntityFrameworkCore", "Oracle.ManagedDataAccess" ]
+  }
+]
