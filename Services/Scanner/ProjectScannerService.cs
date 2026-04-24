@@ -176,41 +176,33 @@ public class ProjectScannerService : IProjectScannerService
 
         try
         {
-            if (File.Exists(csProject.Path))
+            // Scan the main project and all its referenced projects to gather metadata about package references
+            var metadata = await ScanProjectContentAsync(csProject.Path);
+
+            // Combine all package references from the main project and its referenced projects
+            var allPackages = metadata.PackageReferences.Keys
+                .Concat(metadata.ReferencedProjectPackages.Keys)
+                .ToList();
+
+            if (File.Exists(DbProvidersJsonPath))
             {
-                var csprojContent = await File.ReadAllTextAsync(csProject.Path);
-                var xml = XDocument.Parse(csprojContent);
+                var jsonContent = await File.ReadAllTextAsync(DbProvidersJsonPath);
+                var providerRules = JsonSerializer.Deserialize<List<DbProviderRuleDto>>(jsonContent);
 
-                var packageReferences = xml.Descendants()
-                    .Where(x => x.Name.LocalName == "PackageReference")
-                    .Select(x => x.Attribute("Include")?.Value)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .ToList();
-
-                if (File.Exists(DbProvidersJsonPath))
+                if (providerRules != null)
                 {
-                    var jsonContent = await File.ReadAllTextAsync(DbProvidersJsonPath);
-                    var providerRules = JsonSerializer.Deserialize<List<DbProviderRuleDto>>(jsonContent);
-
-                    if (providerRules != null)
+                    foreach (var rule in providerRules)
                     {
-                        foreach (var rule in providerRules)
-                        {
-                            bool isMatch = packageReferences.Any(projPkg =>
-                                rule.Packages.Any(rulePkg => projPkg!.Contains(rulePkg, StringComparison.OrdinalIgnoreCase)));
+                        bool isMatch = allPackages.Any(projPkg =>
+                            rule.Packages.Any(rulePkg => projPkg.Contains(rulePkg, StringComparison.OrdinalIgnoreCase)));
 
-                            if (isMatch)
-                            {
-                                config.RequiresDb = true;
-                                config.DbType = rule.DbType;
-                                break;
-                            }
+                        if (isMatch)
+                        {
+                            config.RequiresDb = true;
+                            config.DbType = rule.DbType;
+                            break;
                         }
                     }
-                }
-                else
-                {
-                    Console.WriteLine("Database providers configuration file not found. Skipping database type detection.");
                 }
             }
         }

@@ -44,24 +44,34 @@ public class TemplateService : ITemplateService
 
         if (templates == null || templates.Count == 0) return;
 
-        var projectListForTemplate = metadata.AllProjectPaths.Select(p => {
-            var relPath = Path.GetRelativePath(outputDirectory, p).Replace('\\', '/');
-            return new {
-                relative_path = relPath,
-                folder = Path.GetDirectoryName(relPath)?.Replace('\\', '/') ?? ""
-            };
-        }).ToList();
+        var projectListForTemplate = metadata.AllProjectPaths
+            .Select(p =>
+            {
+                var relPath = Path.GetRelativePath(outputDirectory, p).Replace('\\', '/');
+                var dir = Path.GetDirectoryName(relPath)?.Replace('\\', '/');
+                return new {
+                    relative_path = relPath,
+                    folder = string.IsNullOrEmpty(dir) ? "." : dir
+                };
+            }).ToList();
 
+        // Determine the main project file and its relative path for use in templates
         var mainProjectFile = metadata.AllProjectPaths
             .FirstOrDefault(p => p.EndsWith($"{csProjectName}.csproj", StringComparison.OrdinalIgnoreCase));
 
+        // Calculate the relative path to the main project file from the output directory
         var relativeMainProjectFile = string.IsNullOrEmpty(mainProjectFile)
             ? ""
             : Path.GetRelativePath(outputDirectory, mainProjectFile).Replace('\\', '/');
 
+        // Calculate the relative folder of the main project file for use in templates
         var relativeMainProjectFolder = string.IsNullOrEmpty(relativeMainProjectFile)
             ? ""
             : Path.GetDirectoryName(relativeMainProjectFile)?.Replace('\\', '/') ?? "";
+
+        // If the main project file is in the same directory as the output, set the relative folder to "."
+        if (string.IsNullOrEmpty(relativeMainProjectFolder))
+            relativeMainProjectFolder = ".";
 
         // Create a unified model that combines both metadata and configuration for use in templates
         var unifiedModel = new
@@ -83,11 +93,13 @@ public class TemplateService : ITemplateService
             db_password = config.DbPassword,
 
             // URL-encoded variables for safe inclusion in connection strings or environment variables
-            db_user_encoded = Uri.EscapeDataString(config.DbUser),
-            db_password_encoded = Uri.EscapeDataString(config.DbPassword),
+            db_user_encoded = string.IsNullOrEmpty(config.DbUser) ? "" : Uri.EscapeDataString(config.DbUser),
+            db_password_encoded = string.IsNullOrEmpty(config.DbPassword) ? "" : Uri.EscapeDataString(config.DbPassword),
 
             // Custom environment variables as a list of key-value pairs for iteration in templates
-            custom_env_vars = config.CustomEnvVars.Select(kvp => new { key = kvp.Key, value = kvp.Value }).ToList()
+            custom_env_vars = config.CustomEnvVars?
+                .Select(object (kvp) => new { key = kvp.Key, value = kvp.Value })
+                .ToList() ?? []
         };
 
         // Iterate through active templates and generate files
