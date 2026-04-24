@@ -64,7 +64,7 @@ public class DeploymentConfigDto
     ///     The password for authenticating with the database. This setting is used to configure the database connection string
     ///     and ensure that the application can authenticate successfully with the database during deployment.
     /// </summary>
-    public string DbPassword { get; set; } = "P@ssw0rd123!";
+    public string DbPassword { get; set; } = "AdminPwd123";
 
     /// <summary>
     ///     A dictionary of custom environment variables to be set for the deployed application. This allows users to specify

@@ -8,16 +8,6 @@ namespace Services.Templating;
 /// </summary>
 public interface ITemplateService
 {
-    /// Generates a Dockerfile based on the provided project name, .NET version, exposed port, and project paths.
-    Task<string> GenerateDockerfileAsync(string projectName, string dotNetVersion,
-        int exposedPort, HashSet<string> allProjectPaths, string solutionRoot);
-
-    /// Generates the content of a .dockerignore file using a predefined template.
-    Task<string> GenerateDockerIgnoreAsync();
-
-    /// Saves a file to the specified directory with the specified name and content.
-    Task SaveFileAsync(string targetDirectory, string fileName, string content);
-
-    /// Generates a docker-compose.yml file based on the provided deployment configuration.
-    Task<string> GenerateDockerComposeAsync(DeploymentConfigDto config);
+    /// Generates all necessary templates (Dockerfile, .dockerignore, docker-compose.yml) and saves them to the specified output directory.
+    Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata, string csProjectName, string outputDirectory);
 }

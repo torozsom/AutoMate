@@ -1,0 +1,17 @@
+[
+  {
+    "TemplateFile": "Dockerfile.scriban",
+    "OutputFile": "Dockerfile",
+    "IsActive": true
+  },
+  {
+    "TemplateFile": "dockerignore.scriban",
+    "OutputFile": ".dockerignore",
+    "IsActive": true
+  },
+  {
+    "TemplateFile": "docker-compose.scriban",
+    "OutputFile": "docker-compose.yml",
+    "IsActive": true
+  }
+]
