@@ -1,5 +1,6 @@
 using Core.DTO;
 using Microsoft.AspNetCore.Components;
+using Services.Scanner;
 
 namespace Web.Components.Pages;
 
@@ -29,6 +30,46 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     [Parameter]
     public EventCallback OnCancel { get; set; }
+
+    /// <summary>
+    ///     The file system path to the project being configured for deployment.
+    /// </summary>
+    [Parameter]
+    public string ProjectPath { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     A service responsible for scanning project files to extract environment variables and other metadata.
+    /// </summary>
+    [Inject]
+    public IProjectScannerService ProjectScanner { get; set; } = default!;
+
+
+    /// <summary>
+    ///     Scans the project directory for configuration files (appsettings.json, launchSettings.json, .env)
+    ///     and loads discovered variables into the CustomEnvVars dictionary without overwriting existing ones.
+    /// </summary>
+    private async Task LoadVariablesFromConfigFilesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(ProjectPath))
+        {
+            Console.WriteLine("[WARNING] Project path is not provided to the configuration form.");
+            return;
+        }
+
+        // Analyze the project files and extract environment variables.
+        var scannedVars = await ProjectScanner.ExtractEnvironmentVariablesAsync(ProjectPath);
+
+        var addedCount = 0;
+        foreach (var kvp in scannedVars)
+        {
+            if (Config.CustomEnvVars.ContainsKey(kvp.Key)) continue;
+            Config.CustomEnvVars.Add(kvp.Key, kvp.Value);
+            addedCount++;
+        }
+
+        Console.WriteLine($"[INFO] Successfully loaded {addedCount} new environment variables.");
+        StateHasChanged();
+    }
 
 
     /// <summary>

@@ -24,7 +24,6 @@ public class TemplateService : ITemplateService
 
 
     /// <summary>
-    ///
     /// </summary>
     /// <param name="config"></param>
     /// <param name="metadata"></param>
@@ -32,7 +31,8 @@ public class TemplateService : ITemplateService
     /// <param name="outputDirectory"></param>
     /// <exception cref="FileNotFoundException"></exception>
     /// <exception cref="InvalidOperationException"></exception>
-    public async Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata, string csProjectName, string outputDirectory)
+    public async Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata,
+        string csProjectName, string outputDirectory)
     {
         // Load the template manifest which defines which templates to process and their output file names
         var manifestPath = Path.Combine(TemplatesDirectory, "template-manifest.json");
@@ -49,7 +49,8 @@ public class TemplateService : ITemplateService
             {
                 var relPath = Path.GetRelativePath(outputDirectory, p).Replace('\\', '/');
                 var dir = Path.GetDirectoryName(relPath)?.Replace('\\', '/');
-                return new {
+                return new
+                {
                     relative_path = relPath,
                     folder = string.IsNullOrEmpty(dir) ? "." : dir
                 };
@@ -94,7 +95,8 @@ public class TemplateService : ITemplateService
 
             // URL-encoded variables for safe inclusion in connection strings or environment variables
             db_user_encoded = string.IsNullOrEmpty(config.DbUser) ? "" : Uri.EscapeDataString(config.DbUser),
-            db_password_encoded = string.IsNullOrEmpty(config.DbPassword) ? "" : Uri.EscapeDataString(config.DbPassword),
+            db_password_encoded =
+                string.IsNullOrEmpty(config.DbPassword) ? "" : Uri.EscapeDataString(config.DbPassword),
 
             // Custom environment variables as a list of key-value pairs for iteration in templates
             custom_env_vars = config.CustomEnvVars?

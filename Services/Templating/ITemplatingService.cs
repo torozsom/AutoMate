@@ -8,6 +8,7 @@ namespace Services.Templating;
 /// </summary>
 public interface ITemplateService
 {
-    /// Generates all necessary templates (Dockerfile, .dockerignore, docker-compose.yml) and saves them to the specified output directory.
-    Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata, string csProjectName, string outputDirectory);
+    /// Generates all necessary templates and saves them to the specified output directory.
+    Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata, string csProjectName,
+        string outputDirectory);
 }

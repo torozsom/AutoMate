@@ -12,8 +12,9 @@ public interface IProjectScannerService
     /// Scans the provided XML content to extract solution-wide metadata.
     Task<ProjectMetadataDto> ScanProjectContentAsync(string xmlContent);
 
-    /// Scans a .csproj file located at the specified file path to extract project metadata.
-    Task<ProjectMetadataDto> ScanCsprojFileContentAsync(string filePath);
-
+    /// Analyzes the dependencies of the given project to determine deployment configurations.
     Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject);
+
+    /// Extracts environment variables from configuration files in the project directory.
+    Task<Dictionary<string, string>> ExtractEnvironmentVariablesAsync(string projectPath);
 }

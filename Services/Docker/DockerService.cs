@@ -201,13 +201,74 @@ public class DockerService : IDockerService, IDisposable
 
 
     /// <summary>
+    ///     Executes the 'docker compose up -d' command in a specified working directory with a given project name.
+    /// </summary>
+    /// <param name="workingDir">The working directory where the docker command should be run.</param>
+    /// <param name="projectName">The name of the project to be containerized.</param>
+    /// <returns></returns>
+    public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName)
+    {
+        var safeProjectName = projectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
+
+        _logger.LogInformation("Starting 'docker compose up -d' in {Directory}", workingDir);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = $"compose -p {safeProjectName} up -d --build",
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process();
+        process.StartInfo = startInfo;
+
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data != null) _logger.LogInformation("[Docker STDOUT]: {Data}", e.Data);
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data != null) _logger.LogWarning("[Docker STDERR]: {Data}", e.Data);
+        };
+
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(8));
+            await process.WaitForExitAsync(cts.Token);
+
+            if (process.ExitCode != 0)
+            {
+                _logger.LogError("Docker Compose failed with exit code {Code}", process.ExitCode);
+                return false;
+            }
+
+            _logger.LogInformation("Docker Compose started successfully.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Critical error while launching Docker process.");
+            return false;
+        }
+    }
+
+
+    /// <summary>
     ///     Creates a tar context by packaging the specified source directory into a tar file.
     ///     The method respects the .dockerignore file, if present, to exclude certain files and directories
     ///     from being included in the tar. If no .dockerignore file exists, a default set of ignored paths is used.
     /// </summary>
     /// <param name="sourceDirectory">The source directory containing the files to be packaged into the tar file.</param>
     /// <param name="targetTarFilePath">The file path where the created tar file will be saved.</param>
-    private async Task CreateTarContextAsync(string sourceDirectory, string targetTarFilePath)
+    private static async Task CreateTarContextAsync(string sourceDirectory, string targetTarFilePath)
     {
         if (!Directory.Exists(sourceDirectory))
             throw new DirectoryNotFoundException($"Source directory '{sourceDirectory}' does not exist.");
@@ -237,61 +298,6 @@ public class DockerService : IDockerService, IDisposable
             var relativePath = Path.GetRelativePath(sourceDirectory, filePath).Replace('\\', '/');
             if (!ignore.IsIgnored(relativePath))
                 await tarWriter.WriteEntryAsync(filePath, relativePath);
-        }
-    }
-
-
-    /// <summary>
-    ///     Executes the 'docker compose up -d' command in a specified working directory with a given project name.
-    /// </summary>
-    /// <param name="workingDir">The working directory where the docker command should be run.</param>
-    /// <param name="projectName">The name of the project to be containerized.</param>
-    /// <returns></returns>
-    public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName)
-    {
-        var safeProjectName = projectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
-
-        _logger.LogInformation("Starting 'docker compose up -d' in {Directory}", workingDir);
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "docker",
-            Arguments = $"compose -p {safeProjectName} up -d --build",
-            WorkingDirectory = workingDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = new Process();
-        process.StartInfo = startInfo;
-
-        process.OutputDataReceived += (_, e) => { if (e.Data != null) _logger.LogInformation("[Docker STDOUT]: {Data}", e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data != null) _logger.LogWarning("[Docker STDERR]: {Data}", e.Data); };
-
-        try
-        {
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(8));
-            await process.WaitForExitAsync(cts.Token);
-
-            if (process.ExitCode != 0)
-            {
-                _logger.LogError("Docker Compose failed with exit code {Code}", process.ExitCode);
-                return false;
-            }
-
-            _logger.LogInformation("Docker Compose started successfully.");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogCritical(ex, "Critical error while launching Docker process.");
-            return false;
         }
     }
 }
