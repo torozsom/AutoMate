@@ -70,6 +70,10 @@
 
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="text-primary mb-0">Custom Environment Variables</h6>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            @onclick="LoadVariablesFromConfigFilesAsync">
+                        <i class="bi bi-file-earmark-arrow-down"></i> Load Variables
+                    </button>
                     <button class="btn btn-sm btn-outline-success" @onclick="AddEmptyEnvVar">+ Add Variable</button>
                 </div>
 

@@ -19,22 +19,47 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class Dashboard : ComponentBase
 {
+    /// A dictionary containing the deployment states of projects.
     private readonly Dictionary<Guid, bool> _deployingStates = new();
+
+    /// The current deployment configuration being edited by the user, if any.
     private DeploymentConfigDto? _currentDeployConfig;
+
+    /// The ID of the currently authenticated user, used to fetch and manage their projects.
     private Guid _currentUserId;
+
+    /// A message to display global errors that occur during operations like deployment or project fetching.
     private string? _globalErrorMessage;
 
+    /// A message to display global success notifications, such as successful deployments.
     private string? _globalSuccessMessage;
+
+    /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
     private bool _isLoading = true;
+
+    /// The list of projects associated with the authenticated user, fetched from the database.
     private List<Project>? _projects;
 
+    /// The file system path of the project currently selected for deployment configuration.
+    private string? _selectedProjectPath;
+
+    /// A flag indicating whether the deployment configuration modal is currently visible to the user.
     private bool _showConfigModal;
 
+
+    /// Authentication State Provider for checking user authentication and retrieving user information.
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+
+    /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
     [Inject] private IProjectService ProjectService { get; set; } = null!;
+
+    /// Service provider for creating scopes and resolving services, used for database access and other operations.
     [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
+
+    /// Service responsible for orchestrating the deployment process of local projects.
     [Inject] private ILocalDeploymentOrchestrator DeploymentOrchestrator { get; set; } = null!;
 
+    /// Service responsible for scanning project files to extract metadata and analyze dependencies.
     [Inject] private IProjectScannerService ProjectScanner { get; set; } = null!;
 
 
@@ -100,9 +125,9 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
-    ///    Initiates the deployment process for a given project. If the project is local,
-    ///    it looks for a web project within the solution. If a web project is found, it analyzes
-    ///    the project's dependencies to prepare the deployment configuration.
+    ///     Initiates the deployment process for a given project. If the project is local,
+    ///     it looks for a web project within the solution. If a web project is found, it analyzes
+    ///     the project's dependencies to prepare the deployment configuration.
     /// </summary>
     /// <param name="project"></param>
     private async Task DeployProjectAsync(Project project)
@@ -124,6 +149,7 @@ public partial class Dashboard : ComponentBase
         {
             _globalErrorMessage = null;
             _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(project, csProjectToDeploy);
+            _selectedProjectPath = csProjectToDeploy.Path;
             _showConfigModal = true;
         }
         catch (Exception ex)
@@ -134,20 +160,25 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
+    ///     Cancels the deployment process by hiding the configuration modal
+    ///     and clearing any selected project path or current deployment configuration.
     /// </summary>
     private void CancelDeployment()
     {
         _showConfigModal = false;
         _currentDeployConfig = null;
+        _selectedProjectPath = null;
     }
 
 
     /// <summary>
+    ///     Executes the deployment process using the provided deployment configuration.
     /// </summary>
-    /// <param name="finalConfig"></param>
+    /// <param name="finalConfig">The final configuration for the project's deployment.</param>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
         _showConfigModal = false;
+        _selectedProjectPath = null;
 
         try
         {
@@ -155,11 +186,11 @@ public partial class Dashboard : ComponentBase
             _globalSuccessMessage = null;
             _deployingStates[finalConfig.ProjectId] = true;
             StateHasChanged();
-            
-            var deployment = await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
+
+            await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
 
             _globalSuccessMessage =
-                $"The '{finalConfig.ProjectName}' project has been successfully deployed! Container ID: {deployment.DockerContainerId}";
+                $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
         }
         catch (Exception ex)
         {
@@ -173,7 +204,7 @@ public partial class Dashboard : ComponentBase
     }
 
 
-    // Helper method to check if a project is currently being deployed.
+    /// Helper method to check if a project is currently being deployed.
     private bool IsDeploying(Guid projectId)
     {
         return _deployingStates.GetValueOrDefault(projectId, false);

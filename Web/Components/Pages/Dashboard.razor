@@ -99,12 +99,14 @@
                             </div>
                         </div>
                     }
-                    @if (_showConfigModal && _currentDeployConfig != null)
+                    @if (_showConfigModal && _currentDeployConfig != null && _selectedProjectPath != null)
                     {
                         <ConfigurationForm
-                            Config="_currentDeployConfig"
-                            OnCancel="CancelDeployment"
-                            OnDeployConfirmed="ExecuteDeploymentAsync"/>
+                            Config="@_currentDeployConfig"
+                            ProjectPath="@_selectedProjectPath"
+                            OnCancel="@CancelDeployment"
+                            OnDeployConfirmed="@ExecuteDeploymentAsync"
+                        />
                     }
                 </div>
             }
