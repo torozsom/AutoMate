@@ -1,7 +1,9 @@
 using System.Threading.RateLimiting;
+using Core.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Services.Auth;
 using Services.Data;
@@ -135,11 +137,14 @@ public static class ServiceConfiguration
         // Add services for authentication and user management
         builder.Services.AddScoped<IAuthService, AuthService>();
 
+        // Add a password hasher for hashing user passwords securely.
+        builder.Services.AddScoped<IPasswordHasher<LocalUser>, PasswordHasher<LocalUser>>();
+
         // Add services for Docker operations
         builder.Services.AddScoped<IDockerService, DockerService>();
 
         // Add services for sending emails
-        builder.Services.AddScoped<IEmailSender, GmailEmailSender>();
+        builder.Services.AddScoped<IEmailSenderService, GmailSenderService>();
 
         // Add services for GitHub API interactions
         builder.Services.AddHttpClient<IGitHubService, GitHubService>();

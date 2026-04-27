@@ -48,19 +48,24 @@ public partial class Dashboard : ComponentBase
 
 
     /// Authentication State Provider for checking user authentication and retrieving user information.
-    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+    [Inject]
+    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
     /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
-    [Inject] private IProjectService ProjectService { get; set; } = null!;
+    [Inject]
+    private IProjectService ProjectService { get; set; } = null!;
 
     /// Service provider for creating scopes and resolving services, used for database access and other operations.
-    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
+    [Inject]
+    private IServiceProvider ServiceProvider { get; set; } = null!;
 
     /// Service responsible for orchestrating the deployment process of local projects.
-    [Inject] private ILocalDeploymentOrchestrator DeploymentOrchestrator { get; set; } = null!;
+    [Inject]
+    private ILocalDeploymentOrchestrator DeploymentOrchestrator { get; set; } = null!;
 
     /// Service responsible for scanning project files to extract metadata and analyze dependencies.
-    [Inject] private IProjectScannerService ProjectScanner { get; set; } = null!;
+    [Inject]
+    private IProjectScannerService ProjectScanner { get; set; } = null!;
 
 
     /// <summary>
