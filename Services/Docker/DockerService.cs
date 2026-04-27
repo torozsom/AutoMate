@@ -16,6 +16,10 @@ namespace Services.Docker;
 /// </summary>
 public class DockerService : IDockerService, IDisposable
 {
+    private const int DefaultContainerPort = 8080;
+    private const int DockerComposeTimeoutMinutes = 8;
+    private const string WindowsDockerUri = "npipe://./pipe/docker_engine";
+    private const string UnixDockerUri = "unix:///var/run/docker.sock";
     private readonly DockerClient _client;
     private readonly ILogger<DockerService> _logger;
 
@@ -31,8 +35,8 @@ public class DockerService : IDockerService, IDisposable
         _logger = logger;
 
         var dockerUri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? new Uri("npipe://./pipe/docker_engine")
-            : new Uri("unix:///var/run/docker.sock");
+            ? new Uri(WindowsDockerUri)
+            : new Uri(UnixDockerUri);
 
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
     }
@@ -59,8 +63,9 @@ public class DockerService : IDockerService, IDisposable
             await _client.System.PingAsync();
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "[DockerService] Docker daemon is not responsive during ping.");
             return false;
         }
     }
@@ -69,7 +74,9 @@ public class DockerService : IDockerService, IDisposable
     /// <summary>
     ///     Builds a Docker image from a specified source directory and tags it with the provided image tag.
     /// </summary>
-    /// <param name="sourcePath">The path to the source directory containing the Dockerfile and associated build context.</param>
+    /// <param name="sourcePath">
+    ///     The path to the source directory containing the Dockerfile and associated build context.
+    /// </param>
     /// <param name="imageTag">The tag to assign to the built Docker image.</param>
     /// <returns>
     ///     A task representing the asynchronous operation, returning true if the image was successfully built,
@@ -81,43 +88,31 @@ public class DockerService : IDockerService, IDisposable
 
         try
         {
-            _logger.LogInformation("Building Docker image from source directory: {SourcePath}", sourcePath);
+            _logger.LogInformation("[DockerService] Building Docker image '{ImageTag}' " +
+                                   "from source directory: {SourcePath}", imageTag, sourcePath);
 
             // Create a tar context from the source directory
             await CreateTarContextAsync(sourcePath, tempTarFilePath);
+
             await using var fileStream = new FileStream(tempTarFilePath, FileMode.Open, FileAccess.Read);
             var buildParameters = new ImageBuildParameters { Tags = [imageTag] };
-
             var buildErrorOccurred = false;
 
-            _logger.LogInformation("Starting Docker build for image tag: {ImageTag}", imageTag);
-
-            // Build the image and capture the output messages to log progress and errors
             await _client.Images.BuildImageFromDockerfileAsync(
                 buildParameters,
                 fileStream,
                 null,
                 null,
-                new Progress<JSONMessage>(msg =>
-                {
-                    if (!string.IsNullOrEmpty(msg.Stream))
-                        Console.Write(msg.Stream);
-
-                    if (!string.IsNullOrEmpty(msg.ErrorMessage))
-                    {
-                        _logger.LogError("[DOCKER ERROR]: {ObjErrorMessage}", msg.ErrorMessage);
-                        buildErrorOccurred = true;
-                    }
-                }));
+                new Progress<JSONMessage>(msg => HandleDockerBuildProgress(msg, ref buildErrorOccurred)));
 
             if (!buildErrorOccurred)
-                _logger.LogInformation("Docker image '{ImageTag}' built successfully.", imageTag);
+                _logger.LogInformation("[DockerService] Docker image '{ImageTag}' built successfully.", imageTag);
 
             return !buildErrorOccurred;
         }
         catch (Exception ex)
         {
-            _logger.LogError("Error building image: {ExMessage}", ex.Message);
+            _logger.LogError(ex, "[DockerService] Error building Docker image '{ImageTag}'.", imageTag);
             return false;
         }
         finally
@@ -139,62 +134,41 @@ public class DockerService : IDockerService, IDisposable
     /// <param name="containerPort">The port within the container to be exposed, with a default value of 8080.</param>
     /// <param name="envVarsJson">Optional JSON string specifying environment variables to pass to the container.</param>
     /// <returns>The ID of the started container if the operation is successful, or null if it fails.</returns>
-    public async Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort,
-        int containerPort = 8080,
+    public async Task<string?> StartContainerAsync(
+        string imageTag,
+        string containerName,
+        int hostPort,
+        int containerPort = DefaultContainerPort,
         string? envVarsJson = null)
     {
         try
         {
-            _logger.LogInformation("Starting container with image tag: {ImageTag}, " +
-                                   "container name: {ContainerName}, " +
-                                   "host port: {HostPort}, " +
-                                   "container port: {ContainerPort}",
-                imageTag, containerName, hostPort, containerPort);
+            _logger.LogInformation("[DockerService] Starting container '{ContainerName}' " +
+                                   "(Image: {ImageTag}, Port: {HostPort}->{ContainerPort})",
+                containerName, imageTag, hostPort, containerPort);
 
-            var envList = new List<string>();
-            if (!string.IsNullOrEmpty(envVarsJson))
-            {
-                _logger.LogInformation("Starting container with environment variables: {EnvVarsJson}", envVarsJson);
-                var envDict = JsonSerializer.Deserialize<Dictionary<string, string>>(envVarsJson);
-                if (envDict != null)
-                    envList.AddRange(envDict.Select(kv => $"{kv.Key}={kv.Value}"));
-            }
+            var createParams
+                = BuildContainerParameters(imageTag, containerName, hostPort, containerPort, envVarsJson);
 
-            // Configure the container creation parameters
-            var createParams = new CreateContainerParameters
-            {
-                Image = imageTag,
-                Name = containerName,
-                Env = envList,
-
-                ExposedPorts = new Dictionary<string, EmptyStruct>
-                {
-                    { $"{containerPort}/tcp", default }
-                },
-
-                HostConfig = new HostConfig
-                {
-                    PortBindings = new Dictionary<string, IList<PortBinding>>
-                    {
-                        {
-                            $"{containerPort}/tcp",
-                            [new PortBinding { HostPort = hostPort.ToString() }]
-                        }
-                    }
-                }
-            };
-
-            // Start the container
             var response = await _client.Containers.CreateContainerAsync(createParams);
             var containerId = response.ID;
             var started = await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters());
 
-            _logger.LogInformation("Container '{ContainerId}' started successfully.", containerId);
-            return started ? containerId : null;
+            if (started)
+            {
+                _logger.LogInformation(
+                    "[DockerService] Container '{ContainerName}' ({ContainerId}) started successfully.",
+                    containerName, containerId[..8]);
+                return containerId;
+            }
+
+            _logger.LogWarning("[DockerService] Container '{ContainerName}' was created but failed to start.",
+                containerName);
+            return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError("Error starting container: {ExMessage}", ex.Message);
+            _logger.LogError(ex, "[DockerService] Error starting container '{ContainerName}'.", containerName);
             return null;
         }
     }
@@ -205,34 +179,28 @@ public class DockerService : IDockerService, IDisposable
     /// </summary>
     /// <param name="workingDir">The working directory where the docker command should be run.</param>
     /// <param name="projectName">The name of the project to be containerized.</param>
-    /// <returns></returns>
+    /// <returns>Returns an indicator if the docker compose up command was successfully run.</returns>
     public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName)
     {
-        var safeProjectName = projectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
+        var safeProjectName = NormalizeProjectName(projectName);
+        _logger.LogInformation("[DockerService] Starting 'docker compose up -d' for project '{ProjectName}' " +
+                               "in {Directory}", safeProjectName, workingDir);
 
-        _logger.LogInformation("Starting 'docker compose up -d' in {Directory}", workingDir);
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "docker",
-            Arguments = $"compose -p {safeProjectName} up -d --build",
-            WorkingDirectory = workingDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var startInfo = CreateDockerComposeStartInfo(workingDir, safeProjectName);
 
         using var process = new Process();
         process.StartInfo = startInfo;
 
         process.OutputDataReceived += (_, e) =>
         {
-            if (e.Data != null) _logger.LogInformation("[Docker STDOUT]: {Data}", e.Data);
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
         };
+
         process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data != null) _logger.LogWarning("[Docker STDERR]: {Data}", e.Data);
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
         };
 
         try
@@ -241,21 +209,33 @@ public class DockerService : IDockerService, IDisposable
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(8));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(DockerComposeTimeoutMinutes));
             await process.WaitForExitAsync(cts.Token);
 
             if (process.ExitCode != 0)
             {
-                _logger.LogError("Docker Compose failed with exit code {Code}", process.ExitCode);
+                _logger.LogError(
+                    "[DockerService] Docker Compose failed for project '{ProjectName}' with exit code {Code}.",
+                    safeProjectName, process.ExitCode);
                 return false;
             }
 
-            _logger.LogInformation("Docker Compose started successfully.");
+            _logger.LogInformation("[DockerService] Docker Compose completed successfully for project '{ProjectName}'.",
+                safeProjectName);
             return true;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogError(
+                "[DockerService] Docker Compose timed out after {Timeout} minutes for project '{ProjectName}'.",
+                DockerComposeTimeoutMinutes, safeProjectName);
+            if (!process.HasExited) process.Kill();
+            return false;
         }
         catch (Exception ex)
         {
-            _logger.LogCritical(ex, "Critical error while launching Docker process.");
+            _logger.LogCritical(ex, "[DockerService] Critical error while launching " +
+                                    "Docker Compose process for '{ProjectName}'.", safeProjectName);
             return false;
         }
     }
@@ -284,20 +264,136 @@ public class DockerService : IDockerService, IDisposable
         }
         else
         {
-            ignore.Add(["bin/", "obj/", ".git/", ".vs/"]);
+            ignore.Add([
+                "bin/",
+                "obj/",
+                ".git/",
+                ".vs/",
+                "node_modules/",
+                "TestResults/",
+                ".DS_Store"
+            ]);
         }
 
-        // Create the tar file
+        // Create the tar file and write entries while respecting the ignore rules
         await using var fileStream = new FileStream(targetTarFilePath, FileMode.Create, FileAccess.Write);
         await using var tarWriter = new TarWriter(fileStream);
 
-        // Add all files to the tar respecting the ignore rules
-        var allFiles = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories);
+        // Enumerate all files in the source directory and its subdirectories, and write them to the tar file if they are not ignored
+        var allFiles = Directory.EnumerateFiles(sourceDirectory, "*.*", SearchOption.AllDirectories);
         foreach (var filePath in allFiles)
         {
             var relativePath = Path.GetRelativePath(sourceDirectory, filePath).Replace('\\', '/');
             if (!ignore.IsIgnored(relativePath))
                 await tarWriter.WriteEntryAsync(filePath, relativePath);
         }
+    }
+
+
+    /// <summary>
+    ///     Handles the progress of the Docker image build process by logging the output and errors.
+    ///     It checks for any error messages in the build output and sets a flag if an error occurs.
+    /// </summary>
+    /// <param name="msg">The message of the docker build.</param>
+    /// <param name="buildErrorOccurred">A reference to an indicator of error occurance.</param>
+    private void HandleDockerBuildProgress(JSONMessage msg, ref bool buildErrorOccurred)
+    {
+        if (!string.IsNullOrEmpty(msg.Stream))
+        {
+            Console.Write(msg.Stream);
+        }
+
+        else if (!string.IsNullOrEmpty(msg.Status))
+        {
+            if (!string.IsNullOrEmpty(msg.ProgressMessage))
+                Console.Write($"\r{msg.Status} {msg.ProgressMessage}");
+            else
+                Console.WriteLine(msg.Status);
+        }
+
+        if (string.IsNullOrEmpty(msg.ErrorMessage)) return;
+        _logger.LogError("[DOCKER BUILD ERROR]: {ErrorMessage}", msg.ErrorMessage);
+        buildErrorOccurred = true;
+    }
+
+
+    /// <summary>
+    ///     Builds the parameters required to create a Docker container based on the provided configuration.
+    ///     This includes setting the image, container name, environment variables, and port bindings.
+    /// </summary>
+    /// <param name="imageTag">The image tag for the container.</param>
+    /// <param name="containerName">The name of the container.</param>
+    /// <param name="hostPort">The host port for the container.</param>
+    /// <param name="containerPort">The container's own port.</param>
+    /// <param name="envVarsJson">The environment variables.</param>
+    /// <returns></returns>
+    private static CreateContainerParameters BuildContainerParameters(
+        string imageTag,
+        string containerName,
+        int hostPort,
+        int containerPort,
+        string? envVarsJson)
+    {
+        var envList = new List<string>();
+        if (!string.IsNullOrWhiteSpace(envVarsJson))
+        {
+            var envDict = JsonSerializer.Deserialize<Dictionary<string, string>>(envVarsJson);
+            if (envDict != null)
+                envList.AddRange(envDict.Select(kv => $"{kv.Key}={kv.Value}"));
+        }
+
+        return new CreateContainerParameters
+        {
+            Image = imageTag,
+            Name = containerName,
+            Env = envList,
+            ExposedPorts = new Dictionary<string, EmptyStruct>
+            {
+                { $"{containerPort}/tcp", default }
+            },
+            HostConfig = new HostConfig
+            {
+                PortBindings = new Dictionary<string, IList<PortBinding>>
+                {
+                    {
+                        $"{containerPort}/tcp",
+                        [new PortBinding { HostPort = hostPort.ToString() }]
+                    }
+                }
+            }
+        };
+    }
+
+
+    /// <summary>
+    ///     Normalizes the project name to create a safe and consistent identifier for Docker Compose.
+    /// </summary>
+    /// <param name="projectName">The name of the project to be normalized.</param>
+    /// <returns>The safe name to be used.</returns>
+    private static string NormalizeProjectName(string projectName)
+    {
+        return projectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
+    }
+
+
+    /// <summary>
+    ///     Creates a ProcessStartInfo object configured to run the 'docker compose up -d'
+    ///     command with the specified project name and working directory.
+    /// </summary>
+    /// <param name="workingDir">The path of the working directory.</param>
+    /// <param name="safeProjectName">The safe name of the project to be containerized.</param>
+    /// <returns></returns>
+    private static ProcessStartInfo CreateDockerComposeStartInfo(string workingDir, string safeProjectName)
+    {
+        return new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = $"compose -p {safeProjectName} up -d --build",
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
     }
 }

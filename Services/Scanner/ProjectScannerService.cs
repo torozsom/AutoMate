@@ -1,11 +1,11 @@
 using System.Net;
-using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using Core.DTO;
 using Core.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Services.Scanner;
 
@@ -13,10 +13,15 @@ namespace Services.Scanner;
 ///     Provides functionality to scan and analyze C# project files (.csproj) to extract
 ///     metadata such as target frameworks, dependencies, and project references.
 /// </summary>
-public class ProjectScannerService : IProjectScannerService
+public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IProjectScannerService
 {
     private static readonly string DbProvidersJsonPath
         = Path.Combine(AppContext.BaseDirectory, "Scanner", "database-providers.json");
+
+    private static readonly SemaphoreSlim DbProvidersSemaphore = new(1, 1);
+
+    private static List<DbProviderRuleDto>? _cachedDbProviders;
+
 
     /// <summary>
     ///     Scans a solution's project files (.csproj) to extract metadata such as target frameworks,
@@ -33,11 +38,14 @@ public class ProjectScannerService : IProjectScannerService
     public async Task<ProjectMetadataDto> ScanProjectContentAsync(string filePath)
     {
         if (!File.Exists(filePath))
+        {
+            logger.LogError("[ProjectScannerService] The project file '{FilePath}' does not exist.", filePath);
             throw new FileNotFoundException($"The project file '{filePath}' does not exist.");
+        }
 
         // Scan the main project file first
         var mainContent = await File.ReadAllTextAsync(filePath);
-        var mainMetadata = await ScanCsprojFileContentAsync(mainContent);
+        var mainMetadata = ScanCsprojFileContent(mainContent);
 
         // Initialize data structures to track referenced projects and their packages
         var referencedProjectPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -67,7 +75,7 @@ public class ProjectScannerService : IProjectScannerService
                 allProjectPaths.Add(absoluteRefPath);
 
                 var refContent = await File.ReadAllTextAsync(absoluteRefPath);
-                var refMetadata = await ScanCsprojFileContentAsync(refContent);
+                var refMetadata = ScanCsprojFileContent(refContent);
 
                 foreach (var pkg in refMetadata.PackageReferences)
                     referencedProjectPackages.TryAdd(pkg.Key, pkg.Value);
@@ -116,30 +124,31 @@ public class ProjectScannerService : IProjectScannerService
                 .Concat(metadata.ReferencedProjectPackages.Keys)
                 .ToList();
 
-            if (File.Exists(DbProvidersJsonPath))
-            {
-                // Read the database providers configuration from the JSON file
-                var jsonContent = await File.ReadAllTextAsync(DbProvidersJsonPath);
-                var providerRules = JsonSerializer.Deserialize<List<DbProviderRuleDto>>(jsonContent);
+            var providerRules = await GetDbProviderRulesAsync();
 
-                // Determine if any of the packages match known database providers
-                if (providerRules != null)
-                    foreach (var rule in providerRules)
+            // Determine if any of the packages match known database providers
+            if (providerRules != null)
+                foreach (var rule in providerRules)
+                {
+                    var isMatch = allPackages.Any(projPkg =>
+                        rule.Packages.Any(rulePkg =>
+                            projPkg.Contains(rulePkg, StringComparison.OrdinalIgnoreCase)));
+
+                    if (isMatch)
                     {
-                        var isMatch = allPackages.Any(projPkg =>
-                            rule.Packages.Any(rulePkg =>
-                                projPkg.Contains(rulePkg, StringComparison.OrdinalIgnoreCase)));
-
-                        if (!isMatch) continue;
                         config.RequiresDb = true;
                         config.DbType = rule.DbType;
+                        logger.LogInformation(
+                            "[ProjectScannerService] Database dependency detected for project '{ProjectName}': {DbType}",
+                            project.Name, rule.DbType);
                         break;
                     }
-            }
+                }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error scanning csproj dependencies: {ex.Message}");
+            logger.LogError(ex, "[ProjectScannerService] Error scanning csproj dependencies for project: {ProjectName}",
+                project.Name);
         }
 
         return config;
@@ -174,10 +183,56 @@ public class ProjectScannerService : IProjectScannerService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[WARNING] Error extracting environment variables from config files: {ex.Message}");
+            logger.LogWarning(ex,
+                "[ProjectScannerService] Error extracting environment variables from config files at: {ProjectPath}",
+                projectPath);
         }
 
         return extractedVars;
+    }
+
+
+    /// <summary>
+    ///     Retrieves the list of database provider rules from a JSON file. This method implements caching to avoid
+    ///     repeated file reads and deserialization, ensuring that the database provider rules are loaded efficiently
+    ///     and are available for use when analyzing project dependencies.
+    /// </summary>
+    /// <returns>
+    ///     A list of <see cref="DbProviderRuleDto" /> objects representing the database provider rules defined
+    ///     in the JSON file, or null if the file is not found or cannot be parsed.
+    /// </returns>
+    private async Task<List<DbProviderRuleDto>?> GetDbProviderRulesAsync()
+    {
+        if (_cachedDbProviders != null)
+            return _cachedDbProviders;
+
+        if (!File.Exists(DbProvidersJsonPath))
+        {
+            logger.LogWarning(
+                "[ProjectScannerService] Database providers JSON file not found at: {DbProvidersJsonPath}",
+                DbProvidersJsonPath);
+            return null;
+        }
+
+        await DbProvidersSemaphore.WaitAsync();
+        try
+        {
+            if (_cachedDbProviders != null)
+                return _cachedDbProviders;
+
+            var jsonContent = await File.ReadAllTextAsync(DbProvidersJsonPath);
+            _cachedDbProviders = JsonSerializer.Deserialize<List<DbProviderRuleDto>>(jsonContent);
+            return _cachedDbProviders;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[ProjectScannerService] Failed to parse database-providers.json");
+            return null;
+        }
+        finally
+        {
+            DbProvidersSemaphore.Release();
+        }
     }
 
 
@@ -193,7 +248,7 @@ public class ProjectScannerService : IProjectScannerService
     /// <exception cref="XmlException">
     ///     Thrown when the provided XML content is not well-formed or cannot be parsed.
     /// </exception>
-    private static Task<ProjectMetadataDto> ScanCsprojFileContentAsync(string xmlContent)
+    private static ProjectMetadataDto ScanCsprojFileContent(string xmlContent)
     {
         // Parse the XML content of the project file
         var document = XDocument.Parse(xmlContent);
@@ -209,8 +264,8 @@ public class ProjectScannerService : IProjectScannerService
 
         // Check if the project is a web project by looking for the Sdk attribute in the root element
         var sdkAttribute = document.Root?.Attribute("Sdk")?.Value;
-        var isWebProject = sdkAttribute != null
-                           && sdkAttribute.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase);
+        var isWebProject = sdkAttribute != null &&
+                           sdkAttribute.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase);
 
         // Extract the UserSecretsId if it exists
         var userSecretsId = document.Descendants("UserSecretsId").FirstOrDefault()?.Value;
@@ -230,14 +285,10 @@ public class ProjectScannerService : IProjectScannerService
         foreach (var pr in document.Descendants("ProjectReference"))
         {
             var include = pr.Attribute("Include")?.Value;
-
-            if (string.IsNullOrEmpty(include)) continue;
-            var normalizedPath = include.Replace('\\', '/');
-            projectReferences.Add(normalizedPath);
+            if (!string.IsNullOrEmpty(include)) projectReferences.Add(include.Replace('\\', '/'));
         }
 
-        // Create and return the metadata DTO with the extracted information
-        var metadata = new ProjectMetadataDto
+        return new ProjectMetadataDto
         {
             TargetFramework = targetFramework,
             DotNetVersion = dotNetVersion,
@@ -246,8 +297,6 @@ public class ProjectScannerService : IProjectScannerService
             PackageReferences = packageReferences,
             ProjectReferences = projectReferences
         };
-
-        return Task.FromResult(metadata);
     }
 
 
@@ -261,13 +310,23 @@ public class ProjectScannerService : IProjectScannerService
     /// <exception cref="SocketException">
     ///     Thrown when an error occurs while accessing the network during the process of finding an available port.
     /// </exception>
-    private static int GetAvailablePort()
+    private int GetAvailablePort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        try
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            logger.LogInformation("[ProjectScannerService] Successfully allocated dynamic port: {Port}", port);
+            return port;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex,
+                "[ProjectScannerService] Failed to find an available port. Falling back to default port 8080.");
+            return 8080;
+        }
     }
 
 
@@ -279,7 +338,7 @@ public class ProjectScannerService : IProjectScannerService
     /// </summary>
     /// <param name="projectPath">The path of the project to be scanned.</param>
     /// <returns></returns>
-    private static async Task<Dictionary<string, string>> ScanConfigurationFilesAsync(string projectPath)
+    private async Task<Dictionary<string, string>> ScanConfigurationFilesAsync(string projectPath)
     {
         var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var directory = Path.GetDirectoryName(projectPath);
@@ -288,11 +347,16 @@ public class ProjectScannerService : IProjectScannerService
         var configFiles = Directory.GetFiles(directory, "appsettings*.json");
 
         foreach (var file in configFiles.OrderBy(f => f.Length))
-        {
-            var content = await File.ReadAllTextAsync(file);
-            using var doc = JsonDocument.Parse(content);
-            FlattenJsonElement(doc.RootElement, "", settings);
-        }
+            try
+            {
+                var content = await File.ReadAllTextAsync(file);
+                using var doc = JsonDocument.Parse(content);
+                FlattenJsonElement(doc.RootElement, "", settings);
+            }
+            catch (JsonException ex)
+            {
+                logger.LogWarning(ex, "[ProjectScannerService] Failed to parse JSON file: {File}", file);
+            }
 
         return settings;
     }
@@ -309,7 +373,7 @@ public class ProjectScannerService : IProjectScannerService
     ///     A tuple containing a dictionary of environment variables and an optional
     ///     integer representing the default port.
     /// </returns>
-    private static async Task<(Dictionary<string, string> EnvVars, int? DefaultPort)> ScanLaunchSettingsAsync(
+    private async Task<(Dictionary<string, string> EnvVars, int? DefaultPort)> ScanLaunchSettingsAsync(
         string projectPath)
     {
         var envVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -357,7 +421,8 @@ public class ProjectScannerService : IProjectScannerService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[WARNING] Error parsing launchSettings.json: {ex.Message}");
+            logger.LogWarning(ex, "[ProjectScannerService] Error parsing launchSettings.json at {LaunchSettingsPath}",
+                launchSettingsPath);
         }
 
         return (envVars, defaultPort);
@@ -369,7 +434,7 @@ public class ProjectScannerService : IProjectScannerService
     /// </summary>
     /// <param name="projectPath"></param>
     /// <returns></returns>
-    private static async Task<Dictionary<string, string>> ScanDotEnvFilesAsync(string projectPath)
+    private async Task<Dictionary<string, string>> ScanDotEnvFilesAsync(string projectPath)
     {
         var envVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var directory = Path.GetDirectoryName(projectPath);
@@ -400,27 +465,33 @@ public class ProjectScannerService : IProjectScannerService
                     if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith('#'))
                         continue;
 
-                    // Extract key-value pairs in the format KEY=VALUE
+                    // Remove inline comments by splitting on the first occurrence of " #"
+                    var commentIndex = trimmedLine.IndexOf(" #", StringComparison.Ordinal);
+                    if (commentIndex > 0)
+                        trimmedLine = trimmedLine[..commentIndex].Trim();
+
+                    // Split the line into key and value based on the first occurrence of '='
                     var splitIndex = trimmedLine.IndexOf('=');
                     if (splitIndex > 0)
                     {
                         var key = trimmedLine[..splitIndex].Trim();
                         var value = trimmedLine[(splitIndex + 1)..].Trim();
 
-                        // Remove surrounding quotes if present (handles both " and ')
                         if (value.Length > 1 &&
                             ((value.StartsWith('"') && value.EndsWith('"')) ||
                              (value.StartsWith('\'') && value.EndsWith('\''))))
                             value = value[1..^1];
+
                         envVars[key] = value;
                     }
                 }
 
-                Console.WriteLine($"[INFO] Successfully scanned .env file: {envFilePath}");
+                logger.LogInformation("[ProjectScannerService] Successfully scanned .env file: {EnvFilePath}",
+                    envFilePath);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WARNING] Error scanning .env file: ({envFilePath}): {ex.Message}");
+                logger.LogWarning(ex, "[ProjectScannerService] Error scanning .env file: {EnvFilePath}", envFilePath);
             }
         }
 
@@ -449,6 +520,7 @@ public class ProjectScannerService : IProjectScannerService
                     var newKey = string.IsNullOrEmpty(prefix) ? property.Name : $"{prefix}__{property.Name}";
                     FlattenJsonElement(property.Value, newKey, result);
                 }
+
                 break;
 
             case JsonValueKind.Array:
@@ -459,6 +531,7 @@ public class ProjectScannerService : IProjectScannerService
                     FlattenJsonElement(item, newKey, result);
                     index++;
                 }
+
                 break;
 
             default:

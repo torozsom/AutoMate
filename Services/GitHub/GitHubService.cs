@@ -1,8 +1,11 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Core.DTO;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 
 namespace Services.GitHub;
 
@@ -12,8 +15,14 @@ namespace Services.GitHub;
 /// </summary>
 public class GitHubService : IGitHubService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IDistributedCache _cache;
     private readonly HttpClient _httpClient;
+    private readonly ILogger<GitHubService> _logger;
 
 
     /// <summary>
@@ -22,57 +31,122 @@ public class GitHubService : IGitHubService
     /// </summary>
     /// <param name="httpClient">The HttpClient instance used for making HTTP requests.</param>
     /// <param name="cache">The IMemoryCache instance used for caching data.</param>
-    public GitHubService(HttpClient httpClient, IDistributedCache cache)
+    /// <param name="logger">The logger for the GitHubService class.</param>
+    public GitHubService(HttpClient httpClient, IDistributedCache cache, ILogger<GitHubService> logger)
     {
         _httpClient = httpClient;
         _cache = cache;
+        _logger = logger;
 
         _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("AutoMate", "1.0"));
-        _httpClient.BaseAddress = new Uri("https://api.github.com/");
+
+        if (_httpClient.BaseAddress == null)
+            _httpClient.BaseAddress = new Uri("https://api.github.com/");
     }
 
 
     /// <summary>
-    ///     Retrieves the list of repositories for the authenticated user using the provided access token.
+    ///     Asynchronously retrieves the list of repositories for the authenticated user from GitHub.
     /// </summary>
     /// <param name="accessToken">The access token of the authenticated user.</param>
     /// <param name="forceRefresh">A flag indicating whether to force a refresh of the repository list.</param>
     /// <returns>A list of GitHubRepositoryDto objects representing the user's repositories.</returns>
     public async Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken, bool forceRefresh)
     {
-        // Create a unique cache key based on the access token to store the user's repositories
-        var cacheKey = $"github_repos_{accessToken}";
-
-        // Check if the repositories are already cached and not expired
-        if (!forceRefresh)
+        if (string.IsNullOrWhiteSpace(accessToken))
         {
-            var cachedJson = await _cache.GetStringAsync(cacheKey);
-            if (!string.IsNullOrEmpty(cachedJson))
-            {
-                var cachedRepos = JsonSerializer.Deserialize<List<GitHubRepositoryDto>>(cachedJson);
-                if (cachedRepos != null)
-                    return cachedRepos;
-            }
+            _logger.LogWarning("[GitHubService] Attempted to get GitHub repositories with an empty access token.");
+            return [];
         }
 
-        // Set the Authorization header with the Bearer token for authentication
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        // Generate a cache key based on the access token to ensure that cached data is user-specific and secure.
+        var cacheKey = GenerateCacheKey(accessToken);
 
-        // Make the API request to retrieve the user's repositories
-        var response = await _httpClient.GetAsync("user/repos?sort=updated&per_page=100");
-        if (!response.IsSuccessStatusCode)
-            return [];
+        if (!forceRefresh)
+            try
+            {
+                // Attempt to retrieve the repository list from the distributed cache using the generated cache key.
+                var cachedJson = await _cache.GetStringAsync(cacheKey);
+                if (!string.IsNullOrEmpty(cachedJson))
+                {
+                    var cachedRepos = JsonSerializer.Deserialize<List<GitHubRepositoryDto>>(cachedJson, JsonOptions);
+                    if (cachedRepos != null)
+                    {
+                        _logger.LogInformation(
+                            "[GitHubService] Successfully retrieved {Count} GitHub repositories from cache.",
+                            cachedRepos.Count);
+                        return cachedRepos;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "[GitHubService] Failed to read or deserialize repositories from cache. Falling back to API call.");
+            }
 
-        var repositories = await response.Content.ReadFromJsonAsync<List<GitHubRepositoryDto>>() ?? [];
-
-        // Cache the repositories for 10 minutes
-        var cacheOptions = new DistributedCacheEntryOptions
+        try
         {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
-        };
-        var serializedRepos = JsonSerializer.Serialize(repositories);
-        await _cache.SetStringAsync(cacheKey, serializedRepos, cacheOptions);
+            _logger.LogInformation("[GitHubService] Fetching repositories from GitHub API...");
 
-        return repositories;
+            // Create an HTTP GET request to the GitHub API endpoint for user repositories
+            using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "user/repos?sort=updated&per_page=100");
+            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            using var response = await _httpClient.SendAsync(requestMessage);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("GitHub API returned error status code: {StatusCode} for getting repositories.",
+                    response.StatusCode);
+                return [];
+            }
+
+            // Read and deserialize the response content into a list of GitHubRepositoryDto objects
+            var repositories = await response.Content.ReadFromJsonAsync<List<GitHubRepositoryDto>>(JsonOptions) ?? [];
+
+            try
+            {
+                // Cache the retrieved repository list in the distributed cache for 10 minutes
+                var cacheOptions = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
+                };
+                var serializedRepos = JsonSerializer.Serialize(repositories, JsonOptions);
+                await _cache.SetStringAsync(cacheKey, serializedRepos, cacheOptions);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "[GitHubService] Failed to save repositories to distributed cache.");
+            }
+
+            _logger.LogInformation(
+                "[GitHubService] Successfully retrieved and cached {Count} repositories from GitHub API.",
+                repositories.Count);
+            return repositories;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "[GitHubService] Network error occurred while contacting the GitHub API.");
+            return [];
+        }
+    }
+
+
+    /// <summary>
+    ///     Generates a cache key based on the provided access token by
+    ///     hashing it using SHA256 and encoding it in a URL-safe format.
+    /// </summary>
+    /// <param name="token">The token to be hashed.</param>
+    /// <returns>The safe cache key.</returns>
+    private static string GenerateCacheKey(string token)
+    {
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        var safeHash = Convert.ToBase64String(hashBytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+
+        return $"github_repos_{safeHash}";
     }
 }

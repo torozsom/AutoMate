@@ -16,58 +16,68 @@ public class DeploymentCleanupHostedService(
     ILogger<DeploymentCleanupHostedService> logger)
     : IHostedService
 {
+    private const string SystemFailureLog
+        = "\n[System]: Deployment marked as failed due to application restart or timeout.";
+
+
     /// <summary>
-    ///     Executes tasks at application startup to clean up any deployments stuck in "Building" or "Starting" status.
+    ///     This method is called when the application starts. It initiates the cleanup process by running the
+    ///     CleanupStuckDeploymentsAsync method in a separate task. This allows the cleanup to run asynchronously
+    ///     without blocking the application startup process.
     /// </summary>
     /// <param name="cancellationToken">
-    ///     A token to monitor for cancellation requests, passed from the host.
+    ///     A cancellation token that can be used to cancel the operation if needed.
     /// </param>
-    /// <returns>
-    ///     A task that represents the asynchronous cleanup operation.
-    /// </returns>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation("Starting DeploymentCleanupHostedService to clean up stuck deployments...");
-
-        using var scope = serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-
-        try
-        {
-            // Query the database for deployments that are stuck in "Building" or "Starting" status.
-            var stuckDeployments = await dbContext.Deployments
-                .Where(d => d.Status == DeploymentStatus.Building || d.Status == DeploymentStatus.Starting)
-                .ToListAsync(cancellationToken);
-
-            if (stuckDeployments.Count > 0)
-            {
-                logger.LogWarning("{Count} stuck deployments found. They will be set to 'Failed' status.",
-                    stuckDeployments.Count);
-
-                // Update the status of each stuck deployment to "Failed" and append a log message indicating the reason.
-                foreach (var deployment in stuckDeployments)
-                {
-                    deployment.Status = DeploymentStatus.Failed;
-                    deployment.Logs += "\n[System]: Deployment marked as failed due to timeout or unexpected error.";
-                }
-
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
-            else
-            {
-                logger.LogInformation("No stuck deployments found.");
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error occurred while cleaning up stuck deployments.");
-        }
+        logger.LogInformation("[DeploymentCleanupHostedService] Starting to clean up stuck deployments...");
+        _ = Task.Run(async () => await CleanupStuckDeploymentsAsync(cancellationToken), cancellationToken);
     }
 
 
     /// This method is called when the application is stopping. Now it simply returns a completed task.
     public Task StopAsync(CancellationToken cancellationToken)
     {
+        logger.LogInformation("DeploymentCleanupHostedService is stopping.");
         return Task.CompletedTask;
+    }
+
+
+    /// <summary>
+    ///     This method performs a bulk update on the Deployments table to set the status of any deployments
+    ///     that are currently in "Building" or "Starting" status to "Failed". It also appends a system log message
+    ///     to indicate that the deployment was marked as failed due to application restart or timeout.
+    /// </summary>
+    /// <param name="cancellationToken">
+    ///     A cancellation token that can be used to cancel the operation if needed. This allows the method to
+    ///     respond to application shutdown signals and stop the cleanup process gracefully if the application
+    ///     is stopping while the cleanup is still in progress.
+    /// </param>
+    private async Task CleanupStuckDeploymentsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = serviceProvider.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+
+            var updatedCount = await dbContext.Deployments
+                .Where(d => d.Status == DeploymentStatus.Building || d.Status == DeploymentStatus.Starting)
+                .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(d => d.Status, DeploymentStatus.Failed)
+                        .SetProperty(d => d.Logs, d => d.Logs + SystemFailureLog),
+                    cancellationToken);
+
+            if (updatedCount > 0)
+                logger.LogWarning("[DeploymentCleanupHostedService] Successfully cleaned up and marked {Count} " +
+                                  "stuck deployments as 'Failed'.", updatedCount);
+            else
+                logger.LogInformation(
+                    "[DeploymentCleanupHostedService] No stuck deployments found. Database is clean.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(ex, "[DeploymentCleanupHostedService] CRITICAL: Error occurred while " +
+                                   "executing bulk update to clean up stuck deployments.");
+        }
     }
 }
