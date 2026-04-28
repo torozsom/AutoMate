@@ -232,8 +232,7 @@ public class AuthService(
         {
             logger.LogError(
                 ex,
-                "[AuthService] Failed to send verification email to '{Email}'.",
-                MaskEmailForLogging(user.Email));
+                "[AuthService] Failed to send verification email.");
             return false;
         }
     }
