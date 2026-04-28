@@ -40,22 +40,25 @@ public class LocalDeploymentOrchestrator(
     /// </exception>
     public async Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config)
     {
-        logger.LogInformation("Starting Deployment Process for {Project}", config.ProjectName);
+        logger.LogInformation(
+            "[LocalDeploymentOrchestrator] Starting Deployment Process for project '{ProjectName}'...",
+            config.ProjectName);
 
-        var csProject = await dbContext.CsProjects
-            .FirstOrDefaultAsync(csp => csp.Id == config.CsProjectId);
+        var csProject = await dbContext.CsProjects.FirstOrDefaultAsync(csp => csp.Id == config.CsProjectId);
 
         if (csProject == null)
         {
-            logger.LogError("Database record for CsProject {Id} not found!", config.CsProjectId);
-            throw new InvalidOperationException("Project not found.");
+            logger.LogError(
+                "[LocalDeploymentOrchestrator] Deployment failed: Database record for CsProject {Id} not found.",
+                config.CsProjectId);
+            throw new InvalidOperationException($"Project with ID {config.CsProjectId} not found in the database.");
         }
 
         var deployment = new Deployment
         {
             CsProjectId = csProject.Id,
             Status = DeploymentStatus.Building,
-            ImageTag = $"automate-{csProject.Name.ToLower()}:{csProject.Id.ToString()[..8]}"
+            ImageTag = GenerateImageTag(csProject.Name, csProject.Id)
         };
 
         // Save the deployment to the database
@@ -64,45 +67,106 @@ public class LocalDeploymentOrchestrator(
 
         try
         {
-            logger.LogInformation("Step 1: Locating solution root...");
-            var solutionRoot = await systemScanner.FindSolutionRootAsync(csProject.Path);
-            logger.LogInformation("Solution root found at: {Path}", solutionRoot);
-
-            logger.LogInformation("Step 2: Scanning project content for metadata...");
-            var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
-
-            logger.LogInformation("Step 3: Generating Infrastructure-as-Code files...");
-            await templateService.GenerateAndSaveAllTemplatesAsync(config, metadata, csProject.Name, solutionRoot);
-
-            logger.LogInformation("Step 4: Invoking Docker Compose...");
-            deployment.Status = DeploymentStatus.Starting;
-            await dbContext.SaveChangesAsync();
-
-            var success = await dockerService.RunDockerComposeUpAsync(solutionRoot, config.ProjectName);
-
-            if (!success)
-            {
-                deployment.Status = DeploymentStatus.Failed;
-                await dbContext.SaveChangesAsync();
-                logger.LogError("Step 5 Failed: Docker Compose could not start the services.");
-                throw new Exception("Docker Compose process returned an error. Check server logs.");
-            }
-
-            logger.LogInformation("Step 6: Finalizing deployment record...");
-            deployment.Status = DeploymentStatus.Running;
-            deployment.Logs = $"System live at http://localhost:{config.ExposedPort}";
-            await dbContext.SaveChangesAsync();
-
-            logger.LogInformation("--- Deployment Finished Successfully ---");
+            await ExecuteDeploymentStepsAsync(config, csProject, deployment);
             return deployment;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Deployment failed during execution.");
-            deployment.Status = DeploymentStatus.Failed;
-            deployment.Logs = $"Error: {ex.Message}";
-            await dbContext.SaveChangesAsync();
+            logger.LogError(ex,
+                "[LocalDeploymentOrchestrator] Deployment failed during execution for project '{ProjectName}'.",
+                config.ProjectName);
+            await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Failed, $"Error: {ex.Message}");
             throw;
         }
+    }
+
+
+    /// <summary>
+    ///     Executes the main steps of the deployment process, including locating the solution root,
+    ///     scanning the project for dependencies, generating necessary templates, and running Docker Compose.
+    /// </summary>
+    /// <param name="config"></param>
+    /// <param name="csProject"></param>
+    /// <param name="deployment"></param>
+    /// <exception cref="InvalidOperationException"></exception>
+    private async Task ExecuteDeploymentStepsAsync(DeploymentConfigDto config, CsProject csProject,
+        Deployment deployment)
+    {
+        logger.LogInformation("[LocalDeploymentOrchestrator] Step 1/4: Locating solution root for {Path}...",
+            csProject.Path);
+        var solutionRoot = await systemScanner.FindSolutionRootAsync(csProject.Path);
+
+        logger.LogInformation("[LocalDeploymentOrchestrator] Step 2/4: Scanning project content for dependencies...");
+        var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
+
+        logger.LogInformation(
+            "[LocalDeploymentOrchestrator] Step 3/4: Generating Infrastructure-as-Code files (Dockerfile, docker-compose)...");
+        await templateService.GenerateAndSaveAllTemplatesAsync(config, metadata, csProject.Name, solutionRoot);
+
+        logger.LogInformation("[LocalDeploymentOrchestrator] Step 4/4: Starting Docker Compose deployment...");
+        await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Starting);
+
+        var isDockerSuccess = await dockerService.RunDockerComposeUpAsync(solutionRoot, config.ProjectName);
+
+        if (!isDockerSuccess)
+            throw new InvalidOperationException("Docker Compose process returned an error or timed out. " +
+                                                "Check server console for details.");
+
+        var systemUrl = $"http://localhost:{config.ExposedPort}";
+        logger.LogInformation("--- Deployment Finished Successfully! System live at {Url} ---", systemUrl);
+
+        await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Running, $"System live at {systemUrl}");
+    }
+
+
+    /// <summary>
+    ///     Safely updates the deployment status in the database, handling any
+    ///     potential exceptions that may occur during the update process.
+    /// </summary>
+    /// <param name="deployment">
+    ///     The <see cref="Deployment" /> entity whose status is to be updated.
+    /// </param>
+    /// <param name="status">
+    ///     The new <see cref="DeploymentStatus" /> value to set for the deployment.
+    /// </param>
+    /// <param name="logs">
+    ///     Optional log messages or details to be saved with the deployment status update.
+    /// </param>
+    private async Task SafeUpdateDeploymentStatusAsync(Deployment deployment, DeploymentStatus status,
+        string? logs = null)
+    {
+        try
+        {
+            deployment.Status = status;
+            if (logs != null)
+                deployment.Logs = logs;
+
+            await dbContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            logger.LogCritical(ex, "[LocalDeploymentOrchestrator] CRITICAL: Failed to update " +
+                                   "deployment status to '{Status}' for Deployment ID {Id}.", status, deployment.Id);
+        }
+    }
+
+
+    /// <summary>
+    ///     Generates a unique and descriptive Docker image tag based on the project name and ID.
+    /// </summary>
+    /// <param name="projectName">
+    ///     The name of the project, which will be sanitized and included in the image tag for readability.
+    /// </param>
+    /// <param name="projectId">
+    ///     The unique identifier of the project, which will be included in the image tag
+    ///     to ensure uniqueness and avoid conflicts with other images.
+    /// </param>
+    /// <returns>
+    ///     A string representing the generated Docker image tag.
+    /// </returns>
+    private static string GenerateImageTag(string projectName, Guid projectId)
+    {
+        var safeProjectName = projectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
+        return $"automate-{safeProjectName}:{projectId.ToString()[..8]}";
     }
 }

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Core.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Services.Data;
 using Services.Email;
 
@@ -10,11 +11,12 @@ namespace Services.Auth;
 /// <summary>
 ///     Service implementation for handling user authentication, registration, and email verification.
 /// </summary>
-public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) : IAuthService
+public class AuthService(
+    AutoMateDbContext dbContext,
+    IEmailSenderService emailSenderService,
+    IPasswordHasher<LocalUser> passwordHasher,
+    ILogger<AuthService> logger) : IAuthService
 {
-    private readonly PasswordHasher<LocalUser> _passwordHasher = new();
-
-
     /// <summary>
     ///     Registers a new user by creating their account, saving their details in the database, and sending a verification
     ///     email.
@@ -33,41 +35,28 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
     public async Task<bool> RegisterAsync(string username, string email, string password,
         Func<string, string> verificationLinkFactory)
     {
-        var emailExists = await dbContext.Users.AnyAsync(u => u.Email == email);
-        if (emailExists)
-            return false;
-
-        var newUser = new LocalUser
+        if (await IsEmailInUseAsync(email))
         {
-            Email = email,
-            Username = username,
-            IsEmailVerified = false,
-            EmailVerificationToken = GenerateSecureToken(),
-            VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(24)
-        };
+            logger.LogWarning(
+                "[AuthService] Registration failed: email is already in use for username '{Username}'.",
+                username
+            );
+            return false;
+        }
 
-        newUser.PasswordHash = _passwordHasher.HashPassword(newUser, password);
+        var newUser = CreateLocalUserEntity(username, email, password);
 
         dbContext.Users.Add(newUser);
         await dbContext.SaveChangesAsync();
 
-        var verificationLink = verificationLinkFactory(newUser.EmailVerificationToken);
-
-        try
+        var isEmailSent = await TrySendVerificationEmailAsync(newUser, verificationLinkFactory);
+        if (!isEmailSent)
         {
-            await emailSender.SendEmailAsync(
-                newUser.Email,
-                "Confirm your registration to AutoMate!",
-                "Welcome to AutoMate!\n\nPlease follow this link for verification:\n" + verificationLink);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("An error occured while trying to send the verification email! Error: " + ex.Message);
-            dbContext.Users.Remove(newUser);
-            await dbContext.SaveChangesAsync();
+            await RollbackUserCreationAsync(newUser);
             return false;
         }
 
+        logger.LogInformation("[AuthService] Successfully registered new user '{Username}'.", username);
         return true;
     }
 
@@ -87,13 +76,19 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
             .OfType<LocalUser>()
             .FirstOrDefaultAsync(u => u.EmailVerificationToken == token);
 
-        if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < DateTimeOffset.UtcNow) return false;
+        if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < DateTimeOffset.UtcNow)
+        {
+            var sanitizedTokenForLog = token.Replace("\r", string.Empty).Replace("\n", string.Empty);
+            logger.LogWarning("[AuthService] Email verification failed for token '{Token}'.", sanitizedTokenForLog);
+            return false;
+        }
 
         user.IsEmailVerified = true;
         user.EmailVerificationToken = null;
         user.VerificationTokenExpiry = null;
 
         await dbContext.SaveChangesAsync();
+        logger.LogInformation("[AuthService] Email verified successfully for user '{Username}'.", user.Username);
         return true;
     }
 
@@ -116,8 +111,7 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
         if (user == null)
             return (null, "Invalid credentials");
 
-
-        var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash!, password);
+        var verificationResult = passwordHasher.VerifyHashedPassword(user, user.PasswordHash!, password);
 
         if (verificationResult == PasswordVerificationResult.Failed)
             return (null, "Invalid credentials");
@@ -157,6 +151,7 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
             };
 
             dbContext.Users.Add(newUser);
+            logger.LogInformation("[AuthService] Created new GitHub user: {Username}", username);
         }
         else
         {
@@ -164,9 +159,99 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
             existingUser.Email = email;
             existingUser.AvatarUrl = avatarUrl;
             existingUser.AccessToken = accessToken;
+            logger.LogInformation("[AuthService] Updated existing GitHub user: {Username}", username);
         }
 
         await dbContext.SaveChangesAsync();
+    }
+
+
+    /// <summary>
+    ///     Checks if the provided email address is already associated with an existing user account in the database.
+    /// </summary>
+    /// <param name="email">The email to be checked if it is used already.</param>
+    /// <returns></returns>
+    private async Task<bool> IsEmailInUseAsync(string email)
+    {
+        return await dbContext.Users.AnyAsync(u => u.Email == email);
+    }
+
+
+    /// <summary>
+    ///     Creates a new instance of the <see cref="LocalUser" /> entity with the provided username, email, and password.
+    ///     The method also generates a secure email verification token and sets the token's expiry time.
+    /// </summary>
+    /// <param name="username">The username of the local user.</param>
+    /// <param name="email">The email of the local user.</param>
+    /// <param name="password">The password of the local user.</param>
+    /// <returns></returns>
+    private LocalUser CreateLocalUserEntity(string username, string email, string password)
+    {
+        var user = new LocalUser
+        {
+            Email = email,
+            Username = username,
+            IsEmailVerified = false,
+            EmailVerificationToken = GenerateSecureToken(),
+            VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(24)
+        };
+
+        user.PasswordHash = passwordHasher.HashPassword(user, password);
+        return user;
+    }
+
+
+    /// <summary>
+    ///     Attempts to send a verification email to the user with the provided email verification token. If the email fails to
+    ///     send,
+    ///     the method logs the error and returns false, allowing the caller to handle the failure appropriately.
+    /// </summary>
+    /// <param name="user">The user to be verified.</param>
+    /// <param name="verificationLinkFactory">The functor that handles the link creation.</param>
+    /// <returns></returns>
+    private async Task<bool> TrySendVerificationEmailAsync(LocalUser user, Func<string, string> verificationLinkFactory)
+    {
+        var verificationLink = verificationLinkFactory(user.EmailVerificationToken!);
+
+        try
+        {
+            await emailSenderService.SendEmailAsync(
+                user.Email,
+                "Confirm your registration to AutoMate!",
+                $"Welcome to AutoMate!\n\nPlease follow this link for verification:\n{verificationLink}");
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[AuthService] Failed to send verification email.");
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    ///     Rolls back the user creation process by removing the user from the database if the email sending fails. This
+    ///     ensures that
+    ///     the database remains consistent and does not contain unverified user accounts that could not receive the
+    ///     verification email.
+    /// </summary>
+    /// <param name="user">The user to be removed.</param>
+    private async Task RollbackUserCreationAsync(LocalUser user)
+    {
+        try
+        {
+            dbContext.Users.Remove(user);
+            await dbContext.SaveChangesAsync();
+            logger.LogInformation("[AuthService] Rolled back user creation due to email sending failure.");
+        }
+        catch (Exception rollbackEx)
+        {
+            logger.LogCritical(
+                rollbackEx,
+                "[AuthService] CRITICAL: Failed to rollback user creation. " +
+                "Database might be in an inconsistent state.");
+        }
     }
 
 
@@ -176,7 +261,7 @@ public class AuthService(AutoMateDbContext dbContext, IEmailSender emailSender) 
     ///     Base64 format, ensuring it can be safely included in email verification links without
     ///     issues related to special characters.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>A secure token for verification.</returns>
     private static string GenerateSecureToken()
     {
         var tokenBytes = RandomNumberGenerator.GetBytes(32);
