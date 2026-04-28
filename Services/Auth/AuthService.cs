@@ -92,8 +92,8 @@ public class AuthService(
         user.VerificationTokenExpiry = null;
 
         await dbContext.SaveChangesAsync();
-        logger.LogInformation("[AuthService] Email verified successfully for user '{Email}'.",
-            MaskEmailForLogging(user.Email));
+        logger.LogInformation("[AuthService] Email verified successfully for user id '{UserId}'.",
+            user.Id);
 
         return true;
     }
