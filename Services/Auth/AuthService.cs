@@ -56,11 +56,7 @@ public class AuthService(
             return false;
         }
 
-        logger.LogInformation(
-            "[AuthService] Successfully registered new user '{Username}'.",
-            username
-        );
-
+        logger.LogInformation("[AuthService] Successfully registered new user '{Username}'.", username);
         return true;
     }
 
@@ -92,9 +88,7 @@ public class AuthService(
         user.VerificationTokenExpiry = null;
 
         await dbContext.SaveChangesAsync();
-        logger.LogInformation("[AuthService] Email verified successfully for user id '{UserId}'.",
-            user.Id);
-
+        logger.LogInformation("[AuthService] Email verified successfully for user '{Username}'.", user.Username);
         return true;
     }
 
@@ -230,9 +224,7 @@ public class AuthService(
         }
         catch (Exception ex)
         {
-            logger.LogError(
-                ex,
-                "[AuthService] Failed to send verification email.");
+            logger.LogError(ex, "[AuthService] Failed to send verification email.");
             return false;
         }
     }
@@ -251,16 +243,15 @@ public class AuthService(
         {
             dbContext.Users.Remove(user);
             await dbContext.SaveChangesAsync();
-            logger.LogInformation(
-                "[AuthService] Rolled back user creation for user id '{UserId}' due to email sending failure.",
-                "[AuthService] Rolled back user creation due to email sending failure.");
+            logger.LogInformation("[AuthService] Rolled back user creation due to email sending failure.");
+        }
         catch (Exception rollbackEx)
         {
             logger.LogCritical(
                 rollbackEx,
-                "[AuthService] CRITICAL: Failed to rollback user creation for user id '{UserId}'. " +
                 "[AuthService] CRITICAL: Failed to rollback user creation. " +
                 "Database might be in an inconsistent state.");
+        }
     }
 
 
@@ -278,46 +269,5 @@ public class AuthService(
             .Replace("+", "-")
             .Replace("/", "_")
             .TrimEnd('=');
-    }
-
-
-    /// <summary>
-    ///     Masks an email address for logging purposes by obscuring the local part
-    ///     and domain while retaining the general structure of the email.
-    /// </summary>
-    /// <param name="email">The email address to be masked.</param>
-    /// <returns>The masked email address.</returns>
-    public static string MaskEmailForLogging(string email)
-    {
-        if (string.IsNullOrWhiteSpace(email))
-            return "***";
-
-        var atIndex = email.IndexOf('@');
-        if (atIndex <= 0 || atIndex == email.Length - 1)
-            return "***";
-
-        var local = email[..atIndex];
-        var domain = email[(atIndex + 1)..];
-        var maskedLocal = local.Length switch
-        {
-            1 => "*",
-            2 => $"{local[0]}*",
-            _ => $"{local[0]}***{local[^1]}"
-        };
-
-        var dotIndex = domain.LastIndexOf('.');
-        if (dotIndex <= 0 || dotIndex == domain.Length - 1)
-            return $"{maskedLocal}@***";
-
-        var domainName = domain[..dotIndex];
-        var tld = domain[dotIndex..];
-        var maskedDomain = domainName.Length switch
-        {
-            1 => "*",
-            2 => $"{domainName[0]}*",
-            _ => $"{domainName[0]}***{domainName[^1]}"
-        };
-
-        return $"{maskedLocal}@{maskedDomain}{tld}";
     }
 }

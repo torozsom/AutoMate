@@ -54,8 +54,8 @@ public class GmailSenderService : IEmailSenderService
         {
             _logger.LogInformation(
                 "[GmailSenderService] Attempting to send email with subject '{Subject}'...",
-                "[GmailSenderService] Attempting to send email with subject '{Subject}'...",
                 subject);
+
             using var mailMessage = new MailMessage();
             mailMessage.From = new MailAddress(_senderEmail, _senderName);
             mailMessage.Subject = subject;
@@ -69,22 +69,17 @@ public class GmailSenderService : IEmailSenderService
 
             await smtpClient.SendMailAsync(mailMessage);
 
-            _logger.LogInformation(
-                "[GmailSenderService] Email successfully sent."
-                "[GmailSenderService] Email successfully sent."
+            _logger.LogInformation("[GmailSenderService] Email successfully sent.");
+        }
         catch (SmtpException smtpEx)
         {
             _logger.LogError(smtpEx,
                 "[GmailSenderService] SMTP error occurred while sending email. StatusCode: {StatusCode}",
                 smtpEx.StatusCode);
-                "[GmailSenderService] SMTP error occurred while sending email. StatusCode: {StatusCode}",
-                smtpEx.StatusCode);
+        }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "[GmailSenderService] An unexpected error occurred while sending email."
-            );
-                "[GmailSenderService] An unexpected error occurred while sending email."
+            _logger.LogError(ex, "[GmailSenderService] An unexpected error occurred while sending email.");
+        }
     }
 }
