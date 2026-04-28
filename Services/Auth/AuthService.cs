@@ -253,16 +253,14 @@ public class AuthService(
             await dbContext.SaveChangesAsync();
             logger.LogInformation(
                 "[AuthService] Rolled back user creation for user id '{UserId}' due to email sending failure.",
-                user.Id);
-        }
+                "[AuthService] Rolled back user creation due to email sending failure.");
         catch (Exception rollbackEx)
         {
             logger.LogCritical(
                 rollbackEx,
                 "[AuthService] CRITICAL: Failed to rollback user creation for user id '{UserId}'. " +
-                "Database might be in an inconsistent state.",
-                user.Id);
-        }
+                "[AuthService] CRITICAL: Failed to rollback user creation. " +
+                "Database might be in an inconsistent state.");
     }
 
 
