@@ -37,7 +37,10 @@ public class AuthService(
     {
         if (await IsEmailInUseAsync(email))
         {
-            logger.LogWarning("[AuthService] Registration failed: Email '{Email}' is already in use.", email);
+            logger.LogWarning(
+                "[AuthService] Registration failed: Email '{Email}' is already in use.",
+                MaskEmailForLogging(email)
+            );
             return false;
         }
 
@@ -47,14 +50,17 @@ public class AuthService(
         await dbContext.SaveChangesAsync();
 
         var isEmailSent = await TrySendVerificationEmailAsync(newUser, verificationLinkFactory);
-
         if (!isEmailSent)
         {
             await RollbackUserCreationAsync(newUser);
             return false;
         }
 
-        logger.LogInformation("[AuthService] Successfully registered new user with email '{Email}'.", email);
+        logger.LogInformation(
+            "[AuthService] Successfully registered new user with email '{Email}'.",
+            MaskEmailForLogging(email)
+        );
+
         return true;
     }
 
@@ -76,7 +82,8 @@ public class AuthService(
 
         if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < DateTimeOffset.UtcNow)
         {
-            logger.LogWarning("[AuthService] Email verification failed for token '{Token}'.", token);
+            var sanitizedTokenForLog = token.Replace("\r", string.Empty).Replace("\n", string.Empty);
+            logger.LogWarning("[AuthService] Email verification failed for token '{Token}'.", sanitizedTokenForLog);
             return false;
         }
 
@@ -85,7 +92,8 @@ public class AuthService(
         user.VerificationTokenExpiry = null;
 
         await dbContext.SaveChangesAsync();
-        logger.LogInformation("[AuthService] Email verified successfully for user '{Email}'.", user.Email);
+        logger.LogInformation("[AuthService] Email verified successfully for user '{Email}'.",
+            MaskEmailForLogging(user.Email));
 
         return true;
     }
@@ -222,7 +230,10 @@ public class AuthService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "[AuthService] Failed to send verification email to '{Email}'.", user.Email);
+            logger.LogError(
+                ex,
+                "[AuthService] Failed to send verification email to '{Email}'.",
+                MaskEmailForLogging(user.Email));
             return false;
         }
     }
@@ -241,14 +252,17 @@ public class AuthService(
         {
             dbContext.Users.Remove(user);
             await dbContext.SaveChangesAsync();
-            logger.LogInformation("[AuthService] Rolled back user creation for '{Email}' due to email sending failure.",
-                user.Email);
+            logger.LogInformation(
+                "[AuthService] Rolled back user creation for '{Email}' due to email sending failure.",
+                MaskEmailForLogging(user.Email));
         }
         catch (Exception rollbackEx)
         {
-            logger.LogCritical(rollbackEx,
-                "[AuthService] CRITICAL: Failed to rollback user creation for '{Email}'. Database might be in an inconsistent state.",
-                user.Email);
+            logger.LogCritical(
+                rollbackEx,
+                "[AuthService] CRITICAL: Failed to rollback user creation for '{Email}'. " +
+                "Database might be in an inconsistent state.",
+                MaskEmailForLogging(user.Email));
         }
     }
 
@@ -267,5 +281,46 @@ public class AuthService(
             .Replace("+", "-")
             .Replace("/", "_")
             .TrimEnd('=');
+    }
+
+
+    /// <summary>
+    ///     Masks an email address for logging purposes by obscuring the local part
+    ///     and domain while retaining the general structure of the email.
+    /// </summary>
+    /// <param name="email">The email address to be masked.</param>
+    /// <returns>The masked email address.</returns>
+    public static string MaskEmailForLogging(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "***";
+
+        var atIndex = email.IndexOf('@');
+        if (atIndex <= 0 || atIndex == email.Length - 1)
+            return "***";
+
+        var local = email[..atIndex];
+        var domain = email[(atIndex + 1)..];
+        var maskedLocal = local.Length switch
+        {
+            1 => "*",
+            2 => $"{local[0]}*",
+            _ => $"{local[0]}***{local[^1]}"
+        };
+
+        var dotIndex = domain.LastIndexOf('.');
+        if (dotIndex <= 0 || dotIndex == domain.Length - 1)
+            return $"{maskedLocal}@***";
+
+        var domainName = domain[..dotIndex];
+        var tld = domain[dotIndex..];
+        var maskedDomain = domainName.Length switch
+        {
+            1 => "*",
+            2 => $"{domainName[0]}*",
+            _ => $"{domainName[0]}***{domainName[^1]}"
+        };
+
+        return $"{maskedLocal}@{maskedDomain}{tld}";
     }
 }

@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Mail;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Services.Auth;
 
 namespace Services.Email;
 
@@ -54,8 +55,8 @@ public class GmailSenderService : IEmailSenderService
         try
         {
             _logger.LogInformation(
-                "[GmailSenderService] Attempting to send email to '{ToEmail}' with subject '{Subject}'...", toEmail,
-                subject);
+                "[GmailSenderService] Attempting to send email to '{ToEmail}' with subject '{Subject}'...",
+                AuthService.MaskEmailForLogging(toEmail), subject);
 
             using var mailMessage = new MailMessage();
             mailMessage.From = new MailAddress(_senderEmail, _senderName);
@@ -70,19 +71,25 @@ public class GmailSenderService : IEmailSenderService
 
             await smtpClient.SendMailAsync(mailMessage);
 
-            _logger.LogInformation("[GmailSenderService] Email successfully sent to '{ToEmail}'.", toEmail);
+            _logger.LogInformation(
+                "[GmailSenderService] Email successfully sent to '{ToEmail}'.",
+                AuthService.MaskEmailForLogging(toEmail)
+            );
         }
         catch (SmtpException smtpEx)
         {
             _logger.LogError(smtpEx,
                 "[GmailSenderService] SMTP error occurred while sending email to '{ToEmail}'. StatusCode: {StatusCode}",
-                toEmail, smtpEx.StatusCode);
+                AuthService.MaskEmailForLogging(toEmail), smtpEx.StatusCode);
             throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
-                "[GmailSenderService] An unexpected error occurred while sending email to '{ToEmail}'.", toEmail);
+            _logger.LogError(
+                ex,
+                "[GmailSenderService] An unexpected error occurred while sending email to '{ToEmail}'.",
+                AuthService.MaskEmailForLogging(toEmail)
+            );
             throw;
         }
     }
