@@ -38,8 +38,8 @@ public class AuthService(
         if (await IsEmailInUseAsync(email))
         {
             logger.LogWarning(
-                "[AuthService] Registration failed: Email '{Email}' is already in use.",
-                MaskEmailForLogging(email)
+                "[AuthService] Registration failed: email is already in use for username '{Username}'.",
+                username
             );
             return false;
         }
@@ -57,8 +57,8 @@ public class AuthService(
         }
 
         logger.LogInformation(
-            "[AuthService] Successfully registered new user with email '{Email}'.",
-            MaskEmailForLogging(email)
+            "[AuthService] Successfully registered new user '{Username}'.",
+            username
         );
 
         return true;
