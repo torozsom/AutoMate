@@ -35,36 +35,10 @@ public class DeploymentConfigDto
     /// </summary>
     public int ExposedPort { get; set; } = 8080;
 
-    /// <summary>
-    ///     Indicates whether the deployed application requires a database connection.
+    // <summary>
+    ///     A list of databases required by the deployed application.
     /// </summary>
-    public bool RequiresDb { get; set; }
-
-    /// <summary>
-    ///     The type of database to be used for the deployed application (e.g., "PostgreSQL", "MySQL", "SQL Server").
-    ///     This setting can be used to determine the appropriate database configuration and connection settings during
-    ///     deployment.
-    /// </summary>
-    public string DbType { get; set; } = "PostgreSQL";
-
-    /// <summary>
-    ///     The name of the database to be used for the deployed application.
-    ///     This setting is used to configure the database connection string and ensure
-    ///     that the application can connect to the correct database instance during deployment.
-    /// </summary>
-    public string DbName { get; set; } = "appdb";
-
-    /// <summary>
-    ///     The username for authenticating with the database. This setting is used to configure the database connection
-    ///     string and ensure that the application can authenticate successfully with the database during deployment.
-    /// </summary>
-    public string DbUser { get; set; } = "admin";
-
-    /// <summary>
-    ///     The password for authenticating with the database. This setting is used to configure the database connection string
-    ///     and ensure that the application can authenticate successfully with the database during deployment.
-    /// </summary>
-    public string DbPassword { get; set; } = "AdminPwd123";
+    public List<DatabaseConfigDto> Databases { get; set; } = [];
 
     /// <summary>
     ///     A dictionary of custom environment variables to be set for the deployed application. This allows users to specify

@@ -50,6 +50,8 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     protected override void OnInitialized()
     {
+        Config.Databases ??= [];
+
         // Populate the UI list from the incoming configuration dictionary
         if (Config.CustomEnvVars != null)
             foreach (var kvp in Config.CustomEnvVars)
@@ -95,6 +97,34 @@ public partial class ConfigurationForm : ComponentBase
                 Config.CustomEnvVars.TryAdd(item.Key.Trim(), item.Value?.Trim() ?? string.Empty);
 
         await OnDeployConfirmed.InvokeAsync(Config);
+    }
+
+
+    /// <summary>
+    ///     Adds a new empty database configuration entry to the UI list.
+    /// </summary>
+    private void AddEmptyDatabase()
+    {
+        var dbCount = Config.Databases.Count + 1;
+        Config.Databases.Add(new DatabaseConfigDto
+        {
+            DbType = "PostgreSQL",
+            DbName = $"appdb{dbCount}",
+            DbUser = "admin",
+            DbPassword = "AdminPwd123",
+            ConnectionStringName = $"Database{dbCount}Connection",
+            ContainerNameSuffix = $"db{dbCount}"
+        });
+    }
+
+
+    /// <summary>
+    ///     Removes a database configuration entry from the UI list.
+    /// </summary>
+    /// <param name="db">The db to be removed.</param>
+    private void RemoveDatabase(DatabaseConfigDto db)
+    {
+        Config.Databases.Remove(db);
     }
 
 

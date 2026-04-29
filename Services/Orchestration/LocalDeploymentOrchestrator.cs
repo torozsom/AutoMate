@@ -96,17 +96,21 @@ public class LocalDeploymentOrchestrator(
             csProject.Path);
         var solutionRoot = await systemScanner.FindSolutionRootAsync(csProject.Path);
 
+        var automateDir = Path.Combine(solutionRoot, ".automate");
+        if (!Directory.Exists(automateDir))
+            Directory.CreateDirectory(automateDir);
+
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 2/4: Scanning project content for dependencies...");
         var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path);
 
         logger.LogInformation(
             "[LocalDeploymentOrchestrator] Step 3/4: Generating Infrastructure-as-Code files (Dockerfile, docker-compose)...");
-        await templateService.GenerateAndSaveAllTemplatesAsync(config, metadata, csProject.Name, solutionRoot);
+        await templateService.GenerateAndSaveAllTemplatesAsync(config, metadata, csProject.Name, automateDir);
 
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 4/4: Starting Docker Compose deployment...");
         await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Starting);
 
-        var isDockerSuccess = await dockerService.RunDockerComposeUpAsync(solutionRoot, config.ProjectName);
+        var isDockerSuccess = await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName);
 
         if (!isDockerSuccess)
             throw new InvalidOperationException("Docker Compose process returned an error or timed out. " +

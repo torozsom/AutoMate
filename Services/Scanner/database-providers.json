@@ -30,7 +30,8 @@
     "DbType": "Redis",
     "Packages": [
       "StackExchange.Redis",
-      "Microsoft.Extensions.Caching.StackExchangeRedis"
+      "Microsoft.Extensions.Caching.StackExchangeRedis",
+      "Caching.Redis"
     ]
   },
   {

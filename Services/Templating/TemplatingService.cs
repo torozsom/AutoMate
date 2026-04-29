@@ -159,10 +159,12 @@ public class TemplateService : ITemplateService
     private static object BuildTemplateModel(DeploymentConfigDto config, ProjectMetadataDto metadata,
         string csProjectName, string outputDirectory)
     {
+        var solutionRoot = Path.GetDirectoryName(outputDirectory);
+
         var projectListForTemplate = metadata.AllProjectPaths
             .Select(p =>
             {
-                var relPath = Path.GetRelativePath(outputDirectory, p).Replace('\\', '/');
+                var relPath = Path.GetRelativePath(solutionRoot!, p).Replace('\\', '/');
                 var dir = Path.GetDirectoryName(relPath)?.Replace('\\', '/');
                 return new
                 {
@@ -178,7 +180,7 @@ public class TemplateService : ITemplateService
         // Calculate the relative path to the main project file from the output directory
         var relativeMainProjectFile = string.IsNullOrEmpty(mainProjectFile)
             ? ""
-            : Path.GetRelativePath(outputDirectory, mainProjectFile).Replace('\\', '/');
+            : Path.GetRelativePath(solutionRoot!, mainProjectFile).Replace('\\', '/');
 
         // Calculate the relative folder of the main project file for use in templates
         var relativeMainProjectFolder = string.IsNullOrEmpty(relativeMainProjectFile)
@@ -189,11 +191,27 @@ public class TemplateService : ITemplateService
         if (string.IsNullOrEmpty(relativeMainProjectFolder))
             relativeMainProjectFolder = ".";
 
+        var databasesForTemplate = config.Databases.Select(db => new
+        {
+            type = db.DbType,
+            name = db.DbName,
+            user = db.DbUser,
+            password = db.DbPassword,
+
+            user_encoded = string.IsNullOrEmpty(db.DbUser) ? "" : Uri.EscapeDataString(db.DbUser),
+            password_encoded = string.IsNullOrEmpty(db.DbPassword) ? "" : Uri.EscapeDataString(db.DbPassword),
+
+            conn_name = db.ConnectionStringName,
+            container_suffix = db.ContainerNameSuffix
+        }).ToList();
+
         return new
         {
             // Metadata for the Dockerfile
-            dotnet_version = metadata.DotNetVersion,
+            app_name = config.ProjectName,
             project_name = csProjectName,
+
+            dotnet_version = metadata.DotNetVersion,
             projects = projectListForTemplate,
             main_project_relative_path = relativeMainProjectFile,
             main_project_folder = relativeMainProjectFolder,
@@ -201,16 +219,8 @@ public class TemplateService : ITemplateService
             // Configurations for the docker-compose file
             exposed_port = config.ExposedPort,
             environment_name = config.EnvironmentName,
-            requires_db = config.RequiresDb,
-            db_type = config.DbType,
-            db_name = config.DbName,
-            db_user = config.DbUser,
-            db_password = config.DbPassword,
-
-            // URL-encoded variables for safe inclusion in connection strings or environment variables
-            db_user_encoded = string.IsNullOrEmpty(config.DbUser) ? "" : Uri.EscapeDataString(config.DbUser),
-            db_password_encoded =
-                string.IsNullOrEmpty(config.DbPassword) ? "" : Uri.EscapeDataString(config.DbPassword),
+            requires_db = databasesForTemplate.Count > 0,
+            databases = databasesForTemplate,
 
             // Custom environment variables as a list of key-value pairs for iteration in templates
             custom_env_vars = config.CustomEnvVars?
