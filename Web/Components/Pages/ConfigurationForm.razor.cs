@@ -9,8 +9,8 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class ConfigurationForm : ComponentBase
 {
-    /// A counter used to generate unique keys for new environment variables added by the user.
-    private int _newVarCounter = 1;
+    /// UI-friendly representation of environment variables.
+    private readonly List<EnvVarItem> _envVars = [];
 
     /// <summary>
     ///     The deployment configuration settings for the project being deployed, including project details,
@@ -45,29 +45,35 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
+    ///     On component initialization, we populate the UI list of
+    ///     environment variables from the incoming configuration dictionary.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        // Populate the UI list from the incoming configuration dictionary
+        if (Config.CustomEnvVars != null)
+            foreach (var kvp in Config.CustomEnvVars)
+                _envVars.Add(new EnvVarItem { Key = kvp.Key, Value = kvp.Value });
+    }
+
+
+    /// <summary>
     ///     Scans the project directory for configuration files (appsettings.json, launchSettings.json, .env)
     ///     and loads discovered variables into the CustomEnvVars dictionary without overwriting existing ones.
     /// </summary>
     private async Task LoadVariablesFromConfigFilesAsync()
     {
         if (string.IsNullOrWhiteSpace(ProjectPath))
-        {
-            Console.WriteLine("[WARNING] Project path is not provided to the configuration form.");
             return;
-        }
 
         // Analyze the project files and extract environment variables.
         var scannedVars = await ProjectScanner.ExtractEnvironmentVariablesAsync(ProjectPath);
 
-        var addedCount = 0;
+        // Only add variables that are not already present in our UI list
         foreach (var kvp in scannedVars)
-        {
-            if (Config.CustomEnvVars.ContainsKey(kvp.Key)) continue;
-            Config.CustomEnvVars.Add(kvp.Key, kvp.Value);
-            addedCount++;
-        }
+            if (!_envVars.Any(e => e.Key.Equals(kvp.Key, StringComparison.OrdinalIgnoreCase)))
+                _envVars.Add(new EnvVarItem { Key = kvp.Key, Value = kvp.Value });
 
-        Console.WriteLine($"[INFO] Successfully loaded {addedCount} new environment variables.");
         StateHasChanged();
     }
 
@@ -80,53 +86,46 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private async Task ConfirmDeploy()
     {
+        // Rebuild the final Dictionary from the UI list before sending it back
+        Config.CustomEnvVars.Clear();
+
+        // Ignore completely empty keys to prevent dictionary crash or invalid configurations
+        foreach (var item in _envVars)
+            if (!string.IsNullOrWhiteSpace(item.Key))
+                Config.CustomEnvVars.TryAdd(item.Key.Trim(), item.Value?.Trim() ?? string.Empty);
+
         await OnDeployConfirmed.InvokeAsync(Config);
     }
 
 
     /// <summary>
+    ///     Adds a new empty environment variable entry to the UI list.
+    ///     This allows the user to input a new key-value pair for environment variables.
     /// </summary>
     private void AddEmptyEnvVar()
     {
-        var newKey = $"NEW_VAR_{_newVarCounter++}";
-        Config.CustomEnvVars.TryAdd(newKey, "");
+        _envVars.Add(new EnvVarItem { Key = "", Value = "" });
     }
 
 
     /// <summary>
-    ///     Removes an environment variable from the deployment configuration based on the specified key.
+    ///     Removes an environment variable entry from the UI list. This method is called when the user clicks the "Remove"
+    ///     button
+    ///     next to an environment variable entry, allowing them to delete unwanted variables from the configuration.
     /// </summary>
-    /// <param name="key">The key of the environment variable to be removed.</param>
-    private void RemoveEnvVar(string key)
+    /// <param name="item">The item to be removed.</param>
+    private void RemoveEnvVar(EnvVarItem item)
     {
-        Config.CustomEnvVars.Remove(key);
+        _envVars.Remove(item);
     }
 
 
     /// <summary>
-    ///     Updates the key of an existing environment variable in the deployment configuration.
+    ///     Inner class used solely for UI data binding.
     /// </summary>
-    /// <param name="oldKey">The old key of the variable to be updated.</param>
-    /// <param name="newKey">The new key to be set for the specific variable.</param>
-    private void UpdateEnvVarKey(string oldKey, string? newKey)
+    private class EnvVarItem
     {
-        if (string.IsNullOrWhiteSpace(newKey) || newKey == oldKey || Config.CustomEnvVars.ContainsKey(newKey))
-            return;
-
-        var value = Config.CustomEnvVars[oldKey];
-        Config.CustomEnvVars.Remove(oldKey);
-        Config.CustomEnvVars.Add(newKey, value);
-    }
-
-
-    /// <summary>
-    ///     Updates the value of an existing environment variable in the deployment configuration based on the specified key.
-    /// </summary>
-    /// <param name="key">The key of the variable to be updated.</param>
-    /// <param name="newValue">The new value to be set for the variable.</param>
-    private void UpdateEnvVarValue(string key, string? newValue)
-    {
-        if (Config.CustomEnvVars.ContainsKey(key))
-            Config.CustomEnvVars[key] = newValue ?? string.Empty;
+        public string Key { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
     }
 }

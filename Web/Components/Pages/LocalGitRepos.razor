@@ -13,8 +13,7 @@
             <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show mt-3"
                  role="alert">
                 @_statusMessage
-                <button type="button" class="btn-close" @onclick="() => _statusMessage = null"
-                        aria-label="Close"></button>
+                <button type="button" class="btn-close" @onclick="ClearStatusMessage" aria-label="Close"></button>
             </div>
         }
 
@@ -23,8 +22,8 @@
                 <span class="input-group-text"><i class="bi bi-folder2"></i></span>
                 <input type="text" class="form-control" placeholder="E.g.: C:\Dev or /home/user/projects"
                        @bind="_searchPath" @bind:event="oninput" @onkeyup="HandleKeyUp"/>
-                <button class="btn btn-primary" @onclick="StartScan"
-                        disabled="@(string.IsNullOrWhiteSpace(_searchPath) || _isScanning)">
+
+                <button class="btn btn-primary" @onclick="StartScanAsync" disabled="@IsScanButtonDisabled">
                     @if (_isScanning)
                     {
                         <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -42,14 +41,13 @@
 
     <AuthorizeView>
         <Authorized>
-
             @if (_hasScanned && !_isScanning)
             {
                 if (_localProjects == null || !_localProjects.Any())
                 {
                     <div class="alert alert-warning text-center mt-4">
                         <i class="bi bi-exclamation-triangle display-4"></i>
-                        <p class="mt-3 lead">We could not find any Git projects within the given folder.
+                        <p class="mt-3 lead">We could not find any Git projects within the given folder. <br/>
                             <strong>@_lastSearchedPath</strong></p>
                     </div>
                 }
@@ -61,7 +59,7 @@
                         @foreach (var project in _localProjects)
                         {
                             <div class="col">
-                                <div class="card mb-3 shadow border-black border-1">
+                                <div class="card mb-3 shadow border-2">
                                     <div class="card-header">
                                         <h5 class="mb-0"><i
                                                 class="bi bi-folder-fill text-warning me-2"></i> @project.Name
@@ -72,10 +70,9 @@
                                         <ul class="list-group list-group-flush">
                                             @if (!project.CsProjects.Any())
                                             {
-                                                <li class="list-group-item bg-transparent">
-                                                    <div class="text-center">
-                                                        <p class="mt-3">No subprojects found in this app.</p>
-                                                    </div>
+                                                <li class="list-group-item bg-transparent text-center">
+                                                    <p class="mt-3 text-muted">No C# subprojects found in this
+                                                        directory.</p>
                                                 </li>
                                             }
                                             @foreach (var subProj in project.CsProjects)
@@ -96,9 +93,9 @@
                                                     </div>
                                                     @if (subProj.IsWebProject)
                                                     {
-                                                        <button class="btn btn-sm btn-outline-primary"
+                                                        <button class="btn btn-sm btn-primary w-25"
                                                                 @onclick="() => SaveProjectAsync(project, subProj)">
-                                                            Save
+                                                            <i class="bi bi-cloud-download me-1"></i> Save
                                                         </button>
                                                     }
                                                 </li>
@@ -118,11 +115,10 @@
                     <p class="mt-3 lead">Choose a folder and click on the button above!</p>
                 </div>
             }
-
         </Authorized>
         <NotAuthorized>
-            <div class="alert alert-warning">
-                Please log in for scanning your local folders for Git projects.
+            <div class="alert alert-warning mt-4">
+                <i class="bi bi-lock-fill me-2"></i> Please log in to scan your local folders for Git projects.
             </div>
         </NotAuthorized>
     </AuthorizeView>

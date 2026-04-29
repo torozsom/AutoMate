@@ -17,42 +17,46 @@
             </div>
         }
 
-        @if (!string.IsNullOrEmpty(RegisteredMessage))
+        @if (!string.IsNullOrEmpty(SuccessMessage))
         {
             <div class="alert alert-success" role="alert">
-                @RegisteredMessage
+                @SuccessMessage
             </div>
         }
 
         <form action="/api/auth/login" method="post">
+            <AntiforgeryToken/>
+
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
-                <input type="email" name="email" class="form-control" id="email" placeholder="Enter your email">
+                <input type="email" name="email" class="form-control" id="email" placeholder="Enter your email"
+                       required>
             </div>
 
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
                 <input type="password" name="password" class="form-control" id="password"
-                       placeholder="Enter your password">
+                       placeholder="Enter your password" required>
             </div>
 
             <div class="row g-3">
                 <div class="col-md-6">
-                    <button type="submit" class="btn btn-primary-custom text-white h-100">
+                    <button type="submit" class="btn btn-primary-custom text-white w-100 h-100">
                         Login to your account
                     </button>
                 </div>
                 <div class="col-md-6">
-                    <a href="/api/auth/github-login" class="btn btn-github h-100">
+                    <a href="/api/auth/github-login"
+                       class="btn btn-github w-100 h-100 d-flex align-items-center justify-content-center gap-2">
                         <i class="bi bi-github fs-4"></i>
-                        Login with your Github account
+                        Login with Github
                     </a>
                 </div>
             </div>
-            <div class="mt-3">
-                <p style="text-align: center;">Don't have an account yet? <a href="/register">Register here</a></p>
+
+            <div class="mt-4 text-center">
+                <p>Don't have an account yet? <a href="/register" class="text-decoration-none">Register here</a></p>
             </div>
         </form>
     </div>
 </div>
-

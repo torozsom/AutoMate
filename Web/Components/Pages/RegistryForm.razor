@@ -22,50 +22,46 @@
 
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
-                @if (Model != null)
-                {
-                    <InputText @bind-Value="Model.Username" type="text" class="form-control" id="username"
-                               placeholder="Enter your username"/>
-                    @:</div>
+                <InputText @bind-Value="Model!.Username" type="text" class="form-control" id="username"
+                           placeholder="Enter your username"/>
+                <ValidationMessage For="() => Model!.Username" class="text-danger mt-1"/>
+            </div>
 
-                <div class="mb-3">
-                    <label for="email" class="form-label">Email</label>
-                    <InputText @bind-Value="Model.Email" type="email" class="form-control" id="email"
-                               placeholder="Enter your email"/>
-                </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <InputText @bind-Value="Model!.Email" type="email" class="form-control" id="email"
+                           placeholder="Enter your email"/>
+                <ValidationMessage For="() => Model!.Email" class="text-danger mt-1"/>
+            </div>
 
-                <div class="mb-3">
-                    <label for="password" class="form-label">Password</label>
-                    <InputText @bind-Value="Model.Password" type="password" class="form-control" id="password"
-                               placeholder="Create a password"/>
-                </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <InputText @bind-Value="Model!.Password" type="password" class="form-control" id="password"
+                           placeholder="Create a password"/>
+                <ValidationMessage For="() => Model!.Password" class="text-danger mt-1"/>
+            </div>
 
-                @:<div class="mb-4">
-                    <label for="confirmPassword" class="form-label">Confirm Password</label>
-                    <InputText @bind-Value="Model.ConfirmPassword" type="password" class="form-control"
-                               id="confirmPassword"
-                               placeholder="Confirm your password"/>
-                }
-
-
+            <div class="mb-4">
+                <label for="confirmPassword" class="form-label">Confirm Password</label>
+                <InputText @bind-Value="Model!.ConfirmPassword" type="password" class="form-control"
+                           id="confirmPassword" placeholder="Confirm your password"/>
+                <ValidationMessage For="() => Model!.ConfirmPassword" class="text-danger mt-1"/>
             </div>
 
             <div class="row g-3">
                 <div class="col-md-6">
-                    <button type="submit" class="btn btn-primary-custom text-white h-100">
+                    <button type="submit" class="btn btn-primary-custom text-white w-100 h-100">
                         Create account
                     </button>
                 </div>
                 <div class="col-md-6">
-                    <a href="/api/auth/github-login" class="btn btn-github h-100">
+                    <a href="/api/auth/github-login"
+                       class="btn btn-github w-100 h-100 d-flex align-items-center justify-content-center gap-2">
                         <i class="bi bi-github fs-4"></i>
-                        Login with your Github account
+                        Login with Github
                     </a>
                 </div>
             </div>
         </EditForm>
     </div>
 </div>
-
-
-<PageTitle>Register</PageTitle>

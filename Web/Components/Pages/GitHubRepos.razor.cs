@@ -21,22 +21,17 @@ public partial class GitHubRepos : ComponentBase
     private List<GitHubRepositoryDto>? _githubRepos;
 
     private bool _isErrorStatus;
-
     private bool _isGitHubUser;
-
     private bool _isLoading = true;
-
     private string? _statusMessage;
 
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    [Inject] private AutoMateDbContext DbContext { get; set; } = null!;
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
 
     [Inject] private IGitHubService GitHubService { get; set; } = null!;
 
     [Inject] private IProjectService ProjectService { get; set; } = null!;
-
-    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
 
 
     /// <summary>
@@ -47,31 +42,12 @@ public partial class GitHubRepos : ComponentBase
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        // Check if the user is authenticated
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        var dbUser = await GetCurrentUserFromDbAsync();
 
-        if (user.Identity is { IsAuthenticated: true })
+        if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
         {
-            // Attempt to find the user in the database
-            var nameIdentifier = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            User? dbUser = null;
-
-            // First, try to parse the NameIdentifier as a GUID to find a local user
-            if (Guid.TryParse(nameIdentifier, out var localUserId))
-                dbUser = await DbContext.Users.FindAsync(localUserId);
-
-            // If not found as a local user, try to find a GitHub user by the NameIdentifier
-            else if (!string.IsNullOrEmpty(nameIdentifier))
-                dbUser = await DbContext.Users.OfType<GitHubUser>()
-                    .FirstOrDefaultAsync(u => u.AccountId == nameIdentifier);
-
-            // If we found a GitHub user with a valid access token, fetch their repositories
-            if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
-            {
-                _isGitHubUser = true;
-                _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken);
-            }
+            _isGitHubUser = true;
+            _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken, false);
         }
 
         _isLoading = false;
@@ -87,42 +63,70 @@ public partial class GitHubRepos : ComponentBase
     /// <param name="repo">The DTO representing the GitHub repository to be saved.</param>
     private async Task SaveProjectAsync(GitHubRepositoryDto repo)
     {
-        // Return if the user is not authenticated
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        var user = await GetCurrentUserFromDbAsync();
 
-        if (!user.Identity?.IsAuthenticated ?? true)
-            return;
-
-        // Attempt to retrieve the user's ID from the claims
-        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        // If the user ID is not a valid GUID, it might be a GitHub account ID
-        if (!Guid.TryParse(userIdString, out var userId))
+        if (user == null || user.Id == Guid.Empty)
         {
-            using var scope = ServiceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-            var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
-
-            if (dbUser != null)
-                userId = dbUser.Id;
+            SetStatusMessage("Authentication error. Please log in again.", true);
+            return;
         }
 
-        if (userId == Guid.Empty)
-            return;
-
-        // Attempt to save the GitHub repository as a project in our system
-        var success = await ProjectService.AddGitHubProjectAsync(userId, repo.Name, repo.HtmlUrl);
+        var success = await ProjectService.AddGitHubProjectAsync(user.Id, repo.Name, repo.HtmlUrl);
 
         if (success)
-        {
-            _statusMessage = $"{repo.Name} successfully saved!";
-            _isErrorStatus = false;
-        }
+            SetStatusMessage($"{repo.Name} successfully saved!", false);
         else
-        {
-            _statusMessage = $"{repo.Name} repository is already saved!";
-            _isErrorStatus = true;
-        }
+            SetStatusMessage($"{repo.Name} repository is already saved!", true);
+    }
+
+
+    /// <summary>
+    ///     Extracts user authentication checks and database fetching into a single, reusable method.
+    ///     Safely handles the DbContext connection for Blazor Server using a Scope.
+    /// </summary>
+    private async Task<User?> GetCurrentUserFromDbAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var claimsPrincipal = authState.User;
+
+        if (!claimsPrincipal.Identity?.IsAuthenticated ?? true)
+            return null;
+
+        var nameIdentifier = claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(nameIdentifier))
+            return null;
+
+        using var scope = ServiceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+
+        // First try to parse as LocalUser (GUID)
+        if (Guid.TryParse(nameIdentifier, out var localUserId))
+            return await db.Users.FindAsync(localUserId);
+
+        // Fallback: GitHubUser uses string-based AccountId
+        return await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == nameIdentifier);
+    }
+
+
+    /// <summary>
+    ///     Sets the status message to be displayed to the user, along with an indication
+    ///     of whether it's an error message or not.
+    /// </summary>
+    /// <param name="message">The message to be displayed.</param>
+    /// <param name="isError">An indication of whether the message is an error.</param>
+    private void SetStatusMessage(string message, bool isError)
+    {
+        _statusMessage = message;
+        _isErrorStatus = isError;
+    }
+
+
+    /// <summary>
+    ///     Clears the current status message and resets the error status flag.
+    /// </summary>
+    private void ClearStatusMessage()
+    {
+        _statusMessage = null;
+        _isErrorStatus = false;
     }
 }

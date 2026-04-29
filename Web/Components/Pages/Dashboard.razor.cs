@@ -46,7 +46,6 @@ public partial class Dashboard : ComponentBase
     /// A flag indicating whether the deployment configuration modal is currently visible to the user.
     private bool _showConfigModal;
 
-
     /// Authentication State Provider for checking user authentication and retrieving user information.
     [Inject]
     private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
@@ -79,33 +78,9 @@ public partial class Dashboard : ComponentBase
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        _currentUserId = await GetCurrentUserIdAsync();
 
-        // Check if the user is authenticated
-        if (user.Identity is { IsAuthenticated: true })
-        {
-            // Try to get the user ID from the claims
-            var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (Guid.TryParse(userIdString, out var userId))
-            {
-                _currentUserId = userId;
-            }
-            else if (!string.IsNullOrEmpty(userIdString))
-            {
-                // If the user ID is not a valid GUID, it might be a GitHub account ID.
-                using var scope = ServiceProvider.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-                var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
-
-                if (dbUser != null)
-                    _currentUserId = dbUser.Id;
-            }
-
-            // If we have a valid user ID, fetch the projects for that user.
-            if (_currentUserId != Guid.Empty)
-                _projects = await ProjectService.GetProjectsAsync(_currentUserId);
-        }
+        if (_currentUserId != Guid.Empty) _projects = await ProjectService.GetProjectsAsync(_currentUserId);
 
         _isLoading = false;
     }
@@ -116,16 +91,18 @@ public partial class Dashboard : ComponentBase
     ///     If it is, it calls the project service to delete the project.
     /// </summary>
     /// <param name="projectId"></param>
-    private async Task DeleteProject(Guid projectId)
+    private async Task DeleteProjectAsync(Guid projectId)
     {
-        if (_currentUserId == Guid.Empty)
-            return;
+        if (_currentUserId == Guid.Empty) return;
 
-        var success = await ProjectService
-            .DeleteProjectAsync(projectId, _currentUserId);
+        ClearMessages();
+
+        var success = await ProjectService.DeleteProjectAsync(projectId, _currentUserId);
 
         if (success && _projects != null)
             _projects.RemoveAll(p => p.Id == projectId);
+        else
+            _globalErrorMessage = "Failed to remove the project. It might have been already deleted.";
     }
 
 
@@ -137,22 +114,24 @@ public partial class Dashboard : ComponentBase
     /// <param name="project"></param>
     private async Task DeployProjectAsync(Project project)
     {
+        ClearMessages();
+
         if (project.SourceType == SourceType.Remote)
         {
-            _globalErrorMessage = "This feature is not yet available for remote projects.";
+            _globalErrorMessage = "Cloud deployment for GitHub projects is not yet available in this version.";
             return;
         }
 
         var csProjectToDeploy = project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+
         if (csProjectToDeploy == null)
         {
-            _globalErrorMessage = $"No web project found in '{project.Name}' to deploy.";
+            _globalErrorMessage = $"No web project found in '{project.Name}' to deploy. Only web apps are supported.";
             return;
         }
 
         try
         {
-            _globalErrorMessage = null;
             _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(project, csProjectToDeploy);
             _selectedProjectPath = csProjectToDeploy.Path;
             _showConfigModal = true;
@@ -168,7 +147,7 @@ public partial class Dashboard : ComponentBase
     ///     Cancels the deployment process by hiding the configuration modal
     ///     and clearing any selected project path or current deployment configuration.
     /// </summary>
-    private void CancelDeployment()
+    private void HideConfigModal()
     {
         _showConfigModal = false;
         _currentDeployConfig = null;
@@ -182,20 +161,16 @@ public partial class Dashboard : ComponentBase
     /// <param name="finalConfig">The final configuration for the project's deployment.</param>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
-        _showConfigModal = false;
-        _selectedProjectPath = null;
+        HideConfigModal(); // Hide modal immediately
+        ClearMessages();
 
         try
         {
-            _globalErrorMessage = null;
-            _globalSuccessMessage = null;
-            _deployingStates[finalConfig.ProjectId] = true;
-            StateHasChanged();
+            SetDeployingState(finalConfig.ProjectId, true);
 
             await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
 
-            _globalSuccessMessage =
-                $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
+            _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
         }
         catch (Exception ex)
         {
@@ -203,9 +178,38 @@ public partial class Dashboard : ComponentBase
         }
         finally
         {
-            _deployingStates[finalConfig.ProjectId] = false;
-            StateHasChanged();
+            SetDeployingState(finalConfig.ProjectId, false);
         }
+    }
+
+
+    /// <summary>
+    ///     Helper method to safely extract the current user's ID from claims or fallback to the database.
+    /// </summary>
+    private async Task<Guid> GetCurrentUserIdAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity?.IsAuthenticated ?? true)
+            return Guid.Empty;
+
+        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (Guid.TryParse(userIdString, out var parsedId))
+            return parsedId;
+
+        // Fallback for GitHub users (AccountId is a string)
+        if (!string.IsNullOrEmpty(userIdString))
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+            var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
+
+            return dbUser?.Id ?? Guid.Empty;
+        }
+
+        return Guid.Empty;
     }
 
 
@@ -213,5 +217,30 @@ public partial class Dashboard : ComponentBase
     private bool IsDeploying(Guid projectId)
     {
         return _deployingStates.GetValueOrDefault(projectId, false);
+    }
+
+
+    /// <summary>
+    ///     Sets the deploying state for a specific project. This is used to track which projects are currently
+    ///     in the process of being deployed, allowing the UI to show appropriate loading indicators and prevent
+    ///     multiple deployments of the same project at the same time.
+    /// </summary>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="isDeploying">Indicates whether the project is currently deploying.</param>
+    private void SetDeployingState(Guid projectId, bool isDeploying)
+    {
+        _deployingStates[projectId] = isDeploying;
+        StateHasChanged();
+    }
+
+
+    /// <summary>
+    ///     Clears any global error or success messages. This is typically called before starting
+    ///     a new operation to ensure that old messages do not persist and confuse the user.
+    /// </summary>
+    private void ClearMessages()
+    {
+        _globalErrorMessage = null;
+        _globalSuccessMessage = null;
     }
 }
