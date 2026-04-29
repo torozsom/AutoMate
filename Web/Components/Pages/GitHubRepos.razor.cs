@@ -47,7 +47,7 @@ public partial class GitHubRepos : ComponentBase
         if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
         {
             _isGitHubUser = true;
-            _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken, false);
+            _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken);
         }
 
         _isLoading = false;
