@@ -2,23 +2,27 @@ services:
   web:
     container_name: {{ project_name | string.downcase }}-web
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: .automate/Dockerfile
     ports:
       - "{{ exposed_port }}:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT={{ environment_name }}
 
       {{- if requires_db }}
-      # --- Automatically generated connection strings for the db ---
-      {{- if db_type == 'PostgreSQL' }}
-      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database={{ db_name }};Username={{ db_user }};Password={{ db_password }}
-      {{- else if db_type == 'MySQL' }}
-      - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database={{ db_name }};Uid={{ db_user }};Pwd={{ db_password }}
-      {{- else if db_type == 'SQLServer' }}
-      - ConnectionStrings__DefaultConnection=Server=db,1433;Database={{ db_name }};User Id={{ db_user }};Password={{ db_password }};TrustServerCertificate=True
-      {{- else if db_type == 'MongoDB' }}
-      - ConnectionStrings__DefaultConnection=mongodb://{{ db_user_encoded }}:{{ db_password_encoded }}@db:27017/{{ db_name }}?authSource=admin
+      # --- Automatically generated connection strings for the databases ---
+      {{- for db in databases }}
+      {{- if db.type == 'PostgreSQL' }}
+      - ConnectionStrings__{{ db.conn_name }}=Host={{ app_name | string.downcase }}-{{ db.container_suffix }};Port=5432;Database={{ db.name }};Username={{ db.user }};Password={{ db.password }}
+      {{- else if db.type == 'MySQL' }}
+      - ConnectionStrings__{{ db.conn_name }}=Server={{ app_name | string.downcase }}-{{ db.container_suffix }};Port=3306;Database={{ db.name }};Uid={{ db.user }};Pwd={{ db.password }}
+      {{- else if db.type == 'SQLServer' }}
+      - ConnectionStrings__{{ db.conn_name }}=Server={{ app_name | string.downcase }}-{{ db.container_suffix }},1433;Database={{ db.name }};User Id={{ db.user }};Password={{ db.password }};TrustServerCertificate=True
+      {{- else if db.type == 'MongoDB' }}
+      - ConnectionStrings__{{ db.conn_name }}=mongodb://{{ db.user_encoded }}:{{ db.password_encoded }}@{{ app_name | string.downcase }}-{{ db.container_suffix }}:27017/{{ db.name }}?authSource=admin
+      {{- else if db.type == 'Redis' }}
+      - ConnectionStrings__{{ db.conn_name }}={{ app_name | string.downcase }}-{{ db.container_suffix }}:6379{{ if db.password != "" }},password={{ db.password }}{{ end }}
+      {{- end }}
       {{- end }}
       {{- end }}
 
@@ -29,46 +33,58 @@ services:
 
     {{- if requires_db }}
     depends_on:
-      - db
+      {{- for db in databases }}
+      - {{ app_name | string.downcase }}-{{ db.container_suffix }}
+      {{- end }}
     {{- end }}
 
 {{ if requires_db }}
-  db:
-    container_name: {{ project_name | string.downcase }}-db
-    {{- if db_type == 'PostgreSQL' }}
+  {{- for db in databases }}
+  {{ app_name | string.downcase }}-{{ db.container_suffix }}:
+    container_name: {{ app_name | string.downcase }}-{{ db.container_suffix }}
+    {{- if db.type == 'PostgreSQL' }}
     image: postgres:15-alpine
     environment:
-      - POSTGRES_USER={{ db_user }}
-      - POSTGRES_PASSWORD={{ db_password }}
-      - POSTGRES_DB={{ db_name }}
+      - POSTGRES_USER={{ db.user }}
+      - POSTGRES_PASSWORD={{ db.password }}
+      - POSTGRES_DB={{ db.name }}
     ports:
       - "5432"
 
-    {{- else if db_type == 'MySQL' }}
+    {{- else if db.type == 'MySQL' }}
     image: mysql:8.0
     environment:
-      - MYSQL_ROOT_PASSWORD={{ db_password }}
-      - MYSQL_DATABASE={{ db_name }}
-      - MYSQL_USER={{ db_user }}
+      - MYSQL_ROOT_PASSWORD={{ db.password }}
+      - MYSQL_DATABASE={{ db.name }}
+      - MYSQL_USER={{ db.user }}
       - MYSQL_PASSWORD={{ db_password }}
     ports:
       - "3306"
 
-    {{- else if db_type == 'SQLServer' }}
+    {{- else if db.type == 'SQLServer' }}
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       - ACCEPT_EULA=Y
-      - MSSQL_SA_PASSWORD={{ db_password }}
+      - MSSQL_SA_PASSWORD={{ db.password }}
     ports:
       - "1433"
 
-    {{- else if db_type == 'MongoDB' }}
+    {{- else if db.type == 'MongoDB' }}
     image: mongo:latest
     environment:
-      - MONGO_INITDB_ROOT_USERNAME={{ db_user }}
-      - MONGO_INITDB_ROOT_PASSWORD={{ db_password }}
-      - MONGO_INITDB_DATABASE={{ db_name }}
+      - MONGO_INITDB_ROOT_USERNAME={{ db.user }}
+      - MONGO_INITDB_ROOT_PASSWORD={{ db.password }}
+      - MONGO_INITDB_DATABASE={{ db.name }}
     ports:
       - "27017"
+
+    {{- else if db.type == 'Redis' }}
+    image: redis:7-alpine
+    {{- if db.password != "" }}
+    command: redis-server --requirepass {{ db.password }}
     {{- end }}
+    ports:
+      - "6379"
+    {{- end }}
+  {{- end }}
 {{ end }}

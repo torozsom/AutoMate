@@ -109,9 +109,8 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
             CsProjectId = csProject.Id,
             ProjectName = project.Name,
             ExposedPort = GetAvailablePort(),
-            RequiresDb = false,
-            DbType = "PostgreSQL",
-            EnvironmentName = "Development"
+            EnvironmentName = "Development",
+            Databases = []
         };
 
         try
@@ -136,12 +135,16 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
                     if (isMatch)
                     {
-                        config.RequiresDb = true;
-                        config.DbType = rule.DbType;
+                        config.Databases.Add(new DatabaseConfigDto
+                        {
+                            DbType = rule.DbType,
+                            ContainerNameSuffix = rule.DbType.ToLower(),
+                            ConnectionStringName = $"{rule.DbType}Connection"
+                        });
+
                         logger.LogInformation(
                             "[ProjectScannerService] Database dependency detected for project '{ProjectName}': {DbType}",
                             project.Name, rule.DbType);
-                        break;
                     }
                 }
         }

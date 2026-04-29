@@ -6,7 +6,7 @@
   },
   {
     "TemplateFile": "dockerignore.scriban",
-    "OutputFile": ".dockerignore",
+    "OutputFile": "Dockerfile.dockerignore",
     "IsActive": true
   },
   {
