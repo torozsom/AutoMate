@@ -13,7 +13,10 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class VerifyEmail : ComponentBase
 {
+    private string _pageTitle = "Email Confirmation";
+
     [Inject] private IAuthService AuthService { get; set; } = null!;
+
     [Inject] private NavigationManager NavigationManager { get; set; } = null!;
 
 
@@ -21,8 +24,8 @@ public partial class VerifyEmail : ComponentBase
     public string? Token { get; set; }
 
     [SupplyParameterFromQuery(Name = "checkemail")]
-    public bool CheckEmail { get; set; }
 
+    public bool CheckEmail { get; set; }
 
     private string? ErrorMessage { get; set; }
 
@@ -36,23 +39,38 @@ public partial class VerifyEmail : ComponentBase
     protected override async Task OnInitializedAsync()
     {
         if (CheckEmail)
+        {
+            _pageTitle = "Check Your Email";
             return;
+        }
 
-        if (string.IsNullOrEmpty(Token))
+        await ProcessEmailVerification();
+    }
+
+    /// <summary>
+    ///     Executes the actual verification logic using the token provided in the URL.
+    /// </summary>
+    private async Task ProcessEmailVerification()
+    {
+        if (string.IsNullOrWhiteSpace(Token))
         {
             ErrorMessage = "Invalid or missing token. Please check the link and try again.";
             return;
         }
 
-        // Validate the token and update the user's email verification status
-        var success = await AuthService.VerifyEmailAsync(Token);
-
-        if (!success)
+        try
         {
-            ErrorMessage = "Invalid token or token has expired. Please check the link and try again.";
-            return;
-        }
+            var success = await AuthService.VerifyEmailAsync(Token);
 
-        NavigationManager.NavigateTo("/login?verified=true");
+            if (success)
+                NavigationManager.NavigateTo("/login?verified=true");
+            else
+                ErrorMessage = "Invalid token or token has expired. Please check the link and try again.";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = "A technical error occurred. Please try again later.\n" +
+                           "Error details: " + ex.Message;
+        }
     }
 }

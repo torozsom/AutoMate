@@ -6,7 +6,9 @@ namespace Web.Components.Layout;
 public partial class NavMenu : ComponentBase
 {
     private bool _isDarkMode;
+
     [Inject] private IJSRuntime JS { get; set; } = null!;
+
 
     /// <summary>
     ///     On the first render, we check the user's theme preference from
@@ -16,11 +18,18 @@ public partial class NavMenu : ComponentBase
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
-        {
-            var theme = await JS.InvokeAsync<string>("window.getTheme");
-            _isDarkMode = theme == "dark";
-            StateHasChanged();
-        }
+            try
+            {
+                // Safely invoke JS
+                var theme = await JS.InvokeAsync<string>("window.getTheme");
+                _isDarkMode = theme == "dark";
+                StateHasChanged();
+            }
+            catch
+            {
+                // Fallback to light mode silently if JS interop fails
+                _isDarkMode = false;
+            }
     }
 
 
@@ -34,6 +43,14 @@ public partial class NavMenu : ComponentBase
     {
         _isDarkMode = !_isDarkMode;
         var theme = _isDarkMode ? "dark" : "light";
-        await JS.InvokeVoidAsync("window.setTheme", theme);
+
+        try
+        {
+            await JS.InvokeVoidAsync("window.setTheme", theme);
+        }
+        catch
+        {
+            // Silently ignore if JS interop fails during toggle
+        }
     }
 }

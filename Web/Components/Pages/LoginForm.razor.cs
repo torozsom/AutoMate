@@ -15,10 +15,12 @@ public partial class LoginForm : ComponentBase
     public string? ErrorMessage { get; set; }
 
     [SupplyParameterFromQuery(Name = "registered")]
-    public string? RegisteredMessage { get; set; }
+    public string? RegisteredQueryParam { get; set; }
 
     [SupplyParameterFromQuery(Name = "verified")]
-    public string? VerifiedMessage { get; set; }
+    public string? VerifiedQueryParam { get; set; }
+
+    public string? SuccessMessage { get; private set; }
 
 
     /// <summary>
@@ -28,11 +30,19 @@ public partial class LoginForm : ComponentBase
     protected override void OnInitialized()
     {
         base.OnInitialized();
+        DetermineSuccessMessage();
+    }
 
-        if (RegisteredMessage == "true")
-            RegisteredMessage = "Registration successful! Please log in with your new account.";
 
-        if (VerifiedMessage == "true")
-            RegisteredMessage = "Email successfully verified! You can now log in to your account.";
+    /// <summary>
+    ///     Evaluates the query parameters and sets the appropriate success message
+    ///     for the user interface.
+    /// </summary>
+    private void DetermineSuccessMessage()
+    {
+        if (string.Equals(RegisteredQueryParam, "true", StringComparison.OrdinalIgnoreCase))
+            SuccessMessage = "Registration successful! Please log in with your new account.";
+        else if (string.Equals(VerifiedQueryParam, "true", StringComparison.OrdinalIgnoreCase))
+            SuccessMessage = "Email successfully verified! You can now log in to your account.";
     }
 }

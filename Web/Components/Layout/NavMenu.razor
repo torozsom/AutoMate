@@ -7,7 +7,7 @@
 <input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
+    <nav class="nav flex-column h-100">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
@@ -15,7 +15,6 @@
         </div>
 
         <AuthorizeView>
-
             <NotAuthorized>
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="/login">
@@ -52,11 +51,11 @@
                     </form>
                 </div>
             </Authorized>
-
         </AuthorizeView>
 
-        <div class="nav-item px-3 mt-auto">
-            <button class="nav-link btn btn-link" @onclick="ToggleTheme">
+        <!-- mt-auto pushes this to the bottom of the flex column -->
+        <div class="nav-item px-3 mt-auto mb-3">
+            <button class="nav-link btn btn-link w-100 text-start" @onclick="ToggleTheme">
                 <span class="bi @(_isDarkMode ? "bi-moon-fill-nav-menu" : "bi-sun-fill-nav-menu")"
                       aria-hidden="true"></span>
                 @(_isDarkMode ? "Dark Mode" : "Light Mode")
@@ -64,5 +63,3 @@
         </div>
     </nav>
 </div>
-
-

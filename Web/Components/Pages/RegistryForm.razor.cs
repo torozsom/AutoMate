@@ -48,9 +48,7 @@ public partial class RegistryForm : ComponentBase
             Model.Username,
             Model.Email,
             Model.Password,
-            token => NavigationManager.GetUriWithQueryParameters(
-                NavigationManager.ToAbsoluteUri("/verify-email").ToString(),
-                new Dictionary<string, object?> { { "token", token } }));
+            GenerateVerificationLink);
 
         if (!success)
         {
@@ -59,6 +57,20 @@ public partial class RegistryForm : ComponentBase
         }
 
         NavigationManager.NavigateTo("/verify-email?checkemail=true");
+    }
+
+
+    /// <summary>
+    ///     Generates the absolute URL required for the email verification process.
+    /// </summary>
+    private string GenerateVerificationLink(string token)
+    {
+        var baseUri = NavigationManager.ToAbsoluteUri("/verify-email").ToString();
+
+        return NavigationManager.GetUriWithQueryParameters(
+            baseUri,
+            new Dictionary<string, object?> { { "token", token } }
+        );
     }
 
 

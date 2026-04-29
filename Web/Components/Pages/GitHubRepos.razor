@@ -3,51 +3,70 @@
 <PageTitle>GitHub Repositories</PageTitle>
 
 <div class="container mt-4">
-    <h1>GitHub Repositories</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>GitHub Repositories</h1>
+    </div>
 
     @if (!string.IsNullOrEmpty(_statusMessage))
     {
-        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show mt-3"
+        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm"
              role="alert">
             @_statusMessage
-            <button type="button" class="btn-close" @onclick="() => _statusMessage = null" aria-label="Close"></button>
+            <button type="button" class="btn-close" @onclick="ClearStatusMessage" aria-label="Close"></button>
         </div>
     }
 
     <AuthorizeView Context="authContext">
         <Authorized>
-            <p>Welcome, @authContext.User.Identity?.Name!</p>
+            <p class="lead">Welcome, <strong>@authContext.User.Identity?.Name</strong>!</p>
 
             @if (_isLoading)
             {
-                <div class="spinner-border text-primary" role="status"></div>
+                <div class="text-center mt-5">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Fetching your repositories from GitHub...</p>
+                </div>
             }
             else if (_githubRepos != null && _githubRepos.Any())
             {
-                <h3 class="mt-4">Here are your GitHub repositories:</h3>
-                <div class="row mt-3">
+                <h3 class="mt-4 mb-3">Here are your GitHub repositories:</h3>
+
+                <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
                     @foreach (var repo in _githubRepos)
                     {
-                        <div class="col-md-4 mb-3">
-                            <div class="card h-100 shadow border-black border-1">
-                                <div class="card-body">
-                                    <h5 class="card-title">
-                                        <i class="bi @(repo.IsPrivate ? "bi-lock-fill text-danger" : "bi-globe text-success")"></i>
+                        <div class="col">
+                            <div class="card h-100 shadow border-2">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title d-flex align-items-center">
+                                        <i class="bi @(repo.IsPrivate ? "bi-lock-fill text-danger" : "bi-globe text-success") me-2"></i>
                                         @repo.Name
                                     </h5>
-                                    <h6 class="card-subtitle mb-2 text-muted">@repo.Language</h6>
-                                    <p class="card-text small text-muted">Updated
-                                        at: @repo.UpdatedAt.ToString("yyyy. MM. dd.")</p>
-                                    <a href="@repo.HtmlUrl" target="_blank" class="btn btn-sm btn-outline-dark">Show in
-                                        GitHub</a>
 
-                                    @if (repo.Language == "C#")
-                                    {
-                                        <button class="btn btn-sm btn-primary m-2"
-                                                @onclick="() => SaveProjectAsync(repo)">Save
-                                        </button>
-                                    }
+                                    <h6 class="card-subtitle mb-3 text-muted">
+                                        <i class="bi bi-code-slash me-1"></i> @(string.IsNullOrEmpty(repo.Language) ? "Unknown" : repo.Language)
+                                    </h6>
 
+                                    <p class="card-text small text-muted mb-4">
+                                        <i class="bi bi-clock-history me-1"></i> Updated
+                                        at: @repo.UpdatedAt.ToString("yyyy. MM. dd.")
+                                    </p>
+
+                                    <div class="mt-auto d-flex gap-2">
+                                        <a href="@repo.HtmlUrl" target="_blank"
+                                           class="btn btn-sm btn-outline-dark w-100">
+                                            <i class="bi bi-github me-1"></i> Show
+                                        </a>
+
+                                        @if (repo.Language == "C#")
+                                        {
+                                            <button class="btn btn-sm btn-primary w-100"
+                                                    @onclick="() => SaveProjectAsync(repo)">
+                                                <i class="bi bi-cloud-download me-1"></i> Save
+                                            </button>
+                                        }
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -56,16 +75,26 @@
             }
             else if (_isGitHubUser)
             {
-                <div class="alert alert-warning">Could not find repositories or access expired.</div>
+                <div class="alert alert-warning mt-4 shadow-sm">
+                    <i class="bi bi-exclamation-triangle me-2"></i> Could not find repositories or your access has
+                    expired.
+                </div>
             }
             else
             {
-                <div class="alert alert-info">You need to login with GitHub to access remote repositories.</div>
+                <div class="alert alert-info mt-4 shadow-sm">
+                    <i class="bi bi-info-circle me-2"></i> You need to link a GitHub account to access remote
+                    repositories.
+                </div>
             }
         </Authorized>
         <NotAuthorized>
-            <p>Please log in to access remote repositories!</p>
-            <a href="/login" class="btn btn-primary">Login</a>
+            <div class="text-center mt-5">
+                <i class="bi bi-github display-1 text-muted mb-3"></i>
+                <h3>Authentication Required</h3>
+                <p class="text-muted">Please log in to access your remote repositories!</p>
+                <a href="/login" class="btn btn-primary mt-2">Login</a>
+            </div>
         </NotAuthorized>
     </AuthorizeView>
 </div>
