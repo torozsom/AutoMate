@@ -210,7 +210,7 @@ public class DockerService : IDockerService, IDisposable
             if (!string.IsNullOrWhiteSpace(e.Data))
                 _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
 
-            _ = _logStreamer.StreamBuildLogsAsync(projectId, $"\x1b[1;31m{e.Data}\x1b[0m\r\n");
+            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
         };
 
         try

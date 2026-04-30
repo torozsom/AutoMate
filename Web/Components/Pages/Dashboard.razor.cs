@@ -160,30 +160,51 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
-    ///     Executes the deployment process using the provided deployment configuration.
+    ///     Initiates the deployment process for a specified project configuration.
+    ///     This method handles the deployment by invoking the local deployment orchestrator,
+    ///     updating the UI state, and managing deployment success or failure messages.
     /// </summary>
-    /// <param name="finalConfig">The final configuration for the project's deployment.</param>
+    /// <param name="finalConfig">
+    ///     The deployment configuration containing details such as project ID,
+    ///     project name, environment settings, and database configuration.
+    /// </param>
+    /// <returns>
+    ///     A task representing the asynchronous deployment operation.
+    /// </returns>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
-        HideConfigModal(); // Hide modal immediately
+        HideConfigModal();
         ClearMessages();
+        SetDeployingState(finalConfig.ProjectId, true);
 
-        try
+        _ = Task.Run(async () =>
         {
-            SetDeployingState(finalConfig.ProjectId, true);
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
 
-            _ = DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
+            try
+            {
+                await orchestrator.DeployLocalProjectAsync(finalConfig);
 
-            NavigationManager.NavigateTo($"/project/{finalConfig.ProjectId}");
-        }
-        catch (Exception ex)
-        {
-            _globalErrorMessage = $"Failed to deploy '{finalConfig.ProjectName}': {ex.Message}";
-        }
-        finally
-        {
-            SetDeployingState(finalConfig.ProjectId, false);
-        }
+                await InvokeAsync(() =>
+                {
+                    _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
+                    SetDeployingState(finalConfig.ProjectId, false);
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() =>
+                {
+                    _globalErrorMessage = $"Failed to deploy '{finalConfig.ProjectName}': {ex.Message}";
+                    SetDeployingState(finalConfig.ProjectId, false);
+                    StateHasChanged();
+                });
+            }
+        });
+
+        NavigationManager.NavigateTo($"/project/{finalConfig.ProjectId}");
     }
 
 

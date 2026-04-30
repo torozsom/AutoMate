@@ -12,6 +12,12 @@ namespace Web.Services;
 /// <param name="hubContext">The SignalR hub context.</param>
 public class RealTimeLogStreamer(IHubContext<LogHub> hubContext) : ILogStreamer
 {
+    /// <summary>
+    ///     Streams build logs for a specific project to connected clients in real-time.
+    /// </summary>
+    /// <param name="projectId">The unique identifier of the project for which logs are being streamed.</param>
+    /// <param name="message">The log message to stream to clients.</param>
+    /// <returns>A task representing the asynchronous operation of streaming the log message.</returns>
     public async Task StreamBuildLogsAsync(Guid projectId, string message)
     {
         await hubContext.Clients
