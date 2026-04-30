@@ -153,7 +153,7 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
     /// </summary>
     /// <param name="userId"></param>
     /// <returns></returns>
-    public async Task<List<Project>> GetProjectsAsync(Guid userId)
+    public async Task<List<Project>> GetUserProjectsAsync(Guid userId)
     {
         return await context.Projects
             .AsNoTracking()
@@ -200,6 +200,22 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
                 projectId);
             return false;
         }
+    }
+
+
+    /// <summary>
+    ///     Retrieves a specific project by its ID for a given user. This method checks if the project exists
+    ///     and belongs to the user before returning it. If the project is found, it includes the associated
+    ///     C# projects in the result.
+    /// </summary>
+    /// <param name="projectId">The unique identifier of the project to retrieve.</param>
+    /// <param name="userId">The unique identifier of the user who owns the project.</param>
+    /// <returns>A task that returns the project if found, or null if not found.</returns>
+    public async Task<Project?> GetProjectByIdAsync(Guid projectId, Guid userId)
+    {
+        return await context.Projects
+            .Include(p => p.CsProjects)
+            .FirstOrDefaultAsync(p => p.Id == projectId && p.UserId == userId);
     }
 
 

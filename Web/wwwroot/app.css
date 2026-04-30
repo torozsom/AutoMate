@@ -74,3 +74,8 @@ h1:focus {
 [data-bs-theme="dark"] .card {
     background-color: var(--bs-secondary-bg);
 }
+
+
+.project-card:hover {
+    transform: translateY(-5px);
+}

@@ -20,5 +20,5 @@ public interface IDockerService
 
 
     /// Executes the 'docker-compose up' command in the specified working directory.
-    Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName);
+    Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId);
 }

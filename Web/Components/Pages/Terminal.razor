@@ -1,0 +1,69 @@
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div id="@Id" style="height: 100%; width: 100%; padding: 10px;"></div>
+
+@code {
+    /// <summary>
+    ///     Unique identifier for the terminal instance, used for JavaScript interop.
+    /// </summary>
+    [Parameter]
+    public string Id { get; set; } = $"terminal-{Guid.NewGuid():N}";
+
+
+    /// <summary>
+    ///     Event callback that is invoked when the terminal instance is ready on the client side,
+    ///     allowing parent components to perform actions once the terminal is initialized.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnReady { get; set; }
+
+
+    /// <summary>
+    ///    Initializes the xterm.js terminal instance on the client side after the component has rendered for the first time.
+    /// </summary>
+    /// <param name="firstRender">The first render indicator.</param>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("xtermWrapper.init", Id);
+
+            // Invoke the OnReady event if it has been provided
+            if (OnReady.HasDelegate)
+            {
+                await OnReady.InvokeAsync();
+            }
+        }
+    }
+
+
+    /// <summary>
+    ///   Writes text to the terminal instance on the client side using JavaScript interop.
+    /// </summary>
+    /// <param name="text">The text to write.</param>
+    public async Task WriteAsync(string text)
+    {
+        await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id, text);
+    }
+
+
+    /// <summary>
+    ///   Writes a line of text to the terminal instance on the client side using JavaScript interop.
+    /// </summary>
+    /// <param name="text">The text to write.</param>
+    public async Task WriteLineAsync(string text)
+    {
+        await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id, text + "\r\n");
+    }
+
+
+    /// <summary>
+    ///     Disposes of the terminal instance on the client side when the
+    ///     component is disposed, ensuring proper cleanup of resources.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        await JSRuntime.InvokeVoidAsync("xtermWrapper.dispose", Id);
+    }
+}

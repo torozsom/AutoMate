@@ -66,6 +66,10 @@ public partial class Dashboard : ComponentBase
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
 
+    /// Navigation manager for handling navigation within the application.
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = null!;
+
 
     /// <summary>
     ///     On initialization, we check if the user is authenticated. If they are,
@@ -80,7 +84,7 @@ public partial class Dashboard : ComponentBase
     {
         _currentUserId = await GetCurrentUserIdAsync();
 
-        if (_currentUserId != Guid.Empty) _projects = await ProjectService.GetProjectsAsync(_currentUserId);
+        if (_currentUserId != Guid.Empty) _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
 
         _isLoading = false;
     }
@@ -168,9 +172,9 @@ public partial class Dashboard : ComponentBase
         {
             SetDeployingState(finalConfig.ProjectId, true);
 
-            await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
+            _ = DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
 
-            _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
+            NavigationManager.NavigateTo($"/project/{finalConfig.ProjectId}");
         }
         catch (Exception ex)
         {
@@ -242,5 +246,15 @@ public partial class Dashboard : ComponentBase
     {
         _globalErrorMessage = null;
         _globalSuccessMessage = null;
+    }
+
+
+    /// <summary>
+    ///     Navigates the user to the project details page for a specific project.
+    /// </summary>
+    /// <param name="projectId">The ID of the project to navigate to.</param>
+    private void NavigateToProject(Guid projectId)
+    {
+        NavigationManager.NavigateTo($"/project/{projectId}");
     }
 }
