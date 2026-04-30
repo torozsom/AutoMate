@@ -50,16 +50,16 @@
                         </button>
                     </form>
                 </div>
+
+                <!-- mt-auto pushes this to the bottom of the flex column -->
+                <div class="nav-item px-3 mt-auto mb-3">
+                    <button class="nav-link btn btn-link w-100 text-start" @onclick="ToggleTheme">
+                        <span class="bi @(_isDarkMode ? "bi-moon-fill-nav-menu" : "bi-sun-fill-nav-menu")"
+                              aria-hidden="true"></span>
+                        @(_isDarkMode ? "Dark Mode" : "Light Mode")
+                    </button>
+                </div>
             </Authorized>
         </AuthorizeView>
-
-        <!-- mt-auto pushes this to the bottom of the flex column -->
-        <div class="nav-item px-3 mt-auto mb-3">
-            <button class="nav-link btn btn-link w-100 text-start" @onclick="ToggleTheme">
-                <span class="bi @(_isDarkMode ? "bi-moon-fill-nav-menu" : "bi-sun-fill-nav-menu")"
-                      aria-hidden="true"></span>
-                @(_isDarkMode ? "Dark Mode" : "Light Mode")
-            </button>
-        </div>
     </nav>
 </div>
