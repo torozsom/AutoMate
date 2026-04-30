@@ -5,6 +5,7 @@ using System.Text.Json;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
+using Services.LogStreaming;
 
 namespace Services.Docker;
 
@@ -18,10 +19,13 @@ public class DockerService : IDockerService, IDisposable
 {
     private const int DefaultContainerPort = 8080;
     private const int DockerComposeTimeoutMinutes = 8;
+
     private const string WindowsDockerUri = "npipe://./pipe/docker_engine";
     private const string UnixDockerUri = "unix:///var/run/docker.sock";
+
     private readonly DockerClient _client;
     private readonly ILogger<DockerService> _logger;
+    private readonly ILogStreamer _logStreamer;
 
 
     /// <summary>
@@ -30,9 +34,10 @@ public class DockerService : IDockerService, IDisposable
     ///     uses a named pipe to connect to the Docker daemon, while for Unix-based systems,
     ///     it uses a Unix socket.
     /// </summary>
-    public DockerService(ILogger<DockerService> logger)
+    public DockerService(ILogger<DockerService> logger, ILogStreamer logStreamer)
     {
         _logger = logger;
+        _logStreamer = logStreamer;
 
         var dockerUri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? new Uri(WindowsDockerUri)
@@ -179,8 +184,9 @@ public class DockerService : IDockerService, IDisposable
     /// </summary>
     /// <param name="workingDir">The working directory where the docker command should be run.</param>
     /// <param name="projectName">The name of the project to be containerized.</param>
+    /// <param name="projectId">The ID of the project.</param>
     /// <returns>Returns an indicator if the docker compose up command was successfully run.</returns>
-    public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName)
+    public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId)
     {
         var safeProjectName = NormalizeProjectName(projectName);
         _logger.LogInformation("[DockerService] Starting 'docker compose up -d' for project '{ProjectName}' " +
@@ -195,12 +201,16 @@ public class DockerService : IDockerService, IDisposable
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
                 _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
+
+            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
         };
 
         process.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrWhiteSpace(e.Data))
                 _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
+
+            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
         };
 
         try

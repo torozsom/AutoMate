@@ -66,6 +66,10 @@ public partial class Dashboard : ComponentBase
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
 
+    /// Navigation manager for handling navigation within the application.
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = null!;
+
 
     /// <summary>
     ///     On initialization, we check if the user is authenticated. If they are,
@@ -80,7 +84,7 @@ public partial class Dashboard : ComponentBase
     {
         _currentUserId = await GetCurrentUserIdAsync();
 
-        if (_currentUserId != Guid.Empty) _projects = await ProjectService.GetProjectsAsync(_currentUserId);
+        if (_currentUserId != Guid.Empty) _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
 
         _isLoading = false;
     }
@@ -156,30 +160,51 @@ public partial class Dashboard : ComponentBase
 
 
     /// <summary>
-    ///     Executes the deployment process using the provided deployment configuration.
+    ///     Initiates the deployment process for a specified project configuration.
+    ///     This method handles the deployment by invoking the local deployment orchestrator,
+    ///     updating the UI state, and managing deployment success or failure messages.
     /// </summary>
-    /// <param name="finalConfig">The final configuration for the project's deployment.</param>
+    /// <param name="finalConfig">
+    ///     The deployment configuration containing details such as project ID,
+    ///     project name, environment settings, and database configuration.
+    /// </param>
+    /// <returns>
+    ///     A task representing the asynchronous deployment operation.
+    /// </returns>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
-        HideConfigModal(); // Hide modal immediately
+        HideConfigModal();
         ClearMessages();
+        SetDeployingState(finalConfig.ProjectId, true);
 
-        try
+        _ = Task.Run(async () =>
         {
-            SetDeployingState(finalConfig.ProjectId, true);
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
 
-            await DeploymentOrchestrator.DeployLocalProjectAsync(finalConfig);
+            try
+            {
+                await orchestrator.DeployLocalProjectAsync(finalConfig);
 
-            _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
-        }
-        catch (Exception ex)
-        {
-            _globalErrorMessage = $"Failed to deploy '{finalConfig.ProjectName}': {ex.Message}";
-        }
-        finally
-        {
-            SetDeployingState(finalConfig.ProjectId, false);
-        }
+                await InvokeAsync(() =>
+                {
+                    _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
+                    SetDeployingState(finalConfig.ProjectId, false);
+                    StateHasChanged();
+                });
+            }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() =>
+                {
+                    _globalErrorMessage = $"Failed to deploy '{finalConfig.ProjectName}': {ex.Message}";
+                    SetDeployingState(finalConfig.ProjectId, false);
+                    StateHasChanged();
+                });
+            }
+        });
+
+        NavigationManager.NavigateTo($"/project/{finalConfig.ProjectId}");
     }
 
 
@@ -242,5 +267,15 @@ public partial class Dashboard : ComponentBase
     {
         _globalErrorMessage = null;
         _globalSuccessMessage = null;
+    }
+
+
+    /// <summary>
+    ///     Navigates the user to the project details page for a specific project.
+    /// </summary>
+    /// <param name="projectId">The ID of the project to navigate to.</param>
+    private void NavigateToProject(Guid projectId)
+    {
+        NavigationManager.NavigateTo($"/project/{projectId}");
     }
 }

@@ -15,8 +15,11 @@ public interface IProjectService
     Task<bool> AddGitHubProjectAsync(Guid userId, string projectName, string gitUrl);
 
     /// Retrieves a list of projects associated with a specific user.
-    Task<List<Project>> GetProjectsAsync(Guid userId);
+    Task<List<Project>> GetUserProjectsAsync(Guid userId);
 
     /// Deletes a specific project associated with a user.
     Task<bool> DeleteProjectAsync(Guid projectId, Guid userId);
+
+    /// Retrieves a specific project by its ID for a given user.
+    Task<Project?> GetProjectByIdAsync(Guid projectId, Guid userId);
 }

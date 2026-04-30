@@ -1,0 +1,95 @@
+@page "/project/{ProjectId:guid}"
+@using Core.Enums
+
+<PageTitle>Project Details</PageTitle>
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <h2 class="mb-0">
+                @if (_project?.SourceType == SourceType.Remote)
+                {
+                    <i class="bi bi-github me-2"></i>
+                }
+                else
+                {
+                    <i class="bi bi-folder2-open me-2 text-warning"></i>
+                }
+                @(_project?.Name ?? "Loading...")
+            </h2>
+        </div>
+
+        @if (_project != null)
+        {
+            <div class="d-flex gap-2">
+                <button class="btn btn-success">
+                    <i class="bi bi-play-fill me-1"></i> Deploy
+                </button>
+                <button class="btn btn-outline-danger">
+                    <i class="bi bi-stop-fill me-1"></i> Stop
+                </button>
+            </div>
+        }
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="d-flex justify-content-center mt-5">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    }
+    else if (_project == null)
+    {
+        <div class="alert alert-danger shadow-sm">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> Project not found or you don't have access.
+        </div>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card bg-dark-subtle border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.8rem;">Status</h6>
+                        <span class="badge bg-secondary fs-6"><i class="bi bi-circle-fill small me-1"></i> Not Deployed</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card bg-dark-subtle border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.8rem;">Source Path</h6>
+                        <p class="mb-0 font-monospace text-truncate" title="@_project.SourcePathOrUrl">
+                            @_project.SourcePathOrUrl
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-secondary border-opacity-25 bg-dark">
+            <div class="card-header border-bottom border-secondary border-opacity-25 pt-3 pb-0">
+                <ul class="nav nav-tabs border-0" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link text-light bg-dark border-secondary border-opacity-50 active" type="button" role="tab">
+                            <i class="bi bi-hammer me-1"></i> Build Logs
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link text-secondary bg-transparent border-0" type="button" role="tab">
+                            <i class="bi bi-globe me-1"></i> Web App
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link text-secondary bg-transparent border-0" type="button" role="tab">
+                            <i class="bi bi-database me-1"></i> Database
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body p-0" style="height: 450px; background-color: #1e1e1e; overflow: hidden;">
+                <Terminal @ref="_buildTerminal" Id="build-logs-term" OnReady="OnTerminalReady" />
+            </div>
+        </div>
+    }
+</div>

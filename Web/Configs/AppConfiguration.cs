@@ -50,6 +50,9 @@ public static class AppConfiguration
         // Use antiforgery middleware to protect against cross-site request forgery (CSRF) attacks.
         app.UseAntiforgery();
 
+        // Map Blazor Hub for real-time communication.
+        app.MapHub<Hubs.LogHub>("/loghub");
+
         // Configure endpoints
         var endpoints = app.Services.GetServices<IEndpoint>();
         foreach (var endpoint in endpoints)

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Services.Data;
 using Services.Docker;
+using Services.LogStreaming;
 using Services.Scanner;
 using Services.Templating;
 
@@ -110,7 +111,7 @@ public class LocalDeploymentOrchestrator(
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 4/4: Starting Docker Compose deployment...");
         await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Starting);
 
-        var isDockerSuccess = await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName);
+        var isDockerSuccess = await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName, config.ProjectId);
 
         if (!isDockerSuccess)
             throw new InvalidOperationException("Docker Compose process returned an error or timed out. " +

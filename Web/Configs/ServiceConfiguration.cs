@@ -10,6 +10,7 @@ using Services.Data;
 using Services.Docker;
 using Services.Email;
 using Services.GitHub;
+using Services.LogStreaming;
 using Services.Orchestration;
 using Services.Projects;
 using Services.Scanner;
@@ -133,6 +134,11 @@ public static class ServiceConfiguration
             options.InstanceName = "AutoMate_";
         });
 
+        // Add SignalR services to the container.
+        builder.Services.AddSignalR();
+
+        // Add a scoped service for streaming logs in real-time to connected clients using SignalR.
+        builder.Services.AddScoped<ILogStreamer, Services.RealTimeLogStreamer>();
 
         // Add services for authentication and user management
         builder.Services.AddScoped<IAuthService, AuthService>();
