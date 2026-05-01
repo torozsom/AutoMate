@@ -21,4 +21,7 @@ public interface IDockerService
 
     /// Executes the 'docker-compose up' command in the specified working directory.
     Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId);
+
+    /// Starts streaming logs for a specified container to the log streamer.
+    Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId, CancellationToken cancellationToken);
 }

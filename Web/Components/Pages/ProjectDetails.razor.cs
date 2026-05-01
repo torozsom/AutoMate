@@ -7,6 +7,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
+using Services.Scanner;
 
 namespace Web.Components.Pages;
 
@@ -35,30 +36,84 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject]
     private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
 
+    [Inject]
+    private IProjectScannerService ProjectScanner { get; set; } = null!;
+
     private Project? _project;
     private bool _isLoading = true;
 
     private Terminal? _buildTerminal;
+    private Terminal? _webTerminal;
+    private Dictionary<string, Terminal> _dbTerminals = new();
 
     private HubConnection? _hubConnection;
 
+    private string _activeTab = "build";
+    private IEnumerable<DatabaseTab> _databaseTabs = [];
+
+    /// A record type representing a database tab in the UI.
+    private record DatabaseTab(string Provider, string TabId, string DisplayName);
+
 
     /// <summary>
-    ///     Initializes the component by retrieving the current authenticated user's ID and fetching the project details
-    ///     based on the provided ProjectId. If the user is not authenticated, it will not attempt to fetch the project
-    ///     and will simply set the loading state to false.
+    ///     Asynchronously initializes the component by retrieving the current user's ID and fetching the project details
+    ///     based on the provided ProjectId. If the project is found, it analyzes the project's dependencies to determine
+    ///     the databases used and prepares the database tabs for display.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
         var currentUserId = await GetCurrentUserIdAsync();
 
         if (currentUserId != Guid.Empty)
+        {
             _project = await ProjectService.GetProjectByIdAsync(ProjectId, currentUserId);
+
+            if (_project != null)
+            {
+                var csProject = _project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+                if (csProject != null)
+                {
+                    var config = await ProjectScanner.AnalyzeDependenciesAsync(_project, csProject);
+                    _databaseTabs = config.Databases
+                        .Select(db =>
+                            new DatabaseTab(db.DbType, db.ContainerNameSuffix, db.DbType))
+                        .ToList();
+                }
+            }
+        }
 
         _isLoading = false;
     }
 
 
+    /// Sets the active tab in the UI based on the provided tab ID.
+    private void SetActiveTab(string tabId)
+    {
+        _activeTab = tabId;
+    }
+
+
+    /// Retrieves the CSS class for a tab based on whether it is the active tab or not.
+    private string GetTabClass(string tabId) =>
+        _activeTab == tabId ? "text-light bg-dark border-secondary border-opacity-50 active" : "text-secondary bg-transparent border-0";
+
+
+    /// Retrieves the inline style for a terminal based on whether its corresponding tab is active or not.
+    private string GetTerminalStyle(string tabId) =>
+        _activeTab == tabId ? "position: absolute; inset: 0; z-index: 1; visibility: visible;" : "position: absolute; inset: 0; z-index: 0; visibility: hidden;";
+
+
+    /// Retrieves the list of database tabs to be displayed in the UI.
+    private IEnumerable<DatabaseTab> GetDatabaseTabs() => _databaseTabs;
+
+
+    /// <summary>
+    ///     Executes logic after the component has been rendered. On the first render, establishes a SignalR connection
+    ///     to the server for real-time updates and joins a project-specific group using a secure token. Registers handlers
+    ///     for receiving build and container logs. This method is only executed during the first render to set up necessary
+    ///     resources for the project details page.
+    /// </summary>
+    /// <param name="firstRender">Indicates whether this is the first time the component is being rendered.</param>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -71,11 +126,22 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
                 .Build();
 
+
             _hubConnection.On<string>("ReceiveBuildLog", async (message) =>
             {
                 if (_buildTerminal != null)
-                {
                     await _buildTerminal.WriteAsync(message);
+            });
+
+            _hubConnection.On<string, string>("ReceiveContainerLog", async (containerIdentifier, message) =>
+            {
+                if (containerIdentifier == "web" && _webTerminal != null)
+                {
+                    await _webTerminal.WriteAsync(message);
+                }
+                else if (_dbTerminals.TryGetValue(containerIdentifier, out var dbTerminal))
+                {
+                    await dbTerminal.WriteAsync(message);
                 }
             });
 
@@ -96,14 +162,27 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     ///     This method is called when the terminal component is ready. It writes an initial message to the terminal
     ///     indicating that the AutoMate Terminal has been initialized and is waiting for deployment logs.
     /// </summary>
-    private async Task OnTerminalReady()
+    private static async Task OnTerminalReady(Terminal? terminal, string componentName)
     {
-        if (_buildTerminal != null)
+        if (terminal != null)
         {
-            await _buildTerminal.WriteLineAsync("\x1b[1;32mAutoMate Terminal Initialized...\x1b[0m");
-            await _buildTerminal.WriteLineAsync("Waiting for deployment logs...");
-            await _buildTerminal.WriteAsync("$ ");
+            await terminal.WriteLineAsync($"\x1b[1;32mAutoMate {componentName} Terminal Initialized...\x1b[0m");
+            await terminal.WriteLineAsync("Waiting for logs...");
+            await terminal.WriteAsync("$ ");
         }
+    }
+
+
+    /// <summary>
+    ///     This method is called when the build terminal component is ready. It calls the
+    ///     OnTerminalReady method with the build terminal instance and the component name "Build".
+    /// </summary>
+    /// <param name="tabId"></param>
+    /// <param name="dbType"></param>
+    private async Task OnDbTerminalReady(string tabId, string dbType)
+    {
+        if (_dbTerminals.TryGetValue(tabId, out var terminal))
+            await OnTerminalReady(terminal, dbType);
     }
 
 

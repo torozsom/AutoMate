@@ -1,6 +1,6 @@
 namespace Core.DTO;
 
-public record DatabaseConfigDto()
+public record DatabaseConfigDto
 {
     public string DbType { get; set; } = string.Empty;
 

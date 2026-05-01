@@ -24,4 +24,18 @@ public class RealTimeLogStreamer(IHubContext<LogHub> hubContext) : ILogStreamer
             .Group($"project-{projectId}")
             .SendCoreAsync("ReceiveBuildLog", [message]);
     }
+
+    /// <summary>
+    ///     Streams container logs for a specific project and container to connected clients in real-time.
+    /// </summary>
+    /// <param name="projectId">The unique identifier of the project for which logs are being streamed.</param>
+    /// <param name="containerName">The name of the container for which logs are being streamed.</param>
+    /// <param name="message">The log message to stream to clients.</param>
+    /// <returns>A task representing the asynchronous operation of streaming the log message.</returns>
+    public async Task StreamContainerLogsAsync(Guid projectId, string containerName, string message)
+    {
+        await hubContext.Clients
+            .Group($"project-{projectId}")
+            .SendCoreAsync("ReceiveContainerLog", [containerName, message]);
+    }
 }

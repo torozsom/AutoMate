@@ -2,6 +2,7 @@ using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Services.Data;
 using Services.Docker;
@@ -21,7 +22,8 @@ public class LocalDeploymentOrchestrator(
     IProjectScannerService projectScanner,
     ITemplateService templateService,
     IDockerService dockerService,
-    ILogger<LocalDeploymentOrchestrator> logger)
+    ILogger<LocalDeploymentOrchestrator> logger,
+    Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
     : ILocalDeploymentOrchestrator
 {
     /// <summary>
@@ -121,6 +123,43 @@ public class LocalDeploymentOrchestrator(
         logger.LogInformation("--- Deployment Finished Successfully! System live at {Url} ---", systemUrl);
 
         await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Running, $"System live at {systemUrl}");
+
+        // Start streaming container logs in the background using a new scope so it outlives this request scope
+        _ = Task.Run(async () =>
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var scopedDockerService = scope.ServiceProvider.GetRequiredService<IDockerService>();
+
+            var appName = config.ProjectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
+            var streamingTasks = new List<Task>();
+
+            // Web container
+            var webContainerName = $"{csProject.Name.ToLowerInvariant()}-web";
+
+            streamingTasks.Add(scopedDockerService.StreamContainerLogsAsync(
+                webContainerName,
+                config.ProjectId,
+                "web",
+                CancellationToken.None)
+            );
+
+            // Database containers
+            if (config.Databases != null)
+            {
+                foreach (var db in config.Databases)
+                {
+                    var dbContainerName = $"{appName}-{db.ContainerNameSuffix}";
+                    streamingTasks.Add(scopedDockerService.StreamContainerLogsAsync(
+                        dbContainerName,
+                        config.ProjectId,
+                        db.ContainerNameSuffix,
+                        CancellationToken.None)
+                    );
+                }
+            }
+
+            await Task.WhenAll(streamingTasks);
+        });
     }
 
 
@@ -143,9 +182,6 @@ public class LocalDeploymentOrchestrator(
         try
         {
             deployment.Status = status;
-            if (logs != null)
-                deployment.Logs = logs;
-
             await dbContext.SaveChangesAsync();
         }
         catch (DbUpdateException ex)
