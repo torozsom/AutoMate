@@ -252,6 +252,53 @@ public class DockerService : IDockerService, IDisposable
 
 
     /// <summary>
+    ///     Starts streaming logs for a specified container to the log streamer.
+    /// </summary>
+    /// <param name="containerName">The name of the container to stream logs from.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="containerSuffixOrTabId">The tab ID or suffix associated with the container.</param>
+    /// <param name="cancellationToken">A token to cancel the streaming process.</param>
+    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("[DockerService] Starting to stream logs for container '{ContainerName}'", containerName);
+            var logParams = new ContainerLogsParameters
+            {
+                ShowStdout = true,
+                ShowStderr = true,
+                Follow = true,
+                Tail = "100"
+            };
+
+            using var multiplexedStream = await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
+            
+            var buffer = new byte[81920];
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var readResult = await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
+                if (readResult.EOF)
+                    break;
+
+                if (readResult.Count > 0)
+                {
+                    var logLine = System.Text.Encoding.UTF8.GetString(buffer, 0, readResult.Count);
+                    await _logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("[DockerService] Stopped streaming logs for container '{ContainerName}' (cancelled).", containerName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DockerService] Error streaming logs for container '{ContainerName}'.", containerName);
+        }
+    }
+
+
+    /// <summary>
     ///     Creates a tar context by packaging the specified source directory into a tar file.
     ///     The method respects the .dockerignore file, if present, to exclude certain files and directories
     ///     from being included in the tar. If no .dockerignore file exists, a default set of ignored paths is used.
