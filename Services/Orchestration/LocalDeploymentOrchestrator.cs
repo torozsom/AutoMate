@@ -143,9 +143,6 @@ public class LocalDeploymentOrchestrator(
         try
         {
             deployment.Status = status;
-            if (logs != null)
-                deployment.Logs = logs;
-
             await dbContext.SaveChangesAsync();
         }
         catch (DbUpdateException ex)

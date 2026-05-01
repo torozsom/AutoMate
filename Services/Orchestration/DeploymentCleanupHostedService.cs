@@ -63,8 +63,7 @@ public class DeploymentCleanupHostedService(
             var updatedCount = await dbContext.Deployments
                 .Where(d => d.Status == DeploymentStatus.Building || d.Status == DeploymentStatus.Starting)
                 .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(d => d.Status, DeploymentStatus.Failed)
-                        .SetProperty(d => d.Logs, d => d.Logs + SystemFailureLog),
+                        .SetProperty(d => d.Status, DeploymentStatus.Failed),
                     cancellationToken);
 
             if (updatedCount > 0)
