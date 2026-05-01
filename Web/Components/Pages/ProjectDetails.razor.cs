@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.SignalR.Client;
 using Services.Projects;
 using System.Security.Claims;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
 
@@ -30,6 +31,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
+
+    [Inject]
+    private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
 
     private Project? _project;
     private bool _isLoading = true;
@@ -59,6 +63,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (firstRender)
         {
+            var userId = await GetCurrentUserIdAsync();
+            var protector = DataProtectionProvider.CreateProtector("LogHub");
+            var secureToken = protector.Protect($"{ProjectId}:{userId}");
+
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
                 .Build();
@@ -74,7 +82,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             try
             {
                 await _hubConnection.StartAsync();
-                await _hubConnection.SendAsync("JoinProjectGroup", ProjectId);
+                await _hubConnection.SendAsync("JoinProjectGroup", ProjectId, secureToken);
             }
             catch (Exception ex)
             {
