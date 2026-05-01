@@ -64,6 +64,17 @@
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        await JSRuntime.InvokeVoidAsync("xtermWrapper.dispose", Id);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("xtermWrapper.dispose", Id);
+        }
+        catch (JSDisconnectedException jsdex)
+        {
+            Console.WriteLine($"JS interop failed during disposal of terminal '{Id}': {jsdex.Message}");
+        }
+        catch (TaskCanceledException tcex)
+        {
+            Console.WriteLine($"Task was canceled during disposal of terminal '{Id}': {tcex.Message}");
+        }
     }
 }
