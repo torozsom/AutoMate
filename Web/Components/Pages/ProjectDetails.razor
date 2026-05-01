@@ -70,25 +70,51 @@
         <div class="card shadow-sm border-secondary border-opacity-25 bg-dark">
             <div class="card-header border-bottom border-secondary border-opacity-25 pt-3 pb-0">
                 <ul class="nav nav-tabs border-0" role="tablist">
+                    <!-- Build Logs -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link text-light bg-dark border-secondary border-opacity-50 active" type="button" role="tab">
+                        <button class="nav-link @GetTabClass("build")" type="button" role="tab" @onclick='() => SetActiveTab("build")'>
                             <i class="bi bi-hammer me-1"></i> Build Logs
                         </button>
                     </li>
+
+                    <!-- Web App -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link text-secondary bg-transparent border-0" type="button" role="tab">
+                        <button class="nav-link @GetTabClass("web")" type="button" role="tab" @onclick='() => SetActiveTab("web")'>
                             <i class="bi bi-globe me-1"></i> Web App
                         </button>
                     </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link text-secondary bg-transparent border-0" type="button" role="tab">
-                            <i class="bi bi-database me-1"></i> Database
-                        </button>
-                    </li>
+
+                    @foreach (var db in GetDatabaseTabs())
+                    {
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab" @onclick="() => SetActiveTab(db.TabId)">
+                                <i class="bi bi-database me-1"></i> @db.DisplayName
+                            </button>
+                        </li>
+                    }
                 </ul>
             </div>
-            <div class="card-body p-0" style="height: 450px; background-color: #1e1e1e; overflow: hidden;">
-                <Terminal @ref="_buildTerminal" Id="build-logs-term" OnReady="OnTerminalReady" />
+            <div class="card-body p-0" style="height: 450px; background-color: #1e1e1e; overflow: hidden; position: relative;">
+
+                <!-- Build Logs Terminal -->
+                <div style="@GetTerminalStyle("build")">
+                    <Terminal @ref="_buildTerminal" Id="build-logs-term" OnReady='() => OnTerminalReady(_buildTerminal, "Build")' />
+                </div>
+
+                <!-- Web App Terminal -->
+                <div style="@GetTerminalStyle("web")">
+                    <Terminal @ref="_webTerminal" Id="web-logs-term" OnReady='() => OnTerminalReady(_webTerminal, "Web App")' />
+                </div>
+
+                <!-- Database Terminals -->
+                @foreach (var db in GetDatabaseTabs())
+                {
+                    <div style="@GetTerminalStyle(db.TabId)">
+                        <Terminal @ref="_dbTerminals[db.TabId]"
+                                  Id="@($"term-{db.TabId}")"
+                                  OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)' />
+                    </div>
+                }
             </div>
         </div>
     }
