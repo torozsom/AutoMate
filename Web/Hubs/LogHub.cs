@@ -1,11 +1,10 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.SignalR;
 using Services.Projects;
 
 namespace Web.Hubs;
-
 
 /// <summary>
 ///     A SignalR hub that manages real-time communication for project logs. Clients can join or leave groups based on

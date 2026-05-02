@@ -1,12 +1,12 @@
+using System.Security.Claims;
 using Core.Entities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.SignalR.Client;
-using Services.Projects;
-using System.Security.Claims;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Services.Data;
+using Services.Projects;
 using Services.Scanner;
 
 namespace Web.Components.Pages;
@@ -18,41 +18,47 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 {
-    [Parameter]
-    public Guid ProjectId { get; set; }
-
-    [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
-
-    [Inject]
-    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
-
-    [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = null!;
-
-    [Inject]
-    private NavigationManager NavigationManager { get; set; } = null!;
-
-    [Inject]
-    private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
-
-    [Inject]
-    private IProjectScannerService ProjectScanner { get; set; } = null!;
-
-    private Project? _project;
-    private bool _isLoading = true;
-
-    private Terminal? _buildTerminal;
-    private Terminal? _webTerminal;
-    private Dictionary<string, Terminal> _dbTerminals = new();
-
-    private HubConnection? _hubConnection;
+    private readonly Dictionary<string, Terminal> _dbTerminals = new();
 
     private string _activeTab = "build";
+
+    private Terminal? _buildTerminal;
     private IEnumerable<DatabaseTab> _databaseTabs = [];
 
-    /// A record type representing a database tab in the UI.
-    private record DatabaseTab(string Provider, string TabId, string DisplayName);
+    private HubConnection? _hubConnection;
+    private bool _isLoading = true;
+
+    private Project? _project;
+    private Terminal? _webTerminal;
+
+    [Parameter] public Guid ProjectId { get; set; }
+
+    [Inject] private IProjectService ProjectService { get; set; } = null!;
+
+    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+
+    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
+
+    [Inject] private NavigationManager NavigationManager { get; set; } = null!;
+
+    [Inject] private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
+
+    [Inject] private IProjectScannerService ProjectScanner { get; set; } = null!;
+
+
+    /// <summary>
+    ///     Disposes of the component by leaving the SignalR group
+    ///     associated with the project and disposing of the hub connection.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+        {
+            if (_hubConnection.State == HubConnectionState.Connected)
+                await _hubConnection.SendAsync("LeaveProjectGroup", ProjectId);
+            GC.SuppressFinalize(this);
+        }
+    }
 
 
     /// <summary>
@@ -94,17 +100,28 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// Retrieves the CSS class for a tab based on whether it is the active tab or not.
-    private string GetTabClass(string tabId) =>
-        _activeTab == tabId ? "text-light bg-dark border-secondary border-opacity-50 active" : "text-secondary bg-transparent border-0";
+    private string GetTabClass(string tabId)
+    {
+        return _activeTab == tabId
+            ? "text-light bg-dark border-secondary border-opacity-50 active"
+            : "text-secondary bg-transparent border-0";
+    }
 
 
     /// Retrieves the inline style for a terminal based on whether its corresponding tab is active or not.
-    private string GetTerminalStyle(string tabId) =>
-        _activeTab == tabId ? "position: absolute; inset: 0; z-index: 1; visibility: visible;" : "position: absolute; inset: 0; z-index: 0; visibility: hidden;";
+    private string GetTerminalStyle(string tabId)
+    {
+        return _activeTab == tabId
+            ? "position: absolute; inset: 0; z-index: 1; visibility: visible;"
+            : "position: absolute; inset: 0; z-index: 0; visibility: hidden;";
+    }
 
 
     /// Retrieves the list of database tabs to be displayed in the UI.
-    private IEnumerable<DatabaseTab> GetDatabaseTabs() => _databaseTabs;
+    private IEnumerable<DatabaseTab> GetDatabaseTabs()
+    {
+        return _databaseTabs;
+    }
 
 
     /// <summary>
@@ -127,7 +144,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 .Build();
 
 
-            _hubConnection.On<string>("ReceiveBuildLog", async (message) =>
+            _hubConnection.On<string>("ReceiveBuildLog", async message =>
             {
                 if (_buildTerminal != null)
                     await _buildTerminal.WriteAsync(message);
@@ -136,13 +153,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _hubConnection.On<string, string>("ReceiveContainerLog", async (containerIdentifier, message) =>
             {
                 if (containerIdentifier == "web" && _webTerminal != null)
-                {
                     await _webTerminal.WriteAsync(message);
-                }
                 else if (_dbTerminals.TryGetValue(containerIdentifier, out var dbTerminal))
-                {
                     await dbTerminal.WriteAsync(message);
-                }
             });
 
             try
@@ -220,20 +233,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         return Guid.Empty;
     }
 
-
-    /// <summary>
-    ///     Disposes of the component by leaving the SignalR group
-    ///     associated with the project and disposing of the hub connection.
-    /// </summary>
-    public async ValueTask DisposeAsync()
-    {
-        if (_hubConnection is not null)
-        {
-            if (_hubConnection.State == HubConnectionState.Connected)
-            {
-                await _hubConnection.SendAsync("LeaveProjectGroup", ProjectId);
-            }
-            GC.SuppressFinalize(this);
-        }
-    }
+    /// A record type representing a database tab in the UI.
+    private record DatabaseTab(string Provider, string TabId, string DisplayName);
 }

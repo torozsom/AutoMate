@@ -18,6 +18,7 @@ using Services.Templating;
 using Web.Extensions;
 using Web.Routes.Endpoints;
 using Web.Routes.Endpoints.Auth;
+using Web.Services;
 
 namespace Web.Configs;
 
@@ -138,7 +139,7 @@ public static class ServiceConfiguration
         builder.Services.AddSignalR();
 
         // Add a scoped service for streaming logs in real-time to connected clients using SignalR.
-        builder.Services.AddScoped<ILogStreamer, Services.RealTimeLogStreamer>();
+        builder.Services.AddScoped<ILogStreamer, RealTimeLogStreamer>();
 
         // Add services for authentication and user management
         builder.Services.AddScoped<IAuthService, AuthService>();

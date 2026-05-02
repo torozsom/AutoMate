@@ -72,14 +72,16 @@
                 <ul class="nav nav-tabs border-0" role="tablist">
                     <!-- Build Logs -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("build")" type="button" role="tab" @onclick='() => SetActiveTab("build")'>
+                        <button class="nav-link @GetTabClass("build")" type="button" role="tab"
+                                @onclick='() => SetActiveTab("build")'>
                             <i class="bi bi-hammer me-1"></i> Build Logs
                         </button>
                     </li>
 
                     <!-- Web App -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("web")" type="button" role="tab" @onclick='() => SetActiveTab("web")'>
+                        <button class="nav-link @GetTabClass("web")" type="button" role="tab"
+                                @onclick='() => SetActiveTab("web")'>
                             <i class="bi bi-globe me-1"></i> Web App
                         </button>
                     </li>
@@ -87,23 +89,27 @@
                     @foreach (var db in GetDatabaseTabs())
                     {
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab" @onclick="() => SetActiveTab(db.TabId)">
+                            <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab"
+                                    @onclick="() => SetActiveTab(db.TabId)">
                                 <i class="bi bi-database me-1"></i> @db.DisplayName
                             </button>
                         </li>
                     }
                 </ul>
             </div>
-            <div class="card-body p-0" style="height: 450px; background-color: #1e1e1e; overflow: hidden; position: relative;">
+            <div class="card-body p-0"
+                 style="height: 450px; background-color: #1e1e1e; overflow: hidden; position: relative;">
 
                 <!-- Build Logs Terminal -->
                 <div style="@GetTerminalStyle("build")">
-                    <Terminal @ref="_buildTerminal" Id="build-logs-term" OnReady='() => OnTerminalReady(_buildTerminal, "Build")' />
+                    <Terminal @ref="_buildTerminal" Id="build-logs-term"
+                              OnReady='() => OnTerminalReady(_buildTerminal, "Build")'/>
                 </div>
 
                 <!-- Web App Terminal -->
                 <div style="@GetTerminalStyle("web")">
-                    <Terminal @ref="_webTerminal" Id="web-logs-term" OnReady='() => OnTerminalReady(_webTerminal, "Web App")' />
+                    <Terminal @ref="_webTerminal" Id="web-logs-term"
+                              OnReady='() => OnTerminalReady(_webTerminal, "Web App")'/>
                 </div>
 
                 <!-- Database Terminals -->
@@ -112,7 +118,7 @@
                     <div style="@GetTerminalStyle(db.TabId)">
                         <Terminal @ref="_dbTerminals[db.TabId]"
                                   Id="@($"term-{db.TabId}")"
-                                  OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)' />
+                                  OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)'/>
                     </div>
                 }
             </div>

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using Docker.DotNet;
 using Docker.DotNet.Models;
@@ -258,11 +259,13 @@ public class DockerService : IDockerService, IDisposable
     /// <param name="projectId">The ID of the project.</param>
     /// <param name="containerSuffixOrTabId">The tab ID or suffix associated with the container.</param>
     /// <param name="cancellationToken">A token to cancel the streaming process.</param>
-    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId, CancellationToken cancellationToken)
+    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            _logger.LogInformation("[DockerService] Starting to stream logs for container '{ContainerName}'", containerName);
+            _logger.LogInformation("[DockerService] Starting to stream logs for container '{ContainerName}'",
+                containerName);
             var logParams = new ContainerLogsParameters
             {
                 ShowStdout = true,
@@ -271,8 +274,9 @@ public class DockerService : IDockerService, IDisposable
                 Tail = "100"
             };
 
-            using var multiplexedStream = await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
-            
+            using var multiplexedStream =
+                await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
+
             var buffer = new byte[81920];
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -282,18 +286,21 @@ public class DockerService : IDockerService, IDisposable
 
                 if (readResult.Count > 0)
                 {
-                    var logLine = System.Text.Encoding.UTF8.GetString(buffer, 0, readResult.Count);
+                    var logLine = Encoding.UTF8.GetString(buffer, 0, readResult.Count);
                     await _logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
                 }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogInformation("[DockerService] Stopped streaming logs for container '{ContainerName}' (cancelled).", containerName);
+            _logger.LogInformation(
+                "[DockerService] Stopped streaming logs for container '{ContainerName}' (cancelled)," +
+                "exception: {Exception}.", containerName, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DockerService] Error streaming logs for container '{ContainerName}'.", containerName);
+            _logger.LogError(ex, "[DockerService] Error streaming logs for container '{ContainerName}'.",
+                containerName);
         }
     }
 

@@ -14,8 +14,9 @@
                         @switch (_isDockerRunning)
                         {
                             case null:
-                                <div class="docker-status-pill text-muted border border-secondary border-opacity-25 bg-light"
-                                     title="Checking Docker status...">
+                                <div
+                                    class="docker-status-pill text-muted border border-secondary border-opacity-25 bg-light"
+                                    title="Checking Docker status...">
                                     <span class="spinner-border spinner-border-sm me-2" role="status"></span>
                                     <span class="small fw-semibold">Connecting to Docker...</span>
                                 </div>
@@ -25,7 +26,8 @@
                                     class="docker-status-pill bg-success bg-opacity-10 border border-success border-opacity-25 text-success"
                                     title="Docker Engine Online">
                                     <div class="blob green"></div>
-                                    <i class="bi bi-docker me-1"></i> <span class="fw-semibold">Docker Engine Online</span>
+                                    <i class="bi bi-docker me-1"></i> <span
+                                        class="fw-semibold">Docker Engine Online</span>
                                 </div>
                                 break;
                             case false:

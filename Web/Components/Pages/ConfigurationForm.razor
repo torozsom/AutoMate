@@ -40,8 +40,10 @@
                 {
                     @foreach (var db in Config.Databases)
                     {
-                        <div class="bg-secondary bg-opacity-10 border border-secondary p-3 rounded-3 mb-3 position-relative">
-                            <button type="button" class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2"
+                        <div
+                            class="bg-secondary bg-opacity-10 border border-secondary p-3 rounded-3 mb-3 position-relative">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2"
                                     @onclick="@(() => RemoveDatabase(db))" title="Remove database">
                                 <i class="bi bi-trash"></i> X
                             </button>

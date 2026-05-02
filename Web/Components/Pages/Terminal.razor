@@ -4,6 +4,7 @@
 <div id="@Id" style="height: 100%; width: 100%; padding: 10px;"></div>
 
 @code {
+
     /// <summary>
     ///     Unique identifier for the terminal instance, used for JavaScript interop.
     /// </summary>
@@ -20,7 +21,7 @@
 
 
     /// <summary>
-    ///    Initializes the xterm.js terminal instance on the client side after the component has rendered for the first time.
+    ///     Initializes the xterm.js terminal instance on the client side after the component has rendered for the first time.
     /// </summary>
     /// <param name="firstRender">The first render indicator.</param>
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -39,7 +40,7 @@
 
 
     /// <summary>
-    ///   Writes text to the terminal instance on the client side using JavaScript interop.
+    ///     Writes text to the terminal instance on the client side using JavaScript interop.
     /// </summary>
     /// <param name="text">The text to write.</param>
     public async Task WriteAsync(string text)
@@ -49,7 +50,7 @@
 
 
     /// <summary>
-    ///   Writes a line of text to the terminal instance on the client side using JavaScript interop.
+    ///     Writes a line of text to the terminal instance on the client side using JavaScript interop.
     /// </summary>
     /// <param name="text">The text to write.</param>
     public async Task WriteLineAsync(string text)
@@ -77,4 +78,5 @@
             Console.WriteLine($"Task was canceled during disposal of terminal '{Id}': {tcex.Message}");
         }
     }
+
 }

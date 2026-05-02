@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Services.Data;
 using Services.Docker;
-using Services.LogStreaming;
 using Services.Scanner;
 using Services.Templating;
 
@@ -23,7 +22,7 @@ public class LocalDeploymentOrchestrator(
     ITemplateService templateService,
     IDockerService dockerService,
     ILogger<LocalDeploymentOrchestrator> logger,
-    Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
+    IServiceScopeFactory serviceScopeFactory)
     : ILocalDeploymentOrchestrator
 {
     /// <summary>
@@ -113,7 +112,8 @@ public class LocalDeploymentOrchestrator(
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 4/4: Starting Docker Compose deployment...");
         await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Starting);
 
-        var isDockerSuccess = await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName, config.ProjectId);
+        var isDockerSuccess =
+            await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName, config.ProjectId);
 
         if (!isDockerSuccess)
             throw new InvalidOperationException("Docker Compose process returned an error or timed out. " +
