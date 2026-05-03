@@ -156,6 +156,9 @@ public static class ServiceConfiguration
         // Add services for GitHub API interactions
         builder.Services.AddHttpClient<IGitHubService, GitHubService>();
 
+        // Add a singleton service for notifying clients about deployment status changes
+        builder.Services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
+
         // Add services for orchestrating deployments
         builder.Services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
 

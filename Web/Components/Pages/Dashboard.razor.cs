@@ -17,7 +17,7 @@ namespace Web.Components.Pages;
 ///     This component is responsible for verifying user authentication and fetching
 ///     the associated projects based on the authenticated user's ID.
 /// </summary>
-public partial class Dashboard : ComponentBase
+public partial class Dashboard : ComponentBase, IDisposable
 {
     /// A dictionary containing the deployment states of projects.
     private readonly Dictionary<Guid, bool> _deployingStates = new();
@@ -70,6 +70,10 @@ public partial class Dashboard : ComponentBase
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
 
+    /// Service responsible for notifying subscribers about changes in deployment statuses.
+    [Inject]
+    private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
+
 
     /// <summary>
     ///     On initialization, we check if the user is authenticated. If they are,
@@ -82,11 +86,69 @@ public partial class Dashboard : ComponentBase
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
+        
         _currentUserId = await GetCurrentUserIdAsync();
 
-        if (_currentUserId != Guid.Empty) _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
+        if (_currentUserId != Guid.Empty)
+            _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
 
         _isLoading = false;
+    }
+
+    /// <summary>
+    ///     Disposes of the component by unsubscribing from the deployment status change notifications
+    ///     to prevent memory leaks and unintended behavior when the component is no longer in use.
+    /// </summary>
+    public void Dispose()
+    {
+        DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
+        GC.SuppressFinalize(this);
+    }
+
+
+    /// <summary>
+    ///     Event handler that is called whenever the deployment status of a project changes. This method updates
+    ///     the status of the latest deployment for the affected project in the UI. If no deployment record exists
+    ///     yet for the project, it triggers a refresh of the projects list to ensure the UI reflects the status.
+    /// </summary>
+    /// <param name="projectId">The unique identifier of the project whose deployment status has changed.</param>
+    /// <param name="status">The new deployment status to be applied.</param>
+    private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
+    {
+        var project = _projects?.FirstOrDefault(p => p.Id == projectId);
+        if (project == null) return;
+
+        var latestDeployment = project.CsProjects
+            .SelectMany(c => c.Deployments)
+            .OrderByDescending(d => d.CreatedAt)
+            .FirstOrDefault();
+
+        if (latestDeployment != null)
+        {
+            latestDeployment.Status = status;
+        }
+        else
+        {
+            // If no deployment exists yet but we got a status (e.g. Building), we could force a refresh
+            // However, we shouldn't get here unless there is a deployment record created.
+            _ = RefreshProjectsAsync();
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+
+    /// <summary>
+    ///     Refreshes the list of projects for the current user.
+    /// </summary>
+    private async Task RefreshProjectsAsync()
+    {
+        if (_currentUserId != Guid.Empty)
+        {
+            _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
 

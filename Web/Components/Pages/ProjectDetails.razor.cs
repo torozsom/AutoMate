@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Services.Projects;
 using Services.Scanner;
+using Services.Orchestration;
 using Web.Components.Shared;
 
 namespace Web.Components.Pages;
@@ -46,6 +47,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject] private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
 
     [Inject] private IProjectScannerService ProjectScanner { get; set; } = null!;
+    
+    [Inject] private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
 
     /// <summary>
@@ -54,6 +57,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
+
         if (_hubConnection is not null)
         {
             if (_hubConnection.State == HubConnectionState.Connected)
@@ -70,6 +75,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
         var currentUserId = await GetCurrentUserIdAsync();
 
         if (currentUserId != Guid.Empty)
@@ -91,6 +97,37 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
 
         _isLoading = false;
+    }
+    
+    private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
+    {
+        if (_project != null && _project.Id == projectId)
+        {
+            var latestDeployment = _project.CsProjects
+                .SelectMany(c => c.Deployments)
+                .OrderByDescending(d => d.CreatedAt)
+                .FirstOrDefault();
+
+            if (latestDeployment != null)
+            {
+                latestDeployment.Status = status;
+                InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                _ = RefreshProjectAsync();
+            }
+        }
+    }
+    
+    private async Task RefreshProjectAsync()
+    {
+        var currentUserId = await GetCurrentUserIdAsync();
+        if (currentUserId != Guid.Empty)
+        {
+            _project = await ProjectService.GetProjectByIdAsync(ProjectId, currentUserId);
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
 

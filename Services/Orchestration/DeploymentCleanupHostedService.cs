@@ -61,7 +61,7 @@ public class DeploymentCleanupHostedService(
             var dbContext = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
 
             var updatedCount = await dbContext.Deployments
-                .Where(d => d.Status == DeploymentStatus.Building || d.Status == DeploymentStatus.Starting)
+                .Where(d => d.Status == DeploymentStatus.Starting)
                 .ExecuteUpdateAsync(setters => setters
                         .SetProperty(d => d.Status, DeploymentStatus.Failed),
                     cancellationToken);
