@@ -22,8 +22,18 @@
         @if (_project != null)
         {
             <div class="d-flex gap-2">
-                <button class="btn btn-success">
-                    <i class="bi bi-play-fill me-1"></i> Deploy
+                @{ var isDeploying = IsDeploying(); }
+                <button class="btn btn-success" @onclick="DeployProjectAsync" disabled="@isDeploying">
+                    @if (isDeploying)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Deploying...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-play-fill me-1"></i>
+                        <span>Deploy</span>
+                    }
                 </button>
                 <button class="btn btn-outline-danger">
                     <i class="bi bi-stop-fill me-1"></i> Stop
@@ -31,6 +41,15 @@
             </div>
         }
     </div>
+
+    @if (_showConfigModal && _currentDeployConfig != null && _selectedProjectPath != null)
+    {
+        <ConfigurationForm
+            Config="@_currentDeployConfig"
+            ProjectPath="@_selectedProjectPath"
+            OnCancel="@HideConfigModal"
+            OnDeployConfirmed="@ExecuteDeploymentAsync"/>
+    }
 
     @if (_isLoading)
     {

@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.JSInterop;
+using Core.DTO;
 using Services.Data;
 using Services.Projects;
 using Services.Scanner;
@@ -50,6 +52,89 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     
     [Inject] private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
+    private bool _showConfigModal;
+    private DeploymentConfigDto? _currentDeployConfig;
+    private string? _selectedProjectPath;
+    private bool _isDeploying;
+
+
+    /// <summary>
+    ///     Determines whether a deployment is currently in progress.
+    /// </summary>
+    /// <returns>True if a deployment is in progress, otherwise false.</returns>
+    private bool IsDeploying()
+    {
+        var status = GetLatestStatus();
+        return _isDeploying || status == DeploymentStatus.Starting;
+    }
+
+
+    /// <summary>
+    ///     Initiates the deployment process for the project by analyzing
+    ///     its dependencies and preparing the deployment configuration.
+    /// </summary>
+    private async Task DeployProjectAsync()
+    {
+        if (_project == null) return;
+
+        var csProject = _project.CsProjects.FirstOrDefault(p => p.IsWebProject);
+        if (csProject == null) return;
+
+        _selectedProjectPath = csProject.Path;
+        _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(_project, csProject);
+
+        _showConfigModal = true;
+    }
+
+
+    /// <summary>
+    ///     Hides the deployment configuration modal and resets the related state variables to their default values.
+    /// </summary>
+    private void HideConfigModal()
+    {
+        _showConfigModal = false;
+        _currentDeployConfig = null;
+        _selectedProjectPath = null;
+    }
+
+
+    /// <summary>
+    ///     Executes the deployment process asynchronously by hiding the configuration modal,
+    ///     setting the deploying state, and invoking the deployment orchestrator to deploy
+    ///     the project with the specified configuration.
+    /// </summary>
+    /// <param name="finalConfig">The deployment configuration to be used for the project deployment.</param>
+    private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
+    {
+        HideConfigModal();
+        _isDeploying = true;
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
+
+            try
+            {
+                await orchestrator.DeployLocalProjectAsync(finalConfig);
+
+                await InvokeAsync(() =>
+                {
+                    _isDeploying = false;
+                    StateHasChanged();
+                });
+            }
+            catch (Exception)
+            {
+                await InvokeAsync(() =>
+                {
+                    _isDeploying = false;
+                    StateHasChanged();
+                });
+            }
+        });
+    }
 
     /// <summary>
     ///     Disposes of the component by leaving the SignalR group
