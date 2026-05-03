@@ -245,6 +245,16 @@ public partial class Dashboard : ComponentBase
     }
 
 
+    /// Helper method to get the latest deployment status of a project.
+    private DeploymentStatus? GetLatestStatus(Project project)
+    {
+        return project.CsProjects
+            .SelectMany(c => c.Deployments)
+            .OrderByDescending(d => d.CreatedAt)
+            .FirstOrDefault()?.Status;
+    }
+
+
     /// <summary>
     ///     Sets the deploying state for a specific project. This is used to track which projects are currently
     ///     in the process of being deployed, allowing the UI to show appropriate loading indicators and prevent

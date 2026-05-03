@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Core.Entities;
+using Core.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Services.Data;
 using Services.Projects;
 using Services.Scanner;
+using Web.Components.Shared;
 
 namespace Web.Components.Pages;
 
@@ -91,6 +93,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _isLoading = false;
     }
 
+
+    private DeploymentStatus? GetLatestStatus()
+    {
+        return _project?.CsProjects
+            .SelectMany(c => c.Deployments)
+            .OrderByDescending(d => d.CreatedAt)
+            .FirstOrDefault()?.Status;
+    }
 
     /// Sets the active tab in the UI based on the provided tab ID.
     private void SetActiveTab(string tabId)

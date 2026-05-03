@@ -2,7 +2,7 @@ using Core.DTO;
 using Microsoft.AspNetCore.Components;
 using Services.Scanner;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Shared;
 
 /// <summary>
 ///     A Blazor component that provides a user interface for configuring deployment settings for a .NET project.
