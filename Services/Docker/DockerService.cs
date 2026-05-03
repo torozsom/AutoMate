@@ -254,6 +254,88 @@ public class DockerService : IDockerService, IDisposable
 
 
     /// <summary>
+    ///     Executes the 'docker compose down' command in a specified working directory with a given project name.
+    /// </summary>
+    /// <param name="workingDir">The working directory where the docker command should be run.</param>
+    /// <param name="projectName">The name of the project whose containers should be stopped.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <returns>Returns an indicator if the docker compose down command was successfully run.</returns>
+    public async Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId)
+    {
+        var safeProjectName = NormalizeProjectName(projectName);
+        _logger.LogInformation("[DockerService] Starting 'docker compose down' for project '{ProjectName}' " +
+                               "in {Directory}", safeProjectName, workingDir);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = $"compose -p {safeProjectName} down",
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process();
+        process.StartInfo = startInfo;
+
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
+
+            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+        };
+
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
+
+            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+        };
+
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(DockerComposeTimeoutMinutes));
+            await process.WaitForExitAsync(cts.Token);
+
+            if (process.ExitCode != 0)
+            {
+                _logger.LogError(
+                    "[DockerService] Docker Compose down failed for project '{ProjectName}' with exit code {Code}.",
+                    safeProjectName, process.ExitCode);
+                return false;
+            }
+
+            _logger.LogInformation("[DockerService] Docker Compose down completed successfully for project '{ProjectName}'.",
+                safeProjectName);
+            return true;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogError(
+                "[DockerService] Docker Compose down timed out after {Timeout} minutes for project '{ProjectName}'." +
+                " Exception: {Exception}", ex, DockerComposeTimeoutMinutes, safeProjectName);
+
+            if (!process.HasExited) process.Kill();
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "[DockerService] Critical error while launching " +
+                                    "Docker Compose down process for '{ProjectName}'.", safeProjectName);
+            return false;
+        }
+    }
+
+
+    /// <summary>
     ///     Starts streaming logs for a specified container to the log streamer.
     /// </summary>
     /// <param name="containerName">The name of the container to stream logs from.</param>

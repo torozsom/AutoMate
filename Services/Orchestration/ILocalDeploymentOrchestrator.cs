@@ -11,4 +11,7 @@ public interface ILocalDeploymentOrchestrator
 {
     /// Initiates the deployment process for a local .NET project.
     Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config);
+
+    /// Stops an existing deployment for a local .NET project.
+    Task StopDeploymentAsync(Guid projectId, string projectName, string csProjectPath);
 }

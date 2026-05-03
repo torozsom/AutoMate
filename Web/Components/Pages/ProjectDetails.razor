@@ -23,7 +23,7 @@
         {
             <div class="d-flex gap-2">
                 @{ var isDeploying = IsDeploying(); }
-                <button class="btn btn-success" @onclick="DeployProjectAsync" disabled="@isDeploying">
+                <button class="btn btn-success" @onclick="DeployProjectAsync" disabled="@(isDeploying || _isStopping)">
                     @if (isDeploying)
                     {
                         <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -35,8 +35,17 @@
                         <span>Deploy</span>
                     }
                 </button>
-                <button class="btn btn-outline-danger">
-                    <i class="bi bi-stop-fill me-1"></i> Stop
+                <button class="btn btn-outline-danger" @onclick="StopDeploymentAsync" disabled="@(_isStopping || isDeploying)">
+                    @if (_isStopping)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Stopping...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-stop-fill me-1"></i>
+                        <span>Stop</span>
+                    }
                 </button>
             </div>
         }

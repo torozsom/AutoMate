@@ -56,6 +56,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private DeploymentConfigDto? _currentDeployConfig;
     private string? _selectedProjectPath;
     private bool _isDeploying;
+    private bool _isStopping;
 
 
     /// <summary>
@@ -84,6 +85,45 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(_project, csProject);
 
         _showConfigModal = true;
+    }
+
+
+    /// <summary>
+    ///     Stops the current deployment asynchronously.
+    /// </summary>
+    private async Task StopDeploymentAsync()
+    {
+        if (_project == null) return;
+        var csProject = _project.CsProjects.FirstOrDefault(p => p.IsWebProject);
+        if (csProject == null) return;
+
+        _isStopping = true;
+        StateHasChanged();
+
+        _ = Task.Run(async () =>
+        {
+            using var scope = ServiceProvider.CreateScope();
+            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
+
+            try
+            {
+                await orchestrator.StopDeploymentAsync(ProjectId, _project.Name, csProject.Path);
+
+                await InvokeAsync(() =>
+                {
+                    _isStopping = false;
+                    StateHasChanged();
+                });
+            }
+            catch (Exception)
+            {
+                await InvokeAsync(() =>
+                {
+                    _isStopping = false;
+                    StateHasChanged();
+                });
+            }
+        });
     }
 
 

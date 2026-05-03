@@ -85,6 +85,47 @@ public class LocalDeploymentOrchestrator(
 
 
     /// <summary>
+    ///     Stops an existing deployment for a local .NET project.
+    /// </summary>
+    /// <param name="projectId">The unique identifier of the project.</param>
+    /// <param name="projectName">The name of the project.</param>
+    /// <param name="csProjectPath">The path to the main C# project file.</param>
+    public async Task StopDeploymentAsync(Guid projectId, string projectName, string csProjectPath)
+    {
+        logger.LogInformation("[LocalDeploymentOrchestrator] Stopping deployment for Project ID {Id}...", projectId);
+
+        var solutionRoot = await systemScanner.FindSolutionRootAsync(csProjectPath);
+        var automateDir = Path.Combine(solutionRoot, ".automate");
+
+        if (!Directory.Exists(automateDir))
+        {
+            logger.LogWarning("[LocalDeploymentOrchestrator] No .automate directory found at {Path}. Cannot stop deployment.", automateDir);
+            return;
+        }
+
+        var isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName, projectId);
+
+        if (isStopped)
+        {
+            var latestDeployment = await dbContext.Deployments
+                .Where(d => d.CsProject!.ProjectId == projectId)
+                .OrderByDescending(d => d.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (latestDeployment != null && latestDeployment.Status != DeploymentStatus.Stopped)
+            {
+                await SafeUpdateDeploymentStatusAsync(projectId, latestDeployment, DeploymentStatus.Stopped);
+                logger.LogInformation("[LocalDeploymentOrchestrator] Deployment stopped successfully for Project ID {Id}.", projectId);
+            }
+        }
+        else
+        {
+            logger.LogError("[LocalDeploymentOrchestrator] Failed to stop deployment for Project ID {Id}.", projectId);
+        }
+    }
+
+
+    /// <summary>
     ///     Executes the main steps of the deployment process, including locating the solution root,
     ///     scanning the project for dependencies, generating necessary templates, and running Docker Compose.
     /// </summary>
