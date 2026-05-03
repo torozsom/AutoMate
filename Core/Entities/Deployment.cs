@@ -30,11 +30,6 @@ public class Deployment : BaseEntity
     public string? DockerContainerId { get; set; }
 
     /// <summary>
-    ///     Gets or sets the stdout/stderr logs generated specifically during the 'docker build' phase.
-    /// </summary>
-    public string? BuildLogs { get; set; }
-
-    /// <summary>
     ///     Gets or sets any historical logs. (Note: Live container logs should be streamed directly
     ///     from Docker API via SignalR, rather than constantly writing to the database).
     /// </summary>
