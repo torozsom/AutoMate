@@ -5,6 +5,7 @@ using Core.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.JSInterop;
 using Services.Data;
 using Services.Orchestration;
 using Services.Projects;
@@ -73,6 +74,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// Service responsible for notifying subscribers about changes in deployment statuses.
     [Inject]
     private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = null!;
 
 
     /// <summary>
@@ -266,7 +270,7 @@ public partial class Dashboard : ComponentBase, IDisposable
             }
         });
 
-        NavigationManager.NavigateTo($"/project/{finalConfig.ProjectId}");
+        await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
     }
 
 
