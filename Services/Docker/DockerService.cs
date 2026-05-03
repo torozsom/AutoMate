@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.Runtime.InteropServices;
@@ -277,18 +278,25 @@ public class DockerService : IDockerService, IDisposable
             using var multiplexedStream =
                 await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
 
-            var buffer = new byte[81920];
-            while (!cancellationToken.IsCancellationRequested)
+            var buffer = ArrayPool<byte>.Shared.Rent(8192);
+            try
             {
-                var readResult = await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
-                if (readResult.EOF)
-                    break;
-
-                if (readResult.Count > 0)
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    var logLine = Encoding.UTF8.GetString(buffer, 0, readResult.Count);
-                    await _logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
+                    var readResult = await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
+                    if (readResult.EOF)
+                        break;
+
+                    if (readResult.Count > 0)
+                    {
+                        var logLine = Encoding.UTF8.GetString(buffer, 0, readResult.Count);
+                        await _logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
+                    }
                 }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
             }
         }
         catch (OperationCanceledException ex)
