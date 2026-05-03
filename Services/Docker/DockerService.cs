@@ -336,6 +336,61 @@ public class DockerService : IDockerService, IDisposable
 
 
     /// <summary>
+    ///     Gets a list of all currently running Docker Compose project names.
+    /// </summary>
+    /// <returns>A list of project names that are currently running.</returns>
+    public async Task<List<string>> GetRunningProjectNamesAsync()
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = "compose ls --format json",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process();
+        process.StartInfo = startInfo;
+
+        try
+        {
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+            if (process.ExitCode != 0)
+            {
+                var error = await process.StandardError.ReadToEndAsync();
+                _logger.LogWarning("[DockerService] 'docker compose ls' failed. Exit Code: {Code}, Error: {Error}", process.ExitCode, error);
+                return [];
+            }
+
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                return [];
+            }
+
+            var projects = JsonSerializer.Deserialize<JsonElement>(output);
+            var runningProjects = new List<string>();
+
+            if (projects.ValueKind == JsonValueKind.Array)
+                foreach (var project in projects.EnumerateArray())
+                    if (project.TryGetProperty("Name", out var nameProp) && nameProp.GetString() is { } name)
+                        runningProjects.Add(name);
+
+            return runningProjects;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DockerService] Error executing 'docker compose ls'.");
+            return [];
+        }
+    }
+
+
+    /// <summary>
     ///     Starts streaming logs for a specified container to the log streamer.
     /// </summary>
     /// <param name="containerName">The name of the container to stream logs from.</param>
