@@ -17,9 +17,7 @@
 <div align="center">
   <img src="assets/homepage.png" width="600">
   <img src="assets/dashboard.png" width="600">
-  <img src="assets/configform.png" width="600">
-  <img src="assets/registrypage.png" width="600">
-  <img src="assets/localgitrepos.png" width="600">
+  <img src="assets/webterminal.png" width="600">
 </div>
 
 ---
