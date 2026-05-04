@@ -15,9 +15,9 @@
 ## Screenshots
 
 <div align="center">
-  <img src="assets/homepage.png" width="600">
-  <img src="assets/dashboard.png" width="600">
-  <img src="assets/webterminal.png" width="600">
+  <img src="assets/homepage.png" width="100%">
+  <img src="assets/dashboard.png" width="100%">
+  <img src="assets/webterminal.png" width="100%">
 </div>
 
 ---
