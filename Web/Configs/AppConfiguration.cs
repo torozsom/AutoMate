@@ -1,4 +1,5 @@
 using Services.Data;
+using Web.Hubs;
 using Web.Routes;
 
 namespace Web.Configs;
@@ -51,7 +52,7 @@ public static class AppConfiguration
         app.UseAntiforgery();
 
         // Map Blazor Hub for real-time communication.
-        app.MapHub<Hubs.LogHub>("/loghub");
+        app.MapHub<LogHub>("/loghub");
 
         // Configure endpoints
         var endpoints = app.Services.GetServices<IEndpoint>();

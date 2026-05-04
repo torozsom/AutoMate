@@ -6,18 +6,6 @@
 public enum DeploymentStatus
 {
     /// <summary>
-    ///     Indicates that the deployment request has been queued and is awaiting further processing.
-    ///     This status reflects that the deployment has not yet started and is in a pending state.
-    /// </summary>
-    Queued,
-
-    /// <summary>
-    ///     Represents the status of a deployment that is currently in the building stage,
-    ///     where the application or project is being compiled or prepared for deployment.
-    /// </summary>
-    Building,
-
-    /// <summary>
     ///     Represents the deployment status where the process is in the initial stage of being started.
     ///     This state indicates that the deployment has been initiated but is not yet actively running.
     /// </summary>

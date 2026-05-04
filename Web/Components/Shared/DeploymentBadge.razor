@@ -1,0 +1,40 @@
+@using Core.Enums
+
+<span class="badge @BadgeClass @AdditionalClasses">
+    <i class="bi @IconClass small me-1"></i> @StatusText
+</span>
+
+@code {
+    [Parameter]
+    public DeploymentStatus? Status { get; set; }
+
+    [Parameter]
+    public string AdditionalClasses { get; set; } = "";
+
+    private string BadgeClass => Status switch
+    {
+        DeploymentStatus.Starting => "bg-info text-dark border",
+        DeploymentStatus.Running => "bg-success text-white border border-success",
+        DeploymentStatus.Failed => "bg-danger text-white border border-danger",
+        DeploymentStatus.Stopped => "bg-secondary text-white border border-secondary",
+        _ => "bg-light text-dark border"
+    };
+
+    private string IconClass => Status switch
+    {
+        DeploymentStatus.Starting => "bi-hourglass-split",
+        DeploymentStatus.Running => "bi-play-circle-fill",
+        DeploymentStatus.Failed => "bi-exclamation-triangle-fill",
+        DeploymentStatus.Stopped => "bi-stop-circle-fill",
+        _ => "bi-circle-fill text-secondary"
+    };
+
+    private string StatusText => Status switch
+    {
+        DeploymentStatus.Starting => "Starting",
+        DeploymentStatus.Running => "Running",
+        DeploymentStatus.Failed => "Failed",
+        DeploymentStatus.Stopped => "Stopped",
+        _ => "Not Deployed"
+    };
+}

@@ -22,15 +22,43 @@
         @if (_project != null)
         {
             <div class="d-flex gap-2">
-                <button class="btn btn-success">
-                    <i class="bi bi-play-fill me-1"></i> Deploy
+                @{ var isDeploying = IsDeploying(); }
+                <button class="btn btn-success" @onclick="DeployProjectAsync" disabled="@(isDeploying || _isStopping)">
+                    @if (isDeploying)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Deploying...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-play-fill me-1"></i>
+                        <span>Deploy</span>
+                    }
                 </button>
-                <button class="btn btn-outline-danger">
-                    <i class="bi bi-stop-fill me-1"></i> Stop
+                <button class="btn btn-outline-danger" @onclick="StopDeploymentAsync" disabled="@(_isStopping || isDeploying)">
+                    @if (_isStopping)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Stopping...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-stop-fill me-1"></i>
+                        <span>Stop</span>
+                    }
                 </button>
             </div>
         }
     </div>
+
+    @if (_showConfigModal && _currentDeployConfig != null && _selectedProjectPath != null)
+    {
+        <ConfigurationForm
+            Config="@_currentDeployConfig"
+            ProjectPath="@_selectedProjectPath"
+            OnCancel="@HideConfigModal"
+            OnDeployConfirmed="@ExecuteDeploymentAsync"/>
+    }
 
     @if (_isLoading)
     {
@@ -51,7 +79,7 @@
                 <div class="card bg-dark-subtle border-0 shadow-sm h-100">
                     <div class="card-body">
                         <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.8rem;">Status</h6>
-                        <span class="badge bg-secondary fs-6"><i class="bi bi-circle-fill small me-1"></i> Not Deployed</span>
+                        <DeploymentBadge Status="GetLatestStatus()" AdditionalClasses="fs-6" />
                     </div>
                 </div>
             </div>
@@ -72,14 +100,16 @@
                 <ul class="nav nav-tabs border-0" role="tablist">
                     <!-- Build Logs -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("build")" type="button" role="tab" @onclick='() => SetActiveTab("build")'>
+                        <button class="nav-link @GetTabClass("build")" type="button" role="tab"
+                                @onclick='() => SetActiveTab("build")'>
                             <i class="bi bi-hammer me-1"></i> Build Logs
                         </button>
                     </li>
 
                     <!-- Web App -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("web")" type="button" role="tab" @onclick='() => SetActiveTab("web")'>
+                        <button class="nav-link @GetTabClass("web")" type="button" role="tab"
+                                @onclick='() => SetActiveTab("web")'>
                             <i class="bi bi-globe me-1"></i> Web App
                         </button>
                     </li>
@@ -87,23 +117,27 @@
                     @foreach (var db in GetDatabaseTabs())
                     {
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab" @onclick="() => SetActiveTab(db.TabId)">
+                            <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab"
+                                    @onclick="() => SetActiveTab(db.TabId)">
                                 <i class="bi bi-database me-1"></i> @db.DisplayName
                             </button>
                         </li>
                     }
                 </ul>
             </div>
-            <div class="card-body p-0" style="height: 450px; background-color: #1e1e1e; overflow: hidden; position: relative;">
+            <div class="card-body p-0"
+                 style="height: 470px; background-color: #1e1e1e; overflow: hidden; position: relative;">
 
                 <!-- Build Logs Terminal -->
                 <div style="@GetTerminalStyle("build")">
-                    <Terminal @ref="_buildTerminal" Id="build-logs-term" OnReady='() => OnTerminalReady(_buildTerminal, "Build")' />
+                    <Terminal @ref="_buildTerminal" Id="build-logs-term"
+                              OnReady='() => OnTerminalReady(_buildTerminal, "Build")'/>
                 </div>
 
                 <!-- Web App Terminal -->
                 <div style="@GetTerminalStyle("web")">
-                    <Terminal @ref="_webTerminal" Id="web-logs-term" OnReady='() => OnTerminalReady(_webTerminal, "Web App")' />
+                    <Terminal @ref="_webTerminal" Id="web-logs-term"
+                              OnReady='() => OnTerminalReady(_webTerminal, "Web App")'/>
                 </div>
 
                 <!-- Database Terminals -->
@@ -112,7 +146,7 @@
                     <div style="@GetTerminalStyle(db.TabId)">
                         <Terminal @ref="_dbTerminals[db.TabId]"
                                   Id="@($"term-{db.TabId}")"
-                                  OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)' />
+                                  OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)'/>
                     </div>
                 }
             </div>

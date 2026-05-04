@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Formats.Tar;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using Docker.DotNet;
 using Docker.DotNet.Models;
@@ -252,17 +254,156 @@ public class DockerService : IDockerService, IDisposable
 
 
     /// <summary>
+    ///     Executes the 'docker compose down' command in a specified working directory with a given project name.
+    /// </summary>
+    /// <param name="workingDir">The working directory where the docker command should be run.</param>
+    /// <param name="projectName">The name of the project whose containers should be stopped.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <returns>Returns an indicator if the docker compose down command was successfully run.</returns>
+    public async Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId)
+    {
+        var safeProjectName = NormalizeProjectName(projectName);
+        _logger.LogInformation("[DockerService] Starting 'docker compose down' for project '{ProjectName}' " +
+                               "in {Directory}", safeProjectName, workingDir);
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = $"compose -p {safeProjectName} down",
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process();
+        process.StartInfo = startInfo;
+
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
+
+            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+        };
+
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
+
+            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+        };
+
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(DockerComposeTimeoutMinutes));
+            await process.WaitForExitAsync(cts.Token);
+
+            if (process.ExitCode != 0)
+            {
+                _logger.LogError(
+                    "[DockerService] Docker Compose down failed for project '{ProjectName}' with exit code {Code}.",
+                    safeProjectName, process.ExitCode);
+                return false;
+            }
+
+            _logger.LogInformation("[DockerService] Docker Compose down completed successfully for project '{ProjectName}'.",
+                safeProjectName);
+            return true;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogError(
+                "[DockerService] Docker Compose down timed out after {Timeout} minutes for project '{ProjectName}'." +
+                " Exception: {Exception}", ex, DockerComposeTimeoutMinutes, safeProjectName);
+
+            if (!process.HasExited) process.Kill();
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "[DockerService] Critical error while launching " +
+                                    "Docker Compose down process for '{ProjectName}'.", safeProjectName);
+            return false;
+        }
+    }
+
+
+    /// <summary>
+    ///     Gets a list of all currently running Docker Compose project names.
+    /// </summary>
+    /// <returns>A list of project names that are currently running.</returns>
+    public async Task<List<string>> GetRunningProjectNamesAsync()
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "docker",
+            Arguments = "compose ls --format json",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = new Process();
+        process.StartInfo = startInfo;
+
+        try
+        {
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+            if (process.ExitCode != 0)
+            {
+                var error = await process.StandardError.ReadToEndAsync();
+                _logger.LogWarning("[DockerService] 'docker compose ls' failed. Exit Code: {Code}, Error: {Error}", process.ExitCode, error);
+                return [];
+            }
+
+            if (string.IsNullOrWhiteSpace(output))
+            {
+                return [];
+            }
+
+            var projects = JsonSerializer.Deserialize<JsonElement>(output);
+            var runningProjects = new List<string>();
+
+            if (projects.ValueKind == JsonValueKind.Array)
+                foreach (var project in projects.EnumerateArray())
+                    if (project.TryGetProperty("Name", out var nameProp) && nameProp.GetString() is { } name)
+                        runningProjects.Add(name);
+
+            return runningProjects;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DockerService] Error executing 'docker compose ls'.");
+            return [];
+        }
+    }
+
+
+    /// <summary>
     ///     Starts streaming logs for a specified container to the log streamer.
     /// </summary>
     /// <param name="containerName">The name of the container to stream logs from.</param>
     /// <param name="projectId">The ID of the project.</param>
     /// <param name="containerSuffixOrTabId">The tab ID or suffix associated with the container.</param>
     /// <param name="cancellationToken">A token to cancel the streaming process.</param>
-    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId, CancellationToken cancellationToken)
+    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            _logger.LogInformation("[DockerService] Starting to stream logs for container '{ContainerName}'", containerName);
+            _logger.LogInformation("[DockerService] Starting to stream logs for container '{ContainerName}'",
+                containerName);
             var logParams = new ContainerLogsParameters
             {
                 ShowStdout = true,
@@ -271,29 +412,40 @@ public class DockerService : IDockerService, IDisposable
                 Tail = "100"
             };
 
-            using var multiplexedStream = await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
-            
-            var buffer = new byte[81920];
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var readResult = await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
-                if (readResult.EOF)
-                    break;
+            using var multiplexedStream =
+                await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
 
-                if (readResult.Count > 0)
+            var buffer = ArrayPool<byte>.Shared.Rent(8192);
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    var logLine = System.Text.Encoding.UTF8.GetString(buffer, 0, readResult.Count);
-                    await _logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
+                    var readResult = await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
+                    if (readResult.EOF)
+                        break;
+
+                    if (readResult.Count > 0)
+                    {
+                        var logLine = Encoding.UTF8.GetString(buffer, 0, readResult.Count);
+                        await _logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
+                    }
                 }
             }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogInformation("[DockerService] Stopped streaming logs for container '{ContainerName}' (cancelled).", containerName);
+            _logger.LogInformation(
+                "[DockerService] Stopped streaming logs for container '{ContainerName}' (cancelled)," +
+                "exception: {Exception}.", containerName, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DockerService] Error streaming logs for container '{ContainerName}'.", containerName);
+            _logger.LogError(ex, "[DockerService] Error streaming logs for container '{ContainerName}'.",
+                containerName);
         }
     }
 

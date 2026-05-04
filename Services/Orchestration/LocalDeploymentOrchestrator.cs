@@ -6,7 +6,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Services.Data;
 using Services.Docker;
-using Services.LogStreaming;
 using Services.Scanner;
 using Services.Templating;
 
@@ -23,7 +22,8 @@ public class LocalDeploymentOrchestrator(
     ITemplateService templateService,
     IDockerService dockerService,
     ILogger<LocalDeploymentOrchestrator> logger,
-    Microsoft.Extensions.DependencyInjection.IServiceScopeFactory serviceScopeFactory)
+    IServiceScopeFactory serviceScopeFactory,
+    IDeploymentStatusNotifier statusNotifier)
     : ILocalDeploymentOrchestrator
 {
     /// <summary>
@@ -60,13 +60,13 @@ public class LocalDeploymentOrchestrator(
         var deployment = new Deployment
         {
             CsProjectId = csProject.Id,
-            Status = DeploymentStatus.Building,
             ImageTag = GenerateImageTag(csProject.Name, csProject.Id)
         };
 
         // Save the deployment to the database
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync();
+        statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
 
         try
         {
@@ -78,8 +78,49 @@ public class LocalDeploymentOrchestrator(
             logger.LogError(ex,
                 "[LocalDeploymentOrchestrator] Deployment failed during execution for project '{ProjectName}'.",
                 config.ProjectName);
-            await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Failed, $"Error: {ex.Message}");
+            await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Failed);
             throw;
+        }
+    }
+
+
+    /// <summary>
+    ///     Stops an existing deployment for a local .NET project.
+    /// </summary>
+    /// <param name="projectId">The unique identifier of the project.</param>
+    /// <param name="projectName">The name of the project.</param>
+    /// <param name="csProjectPath">The path to the main C# project file.</param>
+    public async Task StopDeploymentAsync(Guid projectId, string projectName, string csProjectPath)
+    {
+        logger.LogInformation("[LocalDeploymentOrchestrator] Stopping deployment for Project ID {Id}...", projectId);
+
+        var solutionRoot = await systemScanner.FindSolutionRootAsync(csProjectPath);
+        var automateDir = Path.Combine(solutionRoot, ".automate");
+
+        if (!Directory.Exists(automateDir))
+        {
+            logger.LogWarning("[LocalDeploymentOrchestrator] No .automate directory found at {Path}. Cannot stop deployment.", automateDir);
+            return;
+        }
+
+        var isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName, projectId);
+
+        if (isStopped)
+        {
+            var latestDeployment = await dbContext.Deployments
+                .Where(d => d.CsProject!.ProjectId == projectId)
+                .OrderByDescending(d => d.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (latestDeployment != null && latestDeployment.Status != DeploymentStatus.Stopped)
+            {
+                await SafeUpdateDeploymentStatusAsync(projectId, latestDeployment, DeploymentStatus.Stopped);
+                logger.LogInformation("[LocalDeploymentOrchestrator] Deployment stopped successfully for Project ID {Id}.", projectId);
+            }
+        }
+        else
+        {
+            logger.LogError("[LocalDeploymentOrchestrator] Failed to stop deployment for Project ID {Id}.", projectId);
         }
     }
 
@@ -111,9 +152,10 @@ public class LocalDeploymentOrchestrator(
         await templateService.GenerateAndSaveAllTemplatesAsync(config, metadata, csProject.Name, automateDir);
 
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 4/4: Starting Docker Compose deployment...");
-        await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Starting);
+        await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Starting);
 
-        var isDockerSuccess = await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName, config.ProjectId);
+        var isDockerSuccess =
+            await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName, config.ProjectId);
 
         if (!isDockerSuccess)
             throw new InvalidOperationException("Docker Compose process returned an error or timed out. " +
@@ -122,7 +164,7 @@ public class LocalDeploymentOrchestrator(
         var systemUrl = $"http://localhost:{config.ExposedPort}";
         logger.LogInformation("--- Deployment Finished Successfully! System live at {Url} ---", systemUrl);
 
-        await SafeUpdateDeploymentStatusAsync(deployment, DeploymentStatus.Running, $"System live at {systemUrl}");
+        await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Running);
 
         // Start streaming container logs in the background using a new scope so it outlives this request scope
         _ = Task.Run(async () =>
@@ -167,22 +209,22 @@ public class LocalDeploymentOrchestrator(
     ///     Safely updates the deployment status in the database, handling any
     ///     potential exceptions that may occur during the update process.
     /// </summary>
+    /// <param name="projectId">
+    ///     The unique identifier of the project.
+    /// </param>
     /// <param name="deployment">
     ///     The <see cref="Deployment" /> entity whose status is to be updated.
     /// </param>
     /// <param name="status">
     ///     The new <see cref="DeploymentStatus" /> value to set for the deployment.
     /// </param>
-    /// <param name="logs">
-    ///     Optional log messages or details to be saved with the deployment status update.
-    /// </param>
-    private async Task SafeUpdateDeploymentStatusAsync(Deployment deployment, DeploymentStatus status,
-        string? logs = null)
+    private async Task SafeUpdateDeploymentStatusAsync(Guid projectId, Deployment deployment, DeploymentStatus status)
     {
         try
         {
             deployment.Status = status;
             await dbContext.SaveChangesAsync();
+            statusNotifier.NotifyStatusChanged(projectId, status);
         }
         catch (DbUpdateException ex)
         {

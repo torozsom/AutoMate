@@ -158,6 +158,7 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
         return await context.Projects
             .AsNoTracking()
             .Include(p => p.CsProjects)
+                .ThenInclude(c => c.Deployments)
             .Where(p => p.UserId == userId)
             .ToListAsync();
     }
@@ -215,6 +216,7 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
     {
         return await context.Projects
             .Include(p => p.CsProjects)
+                .ThenInclude(c => c.Deployments)
             .FirstOrDefaultAsync(p => p.Id == projectId && p.UserId == userId);
     }
 
