@@ -449,6 +449,55 @@ public class DockerService : IDockerService, IDisposable
         }
     }
 
+    /// <summary>
+    ///     Starts streaming metrics for a specified container to the log streamer.
+    /// </summary>
+    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("[DockerService] Starting to stream metrics for container '{ContainerName}'", containerName);
+            
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "docker",
+                Arguments = $"stats {containerName} --format \"{{{{.CPUPerc}}}}|{{{{.MemUsage}}}}\"",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(startInfo);
+            if (process == null) return;
+            
+            await using var registration = cancellationToken.Register(() => {
+                try { if (!process.HasExited) process.Kill(true); } catch { /* ignore */ }
+            });
+
+            using var reader = process.StandardOutput;
+            while (!cancellationToken.IsCancellationRequested && !reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                
+                line = System.Text.RegularExpressions.Regex.Replace(line, @"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "");
+                
+                var parts = line.Split('|');
+                if (parts.Length >= 2)
+                {
+                    await _logStreamer.StreamContainerMetricsAsync(projectId, containerSuffixOrTabId, parts[0].Trim(), parts[1].Trim());
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("[DockerService] Stopped streaming metrics for container '{ContainerName}' (cancelled).", containerName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DockerService] Error streaming metrics for container '{ContainerName}'.", containerName);
+        }
+    }
 
     /// <summary>
     ///     Creates a tar context by packaging the specified source directory into a tar file.

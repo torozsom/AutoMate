@@ -184,6 +184,13 @@ public class LocalDeploymentOrchestrator(
                 "web",
                 CancellationToken.None)
             );
+            
+            streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
+                webContainerName,
+                config.ProjectId,
+                "web",
+                CancellationToken.None)
+            );
 
             // Database containers
             if (config.Databases != null)
@@ -192,6 +199,13 @@ public class LocalDeploymentOrchestrator(
                 {
                     var dbContainerName = $"{appName}-{db.ContainerNameSuffix}";
                     streamingTasks.Add(scopedDockerService.StreamContainerLogsAsync(
+                        dbContainerName,
+                        config.ProjectId,
+                        db.ContainerNameSuffix,
+                        CancellationToken.None)
+                    );
+                    
+                    streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
                         dbContainerName,
                         config.ProjectId,
                         db.ContainerNameSuffix,

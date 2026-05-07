@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.JSInterop;
 using Core.DTO;
 using Services.Data;
 using Services.Projects;
@@ -23,19 +22,6 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 {
-    private readonly Dictionary<string, Terminal> _dbTerminals = new();
-
-    private string _activeTab = "build";
-
-    private Terminal? _buildTerminal;
-    private IEnumerable<DatabaseTab> _databaseTabs = [];
-
-    private HubConnection? _hubConnection;
-    private bool _isLoading = true;
-
-    private Project? _project;
-    private Terminal? _webTerminal;
-
     [Parameter] public Guid ProjectId { get; set; }
 
     [Inject] private IProjectService ProjectService { get; set; } = null!;
@@ -52,11 +38,29 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     
     [Inject] private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
+
+    private readonly Dictionary<string, Terminal> _dbTerminals = new();
+    private string _activeTab = "build";
+
+    private Terminal? _buildTerminal;
+    private IEnumerable<DatabaseTab> _databaseTabs = [];
+
+    private HubConnection? _hubConnection;
+    private bool _isLoading = true;
+
+    private Project? _project;
+    private Terminal? _webTerminal;
+
     private bool _showConfigModal;
     private DeploymentConfigDto? _currentDeployConfig;
     private string? _selectedProjectPath;
+
     private bool _isDeploying;
     private bool _isStopping;
+
+    private readonly Dictionary<string, (string Cpu, string Memory)> _containerMetrics = new();
+    private readonly List<string> _metricContainerNames = [];
+    private int _currentMetricIndex;
 
 
     /// <summary>
@@ -223,7 +227,15 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         _isLoading = false;
     }
-    
+
+
+    /// <summary>
+    ///     Event handler that is called when the deployment status changes. It checks if
+    ///     the status change is related to the current project, and if so, it updates the
+    ///     latest deployment status in the project details and triggers a UI refresh.
+    /// </summary>
+    /// <param name="projectId">The ID of the project for which the status has changed.</param>
+    /// <param name="status">The new deployment status.</param>
     private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
     {
         if (_project != null && _project.Id == projectId)
@@ -244,7 +256,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
         }
     }
-    
+
+
+    /// <summary>
+    ///     Refreshes the project details by re-fetching the project from the database.
+    /// </summary>
     private async Task RefreshProjectAsync()
     {
         var currentUserId = await GetCurrentUserIdAsync();
@@ -256,6 +272,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// <summary>
+    ///     Retrieves the latest deployment status for the project by
+    ///     looking at the most recent deployment across all C# projects.
+    /// </summary>
+    /// <returns></returns>
     private DeploymentStatus? GetLatestStatus()
     {
         return _project?.CsProjects
@@ -263,6 +284,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             .OrderByDescending(d => d.CreatedAt)
             .FirstOrDefault()?.Status;
     }
+
 
     /// Sets the active tab in the UI based on the provided tab ID.
     private void SetActiveTab(string tabId)
@@ -330,6 +352,21 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     await dbTerminal.WriteAsync(message);
             });
 
+            _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
+                (containerName, cpuUsage, memoryUsage) =>
+                {
+                    InvokeAsync(() =>
+                    {
+                        _containerMetrics[containerName] = (cpuUsage, memoryUsage);
+                        if (!_metricContainerNames.Contains(containerName))
+                        {
+                            _metricContainerNames.Add(containerName);
+                        }
+                        StateHasChanged();
+                    });
+                }
+            );
+
             try
             {
                 await _hubConnection.StartAsync();
@@ -368,6 +405,22 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (_dbTerminals.TryGetValue(tabId, out var terminal))
             await OnTerminalReady(terminal, dbType);
+    }
+
+
+    /// Switches to the previous container's metrics.
+    private void PreviousMetric()
+    {
+        if (_metricContainerNames.Count == 0) return;
+        _currentMetricIndex = (_currentMetricIndex - 1 + _metricContainerNames.Count) % _metricContainerNames.Count;
+    }
+
+
+    /// Switches to the next container's metrics.
+    private void NextMetric()
+    {
+        if (_metricContainerNames.Count == 0) return;
+        _currentMetricIndex = (_currentMetricIndex + 1) % _metricContainerNames.Count;
     }
 
 

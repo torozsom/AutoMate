@@ -28,4 +28,8 @@ public interface IDockerService
     /// Starts streaming logs for a specified container to the log streamer.
     Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
         CancellationToken cancellationToken);
+
+    /// Starts streaming metrics for a specified container to the log streamer.
+    Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+        CancellationToken cancellationToken);
 }
