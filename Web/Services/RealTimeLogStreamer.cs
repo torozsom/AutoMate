@@ -38,4 +38,14 @@ public class RealTimeLogStreamer(IHubContext<LogHub> hubContext) : ILogStreamer
             .Group($"project-{projectId}")
             .SendCoreAsync("ReceiveContainerLog", [containerName, message]);
     }
+
+    /// <summary>
+    ///     Streams container metrics for a specific project and container to connected clients in real-time.
+    /// </summary>
+    public async Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage, string memoryUsage)
+    {
+        await hubContext.Clients
+            .Group($"project-{projectId}")
+            .SendCoreAsync("ReceiveContainerMetrics", [containerName, cpuUsage, memoryUsage]);
+    }
 }
