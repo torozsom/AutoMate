@@ -205,7 +205,7 @@ public partial class DockerService : IDockerService, IDisposable
             if (!string.IsNullOrWhiteSpace(e.Data))
                 _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
 
-            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
         };
 
         process.ErrorDataReceived += (_, e) =>
@@ -213,7 +213,7 @@ public partial class DockerService : IDockerService, IDisposable
             if (!string.IsNullOrWhiteSpace(e.Data))
                 _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
 
-            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
         };
 
         try
@@ -242,7 +242,7 @@ public partial class DockerService : IDockerService, IDisposable
             _logger.LogError(
                 "[DockerService] Docker Compose timed out after {Timeout} minutes for project '{ProjectName}'.",
                 DockerComposeTimeoutMinutes, safeProjectName);
-            if (!process.HasExited) process.Kill();
+            if (!process.HasExited) process.Kill(true);
             return false;
         }
         catch (Exception ex)
@@ -286,7 +286,7 @@ public partial class DockerService : IDockerService, IDisposable
             if (!string.IsNullOrWhiteSpace(e.Data))
                 _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
 
-            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
         };
 
         process.ErrorDataReceived += (_, e) =>
@@ -294,7 +294,7 @@ public partial class DockerService : IDockerService, IDisposable
             if (!string.IsNullOrWhiteSpace(e.Data))
                 _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
 
-            _ = _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
         };
 
         try
@@ -324,7 +324,7 @@ public partial class DockerService : IDockerService, IDisposable
                 "[DockerService] Docker Compose down timed out after {Timeout} minutes for project '{ProjectName}'." +
                 " Exception: {Exception}", ex, DockerComposeTimeoutMinutes, safeProjectName);
 
-            if (!process.HasExited) process.Kill();
+            if (!process.HasExited) process.Kill(true);
             return false;
         }
         catch (Exception ex)
@@ -450,6 +450,11 @@ public partial class DockerService : IDockerService, IDisposable
         }
     }
 
+
+    /// A regular expression to remove ANSI escape codes from the docker stats output.
+    [GeneratedRegex(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")]
+    private static partial Regex MetricsRegex();
+
     /// <summary>
     ///     Starts streaming metrics for a specified container to the log streamer.
     /// </summary>
@@ -476,17 +481,21 @@ public partial class DockerService : IDockerService, IDisposable
             });
 
             using var reader = process.StandardOutput;
-            while (!cancellationToken.IsCancellationRequested && !reader.EndOfStream)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 var line = await reader.ReadLineAsync(cancellationToken);
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 
-                line = System.Text.RegularExpressions.Regex.Replace(line, @"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "");
+                line = MetricsRegex().Replace(line, "");
                 
                 var parts = line.Split('|');
                 if (parts.Length >= 2)
                 {
-                    await _logStreamer.StreamContainerMetricsAsync(projectId, containerSuffixOrTabId, parts[0].Trim(), parts[1].Trim());
+                    await _logStreamer.StreamContainerMetricsAsync(
+                        projectId,
+                        containerSuffixOrTabId,
+                        parts[0].Trim(),
+                        parts[1].Trim());
                 }
             }
         }
@@ -503,7 +512,7 @@ public partial class DockerService : IDockerService, IDisposable
 
     /// A regular expression to extract the host port from the output of the 'docker port' command.
     [GeneratedRegex(@":(\d+)")]
-    private static partial Regex MyRegex();
+    private static partial Regex HostPortRegex();
 
 
     /// <summary>
@@ -530,7 +539,7 @@ public partial class DockerService : IDockerService, IDisposable
             
             if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
             {
-                var match = MyRegex().Match(output);
+                var match = HostPortRegex().Match(output);
                 if (match.Success && int.TryParse(match.Groups[1].Value, out var port))
                 {
                     return port;
