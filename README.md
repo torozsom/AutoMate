@@ -50,6 +50,7 @@
     * Direct communication with the local Docker daemon.
     * Analyzes `.NET` projects and dynamically generates Infrastructure-as-Code files (`Dockerfile`, `.dockerignore`, `docker-compose.yml`) on the fly.
     * One-click deployment to spin up containers locally, accompanied by an automated background deployment cleanup service.
+    * Live Logs & Monitoring: View real-time container logs directly from the Blazor dashboard.
       
 * **🏗️ Clean Architecture**
     * Strict separation of concerns into `Core` (Entities/DTOs), `Services` (Business Logic), and `Web` (Blazor UI & Minimal APIs).
@@ -58,7 +59,6 @@
 
 ## 🗺️ Roadmap (Upcoming Features)
 
-- [ ] **Live Logs & Monitoring:** View real-time container logs directly from the Blazor dashboard.
 - [ ] **Cloud Provider Integration:** Deploy directly to AWS, Azure, or DigitalOcean.
 - [ ] **CI/CD Pipeline Generation:** Automatically create GitHub Actions workflows for continuous integration.
 
