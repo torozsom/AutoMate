@@ -4,6 +4,7 @@ using System.Formats.Tar;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
@@ -17,7 +18,7 @@ namespace Services.Docker;
 ///     operations, such as building and deploying projects. The class also implements the IDisposable interface
 ///     to ensure proper resource management when working with the Docker client.
 /// </summary>
-public class DockerService : IDockerService, IDisposable
+public partial class DockerService : IDockerService, IDisposable
 {
     private const int DefaultContainerPort = 8080;
     private const int DockerComposeTimeoutMinutes = 8;
@@ -497,6 +498,51 @@ public class DockerService : IDockerService, IDisposable
         {
             _logger.LogError(ex, "[DockerService] Error streaming metrics for container '{ContainerName}'.", containerName);
         }
+    }
+
+
+    /// A regular expression to extract the host port from the output of the 'docker port' command.
+    [GeneratedRegex(@":(\d+)")]
+    private static partial Regex MyRegex();
+
+
+    /// <summary>
+    ///     Gets the host port mapped to the specified container.
+    /// </summary>
+    public async Task<int> GetContainerHostPortAsync(string containerName)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "docker",
+                Arguments = $"port {containerName}",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(startInfo);
+            if (process == null) return 0;
+            
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            {
+                var match = MyRegex().Match(output);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var port))
+                {
+                    return port;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[DockerService] Error getting host port for container '{ContainerName}'.", containerName);
+        }
+        
+        return 0;
     }
 
     /// <summary>

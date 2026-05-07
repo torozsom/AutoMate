@@ -32,4 +32,7 @@ public interface IDockerService
     /// Starts streaming metrics for a specified container to the log streamer.
     Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
         CancellationToken cancellationToken);
+        
+    /// Gets the host port mapped to the specified container.
+    Task<int> GetContainerHostPortAsync(string containerName);
 }

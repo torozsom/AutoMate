@@ -11,6 +11,7 @@ using Services.Data;
 using Services.Projects;
 using Services.Scanner;
 using Services.Orchestration;
+using Services.Docker;
 using Web.Components.Shared;
 
 namespace Web.Components.Pages;
@@ -38,6 +39,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     
     [Inject] private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
+    [Inject] private IDockerService DockerService { get; set; } = null!;
+
 
     private readonly Dictionary<string, Terminal> _dbTerminals = new();
     private string _activeTab = "build";
@@ -61,6 +64,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private readonly Dictionary<string, (string Cpu, string Memory)> _containerMetrics = new();
     private readonly List<string> _metricContainerNames = [];
     private int _currentMetricIndex;
+    
+    private int _exposedPort;
 
 
     /// <summary>
@@ -217,6 +222,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 if (csProject != null)
                 {
                     var config = await ProjectScanner.AnalyzeDependenciesAsync(_project, csProject);
+                    _exposedPort = config.ExposedPort;
                     _databaseTabs = config.Databases
                         .Select(db =>
                             new DatabaseTab(db.DbType, db.ContainerNameSuffix, db.DbType))
@@ -224,6 +230,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 }
             }
         }
+
+        await UpdateExposedPortAsync();
 
         _isLoading = false;
     }
@@ -248,11 +256,33 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (latestDeployment != null)
             {
                 latestDeployment.Status = status;
-                InvokeAsync(StateHasChanged);
+                _ = UpdateExposedPortAsync().ContinueWith(_ => InvokeAsync(StateHasChanged));
             }
             else
             {
                 _ = RefreshProjectAsync();
+            }
+        }
+    }
+
+
+    /// <summary>
+    ///     Updates the exposed port for the web container by checking the latest deployment status and retrieving
+    ///     the host port mapped to the web container from the Docker service if the deployment is running.
+    /// </summary>
+    private async Task UpdateExposedPortAsync()
+    {
+        if (GetLatestStatus() == DeploymentStatus.Running && _project != null)
+        {
+            var csProject = _project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+            if (csProject != null)
+            {
+                var containerName = $"{csProject.Name.ToLowerInvariant()}-web";
+                var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
+                if (hostPort > 0)
+                {
+                    _exposedPort = hostPort;
+                }
             }
         }
     }
@@ -267,6 +297,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (currentUserId != Guid.Empty)
         {
             _project = await ProjectService.GetProjectByIdAsync(ProjectId, currentUserId);
+            await UpdateExposedPortAsync();
             await InvokeAsync(StateHasChanged);
         }
     }

@@ -95,6 +95,22 @@
             </div>
         </div>
 
+        @if (GetLatestStatus() == DeploymentStatus.Running && _exposedPort > 0)
+        {
+            <div class="alert alert-success shadow-sm d-flex align-items-center justify-content-between mb-4" style="border-radius: 15px;">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-rocket-takeoff-fill fs-4 me-3"></i>
+                    <div>
+                        <h6 class="mb-0">Web App is Live!</h6>
+                        <small class="text-muted">You can access your deployed project by clicking the link here:</small>
+                    </div>
+                </div>
+                <a href="http://localhost:@_exposedPort" target="_blank" class="btn btn-success fw-bold px-4 py-2" style="border-radius: 10px;">
+                    <i class="bi bi-box-arrow-up-right me-2"></i>http://localhost:@_exposedPort
+                </a>
+            </div>
+        }
+
         <!-- Metrics Card -->
         @if (GetLatestStatus() == DeploymentStatus.Running && _metricContainerNames.Count > 0)
         {
