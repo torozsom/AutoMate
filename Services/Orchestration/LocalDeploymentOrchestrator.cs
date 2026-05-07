@@ -8,6 +8,7 @@ using Services.Data;
 using Services.Docker;
 using Services.Scanner;
 using Services.Templating;
+using System.Collections.Concurrent;
 
 namespace Services.Orchestration;
 
@@ -26,6 +27,9 @@ public class LocalDeploymentOrchestrator(
     IDeploymentStatusNotifier statusNotifier)
     : ILocalDeploymentOrchestrator
 {
+
+    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeLogStreams = new();
+
     /// <summary>
     ///     Deploys a local .NET project by orchestrating the entire process.
     /// </summary>
@@ -107,6 +111,13 @@ public class LocalDeploymentOrchestrator(
 
         if (isStopped)
         {
+            if (_activeLogStreams.TryRemove(projectId, out var cts))
+            {
+                logger.LogInformation("[LocalDeploymentOrchestrator] Cancelling active log streams for Project ID {Id}...", projectId);
+                await cts.CancelAsync();
+                cts.Dispose();
+            }
+
             var latestDeployment = await dbContext.Deployments
                 .Where(d => d.CsProject!.ProjectId == projectId)
                 .OrderByDescending(d => d.CreatedAt)
@@ -166,6 +177,16 @@ public class LocalDeploymentOrchestrator(
 
         await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Running);
 
+        var cts = new CancellationTokenSource();
+        _activeLogStreams.AddOrUpdate(config.ProjectId, cts, (_, oldCts) =>
+        {
+            oldCts.Cancel();
+            oldCts.Dispose();
+            return cts;
+        });
+
+        var token = cts.Token;
+
         // Start streaming container logs in the background using a new scope so it outlives this request scope
         _ = Task.Run(async () =>
         {
@@ -182,14 +203,14 @@ public class LocalDeploymentOrchestrator(
                 webContainerName,
                 config.ProjectId,
                 "web",
-                CancellationToken.None)
+                token)
             );
             
             streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
                 webContainerName,
                 config.ProjectId,
                 "web",
-                CancellationToken.None)
+                token)
             );
 
             // Database containers
@@ -202,20 +223,26 @@ public class LocalDeploymentOrchestrator(
                         dbContainerName,
                         config.ProjectId,
                         db.ContainerNameSuffix,
-                        CancellationToken.None)
+                        token)
                     );
                     
                     streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
                         dbContainerName,
                         config.ProjectId,
                         db.ContainerNameSuffix,
-                        CancellationToken.None)
+                        token)
                     );
                 }
             }
-
-            await Task.WhenAll(streamingTasks);
-        });
+            try {
+                await Task.WhenAll(streamingTasks);
+            }
+            catch (OperationCanceledException ex)
+            {
+                logger.LogInformation("[LocalDeploymentOrchestrator] Log streaming cancelled for Project ID {Id}." +
+                                      "Exception: {Ex}", config.ProjectId, ex);
+            }
+        }, token);
     }
 
 
