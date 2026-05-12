@@ -18,14 +18,9 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         "bin", "obj", "node_modules", "testresults", ".vs", ".idea"
     };
 
-    /// <summary>
-    ///     Scans the specified root directory and its subdirectories for Git repositories.
-    ///     For each Git repository found, it checks for the presence of .NET project files
-    ///     (.sln or .csproj) to determine if it's a .NET project.
-    /// </summary>
-    /// <param name="rootPath">The root path where we start scanning.</param>
-    /// <returns>A list of LocalProjectDto objects representing the found projects.</returns>
-    public async Task<List<LocalProjectDto>> ScanForProjectsAsync(string rootPath)
+    /// <inheritdoc />
+    public async Task<List<LocalProjectDto>> ScanForProjectsAsync(string rootPath,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
         {
@@ -38,30 +33,21 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         logger.LogInformation("[LocalSystemScannerService] Starting system scan for .NET projects in: {RootPath}",
             rootPath);
 
-        // Perform the scanning operation in a background task to avoid blocking the main thread
-        return await Task.Run(() =>
+        //
+        return await Task.Run(async () =>
         {
             var result = new List<LocalProjectDto>();
-            ScanDirectorySafe(rootPath, result);
+            await ScanDirectorySafeAsync(rootPath, result, cancellationToken);
+
             logger.LogInformation("[LocalSystemScannerService] Scan completed. Found {Count} local projects.",
                 result.Count);
             return result;
-        });
+        }, cancellationToken);
     }
 
 
-    /// <summary>
-    ///     Finds the solution root directory for a given project file path. It traverses up the directory
-    ///     hierarchy from the project file's location, looking for indicators of a solution root such as a .git folder
-    ///     or .sln/.slnx files.
-    /// </summary>
-    /// <param name="projectFilePath">The full path to the project file for which the solution root is to be located.</param>
-    /// <returns>
-    ///     The full path to the solution root directory. If no solution root is found, it returns the directory of the
-    ///     provided project file.
-    /// </returns>
-    /// <exception cref="FileNotFoundException">Thrown if the specified project file path does not exist or is invalid.</exception>
-    public Task<string> FindSolutionRootAsync(string projectFilePath)
+    /// <inheritdoc />
+    public Task<string> FindSolutionRootAsync(string projectFilePath, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(projectFilePath) || !File.Exists(projectFilePath))
         {
@@ -75,6 +61,8 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         // Traverse up the directory hierarchy to find a solution root
         while (currentDir != null)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (Directory.Exists(Path.Combine(currentDir.FullName, ".git")) ||
                 currentDir.EnumerateFiles("*.sln").Any() ||
                 currentDir.EnumerateFiles("*.slnx").Any())
@@ -103,8 +91,12 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
     /// </summary>
     /// <param name="currentPath">The current directory path being scanned.</param>
     /// <param name="result">The list to accumulate found local projects.</param>
-    private void ScanDirectorySafe(string currentPath, List<LocalProjectDto> result)
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    private async Task ScanDirectorySafeAsync(string currentPath, List<LocalProjectDto> result,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
             var dirInfo = new DirectoryInfo(currentPath);
@@ -120,18 +112,25 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
             // If it's a Git repository, process it to determine if it's a .NET project and add it to the result list
             if (isGitRepo)
             {
-                ProcessGitRepository(currentPath, dirInfo.Name, result);
+                await ProcessGitRepositoryAsync(currentPath, dirInfo.Name, result, cancellationToken);
                 return;
             }
 
             // If it's not a Git repository, continue scanning subdirectories
             foreach (var dir in directories)
-                ScanDirectorySafe(dir, result);
+                await ScanDirectorySafeAsync(dir, result, cancellationToken);
         }
-        catch (UnauthorizedAccessException)
+        catch (OperationCanceledException ex)
         {
-            logger.LogDebug("[LocalSystemScannerService] Access denied to directory, skipping: {CurrentPath}",
-                currentPath);
+            logger.LogDebug(
+                "[LocalSystemScannerService] Scan cancelled for directory: {CurrentPath}, Exception: {Exception}",
+                currentPath, ex.Message);
+            throw;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            logger.LogDebug("[LocalSystemScannerService] Access denied to directory, skipping: {CurrentPath}." +
+                            "Exception: {Exception}", currentPath, ex.Message);
         }
         catch (Exception ex)
         {
@@ -148,12 +147,12 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
     /// <param name="repoPath">The root path to the repository to be processed.</param>
     /// <param name="dirName">The directory name of the repository.</param>
     /// <param name="result">The result list to be appended.</param>
-    private void ProcessGitRepository(string repoPath, string dirName, List<LocalProjectDto> result)
+    private async Task ProcessGitRepositoryAsync(string repoPath, string dirName, List<LocalProjectDto> result,
+        CancellationToken cancellationToken)
     {
         try
         {
-            // Safely find all .csproj files in the repository, excluding common build and dependency folders
-            var csprojFiles = FindCsprojFilesSafe(repoPath);
+            var csprojFiles = FindCsprojFilesSafe(repoPath, cancellationToken);
 
             // Determine if this repository is a .NET project by checking for the presence of .sln files or .csproj files
             var isDotNet = Directory.EnumerateFiles(repoPath).Any(f =>
@@ -161,8 +160,9 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
                                f.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
                            || csprojFiles.Count > 0;
 
-            // Parse each .csproj file to determine if it's a web project and create CsProjectDto objects for them
-            var subProjects = csprojFiles.Select(ParseCsProject).ToList();
+            var subProjects = new List<CsProjectDto>();
+            foreach (var csprojFile in csprojFiles)
+                subProjects.Add(await ParseCsProjectAsync(csprojFile, cancellationToken));
 
             // If it's a .NET project, add it to the result list with its name, path, and sub-projects
             result.Add(new LocalProjectDto
@@ -172,6 +172,13 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
                 IsDotNetProject = isDotNet,
                 CsProjects = subProjects
             });
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogDebug(
+                "[LocalSystemScannerService] Scan cancelled for repository: {RepoPath}, Exception: {Exception}",
+                repoPath, ex.Message);
+            throw;
         }
         catch (Exception ex)
         {
@@ -185,22 +192,33 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
     ///     for the presence of the "Microsoft.NET.Sdk.Web" SDK attribute.
     /// </summary>
     /// <param name="csprojPath">The path to .csproj file.</param>
-    /// <returns></returns>
-    private CsProjectDto ParseCsProject(string csprojPath)
+    /// <returns>A CsProjectDto representing the parsed project.</returns>
+    private async Task<CsProjectDto> ParseCsProjectAsync(string csprojPath, CancellationToken cancellationToken)
     {
         var isWeb = false;
         try
         {
-            // Load the .csproj file as an XML document and check for the "Sdk" attribute in the root element
-            var doc = XDocument.Load(csprojPath);
+            // Use a FileStream with asynchronous reading to load the .csproj file, which allows for cancellation support
+            await using var stream =
+                new FileStream(csprojPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+            var doc = await XDocument.LoadAsync(stream, LoadOptions.None, cancellationToken);
+
             var sdkAttribute = doc.Root?.Attribute("Sdk")?.Value;
             isWeb = sdkAttribute != null &&
                     sdkAttribute.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase);
         }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogDebug(
+                "[LocalSystemScannerService] Parsing cancelled for .csproj file: {CsProjPath}, Exception: {Exception}",
+                csprojPath, ex.Message);
+            throw;
+        }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "[LocalSystemScannerService] Failed to parse .csproj file " +
-                                  "to determine project type: {CsProjPath}", csprojPath);
+            logger.LogWarning(ex,
+                "[LocalSystemScannerService] Failed to parse .csproj file to determine project type: {CsProjPath}",
+                csprojPath);
         }
 
         // Create and return a CsProjectDto with the project name, path, and whether it's a web project
@@ -219,8 +237,9 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
     ///     "obj", "node_modules", and hidden directories.
     /// </summary>
     /// <param name="rootDir">The root directory to start searching for .csproj files.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A list of file paths to the .csproj files found.</returns>
-    private List<string> FindCsprojFilesSafe(string rootDir)
+    private List<string> FindCsprojFilesSafe(string rootDir, CancellationToken cancellationToken)
     {
         var result = new List<string>();
         var queue = new Queue<string>();
@@ -228,6 +247,8 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
 
         while (queue.Count > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var currentPath = queue.Dequeue();
             try
             {
@@ -239,11 +260,11 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
                 foreach (var subDir in Directory.GetDirectories(currentPath))
                     queue.Enqueue(subDir);
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
                 logger.LogDebug(
-                    "[LocalSystemScannerService] Access denied while searching for .csproj files: {CurrentPath}",
-                    currentPath);
+                    "[LocalSystemScannerService] Access denied while searching for .csproj files: {CurrentPath}. " +
+                    "Exception: {Exception}", currentPath, ex.Message);
             }
             catch (Exception ex)
             {
