@@ -47,8 +47,9 @@ public class GitHubService : IGitHubService
     }
 
 
-    /// <inheritdoc/>
-    public async Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken, bool forceRefresh, CancellationToken cancellationToken = default)
+    /// <inheritdoc />
+    public async Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken, bool forceRefresh,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(accessToken))
         {
@@ -70,19 +71,23 @@ public class GitHubService : IGitHubService
                     var cachedRepos = JsonSerializer.Deserialize<List<GitHubRepositoryDto>>(cachedJson, JsonOptions);
                     if (cachedRepos != null)
                     {
-                        _logger.LogInformation("[GitHubService] Successfully retrieved {Count} GitHub repositories from cache.", cachedRepos.Count);
+                        _logger.LogInformation(
+                            "[GitHubService] Successfully retrieved {Count} GitHub repositories from cache.",
+                            cachedRepos.Count);
                         return cachedRepos;
                     }
                 }
             }
             catch (OperationCanceledException ex)
             {
-                _logger.LogWarning("[GitHubService] Fetching repositories from cache was cancelled. Exception: {Message}", ex.Message);
+                _logger.LogWarning(
+                    "[GitHubService] Fetching repositories from cache was cancelled. Exception: {Message}", ex.Message);
                 throw;
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[GitHubService] Failed to read or deserialize repositories from cache. Falling back to API call.");
+                _logger.LogWarning(ex,
+                    "[GitHubService] Failed to read or deserialize repositories from cache. Falling back to API call.");
             }
         }
 
@@ -99,12 +104,16 @@ public class GitHubService : IGitHubService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("[GitHubService] GitHub API returned error status code: {StatusCode} for getting repositories.", response.StatusCode);
+                _logger.LogError(
+                    "[GitHubService] GitHub API returned error status code: {StatusCode} for getting repositories.",
+                    response.StatusCode);
                 return [];
             }
 
             // Read and deserialize the response content into a list of GitHubRepositoryDto objects.
-            var repositories = await response.Content.ReadFromJsonAsync<List<GitHubRepositoryDto>>(JsonOptions, cancellationToken) ?? [];
+            var repositories =
+                await response.Content.ReadFromJsonAsync<List<GitHubRepositoryDto>>(JsonOptions, cancellationToken) ??
+                [];
 
             try
             {
@@ -120,7 +129,9 @@ public class GitHubService : IGitHubService
             }
             catch (OperationCanceledException ex)
             {
-                _logger.LogWarning("[GitHubService] Failed to save repositories to distributed cache. Exception: {Message}", ex.Message);
+                _logger.LogWarning(
+                    "[GitHubService] Failed to save repositories to distributed cache. Exception: {Message}",
+                    ex.Message);
                 throw;
             }
             catch (Exception ex)
@@ -128,7 +139,9 @@ public class GitHubService : IGitHubService
                 _logger.LogWarning(ex, "[GitHubService] Failed to save repositories to distributed cache.");
             }
 
-            _logger.LogInformation("[GitHubService] Successfully retrieved and cached {Count} repositories from GitHub API.", repositories.Count);
+            _logger.LogInformation(
+                "[GitHubService] Successfully retrieved and cached {Count} repositories from GitHub API.",
+                repositories.Count);
             return repositories;
         }
         catch (OperationCanceledException)
