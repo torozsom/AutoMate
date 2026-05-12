@@ -5,13 +5,13 @@ using Web.Configs;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Services: Builder phase
-ServiceConfiguration.Configure(builder);
+builder.AddApplicationServices();
 
 // Build the application.
 var app = builder.Build();
 
 // Configure Pipeline: App phase
-AppConfiguration.Configure(app);
+await app.UseApplicationPipelineAsync();
 
 // Run the application, starting the web server and listening for incoming HTTP requests.
 app.Run();
