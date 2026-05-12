@@ -19,15 +19,9 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
     private const int DefaultExposedPort = 8080;
 
 
-    /// <summary>
-    ///     Adds a local project to the database for a specific user. Checks if a project
-    ///     with the same source path already exists for the user before adding.
-    /// </summary>
-    /// <param name="userId">The user ID of the project's owner.</param>
-    /// <param name="project">The project information to be saved.</param>
-    /// <param name="csproject">The C# project file information.</param>
-    /// <returns>A task that returns true if the project was added successfully, or false if it already exists.</returns>
-    public async Task<bool> AddLocalProjectAsync(Guid userId, LocalProjectDto project, CsProjectDto csproject)
+    /// <inheritdoc />
+    public async Task<bool> AddLocalProjectAsync(Guid userId, LocalProjectDto project, CsProjectDto csproject,
+        CancellationToken cancellationToken = default)
     {
         if (userId == Guid.Empty)
         {
@@ -42,7 +36,7 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
                 .Include(p => p.CsProjects)
                 .FirstOrDefaultAsync(p => p.UserId == userId
                                           && p.SourceType == SourceType.Local
-                                          && p.SourcePathOrUrl == project.Path);
+                                          && p.SourcePathOrUrl == project.Path, cancellationToken);
 
             // If not, create a new project
             if (proj == null)
@@ -74,11 +68,11 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
             var newCsProject = CreateDefaultCsProject(proj.Id, csproject);
             proj.CsProjects.Add(newCsProject);
 
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
+
             logger.LogInformation(
                 "[ProjectService] Successfully added C# project '{CsProjectName}' to project '{ProjectName}'.",
                 csproject.Name, project.Name);
-
             return true;
         }
         catch (DbUpdateException ex)
@@ -90,15 +84,9 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
     }
 
 
-    /// <summary>
-    ///     Adds a GitHub project to the database for a specific user. Checks if a project
-    ///     with the same source URL already exists for the user before adding.
-    /// </summary>
-    /// <param name="userId">The user ID of the project's owner.</param>
-    /// <param name="projectName">The name of the project to be saved.</param>
-    /// <param name="gitUrl">The git URL of the remote repository.</param>
-    /// <returns>A task that returns true if the project was added successfully, or false if it already exists.</returns>
-    public async Task<bool> AddGitHubProjectAsync(Guid userId, string projectName, string gitUrl)
+    /// <inheritdoc />
+    public async Task<bool> AddGitHubProjectAsync(Guid userId, string projectName, string gitUrl,
+        CancellationToken cancellationToken = default)
     {
         if (userId == Guid.Empty || string.IsNullOrWhiteSpace(gitUrl))
         {
@@ -110,7 +98,8 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
         {
             // Check if a project with the same source URL already exists for the user
             var alreadyExists = await context.Projects
-                .AnyAsync(p => p.UserId == userId && p.SourceType == SourceType.Remote && p.SourcePathOrUrl == gitUrl);
+                .AnyAsync(p => p.UserId == userId && p.SourceType == SourceType.Remote && p.SourcePathOrUrl == gitUrl,
+                    cancellationToken);
 
             if (alreadyExists)
             {
@@ -130,7 +119,7 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
             };
 
             context.Projects.Add(project);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation(
                 "[ProjectService] Successfully added GitHub project '{ProjectName}' for user {UserId}.", projectName,
@@ -146,38 +135,27 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
     }
 
 
-    /// <summary>
-    ///     Retrieves a list of projects associated with a specific user. The method queries the database
-    ///     for projects that match the provided user ID and returns them as a list. This allows users to
-    ///     view all their projects in the application.
-    /// </summary>
-    /// <param name="userId"></param>
-    /// <returns></returns>
-    public async Task<List<Project>> GetUserProjectsAsync(Guid userId)
+    /// <inheritdoc />
+    public async Task<List<Project>> GetUserProjectsAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         return await context.Projects
             .AsNoTracking()
             .Include(p => p.CsProjects)
-                .ThenInclude(c => c.Deployments)
+            .ThenInclude(c => c.Deployments)
             .Where(p => p.UserId == userId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 
 
-    /// <summary>
-    ///     Deletes a project associated with a specific user from the database.
-    ///     Checks if the project exists before attempting to delete it.
-    /// </summary>
-    /// <param name="projectId">The unique identifier of the project to be deleted.</param>
-    /// <param name="userId">The unique identifier of the user who owns the project.</param>
-    /// <returns>A task that returns true if the project was deleted successfully, or false if the project does not exist.</returns>
-    public async Task<bool> DeleteProjectAsync(Guid projectId, Guid userId)
+    /// <inheritdoc />
+    public async Task<bool> DeleteProjectAsync(Guid projectId, Guid userId,
+        CancellationToken cancellationToken = default)
     {
         try
         {
             // Check if the project exists before attempting to delete it
             var project = await context.Projects
-                .FirstOrDefaultAsync(p => p.Id == projectId && p.UserId == userId);
+                .FirstOrDefaultAsync(p => p.Id == projectId && p.UserId == userId, cancellationToken);
 
             if (project == null)
             {
@@ -189,7 +167,7 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
 
             // Delete the project and its associated C# projects
             context.Projects.Remove(project);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation("[ProjectService] Successfully deleted project {ProjectId} for user {UserId}.",
                 projectId, userId);
@@ -204,38 +182,20 @@ public class ProjectService(AutoMateDbContext context, ILogger<ProjectService> l
     }
 
 
-    /// <summary>
-    ///     Retrieves a specific project by its ID for a given user. This method checks if the project exists
-    ///     and belongs to the user before returning it. If the project is found, it includes the associated
-    ///     C# projects in the result.
-    /// </summary>
-    /// <param name="projectId">The unique identifier of the project to retrieve.</param>
-    /// <param name="userId">The unique identifier of the user who owns the project.</param>
-    /// <returns>A task that returns the project if found, or null if not found.</returns>
-    public async Task<Project?> GetProjectByIdAsync(Guid projectId, Guid userId)
+    /// <inheritdoc />
+    public async Task<Project?> GetProjectByIdAsync(Guid projectId, Guid userId,
+        CancellationToken cancellationToken = default)
     {
         return await context.Projects
             .Include(p => p.CsProjects)
-                .ThenInclude(c => c.Deployments)
-            .FirstOrDefaultAsync(p => p.Id == projectId && p.UserId == userId);
+            .ThenInclude(c => c.Deployments)
+            .FirstOrDefaultAsync(p => p.Id == projectId && p.UserId == userId, cancellationToken);
     }
 
 
     /// <summary>
     ///     Creates a default C# project with predefined configuration settings.
-    ///     This method is used when adding a new local project to ensure that the
-    ///     C# project has consistent default values for properties such as .NET version,
-    ///     exposed port, and database requirements.
     /// </summary>
-    /// <param name="projectId">
-    ///     The unique identifier of the parent project to which this C# project belongs.
-    /// </param>
-    /// <param name="dto">
-    ///     The data transfer object containing the name, path, and web project status of the C# project.
-    /// </param>
-    /// <returns>
-    ///     A new instance of the CsProject class initialized with the provided information and default configuration settings.
-    /// </returns>
     private static CsProject CreateDefaultCsProject(Guid projectId, CsProjectDto dto)
     {
         return new CsProject
