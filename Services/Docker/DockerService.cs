@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Services.LogStreaming;
 
 namespace Services.Docker;
@@ -20,15 +21,13 @@ namespace Services.Docker;
 /// </summary>
 public partial class DockerService : IDockerService, IDisposable
 {
-    private const int DefaultContainerPort = 8080;
-    private const int DockerComposeTimeoutMinutes = 8;
-
-    private const string WindowsDockerUri = "npipe://./pipe/docker_engine";
-    private const string UnixDockerUri = "unix:///var/run/docker.sock";
-
     private readonly DockerClient _client;
+
     private readonly ILogger<DockerService> _logger;
     private readonly ILogStreamer _logStreamer;
+    private readonly DockerOptions _options;
+
+    private bool _disposed;
 
 
     /// <summary>
@@ -37,14 +36,15 @@ public partial class DockerService : IDockerService, IDisposable
     ///     uses a named pipe to connect to the Docker daemon, while for Unix-based systems,
     ///     it uses a Unix socket.
     /// </summary>
-    public DockerService(ILogger<DockerService> logger, ILogStreamer logStreamer)
+    public DockerService(ILogger<DockerService> logger, ILogStreamer logStreamer, IOptions<DockerOptions> options)
     {
         _logger = logger;
         _logStreamer = logStreamer;
+        _options = options.Value;
 
         var dockerUri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? new Uri(WindowsDockerUri)
-            : new Uri(UnixDockerUri);
+            ? new Uri(_options.WindowsDockerUri)
+            : new Uri(_options.UnixDockerUri);
 
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
     }
@@ -55,23 +55,26 @@ public partial class DockerService : IDockerService, IDisposable
     /// </summary>
     public void Dispose()
     {
+        if (_disposed) return;
         _client.Dispose();
         GC.SuppressFinalize(this);
+        _disposed = true;
     }
 
 
     /// <summary>
     ///     Checks if the Docker daemon is available and responsive by sending a ping request.
     /// </summary>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the ping operation.</param>
     /// <returns>A boolean indicating if the Docker daemon is available.</returns>
-    public async Task<bool> PingAsync()
+    public async Task<bool> PingAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            await _client.System.PingAsync();
+            await _client.System.PingAsync(cancellationToken);
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[DockerService] Docker daemon is not responsive during ping.");
             return false;
@@ -86,21 +89,22 @@ public partial class DockerService : IDockerService, IDisposable
     ///     The path to the source directory containing the Dockerfile and associated build context.
     /// </param>
     /// <param name="imageTag">The tag to assign to the built Docker image.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the build operation.</param>
     /// <returns>
     ///     A task representing the asynchronous operation, returning true if the image was successfully built,
     ///     otherwise false.
     /// </returns>
-    public async Task<bool> BuildImageAsync(string sourcePath, string imageTag)
+    public async Task<bool> BuildImageAsync(string sourcePath, string imageTag,
+        CancellationToken cancellationToken = default)
     {
         var tempTarFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.tar");
 
         try
         {
-            _logger.LogInformation("[DockerService] Building Docker image '{ImageTag}' " +
-                                   "from source directory: {SourcePath}", imageTag, sourcePath);
+            _logger.LogInformation("[DockerService] Building Docker image '{ImageTag}' from: {SourcePath}", imageTag,
+                sourcePath);
 
-            // Create a tar context from the source directory
-            await CreateTarContextAsync(sourcePath, tempTarFilePath);
+            await CreateTarContextAsync(sourcePath, tempTarFilePath, cancellationToken);
 
             await using var fileStream = new FileStream(tempTarFilePath, FileMode.Open, FileAccess.Read);
             var buildParameters = new ImageBuildParameters { Tags = [imageTag] };
@@ -111,12 +115,19 @@ public partial class DockerService : IDockerService, IDisposable
                 fileStream,
                 null,
                 null,
-                new Progress<JSONMessage>(msg => HandleDockerBuildProgress(msg, ref buildErrorOccurred)));
+                new Progress<JSONMessage>(msg => HandleDockerBuildProgress(msg, ref buildErrorOccurred)),
+                cancellationToken);
 
             if (!buildErrorOccurred)
                 _logger.LogInformation("[DockerService] Docker image '{ImageTag}' built successfully.", imageTag);
 
             return !buildErrorOccurred;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning("[DockerService] Build operation cancelled for image '{ImageTag}', " +
+                               "Exception: {ExceptionMessage}", imageTag, ex.Message);
+            return false;
         }
         catch (Exception ex)
         {
@@ -141,37 +152,44 @@ public partial class DockerService : IDockerService, IDisposable
     /// <param name="hostPort">The port on the host machine to bind to the container's port.</param>
     /// <param name="containerPort">The port within the container to be exposed, with a default value of 8080.</param>
     /// <param name="envVarsJson">Optional JSON string specifying environment variables to pass to the container.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the start operation.</param>
     /// <returns>The ID of the started container if the operation is successful, or null if it fails.</returns>
-    public async Task<string?> StartContainerAsync(
-        string imageTag,
-        string containerName,
-        int hostPort,
-        int containerPort = DefaultContainerPort,
-        string? envVarsJson = null)
+    public async Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort,
+        int containerPort = 8080, string? envVarsJson = null, CancellationToken cancellationToken = default)
     {
         try
         {
-            _logger.LogInformation("[DockerService] Starting container '{ContainerName}' " +
-                                   "(Image: {ImageTag}, Port: {HostPort}->{ContainerPort})",
-                containerName, imageTag, hostPort, containerPort);
+            var actualContainerPort = containerPort == 8080 ? _options.DefaultContainerPort : containerPort;
 
-            var createParams
-                = BuildContainerParameters(imageTag, containerName, hostPort, containerPort, envVarsJson);
+            _logger.LogInformation(
+                "[DockerService] Starting container '{ContainerName}' (Image: {ImageTag}, Port: {HostPort}->{ContainerPort})",
+                containerName, imageTag, hostPort, actualContainerPort);
 
-            var response = await _client.Containers.CreateContainerAsync(createParams);
+            var createParams =
+                BuildContainerParameters(imageTag, containerName, hostPort, actualContainerPort, envVarsJson);
+            var response = await _client.Containers.CreateContainerAsync(createParams, cancellationToken);
             var containerId = response.ID;
-            var started = await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters());
+
+            var started =
+                await _client.Containers.StartContainerAsync(containerId, new ContainerStartParameters(),
+                    cancellationToken);
 
             if (started)
             {
                 _logger.LogInformation(
-                    "[DockerService] Container '{ContainerName}' ({ContainerId}) started successfully.",
-                    containerName, containerId[..8]);
+                    "[DockerService] Container '{ContainerName}' ({ContainerId}) started successfully.", containerName,
+                    containerId[..8]);
                 return containerId;
             }
 
             _logger.LogWarning("[DockerService] Container '{ContainerName}' was created but failed to start.",
                 containerName);
+            return null;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning("[DockerService] Start operation cancelled for container '{ContainerName}'." +
+                               "Exception: {ExceptionMessage}", containerName, ex.Message);
             return null;
         }
         catch (Exception ex)
@@ -188,69 +206,18 @@ public partial class DockerService : IDockerService, IDisposable
     /// <param name="workingDir">The working directory where the docker command should be run.</param>
     /// <param name="projectName">The name of the project to be containerized.</param>
     /// <param name="projectId">The ID of the project.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation.</param>
     /// <returns>Returns an indicator if the docker compose up command was successfully run.</returns>
-    public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId)
+    public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
+        CancellationToken cancellationToken = default)
     {
         var safeProjectName = NormalizeProjectName(projectName);
-        _logger.LogInformation("[DockerService] Starting 'docker compose up -d' for project '{ProjectName}' " +
-                               "in {Directory}", safeProjectName, workingDir);
+        _logger.LogInformation(
+            "[DockerService] Starting 'docker compose up -d' for project '{ProjectName}' in {Directory}",
+            safeProjectName, workingDir);
 
         var startInfo = CreateDockerComposeStartInfo(workingDir, safeProjectName);
-
-        using var process = new Process();
-        process.StartInfo = startInfo;
-
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-                _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
-
-            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
-        };
-
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-                _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
-
-            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
-        };
-
-        try
-        {
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(DockerComposeTimeoutMinutes));
-            await process.WaitForExitAsync(cts.Token);
-
-            if (process.ExitCode != 0)
-            {
-                _logger.LogError(
-                    "[DockerService] Docker Compose failed for project '{ProjectName}' with exit code {Code}.",
-                    safeProjectName, process.ExitCode);
-                return false;
-            }
-
-            _logger.LogInformation("[DockerService] Docker Compose completed successfully for project '{ProjectName}'.",
-                safeProjectName);
-            return true;
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogError(
-                "[DockerService] Docker Compose timed out after {Timeout} minutes for project '{ProjectName}'.",
-                DockerComposeTimeoutMinutes, safeProjectName);
-            if (!process.HasExited) process.Kill(true);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogCritical(ex, "[DockerService] Critical error while launching " +
-                                    "Docker Compose process for '{ProjectName}'.", safeProjectName);
-            return false;
-        }
+        return await ExecuteProcessStreamingLogsAsync(startInfo, projectId, cancellationToken);
     }
 
 
@@ -260,12 +227,15 @@ public partial class DockerService : IDockerService, IDisposable
     /// <param name="workingDir">The working directory where the docker command should be run.</param>
     /// <param name="projectName">The name of the project whose containers should be stopped.</param>
     /// <param name="projectId">The ID of the project.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation.</param>
     /// <returns>Returns an indicator if the docker compose down command was successfully run.</returns>
-    public async Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId)
+    public async Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
+        CancellationToken cancellationToken = default)
     {
         var safeProjectName = NormalizeProjectName(projectName);
-        _logger.LogInformation("[DockerService] Starting 'docker compose down' for project '{ProjectName}' " +
-                               "in {Directory}", safeProjectName, workingDir);
+        _logger.LogInformation(
+            "[DockerService] Starting 'docker compose down' for project '{ProjectName}' in {Directory}",
+            safeProjectName, workingDir);
 
         var startInfo = new ProcessStartInfo
         {
@@ -278,69 +248,16 @@ public partial class DockerService : IDockerService, IDisposable
             CreateNoWindow = true
         };
 
-        using var process = new Process();
-        process.StartInfo = startInfo;
-
-        process.OutputDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-                _logger.LogDebug("[Docker Compose]: {Data}", e.Data);
-
-            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
-        };
-
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (!string.IsNullOrWhiteSpace(e.Data))
-                _logger.LogWarning("[Docker Compose]: {Data}", e.Data);
-
-            _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
-        };
-
-        try
-        {
-            process.Start();
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(DockerComposeTimeoutMinutes));
-            await process.WaitForExitAsync(cts.Token);
-
-            if (process.ExitCode != 0)
-            {
-                _logger.LogError(
-                    "[DockerService] Docker Compose down failed for project '{ProjectName}' with exit code {Code}.",
-                    safeProjectName, process.ExitCode);
-                return false;
-            }
-
-            _logger.LogInformation("[DockerService] Docker Compose down completed successfully for project '{ProjectName}'.",
-                safeProjectName);
-            return true;
-        }
-        catch (OperationCanceledException ex)
-        {
-            _logger.LogError(
-                "[DockerService] Docker Compose down timed out after {Timeout} minutes for project '{ProjectName}'." +
-                " Exception: {Exception}", ex, DockerComposeTimeoutMinutes, safeProjectName);
-
-            if (!process.HasExited) process.Kill(true);
-            return false;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogCritical(ex, "[DockerService] Critical error while launching " +
-                                    "Docker Compose down process for '{ProjectName}'.", safeProjectName);
-            return false;
-        }
+        return await ExecuteProcessStreamingLogsAsync(startInfo, projectId, cancellationToken);
     }
 
 
     /// <summary>
     ///     Gets a list of all currently running Docker Compose project names.
     /// </summary>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation.</param>
     /// <returns>A list of project names that are currently running.</returns>
-    public async Task<List<string>> GetRunningProjectNamesAsync()
+    public async Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -358,30 +275,52 @@ public partial class DockerService : IDockerService, IDisposable
         try
         {
             process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(30)).Token);
+
+            // Set a timeout for reading the output to prevent hanging if the command fails
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+            var outputTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+            await process.WaitForExitAsync(linkedCts.Token);
+
+            var output = await outputTask;
 
             if (process.ExitCode != 0)
             {
-                var error = await process.StandardError.ReadToEndAsync();
-                _logger.LogWarning("[DockerService] 'docker compose ls' failed. Exit Code: {Code}, Error: {Error}", process.ExitCode, error);
+                // If the command fails, log the error and return an empty list
+                var error = await process.StandardError.ReadToEndAsync(CancellationToken.None);
+                _logger.LogWarning("[DockerService] 'docker compose ls' failed. Exit Code: {Code}, Error: {Error}",
+                    process.ExitCode, error);
                 return [];
             }
 
-            if (string.IsNullOrWhiteSpace(output))
-            {
-                return [];
-            }
+            if (string.IsNullOrWhiteSpace(output)) return [];
 
             var projects = JsonSerializer.Deserialize<JsonElement>(output);
             var runningProjects = new List<string>();
 
             if (projects.ValueKind == JsonValueKind.Array)
+            {
                 foreach (var project in projects.EnumerateArray())
+                {
                     if (project.TryGetProperty("Name", out var nameProp) && nameProp.GetString() is { } name)
+                    {
                         runningProjects.Add(name);
+                    }
+                }
+            }
 
             return runningProjects;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning("[DockerService] 'docker compose ls' operation was cancelled or timed out. " +
+                               "Exception: {Exception}", ex.Message);
+
+            if (!process.HasExited)
+                process.Kill(true);
+
+            return [];
         }
         catch (Exception ex)
         {
@@ -405,25 +344,24 @@ public partial class DockerService : IDockerService, IDisposable
         {
             _logger.LogInformation("[DockerService] Starting to stream logs for container '{ContainerName}'",
                 containerName);
+
             var logParams = new ContainerLogsParameters
             {
-                ShowStdout = true,
-                ShowStderr = true,
-                Follow = true,
-                Tail = "100"
+                ShowStdout = true, ShowStderr = true, Follow = true, Tail = "100"
             };
 
             using var multiplexedStream =
                 await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
 
             var buffer = ArrayPool<byte>.Shared.Rent(8192);
+
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    var readResult = await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
-                    if (readResult.EOF)
-                        break;
+                    var readResult =
+                        await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
+                    if (readResult.EOF) break;
 
                     if (readResult.Count > 0)
                     {
@@ -451,19 +389,21 @@ public partial class DockerService : IDockerService, IDisposable
     }
 
 
-    /// A regular expression to remove ANSI escape codes from the docker stats output.
-    [GeneratedRegex(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")]
-    private static partial Regex MetricsRegex();
-
     /// <summary>
     ///     Starts streaming metrics for a specified container to the log streamer.
     /// </summary>
-    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId, CancellationToken cancellationToken)
+    /// <param name="containerName">The name of the container to stream metrics from.</param>
+    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="containerSuffixOrTabId">The tab ID or suffix associated with the container.</param>
+    /// <param name="cancellationToken">A token to cancel the streaming process.</param>
+    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+        CancellationToken cancellationToken)
     {
         try
         {
-            _logger.LogInformation("[DockerService] Starting to stream metrics for container '{ContainerName}'", containerName);
-            
+            _logger.LogInformation("[DockerService] Starting to stream metrics for container '{ContainerName}'",
+                containerName);
+
             var startInfo = new ProcessStartInfo
             {
                 FileName = "docker",
@@ -475,50 +415,59 @@ public partial class DockerService : IDockerService, IDisposable
 
             using var process = Process.Start(startInfo);
             if (process == null) return;
-            
-            await using var registration = cancellationToken.Register(() => {
-                try { if (!process.HasExited) process.Kill(true); } catch { /* ignore */ }
+
+            // Register a cancellation callback to kill the process if the token is cancelled
+            await using var registration = cancellationToken.Register(() =>
+            {
+                try
+                {
+                    if (!process.HasExited)
+                        process.Kill(true);
+                }
+                catch
+                {
+                    /* ignore */
+                }
             });
 
             using var reader = process.StandardOutput;
             while (!cancellationToken.IsCancellationRequested)
             {
+                // Read each line of output, which contains the CPU and memory usage separated by '|'
                 var line = await reader.ReadLineAsync(cancellationToken);
                 if (string.IsNullOrWhiteSpace(line)) continue;
-                
+
                 line = MetricsRegex().Replace(line, "");
-                
                 var parts = line.Split('|');
+
                 if (parts.Length >= 2)
-                {
                     await _logStreamer.StreamContainerMetricsAsync(
                         projectId,
                         containerSuffixOrTabId,
                         parts[0].Trim(),
-                        parts[1].Trim());
-                }
+                        parts[1].Trim()
+                    );
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
-            _logger.LogInformation("[DockerService] Stopped streaming metrics for container '{ContainerName}' (cancelled).", containerName);
+            _logger.LogInformation(
+                "[DockerService] Stopped streaming metrics for container '{ContainerName}' (cancelled)." +
+                "Exception: {Exception}.", containerName, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DockerService] Error streaming metrics for container '{ContainerName}'.", containerName);
+            _logger.LogError(ex, "[DockerService] Error streaming metrics for container '{ContainerName}'.",
+                containerName);
         }
     }
-
-
-    /// A regular expression to extract the host port from the output of the 'docker port' command.
-    [GeneratedRegex(@":(\d+)")]
-    private static partial Regex HostPortRegex();
 
 
     /// <summary>
     ///     Gets the host port mapped to the specified container.
     /// </summary>
-    public async Task<int> GetContainerHostPortAsync(string containerName)
+    public async Task<int> GetContainerHostPortAsync(string containerName,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -526,33 +475,103 @@ public partial class DockerService : IDockerService, IDisposable
             {
                 FileName = "docker",
                 Arguments = $"port {containerName}",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
+                RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true
             };
 
-            using var process = Process.Start(startInfo);
-            if (process == null) return 0;
-            
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            
+            using var process = new Process();
+            process.StartInfo = startInfo;
+            process.Start();
+
+            // Set a timeout for reading the output to prevent hanging if the command fails
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(TimeSpan.FromSeconds(10));
+
+            var outputTask = process.StandardOutput.ReadToEndAsync(cts.Token);
+            await process.WaitForExitAsync(cts.Token);
+            var output = await outputTask;
+
             if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
             {
                 var match = HostPortRegex().Match(output);
-                if (match.Success && int.TryParse(match.Groups[1].Value, out var port))
-                {
-                    return port;
-                }
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var port)) return port;
             }
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogWarning("[DockerService] Getting host port for container '{ContainerName}' was cancelled." +
+                               "Exception: {Exception}.", containerName, ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DockerService] Error getting host port for container '{ContainerName}'.", containerName);
+            _logger.LogError(ex, "[DockerService] Error getting host port for container '{ContainerName}'.",
+                containerName);
         }
-        
+
         return 0;
     }
+
+
+    /// <summary>
+    ///     Executes a process with the specified start information and streams its output and error logs to the log streamer.
+    /// </summary>
+    /// <param name="startInfo"> Process start information for the command to be executed. </param>
+    /// <param name="projectId"> Project identifier for logging purposes. </param>
+    /// <param name="cancellationToken"> Token for cancellation of the operation. </param>
+    /// <returns></returns>
+    private async Task<bool> ExecuteProcessStreamingLogsAsync(ProcessStartInfo startInfo, Guid projectId,
+        CancellationToken cancellationToken)
+    {
+        using var process = new Process();
+        process.StartInfo = startInfo;
+
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+        };
+
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _logStreamer.StreamBuildLogsAsync(projectId, e.Data + "\r\n");
+        };
+
+        try
+        {
+            process.Start();
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(_options.ComposeTimeoutMinutes));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+
+            await process.WaitForExitAsync(linkedCts.Token);
+
+            if (process.ExitCode != 0)
+            {
+                _logger.LogError("[DockerService] Process failed with exit code {Code}. Command: {Cmd}",
+                    process.ExitCode, startInfo.Arguments);
+                return false;
+            }
+
+            return true;
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogError("[DockerService] Process timed out or was cancelled. Command: {Cmd}," +
+                             " Exception: {Ex}", startInfo.Arguments, ex.Message);
+            if (!process.HasExited)
+                process.Kill(true);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "[DockerService] Critical error launching process. Command: {Cmd}",
+                startInfo.Arguments);
+            return false;
+        }
+    }
+
 
     /// <summary>
     ///     Creates a tar context by packaging the specified source directory into a tar file.
@@ -561,7 +580,9 @@ public partial class DockerService : IDockerService, IDisposable
     /// </summary>
     /// <param name="sourceDirectory">The source directory containing the files to be packaged into the tar file.</param>
     /// <param name="targetTarFilePath">The file path where the created tar file will be saved.</param>
-    private static async Task CreateTarContextAsync(string sourceDirectory, string targetTarFilePath)
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation.</param>
+    private async Task CreateTarContextAsync(string sourceDirectory, string targetTarFilePath,
+        CancellationToken cancellationToken)
     {
         if (!Directory.Exists(sourceDirectory))
             throw new DirectoryNotFoundException($"Source directory '{sourceDirectory}' does not exist.");
@@ -572,20 +593,12 @@ public partial class DockerService : IDockerService, IDisposable
 
         if (File.Exists(dockerIgnorePath))
         {
-            var lines = await File.ReadAllLinesAsync(dockerIgnorePath);
+            var lines = await File.ReadAllLinesAsync(dockerIgnorePath, cancellationToken);
             ignore.Add(lines);
         }
         else
         {
-            ignore.Add([
-                "bin/",
-                "obj/",
-                ".git/",
-                ".vs/",
-                "node_modules/",
-                "TestResults/",
-                ".DS_Store"
-            ]);
+            ignore.Add(_options.DefaultDockerIgnore);
         }
 
         // Create the tar file and write entries while respecting the ignore rules
@@ -596,9 +609,11 @@ public partial class DockerService : IDockerService, IDisposable
         var allFiles = Directory.EnumerateFiles(sourceDirectory, "*.*", SearchOption.AllDirectories);
         foreach (var filePath in allFiles)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var relativePath = Path.GetRelativePath(sourceDirectory, filePath).Replace('\\', '/');
             if (!ignore.IsIgnored(relativePath))
-                await tarWriter.WriteEntryAsync(filePath, relativePath);
+                await tarWriter.WriteEntryAsync(filePath, relativePath, cancellationToken);
         }
     }
 
@@ -709,4 +724,14 @@ public partial class DockerService : IDockerService, IDisposable
             CreateNoWindow = true
         };
     }
+
+
+    /// A regular expression to remove ANSI escape codes from the docker stats output.
+    [GeneratedRegex(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")]
+    private static partial Regex MetricsRegex();
+
+
+    /// A regular expression to extract the host port from the output of the 'docker port' command.
+    [GeneratedRegex(@":(\d+)")]
+    private static partial Regex HostPortRegex();
 }

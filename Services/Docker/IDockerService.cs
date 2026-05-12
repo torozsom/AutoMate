@@ -1,38 +1,41 @@
 namespace Services.Docker;
 
 /// <summary>
-///     Service interface for managing Docker operations. Provides methods for checking the
-///     availability of the Docker daemon and for building and deploying projects as Docker containers.
+///     Service interface for managing Docker operations.
+///     Provides methods for checking the availability of the Docker daemon
+///     and for building and deploying projects as Docker containers.
 /// </summary>
 public interface IDockerService
 {
-    /// Checks if the Docker daemon is available and responsive.
-    Task<bool> PingAsync();
+    /// <summary>Checks if the Docker daemon is available and responsive.</summary>
+    Task<bool> PingAsync(CancellationToken cancellationToken = default);
 
-    /// Builds a Docker image from a source code directory.
-    Task<bool> BuildImageAsync(string sourcePath, string imageTag);
+    /// <summary>Builds a Docker image from a source code directory.</summary>
+    Task<bool> BuildImageAsync(string sourcePath, string imageTag, CancellationToken cancellationToken = default);
 
-    /// Starts a Docker container from a specified image, mapping the given host port to the container port.
+    /// <summary>Starts a Docker container from a specified image, mapping the given host port to the container port.</summary>
     Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort, int containerPort = 8080,
-        string? envVarsJson = null);
+        string? envVarsJson = null, CancellationToken cancellationToken = default);
 
-    /// Executes the 'docker-compose up' command in the specified working directory.
-    Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId);
+    /// <summary>Executes the 'docker compose up' command in the specified working directory.</summary>
+    Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
+        CancellationToken cancellationToken = default);
 
-    /// Executes the 'docker compose down' command in the specified working directory.
-    Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId);
+    /// <summary>Executes the 'docker compose down' command in the specified working directory.</summary>
+    Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
+        CancellationToken cancellationToken = default);
 
-    /// Gets a list of all currently running Docker Compose project names.
-    Task<List<string>> GetRunningProjectNamesAsync();
+    /// <summary>Gets a list of all currently running Docker Compose project names.</summary>
+    Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default);
 
-    /// Starts streaming logs for a specified container to the log streamer.
+    /// <summary>Starts streaming logs for a specified container to the log streamer.</summary>
     Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
         CancellationToken cancellationToken);
 
-    /// Starts streaming metrics for a specified container to the log streamer.
+    /// <summary>Starts streaming metrics for a specified container to the log streamer.</summary>
     Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
         CancellationToken cancellationToken);
-        
-    /// Gets the host port mapped to the specified container.
-    Task<int> GetContainerHostPortAsync(string containerName);
+
+    /// <summary>Gets the host port mapped to the specified container.</summary>
+    Task<int> GetContainerHostPortAsync(string containerName, CancellationToken cancellationToken = default);
 }
