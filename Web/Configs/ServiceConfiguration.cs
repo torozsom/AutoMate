@@ -65,7 +65,7 @@ public static class ServiceConfiguration
             .SetApplicationName("AutoMate");
 
         // Add the database context
-        services.AddDbContext<AutoMateDbContext>(options =>
+        services.AddDbContextPool<AutoMateDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
                    .UseSnakeCaseNamingConvention());
 
@@ -186,6 +186,6 @@ public static class ServiceConfiguration
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
         services.AddScoped<IProjectScannerService, ProjectScannerService>();
-        services.AddScoped<ITemplateService, TemplateService>();
+        services.AddScoped<ITemplatingService, TemplatingService>();
     }
 }

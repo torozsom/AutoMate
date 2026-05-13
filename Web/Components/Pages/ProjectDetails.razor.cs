@@ -41,6 +41,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     [Inject] private IDockerService DockerService { get; set; } = null!;
 
+    [Inject] private ILogger<ProjectDetails> Logger { get; set; } = null!;
+
 
     private readonly Dictionary<string, Terminal> _dbTerminals = new();
     private string _activeTab = "build";
@@ -124,7 +126,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     StateHasChanged();
                 });
             }
-            catch (Exception)
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to stop deployment for project {ProjectId}", ProjectId);
+            }
+            finally
             {
                 await InvokeAsync(() =>
                 {
@@ -161,20 +167,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         _ = Task.Run(async () =>
         {
-            using var scope = ServiceProvider.CreateScope();
-            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
-
             try
             {
+                using var scope = ServiceProvider.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
                 await orchestrator.DeployLocalProjectAsync(finalConfig);
-
-                await InvokeAsync(() =>
-                {
-                    _isDeploying = false;
-                    StateHasChanged();
-                });
             }
-            catch (Exception)
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to execute deployment for project {ProjectId}", finalConfig.ProjectId);
+            }
+            finally
             {
                 await InvokeAsync(() =>
                 {
@@ -197,8 +200,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             if (_hubConnection.State == HubConnectionState.Connected)
                 await _hubConnection.SendAsync("LeaveProjectGroup", ProjectId);
-            GC.SuppressFinalize(this);
+
+            await _hubConnection.DisposeAsync();
         }
+        GC.SuppressFinalize(this);
     }
 
 
@@ -361,8 +366,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (firstRender)
         {
             var userId = await GetCurrentUserIdAsync();
-            var protector = DataProtectionProvider.CreateProtector("LogHub");
-            var secureToken = protector.Protect($"{ProjectId}:{userId}");
+            var protector = DataProtectionProvider.CreateProtector("LogHub").ToTimeLimitedDataProtector();
+            var secureToken = protector.Protect($"{ProjectId}:{userId}", lifetime: TimeSpan.FromMinutes(5));
 
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))

@@ -10,7 +10,7 @@ namespace Web.Services;
 ///     with the project ID, allowing clients that have joined the group to receive the log updates as they occur.
 /// </summary>
 /// <param name="hubContext">The SignalR hub context.</param>
-public class RealTimeLogStreamer(IHubContext<LogHub> hubContext) : ILogStreamer
+public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : ILogStreamer
 {
     /// <summary>
     ///     Streams build logs for a specific project to connected clients in real-time.
@@ -22,8 +22,9 @@ public class RealTimeLogStreamer(IHubContext<LogHub> hubContext) : ILogStreamer
     {
         await hubContext.Clients
             .Group($"project-{projectId}")
-            .SendCoreAsync("ReceiveBuildLog", [message]);
+            .ReceiveBuildLog(message);
     }
+
 
     /// <summary>
     ///     Streams container logs for a specific project and container to connected clients in real-time.
@@ -36,8 +37,9 @@ public class RealTimeLogStreamer(IHubContext<LogHub> hubContext) : ILogStreamer
     {
         await hubContext.Clients
             .Group($"project-{projectId}")
-            .SendCoreAsync("ReceiveContainerLog", [containerName, message]);
+            .ReceiveContainerLog(containerName, message);
     }
+
 
     /// <summary>
     ///     Streams container metrics for a specific project and container to connected clients in real-time.
@@ -46,6 +48,6 @@ public class RealTimeLogStreamer(IHubContext<LogHub> hubContext) : ILogStreamer
     {
         await hubContext.Clients
             .Group($"project-{projectId}")
-            .SendCoreAsync("ReceiveContainerMetrics", [containerName, cpuUsage, memoryUsage]);
+            .ReceiveContainerMetrics(containerName, cpuUsage, memoryUsage);
     }
 }
