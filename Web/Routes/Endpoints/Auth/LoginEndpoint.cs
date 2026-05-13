@@ -7,43 +7,46 @@ using Services.Auth;
 namespace Web.Routes.Endpoints.Auth;
 
 /// <summary>
-///     Endpoint for handling user login. It accepts email and password
-///     as form data, verifies the credentials against the database, and if valid,
-///     signs the user in using cookie authentication. If the credentials are invalid
-///     or the email is not verified, it redirects back to the login page with an error message.
+/// Endpoint for handling local user login via form post.
 /// </summary>
+/// <remarks>
+/// IMPORTANT: Requires a valid Antiforgery Token from the frontend.
+/// In Blazor, ensure your login form includes the <AntiforgeryToken /> component.
+/// </remarks>
 public class LoginEndpoint : IEndpoint
 {
     /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/login", async (
-            HttpContext context,
-            [FromForm] string email,
-            [FromForm] string password) =>
-        {
-            var authService = context.RequestServices.GetRequiredService<IAuthService>();
-            var (user, errorMessage) = await authService.LoginAsync(email, password);
-
-            if (user == null)
+                HttpContext context,
+                [FromServices] IAuthService authService,
+                [FromForm] string email,
+                [FromForm] string password) =>
             {
-                var encodedError = Uri.EscapeDataString(errorMessage ?? "Invalid credentials");
-                context.Response.Redirect($"/login?error={encodedError}");
-                return;
-            }
+                var (user, errorMessage) = await authService.LoginAsync(email, password);
 
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new(ClaimTypes.Name, user.Username),
-                new(ClaimTypes.Email, user.Email)
-            };
+                if (user == null)
+                {
+                    var encodedError = Uri.EscapeDataString(errorMessage ?? "Invalid credentials");
+                    // Using LocalRedirect to prevent Open Redirect vulnerability
+                    return Results.LocalRedirect($"/login?error={encodedError}");
+                }
 
-            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var principal = new ClaimsPrincipal(identity);
+                var claims = new List<Claim>
+                {
+                    new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                    new(ClaimTypes.Name, user.Username),
+                    new(ClaimTypes.Email, user.Email)
+                };
 
-            await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
-            context.Response.Redirect("/");
-        }).DisableAntiforgery().AllowAnonymous();
+                var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                var principal = new ClaimsPrincipal(identity);
+
+                await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+                return Results.LocalRedirect("/"); // Safe internal redirect
+            })
+            .AllowAnonymous();
     }
 }

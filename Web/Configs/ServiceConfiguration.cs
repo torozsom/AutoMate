@@ -69,7 +69,7 @@ public static class ServiceConfiguration
             builder.Services.RegisterDomainServices();
 
             // Register Minimal API Endpoints
-            builder.Services.RegisterEndpoints();
+            builder.Services.AddEndpoints();
 
             return builder;
         }
@@ -245,18 +245,6 @@ public static class ServiceConfiguration
             services.AddScoped<IProjectScannerService, ProjectScannerService>();
             services.AddScoped<ITemplatingService, TemplatingService>();
             services.AddScoped<IEmailSenderService, GmailSenderService>();
-        }
-
-        /// <summary>
-        ///     Maps specific Minimal API endpoints.
-        /// </summary>
-        private void RegisterEndpoints()
-        {
-            services.AddEndpoint<StaticAssetsEndpoint>()
-                .AddEndpoint<RazorComponentsEndpoint>()
-                .AddEndpoint<GitHubLoginEndpoint>()
-                .AddEndpoint<LoginEndpoint>()
-                .AddEndpoint<LogoutEndpoint>();
         }
     }
 }
