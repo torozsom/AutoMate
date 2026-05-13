@@ -3,6 +3,7 @@ using Core.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Services.Auth;
@@ -29,31 +30,47 @@ public static class ServiceConfiguration
 {
     /// <summary>
     ///     Configures the services for the ASP.NET Core web application.
-    ///     This method is responsible for registering the application's services with the dependency injection container,
-    ///     including the database context, authentication services, and Razor components.
+    ///     This method is responsible for registering the application's services with the dependency injection container.
     /// </summary>
     /// <param name="builder">The WebApplicationBuilder used to configure services.</param>
+    /// <returns>The original WebApplicationBuilder for chaining.</returns>
     /// <exception cref="InvalidOperationException">
-    ///     Thrown when required configuration values are missing (e.g., GitHub
-    ///     ClientId/ClientSecret).
+    ///     Thrown when required configuration values are missing (e.g., GitHub ClientId/ClientSecret).
     /// </exception>
-    public static void Configure(WebApplicationBuilder builder)
+    public static WebApplicationBuilder AddApplicationServices(this WebApplicationBuilder builder)
     {
-        // Add logging services to the services container.
-        builder.Services.AddLogging();
+        var services = builder.Services;
+        var configuration = builder.Configuration;
 
-        // Add data protection services to the services container.
-        builder.Services.AddDataProtection()
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.KnownIPNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
+
+        // Add logging services
+        services.AddLogging();
+
+        // Add antiforgery services for CSRF protection
+        services.AddAntiforgery();
+
+        // Configuration bindings (Options Pattern)
+        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
+        services.Configure<DockerOptions>(configuration.GetSection(DockerOptions.SectionName));
+
+        // Add data protection services
+        services.AddDataProtection()
             .PersistKeysToDbContext<AutoMateDbContext>()
             .SetApplicationName("AutoMate");
 
-        // Add the database context to the services container, using PostgreSQL as the database provider.
-        builder.Services.AddDbContext<AutoMateDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+        // Add the database context
+        services.AddDbContextPool<AutoMateDbContext>(options =>
+            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
+                .UseSnakeCaseNamingConvention());
 
-        // Add authentication services to the container, configuring cookie authentication
-        // as the default scheme and GitHub as an external authentication provider.
-        builder.Services.AddAuthentication(options =>
+        // Add authentication services (Cookie & GitHub OAuth)
+        services.AddAuthentication(options =>
             {
                 options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme = "GitHub";
@@ -61,10 +78,10 @@ public static class ServiceConfiguration
             .AddCookie()
             .AddGitHub(options =>
             {
-                options.ClientId = builder.Configuration["GitHub:ClientId"] ??
+                options.ClientId = configuration["GitHub:ClientId"] ??
                                    throw new InvalidOperationException("GitHub:ClientId is required");
 
-                options.ClientSecret = builder.Configuration["GitHub:ClientSecret"] ??
+                options.ClientSecret = configuration["GitHub:ClientSecret"] ??
                                        throw new InvalidOperationException("GitHub:ClientSecret is required");
 
                 options.CallbackPath = new PathString("/signin-github");
@@ -83,20 +100,22 @@ public static class ServiceConfiguration
                     var accessToken = context.AccessToken;
 
                     var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
-                    await authService.CreateOrUpdateGitHubUserAsync(githubId, username, email, avatarUrl, accessToken);
+
+                    // Create or update the GitHub user in the database and return the local user record.
+                    await authService.CreateOrUpdateGitHubUserAsync(githubId, username, email, avatarUrl, accessToken,
+                        context.HttpContext.RequestAborted);
                 };
             });
 
-        // Add a cascading authentication state provider to the services container, which allows
-        // components to access the current authentication state and react to changes in authentication status.
-        builder.Services.AddCascadingAuthenticationState();
+        // Add a cascading authentication state provider
+        services.AddCascadingAuthenticationState();
 
-        // Add rate limiting services to the container
-        builder.Services.AddRateLimiter(options =>
+        // Add rate limiting services
+        services.AddRateLimiter(options =>
         {
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
             {
-                // Use the user's identity name as the partition key if authenticated, otherwise use the remote IP address.
+                // Now context.Connection.RemoteIpAddress will be correct thanks to ForwardedHeaders!
                 var partitionKey = context.User.Identity?.IsAuthenticated == true
                     ? context.User.Identity.Name!
                     : context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -113,76 +132,61 @@ public static class ServiceConfiguration
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
         });
 
-        // Add authorization services to the container, setting a fallback policy
-        // that requires all users to be authenticated by default.
-        builder.Services.AddAuthorizationBuilder()
+        // Add authorization services
+        services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder()
                 .RequireAuthenticatedUser()
                 .Build());
 
-        // Add services to the container.
-        builder.Services.AddRazorComponents()
+        // Add Blazor UI services
+        services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
         // Add services for Swagger/OpenAPI
-        builder.Services.AddEndpointsApiExplorer();
-        builder.Services.AddSwaggerGen();
+        services.AddEndpointsApiExplorer();
+        services.AddSwaggerGen();
 
-        // Add services for caching, using Redis as the distributed cache provider.
-        builder.Services.AddStackExchangeRedisCache(options =>
+        // Add Redis for distributed caching
+        services.AddStackExchangeRedisCache(options =>
         {
-            options.Configuration = builder.Configuration.GetConnectionString("Redis");
+            options.Configuration = configuration.GetConnectionString("Redis");
             options.InstanceName = "AutoMate_";
         });
 
-        // Add SignalR services to the container.
-        builder.Services.AddSignalR();
+        // Add SignalR services
+        services.AddSignalR();
 
-        // Add a scoped service for streaming logs in real-time to connected clients using SignalR.
-        builder.Services.AddScoped<ILogStreamer, RealTimeLogStreamer>();
+        // Application Specific Services Registration
+        RegisterApplicationServices(services);
 
-        // Add services for authentication and user management
-        builder.Services.AddScoped<IAuthService, AuthService>();
-
-        // Add a password hasher for hashing user passwords securely.
-        builder.Services.AddScoped<IPasswordHasher<LocalUser>, PasswordHasher<LocalUser>>();
-
-        // Add services for Docker operations
-        builder.Services.AddScoped<IDockerService, DockerService>();
-
-        // Add services for sending emails
-        builder.Services.AddScoped<IEmailSenderService, GmailSenderService>();
-
-        // Add services for GitHub API interactions
-        builder.Services.AddHttpClient<IGitHubService, GitHubService>();
-
-        // Add a singleton service for notifying clients about deployment status changes
-        builder.Services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
-
-        // Add services for orchestrating deployments
-        builder.Services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
-
-        // Add a hosted service to periodically clean up deployment artifacts.
-        builder.Services.AddHostedService<DeploymentCleanupHostedService>();
-
-        // Add services for project management
-        builder.Services.AddScoped<IProjectService, ProjectService>();
-
-        // Add services for scanning local repositories
-        builder.Services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
-
-        // Add services for scanning projects for references and dependencies
-        builder.Services.AddScoped<IProjectScannerService, ProjectScannerService>();
-
-        // Add services for templating
-        builder.Services.AddScoped<ITemplateService, TemplateService>();
-
-
-        // Register endpoints
-        builder.Services.AddEndpoint<StaticAssetsEndpoint>()
+        // Endpoint Registration
+        services.AddEndpoint<StaticAssetsEndpoint>()
             .AddEndpoint<RazorComponentsEndpoint>()
             .AddEndpoint<GitHubLoginEndpoint>()
             .AddEndpoint<LoginEndpoint>()
             .AddEndpoint<LogoutEndpoint>();
+
+        return builder;
+    }
+
+
+    /// <summary>
+    ///     Registers custom business logic services into the DI container.
+    /// </summary>
+    private static void RegisterApplicationServices(IServiceCollection services)
+    {
+        services.AddScoped<ILogStreamer, RealTimeLogStreamer>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IPasswordHasher<LocalUser>, PasswordHasher<LocalUser>>();
+        services.AddScoped<IDockerService, DockerService>();
+        services.AddScoped<IEmailSenderService, GmailSenderService>();
+        services.AddHttpClient<IGitHubService, GitHubService>();
+        services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
+        services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+        services.AddHostedService<DeploymentCleanupHostedService>();
+        services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
+        services.AddScoped<IProjectScannerService, ProjectScannerService>();
+        services.AddScoped<ITemplatingService, TemplatingService>();
     }
 }

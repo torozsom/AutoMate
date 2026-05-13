@@ -7,7 +7,7 @@ window.xtermWrapper = {
 
     init: function (elementId) {
         const term = new Terminal({
-            theme: { background: '#1e1e1e' },
+            theme: {background: '#1e1e1e'},
             convertEol: true,
             cursorBlink: true,
             fontFamily: 'Consolas, "Courier New", monospace'
@@ -25,7 +25,7 @@ window.xtermWrapper = {
         });
         resizeObserver.observe(container);
 
-        this.terminals[elementId] = { term, fitAddon, resizeObserver };
+        this.terminals[elementId] = {term, fitAddon, resizeObserver};
     },
 
     write: function (elementId, data) {

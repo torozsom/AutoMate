@@ -19,23 +19,12 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
         = Path.Combine(AppContext.BaseDirectory, "Scanner", "database-providers.json");
 
     private static readonly SemaphoreSlim DbProvidersSemaphore = new(1, 1);
-
     private static List<DbProviderRuleDto>? _cachedDbProviders;
 
 
-    /// <summary>
-    ///     Scans a solution's project files (.csproj) to extract metadata such as target frameworks,
-    ///     dependencies, and project references.
-    /// </summary>
-    /// <param name="filePath">The path to the project (.csproj) file to scan.</param>
-    /// <returns>
-    ///     A <see cref="ProjectMetadataDto" /> object containing metadata such as the target
-    ///     framework, project references, package references, and other details.
-    /// </returns>
-    /// <exception cref="FileNotFoundException">
-    ///     Thrown when the specified project file does not exist at the given path.
-    /// </exception>
-    public async Task<ProjectMetadataDto> ScanProjectContentAsync(string filePath)
+    /// <inheritdoc />
+    public async Task<ProjectMetadataDto> ScanProjectContentAsync(string filePath,
+        CancellationToken cancellationToken = default)
     {
         if (!File.Exists(filePath))
         {
@@ -43,9 +32,8 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
             throw new FileNotFoundException($"The project file '{filePath}' does not exist.");
         }
 
-        // Scan the main project file first
-        var mainContent = await File.ReadAllTextAsync(filePath);
-        var mainMetadata = ScanCsprojFileContent(mainContent);
+        // Start by scanning the main project file to extract its metadata
+        var mainMetadata = await ScanCsprojFileContentAsync(filePath, cancellationToken);
 
         // Initialize data structures to track referenced projects and their packages
         var referencedProjectPackages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -63,6 +51,8 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
         // Process the queue of projects to scan their references recursively
         while (projectsToProcess.Count > 0)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var (currentPath, currentMetadata) = projectsToProcess.Dequeue();
             var currentDir = Path.GetDirectoryName(currentPath) ?? string.Empty;
 
@@ -74,8 +64,7 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
                 visitedPaths.Add(absoluteRefPath);
                 allProjectPaths.Add(absoluteRefPath);
 
-                var refContent = await File.ReadAllTextAsync(absoluteRefPath);
-                var refMetadata = ScanCsprojFileContent(refContent);
+                var refMetadata = await ScanCsprojFileContentAsync(absoluteRefPath, cancellationToken);
 
                 foreach (var pkg in refMetadata.PackageReferences)
                     referencedProjectPackages.TryAdd(pkg.Key, pkg.Value);
@@ -93,15 +82,9 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     }
 
 
-    /// <summary>
-    ///     Analyzes the dependencies of a given project and its associated C# project file (.csproj) to determine
-    ///     if the project requires a database and identifies the type of database based on the presence of specific
-    ///     package references.
-    /// </summary>
-    /// <param name="project">The project to be analyzed.</param>
-    /// <param name="csProject">The web based C# project.</param>
-    /// <returns></returns>
-    public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject)
+    /// <inheritdoc />
+    public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject,
+        CancellationToken cancellationToken = default)
     {
         var config = new DeploymentConfigDto
         {
@@ -115,15 +98,14 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
         try
         {
-            // Scan the main project and all its referenced projects to gather metadata about package references
-            var metadata = await ScanProjectContentAsync(csProject.Path);
+            var metadata = await ScanProjectContentAsync(csProject.Path, cancellationToken);
 
             // Combine all package references from the main project and its referenced projects
             var allPackages = metadata.PackageReferences.Keys
                 .Concat(metadata.ReferencedProjectPackages.Keys)
                 .ToList();
 
-            var providerRules = await GetDbProviderRulesAsync();
+            var providerRules = await GetDbProviderRulesAsync(cancellationToken);
 
             // Determine if any of the packages match known database providers
             if (providerRules != null)
@@ -148,6 +130,12 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
                     }
                 }
         }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning("[ProjectScannerService] Dependency analysis cancelled for project '{ProjectName}'." +
+                              "Ex: {ExceptionMessage}", project.Name, ex.Message);
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "[ProjectScannerService] Error scanning csproj dependencies for project: {ProjectName}",
@@ -158,22 +146,17 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     }
 
 
-    /// <summary>
-    ///     Extracts environment variables from configuration files in the project directory. This method scans for
-    ///     appsettings.json files, launchSettings.json, and .env files to gather environment variable definitions.
-    /// </summary>
-    /// <param name="projectPath">The project path where the configuration files are found.</param>
-    /// <returns></returns>
-    public async Task<Dictionary<string, string>> ExtractEnvironmentVariablesAsync(string projectPath)
+    /// <inheritdoc />
+    public async Task<Dictionary<string, string>> ExtractEnvironmentVariablesAsync(string projectPath,
+        CancellationToken cancellationToken = default)
     {
         var extractedVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
-            // Scan the project directory for configuration files and extract their contents
-            var appSettings = await ScanConfigurationFilesAsync(projectPath);
-            var launchData = await ScanLaunchSettingsAsync(projectPath);
-            var dotEnvData = await ScanDotEnvFilesAsync(projectPath);
+            var appSettings = await ScanConfigurationFilesAsync(projectPath, cancellationToken);
+            var launchData = await ScanLaunchSettingsAsync(projectPath, cancellationToken);
+            var dotEnvData = await ScanDotEnvFilesAsync(projectPath, cancellationToken);
 
             // Combine all extracted environment variables
             foreach (var kvp in appSettings) extractedVars[kvp.Key] = kvp.Value;
@@ -183,6 +166,13 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
             // Environment type settings are handled by the dropdown.
             extractedVars.Remove("ASPNETCORE_ENVIRONMENT");
             extractedVars.Remove("DOTNET_ENVIRONMENT");
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning(
+                "[ProjectScannerService] Environment variable extraction cancelled for project '{ProjectPath}'." +
+                "Ex: {ExceptionMessage}", projectPath, ex.Message);
+            throw;
         }
         catch (Exception ex)
         {
@@ -200,11 +190,12 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     ///     repeated file reads and deserialization, ensuring that the database provider rules are loaded efficiently
     ///     and are available for use when analyzing project dependencies.
     /// </summary>
+    /// <param name="cancellationToken">The cancellation token used to cancel the asynchronous operation.</param>
     /// <returns>
     ///     A list of <see cref="DbProviderRuleDto" /> objects representing the database provider rules defined
     ///     in the JSON file, or null if the file is not found or cannot be parsed.
     /// </returns>
-    private async Task<List<DbProviderRuleDto>?> GetDbProviderRulesAsync()
+    private async Task<List<DbProviderRuleDto>?> GetDbProviderRulesAsync(CancellationToken cancellationToken)
     {
         if (_cachedDbProviders != null)
             return _cachedDbProviders;
@@ -217,15 +208,24 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
             return null;
         }
 
-        await DbProvidersSemaphore.WaitAsync();
+        await DbProvidersSemaphore.WaitAsync(cancellationToken);
         try
         {
-            if (_cachedDbProviders != null)
-                return _cachedDbProviders;
+            if (_cachedDbProviders != null) return _cachedDbProviders;
 
-            var jsonContent = await File.ReadAllTextAsync(DbProvidersJsonPath);
-            _cachedDbProviders = JsonSerializer.Deserialize<List<DbProviderRuleDto>>(jsonContent);
+            // Try to read the database providers JSON file
+            await using var stream = new FileStream(DbProvidersJsonPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                4096, true);
+            _cachedDbProviders =
+                await JsonSerializer.DeserializeAsync<List<DbProviderRuleDto>>(stream,
+                    cancellationToken: cancellationToken);
+
             return _cachedDbProviders;
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning(ex, "[ProjectScannerService] Operation canceled while parsing database-providers.json");
+            throw;
         }
         catch (Exception ex)
         {
@@ -243,7 +243,8 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     ///     Parses the provided project XML content and extracts metadata such as target framework,
     ///     dependencies, project references, and other configuration details.
     /// </summary>
-    /// <param name="xmlContent">The XML content of the project file to scan.</param>
+    /// <param name="filePath">The path to the project file to scan.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>
     ///     A <see cref="ProjectMetadataDto" /> object containing information about the project's
     ///     target framework, .NET version, package references, project references, and other metadata.
@@ -251,15 +252,15 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     /// <exception cref="XmlException">
     ///     Thrown when the provided XML content is not well-formed or cannot be parsed.
     /// </exception>
-    private static ProjectMetadataDto ScanCsprojFileContent(string xmlContent)
+    private static async Task<ProjectMetadataDto> ScanCsprojFileContentAsync(string filePath,
+        CancellationToken cancellationToken)
     {
-        // Parse the XML content of the project file
-        var document = XDocument.Parse(xmlContent);
-        var targetFramework = document.Descendants("TargetFramework").FirstOrDefault()?.Value;
+        // Try to read the project file content
+        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+        var document = await XDocument.LoadAsync(stream, LoadOptions.None, cancellationToken);
 
-        // If TargetFramework is not specified, default to .NET 10.0
-        if (string.IsNullOrEmpty(targetFramework))
-            targetFramework = "net10.0";
+        var targetFramework = document.Descendants("TargetFramework").FirstOrDefault()?.Value;
+        if (string.IsNullOrEmpty(targetFramework)) targetFramework = "net10.0";
 
         var dotNetVersion = targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase)
             ? targetFramework[3..]
@@ -340,8 +341,10 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     ///     pairs where nested properties are represented with double underscores.
     /// </summary>
     /// <param name="projectPath">The path of the project to be scanned.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns></returns>
-    private async Task<Dictionary<string, string>> ScanConfigurationFilesAsync(string projectPath)
+    private async Task<Dictionary<string, string>> ScanConfigurationFilesAsync(string projectPath,
+        CancellationToken cancellationToken)
     {
         var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var directory = Path.GetDirectoryName(projectPath);
@@ -352,8 +355,10 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
         foreach (var file in configFiles.OrderBy(f => f.Length))
             try
             {
-                var content = await File.ReadAllTextAsync(file);
-                using var doc = JsonDocument.Parse(content);
+                // Use a FileStream with asynchronous reading to efficiently read the JSON file content
+                await using var stream =
+                    new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 FlattenJsonElement(doc.RootElement, "", settings);
             }
             catch (JsonException ex)
@@ -372,12 +377,13 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     ///     environment variables.
     /// </summary>
     /// <param name="projectPath">The path of the project to be scanned.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>
     ///     A tuple containing a dictionary of environment variables and an optional
     ///     integer representing the default port.
     /// </returns>
     private async Task<(Dictionary<string, string> EnvVars, int? DefaultPort)> ScanLaunchSettingsAsync(
-        string projectPath)
+        string projectPath, CancellationToken cancellationToken)
     {
         var envVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         int? defaultPort = null;
@@ -393,9 +399,9 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
         try
         {
-            // Read and parse the launchSettings.json file to extract environment variables and application URLs
-            var content = await File.ReadAllTextAsync(launchSettingsPath);
-            using var doc = JsonDocument.Parse(content);
+            await using var stream = new FileStream(launchSettingsPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                4096, true);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
             if (doc.RootElement.TryGetProperty("profiles", out var profiles))
                 foreach (var profile in profiles.EnumerateObject())
@@ -422,6 +428,11 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
                     break;
                 }
         }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning(ex, "[ProjectScannerService] Operation canceled while parsing launchSettings.json");
+            throw;
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "[ProjectScannerService] Error parsing launchSettings.json at {LaunchSettingsPath}",
@@ -435,9 +446,11 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
     /// <summary>
     ///     Scans for .env files in the project directory and its parent directory to extract environment variables.
     /// </summary>
-    /// <param name="projectPath"></param>
-    /// <returns></returns>
-    private async Task<Dictionary<string, string>> ScanDotEnvFilesAsync(string projectPath)
+    /// <param name="projectPath">The path to the project directory to scan for .env files.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A dictionary of environment variables.</returns>
+    private async Task<Dictionary<string, string>> ScanDotEnvFilesAsync(string projectPath,
+        CancellationToken cancellationToken)
     {
         var envVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var directory = Path.GetDirectoryName(projectPath);
@@ -459,7 +472,8 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
             try
             {
-                var lines = await File.ReadAllLinesAsync(envFilePath);
+                // Read the .env file line by line to extract key-value pairs, ignoring comments and empty lines
+                var lines = await File.ReadAllLinesAsync(envFilePath, cancellationToken);
                 foreach (var line in lines)
                 {
                     var trimmedLine = line.Trim();
@@ -491,6 +505,12 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
                 logger.LogInformation("[ProjectScannerService] Successfully scanned .env file: {EnvFilePath}",
                     envFilePath);
+            }
+            catch (OperationCanceledException ex)
+            {
+                logger.LogWarning(ex,
+                    "[ProjectScannerService] Operation canceled while scanning .env file: {EnvFilePath}", envFilePath);
+                throw;
             }
             catch (Exception ex)
             {

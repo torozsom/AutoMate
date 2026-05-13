@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.AspNetCore.Components;
@@ -6,12 +7,11 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
-using Core.DTO;
 using Services.Data;
+using Services.Docker;
+using Services.Orchestration;
 using Services.Projects;
 using Services.Scanner;
-using Services.Orchestration;
-using Services.Docker;
 using Web.Components.Shared;
 
 namespace Web.Components.Pages;
@@ -23,6 +23,31 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 {
+    private readonly Dictionary<string, (string Cpu, string Memory)> _containerMetrics = new();
+
+
+    private readonly Dictionary<string, Terminal> _dbTerminals = new();
+    private readonly List<string> _metricContainerNames = [];
+    private string _activeTab = "build";
+
+    private Terminal? _buildTerminal;
+    private DeploymentConfigDto? _currentDeployConfig;
+    private int _currentMetricIndex;
+    private IEnumerable<DatabaseTab> _databaseTabs = [];
+
+    private int _exposedPort;
+
+    private HubConnection? _hubConnection;
+
+    private bool _isDeploying;
+    private bool _isLoading = true;
+    private bool _isStopping;
+
+    private Project? _project;
+    private string? _selectedProjectPath;
+
+    private bool _showConfigModal;
+    private Terminal? _webTerminal;
     [Parameter] public Guid ProjectId { get; set; }
 
     [Inject] private IProjectService ProjectService { get; set; } = null!;
@@ -36,36 +61,31 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject] private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
 
     [Inject] private IProjectScannerService ProjectScanner { get; set; } = null!;
-    
+
     [Inject] private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
     [Inject] private IDockerService DockerService { get; set; } = null!;
 
+    [Inject] private ILogger<ProjectDetails> Logger { get; set; } = null!;
 
-    private readonly Dictionary<string, Terminal> _dbTerminals = new();
-    private string _activeTab = "build";
+    /// <summary>
+    ///     Disposes of the component by leaving the SignalR group
+    ///     associated with the project and disposing of the hub connection.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
 
-    private Terminal? _buildTerminal;
-    private IEnumerable<DatabaseTab> _databaseTabs = [];
+        if (_hubConnection is not null)
+        {
+            if (_hubConnection.State == HubConnectionState.Connected)
+                await _hubConnection.SendAsync("LeaveProjectGroup", ProjectId);
 
-    private HubConnection? _hubConnection;
-    private bool _isLoading = true;
+            await _hubConnection.DisposeAsync();
+        }
 
-    private Project? _project;
-    private Terminal? _webTerminal;
-
-    private bool _showConfigModal;
-    private DeploymentConfigDto? _currentDeployConfig;
-    private string? _selectedProjectPath;
-
-    private bool _isDeploying;
-    private bool _isStopping;
-
-    private readonly Dictionary<string, (string Cpu, string Memory)> _containerMetrics = new();
-    private readonly List<string> _metricContainerNames = [];
-    private int _currentMetricIndex;
-    
-    private int _exposedPort;
+        GC.SuppressFinalize(this);
+    }
 
 
     /// <summary>
@@ -124,7 +144,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     StateHasChanged();
                 });
             }
-            catch (Exception)
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to stop deployment for project {ProjectId}", ProjectId);
+            }
+            finally
             {
                 await InvokeAsync(() =>
                 {
@@ -161,20 +185,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         _ = Task.Run(async () =>
         {
-            using var scope = ServiceProvider.CreateScope();
-            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
-
             try
             {
+                using var scope = ServiceProvider.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
                 await orchestrator.DeployLocalProjectAsync(finalConfig);
-
-                await InvokeAsync(() =>
-                {
-                    _isDeploying = false;
-                    StateHasChanged();
-                });
             }
-            catch (Exception)
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to execute deployment for project {ProjectId}", finalConfig.ProjectId);
+            }
+            finally
             {
                 await InvokeAsync(() =>
                 {
@@ -183,22 +204,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 });
             }
         });
-    }
-
-    /// <summary>
-    ///     Disposes of the component by leaving the SignalR group
-    ///     associated with the project and disposing of the hub connection.
-    /// </summary>
-    public async ValueTask DisposeAsync()
-    {
-        DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
-
-        if (_hubConnection is not null)
-        {
-            if (_hubConnection.State == HubConnectionState.Connected)
-                await _hubConnection.SendAsync("LeaveProjectGroup", ProjectId);
-            GC.SuppressFinalize(this);
-        }
     }
 
 
@@ -279,10 +284,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             {
                 var containerName = $"{csProject.Name.ToLowerInvariant()}-web";
                 var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
-                if (hostPort > 0)
-                {
-                    _exposedPort = hostPort;
-                }
+                if (hostPort > 0) _exposedPort = hostPort;
             }
         }
     }
@@ -361,8 +363,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (firstRender)
         {
             var userId = await GetCurrentUserIdAsync();
-            var protector = DataProtectionProvider.CreateProtector("LogHub");
-            var secureToken = protector.Protect($"{ProjectId}:{userId}");
+            var protector = DataProtectionProvider.CreateProtector("LogHub").ToTimeLimitedDataProtector();
+            var secureToken = protector.Protect($"{ProjectId}:{userId}", TimeSpan.FromMinutes(5));
 
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
@@ -389,10 +391,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     InvokeAsync(() =>
                     {
                         _containerMetrics[containerName] = (cpuUsage, memoryUsage);
-                        if (!_metricContainerNames.Contains(containerName))
-                        {
-                            _metricContainerNames.Add(containerName);
-                        }
+                        if (!_metricContainerNames.Contains(containerName)) _metricContainerNames.Add(containerName);
                         StateHasChanged();
                     });
                 }

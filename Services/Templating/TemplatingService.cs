@@ -9,7 +9,7 @@ namespace Services.Templating;
 ///     Provides functionality for generating templated files such as Dockerfile and .dockerignore
 ///     based on predefined Scriban templates and for saving generated files to a specified directory.
 /// </summary>
-public class TemplateService : ITemplateService
+public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingService
 {
     private static List<TemplateManifestRuleDto>? _cachedManifest;
     private static readonly SemaphoreSlim ManifestSemaphore = new(1, 1);
@@ -17,86 +17,47 @@ public class TemplateService : ITemplateService
     private static readonly string TemplatesDirectory
         = Path.Combine(AppContext.BaseDirectory, "Templating", "Templates");
 
-    private readonly ILogger<TemplateService> _logger;
 
-
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="TemplateService" /> class.
-    /// </summary>
-    /// <param name="logger">The logger of the TemplateService class.</param>
-    /// <exception cref="DirectoryNotFoundException">
-    ///     Throws DirectoryNotFoundException if the directory to the template files is not found.
-    /// </exception>
-    public TemplateService(ILogger<TemplateService> logger)
+    /// <inheritdoc />
+    public async Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata,
+        string csProjectName, string outputDirectory, CancellationToken cancellationToken = default)
     {
-        _logger = logger;
-
         if (!Directory.Exists(TemplatesDirectory))
         {
-            _logger.LogCritical("[TemplateService] Templates directory not found at: {TemplatesDirectory}",
+            logger.LogCritical("[TemplateService] Templates directory not found at: {TemplatesDirectory}",
                 TemplatesDirectory);
             throw new DirectoryNotFoundException($"Templates directory not found at: {TemplatesDirectory}");
         }
-    }
 
-
-    /// <summary>
-    ///     Generates templated files based on the provided configuration and metadata,
-    ///     and saves them to the specified output directory.
-    /// </summary>
-    /// <param name="config">
-    ///     The deployment configuration containing settings such as exposed port,
-    ///     environment name, database requirements, and custom environment variables.
-    /// </param>
-    /// <param name="metadata">
-    ///     The project metadata containing information about the .NET version, project paths,
-    ///     and other relevant details needed for template generation.
-    /// </param>
-    /// <param name="csProjectName">
-    ///     The name of the main C# project (without .csproj extension) which is used to
-    ///     identify the main project file and its relative path for template generation.
-    /// </param>
-    /// <param name="outputDirectory">
-    ///     The directory where the generated templated files will be saved.
-    /// </param>
-    /// <exception cref="FileNotFoundException">
-    ///     Throws FileNotFoundException if the template manifest file (template-manifest.json) is not found.
-    /// </exception>
-    /// <exception cref="InvalidOperationException">
-    ///     Throws InvalidOperationException if a template file specified in the manifest cannot be parsed or rendered.
-    /// </exception>
-    public async Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata,
-        string csProjectName, string outputDirectory)
-    {
-        var templates = await GetTemplateManifestAsync();
+        var templates = await GetTemplateManifestAsync(cancellationToken);
 
         if (templates == null || templates.Count == 0)
         {
-            _logger.LogWarning("[TemplateService] Template manifest is empty or could not be loaded. " +
-                               "No templates will be generated.");
+            logger.LogWarning(
+                "[TemplateService] Template manifest is empty or could not be loaded. No templates will be generated.");
             return;
         }
 
         // Build the unified view-model for Scriban
         var unifiedModel = BuildTemplateModel(config, metadata, csProjectName, outputDirectory);
 
-        // Process only active templates
+        // Ensure the output directory exists
+        if (!Directory.Exists(outputDirectory))
+            Directory.CreateDirectory(outputDirectory);
+
         foreach (var rule in templates.Where(t => t.IsActive))
-            await RenderAndSaveTemplateAsync(rule, unifiedModel, outputDirectory);
+            await RenderAndSaveTemplateAsync(rule, unifiedModel, outputDirectory, cancellationToken);
     }
 
 
     /// <summary>
-    ///     Loads and parses the template manifest file to retrieve the list of template rules.
+    ///     Asynchronously retrieves the template manifest, which contains a list of template rules.
+    ///     If the manifest has been previously loaded and cached, the cached copy will be returned.
     /// </summary>
-    /// <returns>
-    ///     A list of <see cref="TemplateManifestRuleDto" /> objects representing
-    ///     the template rules defined in the manifest file.
-    /// </returns>
-    /// <exception cref="FileNotFoundException">
-    ///     Throws FileNotFoundException if the template manifest file is not found at the expected location.
-    /// </exception>
-    private async Task<List<TemplateManifestRuleDto>?> GetTemplateManifestAsync()
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A list of template manifest rules, or null if an error occurs during retrieval or parsing.</returns>
+    /// <exception cref="FileNotFoundException">Thrown if the template manifest file is not found.</exception>
+    private async Task<List<TemplateManifestRuleDto>?> GetTemplateManifestAsync(CancellationToken cancellationToken)
     {
         if (_cachedManifest != null) return _cachedManifest;
 
@@ -104,25 +65,33 @@ public class TemplateService : ITemplateService
 
         if (!File.Exists(manifestPath))
         {
-            _logger.LogError("[TemplateService] Template manifest not found at: {ManifestPath}", manifestPath);
+            logger.LogError("[TemplateService] Template manifest not found at: {ManifestPath}", manifestPath);
             throw new FileNotFoundException($"Template manifest not found: {manifestPath}");
         }
 
-        await ManifestSemaphore.WaitAsync();
+        await ManifestSemaphore.WaitAsync(cancellationToken);
         try
         {
-            // Double-check lock pattern
             if (_cachedManifest != null)
                 return _cachedManifest;
 
-            // Load and parse the manifest file
-            var manifestContent = await File.ReadAllTextAsync(manifestPath);
-            _cachedManifest = JsonSerializer.Deserialize<List<TemplateManifestRuleDto>>(manifestContent);
+            await using var stream =
+                new FileStream(manifestPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+            _cachedManifest =
+                await JsonSerializer.DeserializeAsync<List<TemplateManifestRuleDto>>(stream,
+                    cancellationToken: cancellationToken);
+
             return _cachedManifest;
+        }
+        catch (OperationCanceledException ex)
+        {
+            logger.LogWarning("[TemplateService] Template manifest loading cancelled. Exception: {Exception}",
+                ex.Message);
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[TemplateService] Failed to parse template-manifest.json");
+            logger.LogError(ex, "[TemplateService] Failed to parse template-manifest.json");
             return null;
         }
         finally
@@ -246,31 +215,34 @@ public class TemplateService : ITemplateService
     ///     The directory where the generated templated file will be saved, used to calculate relative paths
     ///     for projects in the template model and to determine the destination path for the generated file.
     /// </param>
+    /// <param name="cancellationToken">
+    ///     A cancellation token that can be used to cancel the template generation process.
+    /// </param>
     /// <exception cref="InvalidOperationException">
     ///     Throws InvalidOperationException if the specified template file cannot be parsed or rendered successfully,
     ///     including details about the parsing errors encountered in the Scriban template.
     /// </exception>
     private async Task RenderAndSaveTemplateAsync(TemplateManifestRuleDto rule, object unifiedModel,
-        string outputDirectory)
+        string outputDirectory, CancellationToken cancellationToken)
     {
         var templatePath = Path.Combine(TemplatesDirectory, rule.TemplateFile);
 
         if (!File.Exists(templatePath))
         {
-            _logger.LogWarning("[TemplateService] The template file '{TemplateFile}' does not exist!",
+            logger.LogWarning("[TemplateService] The template file '{TemplateFile}' does not exist!",
                 rule.TemplateFile);
             return;
         }
 
         try
         {
-            var templateText = await File.ReadAllTextAsync(templatePath);
+            var templateText = await File.ReadAllTextAsync(templatePath, cancellationToken);
             var parsedTemplate = Template.Parse(templateText);
 
             if (parsedTemplate.HasErrors)
             {
                 var errors = string.Join(", ", parsedTemplate.Messages.Select(m => m.Message));
-                _logger.LogError("[TemplateService] Could not parse Scriban template: {TemplateFile}. Errors: {Errors}",
+                logger.LogError("[TemplateService] Could not parse Scriban template: {TemplateFile}. Errors: {Errors}",
                     rule.TemplateFile, errors);
                 throw new InvalidOperationException($"Could not parse file: {rule.TemplateFile}, errors: {errors}");
             }
@@ -280,14 +252,18 @@ public class TemplateService : ITemplateService
 
             // Save the rendered content to the specified output directory
             var destinationPath = Path.Combine(outputDirectory, rule.OutputFile);
-            await File.WriteAllTextAsync(destinationPath, renderedContent);
+            await File.WriteAllTextAsync(destinationPath, renderedContent, cancellationToken);
 
-            _logger.LogInformation("[TemplateService] Successfully generated: {OutputFile}", rule.OutputFile);
+            logger.LogInformation("[TemplateService] Successfully generated: {OutputFile}", rule.OutputFile);
         }
-        catch (Exception ex) when (ex is not InvalidOperationException)
+        catch (OperationCanceledException)
         {
-            _logger.LogError(ex,
-                "[TemplateService] Unexpected error occurred while generating template: {TemplateFile}",
+            logger.LogWarning("[TemplateService] Template generation cancelled for '{OutputFile}'.", rule.OutputFile);
+            throw;
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException && ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "[TemplateService] Unexpected error occurred while generating template: {TemplateFile}",
                 rule.TemplateFile);
             throw;
         }

@@ -36,7 +36,7 @@ public class DeploymentConfigDto
     public int ExposedPort { get; set; } = 8080;
 
     // <summary>
-    ///     A list of databases required by the deployed application.
+    /// A list of databases required by the deployed application.
     /// </summary>
     public List<DatabaseConfigDto> Databases { get; set; } = [];
 

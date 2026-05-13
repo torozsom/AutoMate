@@ -11,7 +11,7 @@ namespace Web.Hubs;
 ///     project IDs, allowing them to receive log updates specific to the projects they are interested in.
 /// </summary>
 [AllowAnonymous]
-public class LogHub(IServiceProvider serviceProvider, IDataProtectionProvider dataProtectionProvider) : Hub
+public class LogHub(IServiceProvider serviceProvider, IDataProtectionProvider dataProtectionProvider) : Hub<ILogClient>
 {
     /// <summary>
     ///     Allows a client to join a SignalR group associated with a specific project ID using a secure token.
@@ -28,7 +28,7 @@ public class LogHub(IServiceProvider serviceProvider, IDataProtectionProvider da
     {
         try
         {
-            var protector = dataProtectionProvider.CreateProtector("LogHub");
+            var protector = dataProtectionProvider.CreateProtector("LogHub").ToTimeLimitedDataProtector();
             var unprotect = protector.Unprotect(secureToken);
 
             var parts = unprotect.Split(':');

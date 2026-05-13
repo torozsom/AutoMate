@@ -14,10 +14,15 @@ public static class AppConfiguration
     ///     This method sets up middleware components for error handling, security, authentication, and routing.
     /// </summary>
     /// <param name="app">The WebApplication instance to configure.</param>
-    public static void Configure(WebApplication app)
+    /// <returns>The original WebApplication for chaining.</returns>
+    public static async Task<WebApplication> UseApplicationPipelineAsync(this WebApplication app)
     {
-        // Perform database connectivity check
-        CheckDatabaseConnectivity(app);
+        // Use forwarded headers middleware to correctly handle proxy headers
+        // (e.g., X-Forwarded-For) for client IP and protocol information.
+        app.UseForwardedHeaders();
+
+        // Perform database connectivity check asynchronously
+        await CheckDatabaseConnectivityAsync(app);
 
         // Configure the HTTP request pipeline.
         if (!app.Environment.IsDevelopment())
@@ -34,7 +39,7 @@ public static class AppConfiguration
         }
 
         // Use status code pages that re-execute the request pipeline for a specific path ("/not-found") when a 404 status code is encountered.
-        app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+        app.UseStatusCodePagesWithReExecute("/not-found");
 
         // Redirect HTTP requests to HTTPS.
         app.UseHttpsRedirection();
@@ -54,33 +59,41 @@ public static class AppConfiguration
         // Map Blazor Hub for real-time communication.
         app.MapHub<LogHub>("/loghub");
 
-        // Configure endpoints
+        // Configure endpoints dynamically
         var endpoints = app.Services.GetServices<IEndpoint>();
         foreach (var endpoint in endpoints)
             endpoint.Map(app);
+
+        return app;
     }
 
 
     /// <summary>
-    ///     Checks the database connectivity at application startup by attempting to connect to the database using the
-    ///     configured DbContext.
+    ///     Asynchronously checks the database connectivity at application startup by attempting to connect to the database
+    ///     using the configured DbContext.
     /// </summary>
     /// <param name="app">The WebApplication instance used to create a scope for retrieving the DbContext.</param>
-    private static void CheckDatabaseConnectivity(WebApplication app)
+    private static async Task CheckDatabaseConnectivityAsync(WebApplication app)
     {
         // Testing database connectivity at startup.
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
         try
         {
-            var canConnect = db.Database.CanConnectAsync();
-            Console.WriteLine(canConnect.Result
-                ? "Successfully connected to the database"
-                : "Failed to connect to the database");
+            // Use CanConnectAsync to check if the application can connect to the database without throwing an exception.
+            var canConnect = await db.Database.CanConnectAsync();
+
+            if (canConnect)
+                logger.LogInformation("[Startup] Successfully connected to the database.");
+            else
+                logger.LogWarning("[Startup] Failed to connect to the database. Ensure PostgreSQL is running.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine("Database connectivity error: " + ex.Message);
+            logger.LogCritical(ex, "[Startup] Critical database connectivity error.");
         }
     }
 }
