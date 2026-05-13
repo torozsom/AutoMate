@@ -20,7 +20,7 @@ public class LocalDeploymentOrchestrator(
     AutoMateDbContext dbContext,
     ILocalSystemScannerService systemScanner,
     IProjectScannerService projectScanner,
-    ITemplateService templateService,
+    ITemplatingService templateService,
     IDockerService dockerService,
     ILogger<LocalDeploymentOrchestrator> logger,
     IServiceScopeFactory serviceScopeFactory,
@@ -234,13 +234,20 @@ public class LocalDeploymentOrchestrator(
                     );
                 }
             }
-            try {
+
+            try
+            {
                 await Task.WhenAll(streamingTasks);
             }
             catch (OperationCanceledException ex)
             {
                 logger.LogInformation("[LocalDeploymentOrchestrator] Log streaming cancelled for Project ID {Id}." +
                                       "Exception: {Ex}", config.ProjectId, ex);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "[LocalDeploymentOrchestrator] Error streaming logs for Project ID {Id}.",
+                    config.ProjectId);
             }
         }, token);
     }
