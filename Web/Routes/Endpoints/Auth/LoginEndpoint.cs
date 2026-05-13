@@ -7,11 +7,11 @@ using Services.Auth;
 namespace Web.Routes.Endpoints.Auth;
 
 /// <summary>
-/// Endpoint for handling local user login via form post.
+///     Endpoint for handling local user login via form post.
 /// </summary>
 /// <remarks>
-/// IMPORTANT: Requires a valid Antiforgery Token from the frontend.
-/// In Blazor, ensure your login form includes the <AntiforgeryToken /> component.
+///     IMPORTANT: Requires a valid Antiforgery Token from the frontend.
+///     In Blazor, ensure your login form includes the <AntiforgeryToken /> component.
 /// </remarks>
 public class LoginEndpoint : IEndpoint
 {

@@ -10,7 +10,7 @@ public static class EndpointExtensions
 {
     /// <summary>
     ///     Scans the specified assembly (or the calling assembly) via Reflection, finds all concrete
-    ///     classes implementing <see cref="IEndpoint"/>, and registers them automatically.
+    ///     classes implementing <see cref="IEndpoint" />, and registers them automatically.
     /// </summary>
     /// <param name="services">The IServiceCollection to add the endpoints to.</param>
     /// <param name="assembly">The assembly to scan. Defaults to the executing assembly.</param>

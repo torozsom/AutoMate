@@ -18,8 +18,6 @@ using Services.Projects;
 using Services.Scanner;
 using Services.Templating;
 using Web.Extensions;
-using Web.Routes.Endpoints;
-using Web.Routes.Endpoints.Auth;
 using Web.Services;
 
 namespace Web.Configs;
@@ -33,6 +31,25 @@ public static class ServiceConfiguration
     private const string DefaultConnectionKey = "DefaultConnection";
     private const string RedisConnectionKey = "Redis";
     private const string AppName = "AutoMate";
+
+
+    /// <summary>
+    ///     Helper method to extract GitHub OAuth mapping logic, improving readability and testability.
+    /// </summary>
+    private static async Task ProcessGitHubLoginAsync(OAuthCreatingTicketContext context)
+    {
+        var githubId = context.User.GetProperty("id").GetInt32().ToString();
+        var username = context.User.GetProperty("login").GetString() ?? "Unknown";
+        var email = context.User.GetProperty("email").GetString() ?? "no-email@github.com";
+        var avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem) ? avatarElem.GetString() : null;
+        var accessToken = context.AccessToken;
+
+        var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
+
+        // Call domain service to persist user
+        await authService.CreateOrUpdateGitHubUserAsync(
+            githubId, username, email, avatarUrl, accessToken, context.HttpContext.RequestAborted);
+    }
 
 
     /// <summary>
@@ -115,7 +132,7 @@ public static class ServiceConfiguration
         ///     Registers authentication, authorization, rate limiting, and security headers.
         /// </summary>
         /// <remarks>
-        /// IMPORTANT: Proxy configuration assumes the application is hosted behind a trusted reverse proxy.
+        ///     IMPORTANT: Proxy configuration assumes the application is hosted behind a trusted reverse proxy.
         /// </remarks>
         private void AddSecurity()
         {
@@ -148,9 +165,11 @@ public static class ServiceConfiguration
                 .AddGitHub(options =>
                 {
                     options.ClientId = config["GitHub:ClientId"]
-                                       ?? throw new InvalidOperationException("GitHub:ClientId is missing from configuration.");
+                                       ?? throw new InvalidOperationException(
+                                           "GitHub:ClientId is missing from configuration.");
                     options.ClientSecret = config["GitHub:ClientSecret"]
-                                           ?? throw new InvalidOperationException("GitHub:ClientSecret is missing from configuration.");
+                                           ?? throw new InvalidOperationException(
+                                               "GitHub:ClientSecret is missing from configuration.");
 
                     options.CallbackPath = new PathString("/signin-github");
                     options.Scope.Add("user:email");
@@ -186,7 +205,7 @@ public static class ServiceConfiguration
         }
 
         /// <summary>
-        /// Registers UI and API presentation dependencies.
+        ///     Registers UI and API presentation dependencies.
         /// </summary>
         private void AddPresentation()
         {
@@ -199,32 +218,13 @@ public static class ServiceConfiguration
 
 
     /// <summary>
-    ///     Helper method to extract GitHub OAuth mapping logic, improving readability and testability.
-    /// </summary>
-    private static async Task ProcessGitHubLoginAsync(OAuthCreatingTicketContext context)
-    {
-        var githubId = context.User.GetProperty("id").GetInt32().ToString();
-        var username = context.User.GetProperty("login").GetString() ?? "Unknown";
-        var email = context.User.GetProperty("email").GetString() ?? "no-email@github.com";
-        var avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem) ? avatarElem.GetString() : null;
-        var accessToken = context.AccessToken;
-
-        var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
-
-        // Call domain service to persist user
-        await authService.CreateOrUpdateGitHubUserAsync(
-            githubId, username, email, avatarUrl, accessToken, context.HttpContext.RequestAborted);
-    }
-
-
-    /// <summary>
     ///     Extension method to register core services.
     /// </summary>
     /// <param name="services">The service collection to extend.</param>
     extension(IServiceCollection services)
     {
         /// <summary>
-        /// Registers core domain and application services into the DI container.
+        ///     Registers core domain and application services into the DI container.
         /// </summary>
         private void RegisterDomainServices()
         {

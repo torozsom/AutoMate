@@ -92,15 +92,11 @@ public static class AppConfiguration
                 // Modern EF Core connectivity check
                 var canConnect = await db.Database.CanConnectAsync();
                 if (canConnect)
-                {
                     logger.LogInformation("[Startup] Successfully connected to the database.");
-                    //await db.Database.MigrateAsync();
-                }
+                //await db.Database.MigrateAsync();
                 else
-                {
                     logger.LogWarning("[Startup] Failed to connect to the database. " +
                                       "Ensure the database is running and credentials are valid.");
-                }
             }
             catch (Exception ex)
             {
