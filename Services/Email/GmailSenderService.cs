@@ -27,8 +27,7 @@ public class GmailSenderService(
         }
 
         logger.LogInformation(
-            "[GmailSenderService] Attempting to send email with subject '{Subject}' to '{ToEmail}'...", subject,
-            toEmail);
+            "[GmailSenderService] Attempting to send email with subject '{Subject}'...", subject);
 
         // Create a new MIME message and set the sender, recipient, subject, and body
         var mimeMessage = new MimeMessage();
@@ -48,6 +47,6 @@ public class GmailSenderService(
         await smtpClient.SendAsync(mimeMessage, cancellationToken);
         await smtpClient.DisconnectAsync(true, cancellationToken);
 
-        logger.LogInformation("[GmailSenderService] Email successfully sent to '{ToEmail}'.", toEmail);
+        logger.LogInformation("[GmailSenderService] Email successfully sent.'.");
     }
 }

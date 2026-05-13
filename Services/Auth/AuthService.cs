@@ -203,7 +203,7 @@ public class AuthService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "[AuthService] Failed to send verification email to '{Email}'.", user.Email);
+            logger.LogError(ex, "[AuthService] Failed to send verification email'.");
             return false;
         }
     }
