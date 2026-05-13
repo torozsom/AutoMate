@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
@@ -8,7 +9,6 @@ using Services.Data;
 using Services.Docker;
 using Services.Scanner;
 using Services.Templating;
-using System.Collections.Concurrent;
 
 namespace Services.Orchestration;
 
@@ -27,7 +27,6 @@ public class LocalDeploymentOrchestrator(
     IDeploymentStatusNotifier statusNotifier)
     : ILocalDeploymentOrchestrator
 {
-
     private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeLogStreams = new();
 
     /// <summary>
@@ -103,7 +102,9 @@ public class LocalDeploymentOrchestrator(
 
         if (!Directory.Exists(automateDir))
         {
-            logger.LogWarning("[LocalDeploymentOrchestrator] No .automate directory found at {Path}. Cannot stop deployment.", automateDir);
+            logger.LogWarning(
+                "[LocalDeploymentOrchestrator] No .automate directory found at {Path}. Cannot stop deployment.",
+                automateDir);
             return;
         }
 
@@ -113,7 +114,8 @@ public class LocalDeploymentOrchestrator(
         {
             if (_activeLogStreams.TryRemove(projectId, out var cts))
             {
-                logger.LogInformation("[LocalDeploymentOrchestrator] Cancelling active log streams for Project ID {Id}...", projectId);
+                logger.LogInformation(
+                    "[LocalDeploymentOrchestrator] Cancelling active log streams for Project ID {Id}...", projectId);
                 await cts.CancelAsync();
                 cts.Dispose();
             }
@@ -126,7 +128,8 @@ public class LocalDeploymentOrchestrator(
             if (latestDeployment != null && latestDeployment.Status != DeploymentStatus.Stopped)
             {
                 await SafeUpdateDeploymentStatusAsync(projectId, latestDeployment, DeploymentStatus.Stopped);
-                logger.LogInformation("[LocalDeploymentOrchestrator] Deployment stopped successfully for Project ID {Id}.", projectId);
+                logger.LogInformation(
+                    "[LocalDeploymentOrchestrator] Deployment stopped successfully for Project ID {Id}.", projectId);
             }
         }
         else
@@ -205,7 +208,7 @@ public class LocalDeploymentOrchestrator(
                 "web",
                 token)
             );
-            
+
             streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
                 webContainerName,
                 config.ProjectId,
@@ -215,7 +218,6 @@ public class LocalDeploymentOrchestrator(
 
             // Database containers
             if (config.Databases != null)
-            {
                 foreach (var db in config.Databases)
                 {
                     var dbContainerName = $"{appName}-{db.ContainerNameSuffix}";
@@ -225,7 +227,7 @@ public class LocalDeploymentOrchestrator(
                         db.ContainerNameSuffix,
                         token)
                     );
-                    
+
                     streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
                         dbContainerName,
                         config.ProjectId,
@@ -233,7 +235,6 @@ public class LocalDeploymentOrchestrator(
                         token)
                     );
                 }
-            }
 
             try
             {

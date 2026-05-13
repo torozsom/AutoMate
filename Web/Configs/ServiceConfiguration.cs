@@ -67,7 +67,7 @@ public static class ServiceConfiguration
         // Add the database context
         services.AddDbContextPool<AutoMateDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"))
-                   .UseSnakeCaseNamingConvention());
+                .UseSnakeCaseNamingConvention());
 
         // Add authentication services (Cookie & GitHub OAuth)
         services.AddAuthentication(options =>
@@ -102,7 +102,8 @@ public static class ServiceConfiguration
                     var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
 
                     // Create or update the GitHub user in the database and return the local user record.
-                    await authService.CreateOrUpdateGitHubUserAsync(githubId, username, email, avatarUrl, accessToken, context.HttpContext.RequestAborted);
+                    await authService.CreateOrUpdateGitHubUserAsync(githubId, username, email, avatarUrl, accessToken,
+                        context.HttpContext.RequestAborted);
                 };
             });
 
@@ -160,10 +161,10 @@ public static class ServiceConfiguration
 
         // Endpoint Registration
         services.AddEndpoint<StaticAssetsEndpoint>()
-                .AddEndpoint<RazorComponentsEndpoint>()
-                .AddEndpoint<GitHubLoginEndpoint>()
-                .AddEndpoint<LoginEndpoint>()
-                .AddEndpoint<LogoutEndpoint>();
+            .AddEndpoint<RazorComponentsEndpoint>()
+            .AddEndpoint<GitHubLoginEndpoint>()
+            .AddEndpoint<LoginEndpoint>()
+            .AddEndpoint<LogoutEndpoint>();
 
         return builder;
     }

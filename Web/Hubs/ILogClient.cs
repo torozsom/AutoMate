@@ -1,8 +1,7 @@
 namespace Web.Hubs;
 
-
 /// <summary>
-///    SignalR client interface for receiving real-time logs and metrics from the server.
+///     SignalR client interface for receiving real-time logs and metrics from the server.
 /// </summary>
 public interface ILogClient
 {
@@ -14,7 +13,8 @@ public interface ILogClient
     Task ReceiveBuildLog(string message);
 
     /// <summary>
-    ///    Receives a container log message from the server, associated with a specific container, and processes it on the client side.
+    ///     Receives a container log message from the server, associated with a specific container, and processes it on the
+    ///     client side.
     /// </summary>
     /// <param name="containerName">The name of the container associated with the log message.</param>
     /// <param name="message">The container log message received from the server.</param>

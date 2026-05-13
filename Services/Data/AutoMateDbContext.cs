@@ -136,7 +136,7 @@ public class AutoMateDbContext(
         return base.SaveChanges();
     }
 
-    
+
     /// <summary>
     ///     Iterates through tracked entities and updates the CreatedAt and UpdatedAt timestamps.
     /// </summary>
@@ -150,10 +150,7 @@ public class AutoMateDbContext(
         foreach (var entry in entries)
         {
             entry.Entity.UpdatedAt = now;
-            if (entry.State == EntityState.Added)
-            {
-                entry.Entity.CreatedAt = now;
-            }
+            if (entry.State == EntityState.Added) entry.Entity.CreatedAt = now;
         }
     }
 }

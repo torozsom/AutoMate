@@ -87,13 +87,9 @@ public static class AppConfiguration
             var canConnect = await db.Database.CanConnectAsync();
 
             if (canConnect)
-            {
                 logger.LogInformation("[Startup] Successfully connected to the database.");
-            }
             else
-            {
                 logger.LogWarning("[Startup] Failed to connect to the database. Ensure PostgreSQL is running.");
-            }
         }
         catch (Exception ex)
         {

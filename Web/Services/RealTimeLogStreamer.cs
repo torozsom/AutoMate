@@ -44,7 +44,8 @@ public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : I
     /// <summary>
     ///     Streams container metrics for a specific project and container to connected clients in real-time.
     /// </summary>
-    public async Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage, string memoryUsage)
+    public async Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage,
+        string memoryUsage)
     {
         await hubContext.Clients
             .Group($"project-{projectId}")

@@ -75,8 +75,17 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
-    [Inject]
-    private IJSRuntime JSRuntime { get; set; } = null!;
+    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+
+    /// <summary>
+    ///     Disposes of the component by unsubscribing from the deployment status change notifications
+    ///     to prevent memory leaks and unintended behavior when the component is no longer in use.
+    /// </summary>
+    public void Dispose()
+    {
+        DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
+        GC.SuppressFinalize(this);
+    }
 
 
     /// <summary>
@@ -91,23 +100,13 @@ public partial class Dashboard : ComponentBase, IDisposable
     protected override async Task OnInitializedAsync()
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
-        
+
         _currentUserId = await GetCurrentUserIdAsync();
 
         if (_currentUserId != Guid.Empty)
             _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
 
         _isLoading = false;
-    }
-
-    /// <summary>
-    ///     Disposes of the component by unsubscribing from the deployment status change notifications
-    ///     to prevent memory leaks and unintended behavior when the component is no longer in use.
-    /// </summary>
-    public void Dispose()
-    {
-        DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
-        GC.SuppressFinalize(this);
     }
 
 
@@ -129,15 +128,11 @@ public partial class Dashboard : ComponentBase, IDisposable
             .FirstOrDefault();
 
         if (latestDeployment != null)
-        {
             latestDeployment.Status = status;
-        }
         else
-        {
             // If no deployment exists yet but we got a status (e.g. Building), we could force a refresh
             // However, we shouldn't get here unless there is a deployment record created.
             _ = RefreshProjectsAsync();
-        }
 
         InvokeAsync(StateHasChanged);
     }

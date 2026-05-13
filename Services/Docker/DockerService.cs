@@ -300,15 +300,9 @@ public partial class DockerService : IDockerService, IDisposable
             var runningProjects = new List<string>();
 
             if (projects.ValueKind == JsonValueKind.Array)
-            {
                 foreach (var project in projects.EnumerateArray())
-                {
                     if (project.TryGetProperty("Name", out var nameProp) && nameProp.GetString() is { } name)
-                    {
                         runningProjects.Add(name);
-                    }
-                }
-            }
 
             return runningProjects;
         }
@@ -654,7 +648,7 @@ public partial class DockerService : IDockerService, IDisposable
     /// <param name="hostPort">The host port for the container.</param>
     /// <param name="containerPort">The container's own port.</param>
     /// <param name="envVarsJson">The environment variables.</param>
-    /// <returns></returns>
+    /// <returns>The container creation parameters.</returns>
     private static CreateContainerParameters BuildContainerParameters(
         string imageTag,
         string containerName,

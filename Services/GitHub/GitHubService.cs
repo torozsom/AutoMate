@@ -39,9 +39,7 @@ public class GitHubService : IGitHubService
         _logger = logger;
 
         if (!(_httpClient.DefaultRequestHeaders.UserAgent.Count > 0))
-        {
             _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("AutoMate", "1.0"));
-        }
 
         _httpClient.BaseAddress ??= new Uri("https://api.github.com/");
     }
@@ -61,7 +59,6 @@ public class GitHubService : IGitHubService
         var cacheKey = GenerateCacheKey(accessToken);
 
         if (!forceRefresh)
-        {
             try
             {
                 // Attempt to retrieve the repository list from the distributed cache using the generated cache key.
@@ -89,7 +86,6 @@ public class GitHubService : IGitHubService
                 _logger.LogWarning(ex,
                     "[GitHubService] Failed to read or deserialize repositories from cache. Falling back to API call.");
             }
-        }
 
         try
         {

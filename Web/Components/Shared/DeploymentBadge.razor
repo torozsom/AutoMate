@@ -1,15 +1,12 @@
 @using Core.Enums
-
 <span class="badge @BadgeClass @AdditionalClasses">
     <i class="bi @IconClass small me-1"></i> @StatusText
 </span>
 
 @code {
-    [Parameter]
-    public DeploymentStatus? Status { get; set; }
+    [Parameter] public DeploymentStatus? Status { get; set; }
 
-    [Parameter]
-    public string AdditionalClasses { get; set; } = "";
+    [Parameter] public string AdditionalClasses { get; set; } = "";
 
     private string BadgeClass => Status switch
     {
@@ -37,4 +34,5 @@
         DeploymentStatus.Stopped => "Stopped",
         _ => "Not Deployed"
     };
+
 }

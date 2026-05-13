@@ -88,7 +88,8 @@ public class DeploymentCleanupHostedService(
                     if (deployment.CsProject == null) continue;
 
                     var expectedProjectName = deployment.CsProject.Name.ToLowerInvariant().Replace(" ", "");
-                    var isActuallyRunning = runningProjectsInDocker.Contains(expectedProjectName, StringComparer.OrdinalIgnoreCase);
+                    var isActuallyRunning =
+                        runningProjectsInDocker.Contains(expectedProjectName, StringComparer.OrdinalIgnoreCase);
 
                     if (deployment.Status == DeploymentStatus.Running && !isActuallyRunning)
                     {
@@ -109,7 +110,7 @@ public class DeploymentCleanupHostedService(
                                       "the actual Docker state.", changedCount);
                 }
             }
-            
+
             logger.LogInformation("[DeploymentCleanupHostedService] Deployment sync completed.");
         }
         catch (Exception ex)
