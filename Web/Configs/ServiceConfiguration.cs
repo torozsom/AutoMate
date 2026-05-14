@@ -14,7 +14,8 @@ using Services.Email;
 using Services.GitHub;
 using Services.LogStreaming;
 using Services.Orchestration;
-using Services.Projects;
+using Services.Data.Projects;
+using Services.Data.Users;
 using Services.Scanner;
 using Services.Templating;
 using Web.Extensions;
@@ -241,6 +242,7 @@ public static class ServiceConfiguration
 
             // Business & Utilities
             services.AddScoped<IProjectService, ProjectService>();
+            services.AddScoped<IUserService, UserService>();
             services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
             services.AddScoped<IProjectScannerService, ProjectScannerService>();
             services.AddScoped<ITemplatingService, TemplatingService>();
