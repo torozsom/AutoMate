@@ -300,8 +300,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             var latestDeployment = _project.CsProjects
                 .SelectMany(c => c.Deployments)
-                .OrderByDescending(d => d.CreatedAt)
-                .FirstOrDefault();
+                .MaxBy(d => d.CreatedAt);
 
             if (latestDeployment != null)
             {
@@ -359,8 +358,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         return _project?.CsProjects
             .SelectMany(c => c.Deployments)
-            .OrderByDescending(d => d.CreatedAt)
-            .FirstOrDefault()?.Status;
+            .MaxBy(d => d.CreatedAt)?.Status;
     }
 
 
@@ -413,6 +411,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
+                .WithAutomaticReconnect()
                 .Build();
 
 
@@ -449,7 +448,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"SignalR Connection Error: {ex.Message}");
+                Logger.LogError(ex, "Failed to start SignalR connection for project {ProjectId}", ProjectId);
             }
         }
     }
