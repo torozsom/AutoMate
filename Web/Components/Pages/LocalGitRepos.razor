@@ -43,7 +43,7 @@
         <Authorized>
             @if (_hasScanned && !_isScanning)
             {
-                if (_localProjects == null || !_localProjects.Any())
+                if (_localProjects is null || _localProjects.Count == 0)
                 {
                     <div class="alert alert-warning text-center mt-4">
                         <i class="bi bi-exclamation-triangle display-4"></i>

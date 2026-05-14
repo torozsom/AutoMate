@@ -1,13 +1,11 @@
 using System.Security.Claims;
 using Core.DTO;
-using Core.Entities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
-using Microsoft.EntityFrameworkCore;
-using Services.Data;
-using Services.Projects;
 using Services.Scanner;
+using Services.Data.Projects;
+using Services.Data.Users;
 
 namespace Web.Components.Pages;
 
@@ -18,28 +16,68 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class LocalGitRepos : ComponentBase
 {
+    /// A flag to indicate if the scanning process has been completed at least once.
     private bool _hasScanned;
-    private bool _isErrorStatus;
-    private bool _isScanning;
-    private string _lastSearchedPath = string.Empty;
 
+    /// A flag to indicate if the last scanned operation resulted in an error.
+    private bool _isErrorStatus;
+
+    /// A flag to indicate if the scanning process is currently in progress.
+    private bool _isScanning;
+
+    /// The path of the last folder scanned by the system.
+    private string _lastSearchedPath = string.Empty;
 
     /// This list holds the results of the local Git projects found during the scanning process.
     private List<LocalProjectDto>? _localProjects;
 
+    /// The path to the folder where the scanning process will begin.
     private string _searchPath = string.Empty;
+
+    /// A message to display to the user, indicating the status of the last operation.
     private string? _statusMessage;
 
+    /// The current user's identifier.
+    private Guid _currentUserId;
+
+
+    /// Authentication State Provider for checking user authentication and retrieving user information.
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
+    /// Service for scanning local projects for Git repositories.
     [Inject] private ILocalSystemScannerService SystemScannerService { get; set; } = null!;
 
+    /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
     [Inject] private IProjectService ProjectService { get; set; } = null!;
 
-    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
+    /// Service for managing user accounts.
+    [Inject] private IUserService UserService { get; set; } = null!;
+
 
     /// A computed property that determines whether the "Scan" button should be disabled.
     private bool IsScanButtonDisabled => string.IsNullOrWhiteSpace(_searchPath) || _isScanning;
+
+
+    /// <summary>
+    ///     Lifecycle method that runs on component initialization.
+    ///     Resolves the current user's ID ahead of time.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userClaims = authState.User;
+
+        if (userClaims.Identity is not null && userClaims.Identity.IsAuthenticated)
+        {
+            var nameIdentifier = userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!string.IsNullOrEmpty(nameIdentifier))
+            {
+                var (userId, _, _) = await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier);
+                _currentUserId = userId;
+            }
+        }
+    }
 
 
     /// <summary>
@@ -63,8 +101,7 @@ public partial class LocalGitRepos : ComponentBase
         catch (Exception ex)
         {
             _localProjects = [];
-            SetStatusMessage("An error occurred during scanning. Check the provided path." +
-                             "Error details: " + ex.Message, true);
+            SetStatusMessage($"An error occurred during scanning. Check the provided path. Error details: {ex.Message}", true);
         }
         finally
         {
@@ -88,60 +125,30 @@ public partial class LocalGitRepos : ComponentBase
 
 
     /// <summary>
-    ///     Saves the selected project to the user's account. It checks if the user is authenticated,
-    ///     retrieves the user's ID, and then calls the project service to save the project.
-    ///     It also updates the status message based on the success of the operation.
+    ///     Saves the selected project to the user's account.
+    ///     It updates the status message based on the success of the operation.
     /// </summary>
     /// <param name="project">The DTO of the Local Project to be saved.</param>
     /// <param name="csproject">The DTO of the CsProject to be saved</param>
     private async Task SaveProjectAsync(LocalProjectDto project, CsProjectDto csproject)
     {
-        var userId = await GetCurrentUserIdAsync();
-
-        if (userId == Guid.Empty)
+        if (_currentUserId == Guid.Empty)
         {
             SetStatusMessage("You need to be logged in to save projects.", true);
             return;
         }
 
         // Attempt to save the project to the user's account
-        var success = await ProjectService.AddLocalProjectAsync(userId, project, csproject);
+        var success = await ProjectService.AddLocalProjectAsync(_currentUserId, project, csproject);
 
         if (success)
-            SetStatusMessage($"{csproject.Name} successfully saved!", false);
-        else
-            SetStatusMessage($"{csproject.Name} already exists in your workspace!", true);
-    }
-
-
-    /// <summary>
-    ///     Helper method to extract and resolve the current user's database ID.
-    ///     Encapsulates the AuthState checking and DB fallback logic.
-    /// </summary>
-    private async Task<Guid> GetCurrentUserIdAsync()
-    {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-
-        if (!user.Identity?.IsAuthenticated ?? true)
-            return Guid.Empty;
-
-        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (Guid.TryParse(userIdString, out var parsedId))
-            return parsedId;
-
-        // Fallback for GitHub users where the claim is an AccountId (string), not a GUID
-        if (!string.IsNullOrEmpty(userIdString))
         {
-            using var scope = ServiceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-            var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
-
-            return dbUser?.Id ?? Guid.Empty;
+            SetStatusMessage($"{csproject.Name} successfully saved!", false);
         }
-
-        return Guid.Empty;
+        else
+        {
+            SetStatusMessage($"{csproject.Name} already exists in your workspace!", true);
+        }
     }
 
 
@@ -160,8 +167,6 @@ public partial class LocalGitRepos : ComponentBase
 
     /// <summary>
     ///     Clears the current status message and resets the error status flag.
-    ///     This can be used before starting a new scan or when the user changes
-    ///     the search path to ensure that old messages don't persist.
     /// </summary>
     private void ClearStatusMessage()
     {

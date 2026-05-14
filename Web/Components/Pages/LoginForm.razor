@@ -29,17 +29,17 @@
 
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
-                <input type="email" name="email" class="form-control" id="email" placeholder="Enter your email"
-                       required>
+                <input type="email" name="email" class="form-control" id="email"
+                       placeholder="Enter your email" required autocomplete="email">
             </div>
 
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
                 <input type="password" name="password" class="form-control" id="password"
-                       placeholder="Enter your password" required>
+                       placeholder="Enter your password" required autocomplete="current-password">
             </div>
 
-            <div class="row g-3">
+            <div class="row g-3 mt-1">
                 <div class="col-md-6">
                     <button type="submit" class="btn btn-primary-custom text-white w-100 h-100">
                         Login to your account
@@ -55,7 +55,7 @@
             </div>
 
             <div class="mt-4 text-center">
-                <p>Don't have an account yet? <a href="/register" class="text-decoration-none">Register here</a></p>
+                <p class="mb-0">Don't have an account yet? <a href="/register" class="text-decoration-none fw-bold">Register here</a></p>
             </div>
         </form>
     </div>

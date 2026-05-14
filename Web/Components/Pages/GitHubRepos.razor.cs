@@ -1,36 +1,49 @@
 using System.Security.Claims;
 using Core.DTO;
-using Core.Entities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.EntityFrameworkCore;
-using Services.Data;
+using Services.Data.Projects;
+using Services.Data.Users;
 using Services.GitHub;
-using Services.Projects;
 
 namespace Web.Components.Pages;
 
 /// <summary>
 ///     The GitHubRepos component is responsible for retrieving and displaying a list of GitHub repositories
 ///     associated with the authenticated user. It checks the user's authentication state and integrates
-///     with the database to determine if the user is a GitHub user. If a valid GitHub access token is available,
-///     the component leverages the GitHub service to fetch the repositories.
+///     with the user service to fetch GitHub tokens securely.
 /// </summary>
 public partial class GitHubRepos : ComponentBase
 {
+    /// The current user's identifier.
+    private Guid _currentUserId;
+
+    /// The list of GitHub repositories associated with the user.
     private List<GitHubRepositoryDto>? _githubRepos;
 
+    /// A flag to indicate if the current status message is an error message.
     private bool _isErrorStatus;
+
+    /// A flag indicating whether the user is a GitHub user.
     private bool _isGitHubUser;
+
+    /// A flag indicating whether the component is currently loading data.
     private bool _isLoading = true;
+
+    /// The current status message to be displayed to the user.
     private string? _statusMessage;
 
+
+    /// Authentication State Provider for checking user authentication and retrieving user information.
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    [Inject] private IServiceProvider ServiceProvider { get; set; } = null!;
+    /// Service for managing user accounts.
+    [Inject] private IUserService UserService { get; set; } = null!;
 
+    /// Service for interacting with the GitHub API.
     [Inject] private IGitHubService GitHubService { get; set; } = null!;
 
+    /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
     [Inject] private IProjectService ProjectService { get; set; } = null!;
 
 
@@ -42,12 +55,24 @@ public partial class GitHubRepos : ComponentBase
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        var dbUser = await GetCurrentUserFromDbAsync();
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userClaims = authState.User;
 
-        if (dbUser is GitHubUser ghUser && !string.IsNullOrEmpty(ghUser.AccessToken))
+        if (userClaims.Identity is not null && userClaims.Identity.IsAuthenticated)
         {
-            _isGitHubUser = true;
-            _githubRepos = await GitHubService.GetUserRepositoriesAsync(ghUser.AccessToken);
+            var nameIdentifier = userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (!string.IsNullOrEmpty(nameIdentifier))
+            {
+                var (userId, accessToken, isGitHubUser) =
+                    await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier);
+
+                _currentUserId = userId;
+                _isGitHubUser = isGitHubUser;
+
+                if (_isGitHubUser && !string.IsNullOrEmpty(accessToken))
+                    _githubRepos = await GitHubService.GetUserRepositoriesAsync(accessToken);
+            }
         }
 
         _isLoading = false;
@@ -56,61 +81,34 @@ public partial class GitHubRepos : ComponentBase
 
     /// <summary>
     ///     When the user clicks the "Save" button on a repository card, this method is called.
-    ///     It retrieves the current user's ID and attempts to save the selected GitHub repository
-    ///     as a project in our system. The method also handles success and error states, providing
-    ///     feedback to the user through status messages.
+    ///     It attempts to save the selected GitHub repository as a project in our system.
     /// </summary>
     /// <param name="repo">The DTO representing the GitHub repository to be saved.</param>
     private async Task SaveProjectAsync(GitHubRepositoryDto repo)
     {
-        var user = await GetCurrentUserFromDbAsync();
+        ClearStatusMessage();
 
-        if (user == null || user.Id == Guid.Empty)
+        if (_currentUserId == Guid.Empty)
         {
             SetStatusMessage("Authentication error. Please log in again.", true);
             return;
         }
 
-        var success = await ProjectService.AddGitHubProjectAsync(user.Id, repo.Name, repo.HtmlUrl);
+        var success = await ProjectService.AddGitHubProjectAsync(_currentUserId, repo.Name, repo.HtmlUrl);
 
         if (success)
+        {
             SetStatusMessage($"{repo.Name} successfully saved!", false);
+        }
         else
+        {
             SetStatusMessage($"{repo.Name} repository is already saved!", true);
+        }
     }
 
 
     /// <summary>
-    ///     Extracts user authentication checks and database fetching into a single, reusable method.
-    ///     Safely handles the DbContext connection for Blazor Server using a Scope.
-    /// </summary>
-    private async Task<User?> GetCurrentUserFromDbAsync()
-    {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var claimsPrincipal = authState.User;
-
-        if (!claimsPrincipal.Identity?.IsAuthenticated ?? true)
-            return null;
-
-        var nameIdentifier = claimsPrincipal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(nameIdentifier))
-            return null;
-
-        using var scope = ServiceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-
-        // First try to parse as LocalUser (GUID)
-        if (Guid.TryParse(nameIdentifier, out var localUserId))
-            return await db.Users.FindAsync(localUserId);
-
-        // Fallback: GitHubUser uses string-based AccountId
-        return await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == nameIdentifier);
-    }
-
-
-    /// <summary>
-    ///     Sets the status message to be displayed to the user, along with an indication
-    ///     of whether it's an error message or not.
+    ///     Sets the status message to be displayed to the user.
     /// </summary>
     /// <param name="message">The message to be displayed.</param>
     /// <param name="isError">An indication of whether the message is an error.</param>

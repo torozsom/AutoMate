@@ -1,14 +1,14 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.JSInterop;
-using Services.Data;
+using Services.Data.Projects;
+using Services.Data.Users;
 using Services.Orchestration;
-using Services.Projects;
 using Services.Scanner;
 
 namespace Web.Components.Pages;
@@ -20,8 +20,8 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class Dashboard : ComponentBase, IDisposable
 {
-    /// A dictionary containing the deployment states of projects.
-    private readonly Dictionary<Guid, bool> _deployingStates = new();
+    /// A thread-safe dictionary containing the deployment states of projects.
+    private readonly ConcurrentDictionary<Guid, bool> _deployingStates = new();
 
     /// The current deployment configuration being edited by the user, if any.
     private DeploymentConfigDto? _currentDeployConfig;
@@ -47,6 +47,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A flag indicating whether the deployment configuration modal is currently visible to the user.
     private bool _showConfigModal;
 
+
     /// Authentication State Provider for checking user authentication and retrieving user information.
     [Inject]
     private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
@@ -55,9 +56,13 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IProjectService ProjectService { get; set; } = null!;
 
-    /// Service provider for creating scopes and resolving services, used for database access and other operations.
+    /// Factory for creating service scopes, allowing for proper dependency injection and lifetime management.
     [Inject]
-    private IServiceProvider ServiceProvider { get; set; } = null!;
+    private IServiceScopeFactory ScopeFactory { get; set; } = null!;
+
+    /// Service for managing user accounts.
+    [Inject]
+    private IUserService UserService { get; set; } = null!;
 
     /// Service responsible for orchestrating the deployment process of local projects.
     [Inject]
@@ -75,11 +80,13 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
-    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+    /// JS Runtime for interacting with the browser's JavaScript environment.
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = null!;
+
 
     /// <summary>
-    ///     Disposes of the component by unsubscribing from the deployment status change notifications
-    ///     to prevent memory leaks and unintended behavior when the component is no longer in use.
+    ///     Disposes of the component by unsubscribing from the deployment status change notifications.
     /// </summary>
     public void Dispose()
     {
@@ -120,18 +127,15 @@ public partial class Dashboard : ComponentBase, IDisposable
     private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
     {
         var project = _projects?.FirstOrDefault(p => p.Id == projectId);
-        if (project == null) return;
+        if (project is null) return;
 
         var latestDeployment = project.CsProjects
             .SelectMany(c => c.Deployments)
-            .OrderByDescending(d => d.CreatedAt)
-            .FirstOrDefault();
+            .MaxBy(d => d.CreatedAt);
 
-        if (latestDeployment != null)
+        if (latestDeployment is not null)
             latestDeployment.Status = status;
         else
-            // If no deployment exists yet but we got a status (e.g. Building), we could force a refresh
-            // However, we shouldn't get here unless there is a deployment record created.
             _ = RefreshProjectsAsync();
 
         InvokeAsync(StateHasChanged);
@@ -164,7 +168,7 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         var success = await ProjectService.DeleteProjectAsync(projectId, _currentUserId);
 
-        if (success && _projects != null)
+        if (success && _projects is not null)
             _projects.RemoveAll(p => p.Id == projectId);
         else
             _globalErrorMessage = "Failed to remove the project. It might have been already deleted.";
@@ -189,7 +193,7 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         var csProjectToDeploy = project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
 
-        if (csProjectToDeploy == null)
+        if (csProjectToDeploy is null)
         {
             _globalErrorMessage = $"No web project found in '{project.Name}' to deploy. Only web apps are supported.";
             return;
@@ -238,9 +242,10 @@ public partial class Dashboard : ComponentBase, IDisposable
         ClearMessages();
         SetDeployingState(finalConfig.ProjectId, true);
 
+        // Fire-and-forget pattern to run the deployment in the background without blocking the UI.
         _ = Task.Run(async () =>
         {
-            using var scope = ServiceProvider.CreateScope();
+            using var scope = ScopeFactory.CreateScope();
             var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
 
             try
@@ -270,14 +275,14 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Helper method to safely extract the current user's ID from claims or fallback to the database.
+    ///     Helper method to safely extract the current user's ID from claims.
     /// </summary>
     private async Task<Guid> GetCurrentUserIdAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
-        if (!user.Identity?.IsAuthenticated ?? true)
+        if (user.Identity is null || !user.Identity.IsAuthenticated)
             return Guid.Empty;
 
         var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -287,39 +292,34 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         // Fallback for GitHub users (AccountId is a string)
         if (!string.IsNullOrEmpty(userIdString))
-        {
-            using var scope = ServiceProvider.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-            var dbUser = await db.Users.OfType<GitHubUser>().FirstOrDefaultAsync(u => u.AccountId == userIdString);
-
-            return dbUser?.Id ?? Guid.Empty;
-        }
+            return await UserService.GetUserIdByGithubAccountIdAsync(userIdString);
 
         return Guid.Empty;
     }
 
 
-    /// Helper method to check if a project is currently being deployed.
+    /// <summary>
+    ///     Checks if a project is currently being deployed.
+    /// </summary>
     private bool IsDeploying(Guid projectId)
     {
         return _deployingStates.GetValueOrDefault(projectId, false);
     }
 
 
-    /// Helper method to get the latest deployment status of a project.
+    /// <summary>
+    ///     Gets the latest deployment status of a project.
+    /// </summary>
     private DeploymentStatus? GetLatestStatus(Project project)
     {
         return project.CsProjects
             .SelectMany(c => c.Deployments)
-            .OrderByDescending(d => d.CreatedAt)
-            .FirstOrDefault()?.Status;
+            .MaxBy(d => d.CreatedAt)?.Status;
     }
 
 
     /// <summary>
-    ///     Sets the deploying state for a specific project. This is used to track which projects are currently
-    ///     in the process of being deployed, allowing the UI to show appropriate loading indicators and prevent
-    ///     multiple deployments of the same project at the same time.
+    ///     Sets the deploying state for a specific project.
     /// </summary>
     /// <param name="projectId">The ID of the project.</param>
     /// <param name="isDeploying">Indicates whether the project is currently deploying.</param>

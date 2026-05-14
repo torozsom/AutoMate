@@ -19,7 +19,7 @@
             </h2>
         </div>
 
-        @if (_project != null)
+        @if (_project is not null)
         {
             <div class="d-flex gap-2">
                 @{ var isDeploying = IsDeploying(); }
@@ -52,7 +52,7 @@
         }
     </div>
 
-    @if (_showConfigModal && _currentDeployConfig != null && _selectedProjectPath != null)
+    @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
     {
         <ConfigurationForm
             Config="@_currentDeployConfig"
@@ -64,10 +64,10 @@
     @if (_isLoading)
     {
         <div class="d-flex justify-content-center mt-5">
-            <div class="spinner-border text-primary" role="status"></div>
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
         </div>
     }
-    else if (_project == null)
+    else if (_project is null)
     {
         <div class="alert alert-danger shadow-sm">
             <i class="bi bi-exclamation-triangle-fill me-2"></i> Project not found or you don't have access.

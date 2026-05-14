@@ -5,36 +5,45 @@ namespace Web.Components.Pages;
 
 /// <summary>
 ///     This component handles the email verification process for users.
-///     When a user clicks on the verification link sent to their email,
-///     they are directed to this component with a token in the query string.
-///     The component validates the token against the database, checks for
-///     expiration, and updates the user's email verification status accordingly.
-///     If the token is invalid or expired, it displays an appropriate error message to the user.
+///     It either prompts the user to check their email or validates a provided token.
 /// </summary>
 public partial class VerifyEmail : ComponentBase
 {
+    /// A page title that can be dynamically set based on the context.
     private string _pageTitle = "Email Confirmation";
 
+
+    /// The authentication service used to verify the email token.
     [Inject] private IAuthService AuthService { get; set; } = null!;
 
+    /// The navigation manager used to redirect users after successful verification.
     [Inject] private NavigationManager NavigationManager { get; set; } = null!;
 
+    /// The logger instance for logging verification-related events.
+    [Inject] private ILogger<VerifyEmail> Logger { get; set; } = null!;
 
+
+    /// <summary>
+    ///     The verification token provided in the URL query string.
+    /// </summary>
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
+    /// <summary>
+    ///     A flag indicating whether the component should simply prompt the user to check their email.
+    /// </summary>
     [SupplyParameterFromQuery(Name = "checkemail")]
-
     public bool CheckEmail { get; set; }
 
+
+    /// An error message to display if verification fails.
     private string? ErrorMessage { get; set; }
 
 
     /// <summary>
     ///     Handles the email verification process when the component is initialized.
     ///     It checks for the presence of a token, validates it against the database,
-    ///     and updates the user's email verification status accordingly. If the token is
-    ///     invalid or expired, it sets an appropriate error message to inform the user.
+    ///     and updates the user's email verification status accordingly.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
@@ -44,13 +53,14 @@ public partial class VerifyEmail : ComponentBase
             return;
         }
 
-        await ProcessEmailVerification();
+        await ProcessEmailVerificationAsync();
     }
+
 
     /// <summary>
     ///     Executes the actual verification logic using the token provided in the URL.
     /// </summary>
-    private async Task ProcessEmailVerification()
+    private async Task ProcessEmailVerificationAsync()
     {
         if (string.IsNullOrWhiteSpace(Token))
         {
@@ -63,14 +73,18 @@ public partial class VerifyEmail : ComponentBase
             var success = await AuthService.VerifyEmailAsync(Token);
 
             if (success)
+            {
                 NavigationManager.NavigateTo("/login?verified=true");
+            }
             else
+            {
                 ErrorMessage = "Invalid token or token has expired. Please check the link and try again.";
+            }
         }
         catch (Exception ex)
         {
-            ErrorMessage = "A technical error occurred. Please try again later.\n" +
-                           "Error details: " + ex.Message;
+            Logger.LogError(ex, "An error occurred during email verification for token {Token}", Token);
+            ErrorMessage = "A technical error occurred while verifying your email. Please try again later.";
         }
     }
 }
