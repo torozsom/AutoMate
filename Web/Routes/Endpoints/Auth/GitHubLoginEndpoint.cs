@@ -3,8 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 namespace Web.Routes.Endpoints.Auth;
 
 /// <summary>
-///     Endpoint for handling GitHub user login. When accessed, it initiates
-///     the authentication process using GitHub as the provider.
+///     Endpoint for handling GitHub user login. Initiates the OAuth authentication challenge.
 /// </summary>
 public class GitHubLoginEndpoint : IEndpoint
 {

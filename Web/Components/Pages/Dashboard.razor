@@ -33,7 +33,7 @@
                     <p class="mt-3 text-muted">Loading your workspace...</p>
                 </div>
             }
-            else if (_projects == null || !_projects.Any())
+            else if (_projects is null || _projects.Count == 0)
             {
                 <div class="text-center mt-5 text-muted bg-light p-5 rounded-3 border border-dashed shadow-sm">
                     <i class="bi bi-rocket-takeoff display-1 text-secondary opacity-50"></i>
@@ -113,7 +113,7 @@
                         </div>
                     }
 
-                    @if (_showConfigModal && _currentDeployConfig != null && _selectedProjectPath != null)
+                    @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
                     {
                         <ConfigurationForm
                             Config="@_currentDeployConfig"

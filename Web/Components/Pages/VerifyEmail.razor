@@ -9,25 +9,26 @@
         <div class="col-md-6 text-center">
             @if (CheckEmail)
             {
-                <div class="verification-card p-4 shadow-sm border rounded bg-white">
+                <div class="verification-card p-5 shadow-sm border rounded bg-white">
                     <i class="bi bi-envelope-check text-primary display-1 mb-3"></i>
                     <h2 class="mb-3">Check your email!</h2>
-                    <div class="alert alert-info">
+                    <div class="alert alert-info shadow-sm">
+                        <i class="bi bi-info-circle-fill me-2"></i>
                         We have sent a confirmation link to your email address.
                         Please check your inbox and click the link to activate your account.
                     </div>
                     <p class="text-muted mt-3">Didn't receive the email? Check your spam folder.</p>
-                    <a href="/login" class="btn btn-link">Back to login</a>
+                    <a href="/login" class="btn btn-outline-primary mt-2">Back to login</a>
                 </div>
             }
             else
             {
-                <div class="verification-card p-4 shadow-sm border rounded bg-white">
+                <div class="verification-card p-5 shadow-sm border rounded bg-white">
                     @if (!string.IsNullOrEmpty(ErrorMessage))
                     {
-                        <i class="bi bi-exclamation-triangle text-danger display-1 mb-3"></i>
+                        <i class="bi bi-exclamation-triangle-fill text-danger display-1 mb-3"></i>
                         <h2 class="text-danger mb-3">Verification Failed</h2>
-                        <div class="alert alert-danger">
+                        <div class="alert alert-danger shadow-sm">
                             @ErrorMessage
                         </div>
                         <a href="/login" class="btn btn-primary-custom text-white mt-3 w-100">

@@ -1,7 +1,7 @@
 using Core.DTO;
 using Core.Entities;
 
-namespace Services.Projects;
+namespace Services.Data.Projects;
 
 /// <summary>
 ///     Service interface for managing projects. Provides methods for adding, retrieving, updating, and deleting projects.

@@ -1,17 +1,20 @@
 using Web.Configs;
 
 
-// This is the main entry point for the ASP.NET Core web application.
+// Create a WebApplication builder with the provided command-line arguments.
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Services: Builder phase
+// Add application services to the dependency injection container.
 builder.AddApplicationServices();
 
-// Build the application.
+// Build the WebApplication instance from the configured builder.
 var app = builder.Build();
 
-// Configure Pipeline: App phase
-await app.UseApplicationPipelineAsync();
+// Configure the HTTP request pipeline using the defined middleware components in the specified order.
+app.UseApplicationPipeline();
 
-// Run the application, starting the web server and listening for incoming HTTP requests.
-app.Run();
+// Initialize infrastructure components.
+await app.InitializeInfrastructureAsync();
+
+// Start the application and begin processing HTTP requests.
+await app.RunAsync();

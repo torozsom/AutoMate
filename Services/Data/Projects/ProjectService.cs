@@ -3,9 +3,8 @@ using Core.Entities;
 using Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Services.Data;
 
-namespace Services.Projects;
+namespace Services.Data.Projects;
 
 /// <summary>
 ///     Service class responsible for managing projects within the application.

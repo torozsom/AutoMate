@@ -1,7 +1,8 @@
 # AutoMate Web Module
 
 > The Web layer is the primary user interface and API gateway for the AutoMate platform. Built using .NET 10, Blazor
-> Server, and Minimal APIs, it enforces a strict separation of concerns by delegating business logic to the Services layer
+> Server, and Minimal APIs, it enforces a strict separation of concerns by delegating business logic to the Services
+> layer
 > and keeping the startup footprint exceptionally minimal.
 
 ---

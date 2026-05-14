@@ -1,24 +1,31 @@
+using System.Reflection;
 using Web.Routes;
 
 namespace Web.Extensions;
 
 /// <summary>
-///     Extension methods for registering endpoints in the dependency injection container.
-///     Endpoints are classes that implement the IEndpoint interface and define how to map routes to handlers.
+///     Extension methods for auto-discovering and registering endpoints in the DI container.
 /// </summary>
 public static class EndpointExtensions
 {
     /// <summary>
-    ///     Registers an endpoint of type T in the dependency injection container.
-    ///     The endpoint must implement the IEndpoint interface.
+    ///     Scans the specified assembly (or the calling assembly) via Reflection, finds all concrete
+    ///     classes implementing <see cref="IEndpoint" />, and registers them automatically.
     /// </summary>
-    /// <param name="services">The IServiceCollection to add the endpoint to.</param>
-    /// <typeparam name="T">The type of the endpoint to register, which must implement IEndpoint.</typeparam>
+    /// <param name="services">The IServiceCollection to add the endpoints to.</param>
+    /// <param name="assembly">The assembly to scan. Defaults to the executing assembly.</param>
     /// <returns>The IServiceCollection so that additional calls can be chained.</returns>
-    public static IServiceCollection AddEndpoint<T>(this IServiceCollection services)
-        where T : class, IEndpoint
+    public static IServiceCollection AddEndpoints(this IServiceCollection services, Assembly? assembly = null)
     {
-        services.AddTransient<IEndpoint, T>();
+        assembly ??= Assembly.GetExecutingAssembly();
+
+        var endpointTypes = assembly
+            .GetTypes()
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IEndpoint).IsAssignableFrom(t));
+
+        foreach (var type in endpointTypes)
+            services.AddTransient(typeof(IEndpoint), type);
+
         return services;
     }
 }

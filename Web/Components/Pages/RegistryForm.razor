@@ -23,29 +23,29 @@
             <div class="mb-3">
                 <label for="username" class="form-label">Username</label>
                 <InputText @bind-Value="Model!.Username" type="text" class="form-control" id="username"
-                           placeholder="Enter your username"/>
-                <ValidationMessage For="() => Model!.Username" class="text-danger mt-1"/>
+                           placeholder="Enter your username" autocomplete="username"/>
+                <ValidationMessage For="() => Model!.Username" class="text-danger mt-1 small"/>
             </div>
 
             <div class="mb-3">
                 <label for="email" class="form-label">Email</label>
                 <InputText @bind-Value="Model!.Email" type="email" class="form-control" id="email"
-                           placeholder="Enter your email"/>
-                <ValidationMessage For="() => Model!.Email" class="text-danger mt-1"/>
+                           placeholder="Enter your email" autocomplete="email"/>
+                <ValidationMessage For="() => Model!.Email" class="text-danger mt-1 small"/>
             </div>
 
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
                 <InputText @bind-Value="Model!.Password" type="password" class="form-control" id="password"
-                           placeholder="Create a password"/>
-                <ValidationMessage For="() => Model!.Password" class="text-danger mt-1"/>
+                           placeholder="Create a password" autocomplete="new-password"/>
+                <ValidationMessage For="() => Model!.Password" class="text-danger mt-1 small"/>
             </div>
 
             <div class="mb-4">
                 <label for="confirmPassword" class="form-label">Confirm Password</label>
                 <InputText @bind-Value="Model!.ConfirmPassword" type="password" class="form-control"
-                           id="confirmPassword" placeholder="Confirm your password"/>
-                <ValidationMessage For="() => Model!.ConfirmPassword" class="text-danger mt-1"/>
+                           id="confirmPassword" placeholder="Confirm your password" autocomplete="new-password"/>
+                <ValidationMessage For="() => Model!.ConfirmPassword" class="text-danger mt-1 small"/>
             </div>
 
             <div class="row g-3">
@@ -61,6 +61,10 @@
                         Login with Github
                     </a>
                 </div>
+            </div>
+
+            <div class="mt-4 text-center">
+                <p class="mb-0">Already have an account? <a href="/login" class="text-decoration-none fw-bold">Login here</a></p>
             </div>
         </EditForm>
     </div>

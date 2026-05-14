@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 namespace Web.Routes.Endpoints.Auth;
 
 /// <summary>
-///     Endpoint for logging out the user. It clears the authentication cookie and redirects to the home page.
+///     Endpoint for logging out the user. Clears the authentication cookie.
 /// </summary>
 public class LogoutEndpoint : IEndpoint
 {
@@ -12,9 +12,11 @@ public class LogoutEndpoint : IEndpoint
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/logout", async (HttpContext context) =>
-        {
-            await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return Results.Redirect("/");
-        });
+            {
+                await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return Results.LocalRedirect("/");
+            })
+            // A logout should ideally require an authenticated user.
+            .RequireAuthorization();
     }
 }
