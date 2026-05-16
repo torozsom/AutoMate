@@ -1,14 +1,55 @@
 <div align="center">
   <h1>AutoMate</h1>
-  
+  <p><b>Self-hosted .NET deployment companion for local and GitHub-based project discovery.</b></p>
+
   ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
   ![Blazor](https://img.shields.io/badge/Blazor-Server-512BD4?logo=blazor&logoColor=white)
-  ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
-  ![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)
+  ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Ready-4169E1?logo=postgresql&logoColor=white)
+  ![Docker](https://img.shields.io/badge/Docker-Integrated-2496ED?logo=docker&logoColor=white)
 </div>
 
+---
 
-<p align="center"><b>AutoMate</b> is a modern, self-hosted DevOps companion and project management platform built for developers. It bridges the gap between your source code and your hosting environment, allowing you to seamlessly discover, manage, and (soon) deploy your applications whether they are hosted on GitHub or reside locally on your machine.</p>
+## What AutoMate does
+
+AutoMate is a modular .NET 10 application that helps you:
+
+- authenticate with **local credentials** or **GitHub OAuth**
+- scan your filesystem for **Git repositories** and detect `.NET` projects
+- pull your repositories from GitHub and register them in your workspace
+- configure and launch **local Docker Compose deployments** for web projects
+- stream **live build logs, container logs, and container metrics** into the UI
+
+> Current deployment orchestration is implemented for **local projects**.  
+> GitHub repositories can be imported and managed, while cloud deployment is not implemented yet (planned for a future release, no ETA).
+
+---
+
+## Solution structure
+
+| Project | Responsibility |
+|---|---|
+| `Core` | Domain entities, DTOs, and enums shared by the solution |
+| `Services` | Business logic, data access, scanning, templating, Docker orchestration, email, auth |
+| `Web` | Blazor Server UI, SignalR hub, Minimal API endpoints, app startup and middleware pipeline |
+
+Each module has its own README:
+
+- [`Core/README.md`](./Core/README.md)
+- [`Services/README.md`](./Services/README.md)
+- [`Web/README.md`](./Web/README.md)
+
+---
+
+## Runtime architecture (high-level)
+
+1. User signs in (local or GitHub).
+2. User discovers projects (local scanner or GitHub API).
+3. Selected project is persisted in PostgreSQL.
+4. Deployment config is prepared from project metadata and dependency analysis.
+5. Docker templates are generated into a `.automate` workspace folder.
+6. `docker compose up` is executed.
+7. Logs/metrics are streamed via SignalR to terminal components in the dashboard.
 
 ---
 
@@ -22,78 +63,54 @@
 
 ---
 
-## ✨ Current Features
+## Tech stack
 
-* **🔐 Hybrid Authentication System**
-    * Secure local accounts with hashed passwords and anti-CSRF protection.
-    * Seamless OAuth integration with **GitHub** for quick login.
-    * Cookie-based session management across all user types.
-      
-* **📧 Email Verification Pipeline**
-    * Built-in confirmation workflow for local registrations.
-    * Pluggable email service architecture (Console output for dev, Gmail/SMTP for production).
-      
-* **🐙 GitHub Integration**
-    * Connects to the GitHub API via User Access Tokens.
-    * Fetches and beautifully displays all user repositories (public and private).
-      
-* **📁 Smart Local Scanner**
-    * Lightning-fast, cross-platform recursive directory scanner.
-    * Automatically detects Git repositories and `.NET` projects (`.sln`, `.csproj`).
-    * Enterprise-grade safety: handles symlinks and ignores build artifacts (`bin`, `obj`, `node_modules`).
-      
-* **💾 Project Registration & Management**
-    * Persist scanned local and GitHub projects into the PostgreSQL database.
-    * Maintain clear tracking of projects and their metadata.
-
-* **🐳 Automated Docker Deployments**
-    * Direct communication with the local Docker daemon.
-    * Analyzes `.NET` projects and dynamically generates Infrastructure-as-Code files (`Dockerfile`, `.dockerignore`, `docker-compose.yml`) on the fly.
-    * One-click deployment to spin up containers locally, accompanied by an automated background deployment cleanup service.
-    * Live Logs & Monitoring: View real-time container logs directly from the Blazor dashboard.
-      
-* **🏗️ Clean Architecture**
-    * Strict separation of concerns into `Core` (Entities/DTOs), `Services` (Business Logic), and `Web` (Blazor UI & Minimal APIs).
+- **Backend:** .NET 10, ASP.NET Core, Minimal APIs, SignalR
+- **Frontend:** Blazor Server, Bootstrap 5, Bootstrap Icons, xterm.js
+- **Data:** Entity Framework Core, PostgreSQL, Redis distributed cache
+- **Infra:** Docker Engine + Docker Compose
+- **Templates:** Scriban-based IaC generation
 
 ---
 
-## 🗺️ Roadmap (Upcoming Features)
-
-- [ ] **Cloud Provider Integration:** Deploy directly to AWS, Azure, or DigitalOcean.
-- [ ] **CI/CD Pipeline Generation:** Automatically create GitHub Actions workflows for continuous integration.
-
----
-
-## 🛠️ Tech Stack
-
-* **Frontend:** ASP.NET Core Blazor Server, Bootstrap 5, Bootstrap Icons.
-* **Backend:** C#, .NET 10, Minimal APIs.
-* **Database:** PostgreSQL, Entity Framework Core (Code-First Migrations).
-* **Architecture:** Clean Architecture, Dependency Injection, Repository Pattern logic.
-
----
-
-## 🚀 Getting Started
+## Getting started
 
 ### Prerequisites
-* [.NET 10.0 SDK](https://dotnet.microsoft.com/download)
-* [Docker Desktop](https://www.docker.com/products/docker-desktop) (for running the PostgreSQL database)
 
-### Installation & Setup
+- [.NET SDK 10.0.0+](https://dotnet.microsoft.com/download)
+- Docker + Docker Compose
+- PostgreSQL and Redis (can be started via the provided compose file)
 
-1. **Clone the repository:**
-   ```bash
-   git clone [https://github.com/yourusername/automate.git](https://github.com/yourusername/automate.git)
-   cd automate
-   cd .docker
-   docker-compose up -d
-   cd ../Web
-   dotnet ef database update --project ../Services
-   dotnet run
-   ```
-   
-To enable GitHub OAuth and Real Email sending, configure your .NET User Secrets with your GitHub Client ID/Secret and SMTP credentials.
+### 1) Start infrastructure
 
----
+```bash
+cd .docker
+docker compose up -d
+```
 
-<p align="center">This project is licensed under the MIT License.</p>
+> The compose file expects `DB_USER` and `DB_PASSWORD` environment variables.
+
+### 2) Configure application settings
+
+Configure connection strings and secret settings (recommended via user secrets / environment variables):
+
+- `ConnectionStrings:DefaultConnection` (PostgreSQL)
+- `ConnectionStrings:Redis` (Redis)
+- `GitHub:ClientId`, `GitHub:ClientSecret`
+- `Email:SenderEmail`, `Email:AppPassword` (for registration verification emails)
+
+### 3) Apply database migrations
+
+```bash
+cd Web
+dotnet ef database update --project ../Services
+```
+
+### 4) Run the app
+
+```bash
+cd Web
+dotnet run
+```
+
+Then open the local URL printed by ASP.NET Core.

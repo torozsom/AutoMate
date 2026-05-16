@@ -1,90 +1,138 @@
-# AutoMate Web Module
+# Web
 
-> The Web layer is the primary user interface and API gateway for the AutoMate platform. Built using .NET 10, Blazor
-> Server, and Minimal APIs, it enforces a strict separation of concerns by delegating business logic to the Services
-> layer
-> and keeping the startup footprint exceptionally minimal.
+The `Web` project is the UI and API entrypoint of AutoMate.  
+It hosts the Blazor Server app, SignalR hub, and Minimal API endpoints while delegating core logic to `Services`.
 
 ---
 
-## Architecture and Scope
+## Responsibilities
 
-Adhering strictly to **Clean Architecture** principles, the `Web` project functions exclusively as the presentation and
-routing mechanism. It consumes the rigorous contracts (interfaces) provided by the `Services` and `Core` layers but
-strictly avoids implementing core domain logic or direct database persistence operations.
-
-This module is responsible for orchestrating:
-
-- **Interactive UI Delivery** via Blazor Server.
-- **RESTful API Exposure** using Minimal APIs.
-- **Real-Time Telemetry** via SignalR.
-- **Application Bootstrapping** through isolated configuration classes.
+- render interactive Blazor pages for auth, project discovery, and deployment
+- configure application services, middleware, and endpoint mapping
+- host SignalR hub for live build/container telemetry
+- provide auth-related Minimal API endpoints
 
 ---
 
-## Module Breakdown
+## Startup and configuration
 
-The presentation components are logically grouped to ensure maintainability and separation of frontend concerns.
+- `Program.cs` is intentionally slim:
+  - `builder.AddApplicationServices()`
+  - `app.UseApplicationPipeline()`
+  - `app.InitializeInfrastructureAsync()`
 
-### Frontend Presentation
+- `Configs/ServiceConfiguration.cs` registers:
+  - EF Core context + Data Protection key persistence
+  - Redis distributed cache
+  - authentication (cookie + GitHub OAuth), authorization, rate limiting
+  - Razor Components, SignalR, Swagger
+  - all domain services from `Services`
+  - reflection-based endpoint registration
 
-* **Components**: Houses the modular Blazor Server UI elements that formulate the interactive application.
-    * *Pages*: Routable Razor components representing top-level screens (e.g., Dashboard, Project Details, Deployment
-      Status).
-    * *Layout*: Shared architectural elements that define the application shell, including navigation drawers and
-      contextual headers.
-    * *Shared*: Isolated, highly reusable UI primitives and interactive controls leveraged across distinct pages.
-
-### Application Bootstrapping
-
-* **Configs**: Architected to keep the `Program.cs` file completely pristine by offloading startup responsibilities.
-    * *ServiceConfiguration*: Orchestrates all Dependency Injection container registrations. Configures scoped services,
-      singleton real-time hubs, database contexts, and custom Minimal API endpoints.
-    * *AppConfiguration*: Manages the HTTP request pipeline. Systematically configures middleware for authentication,
-      authorization, static file serving, route interception, and endpoint mapping.
-
-### Utility and Extensions
-
-* **Extensions**: Houses specialized utility methods and extension classes designed to simplify presentation layer
-  tasks. This includes streamlining response formats, querying claim sets from the current security principal, and
-  format-shifting UI-specific data types without polluting pure domain entities.
-
-### Real-Time Communications
-
-* **Hubs**: Manages bi-directional, low-latency communication with connected clients utilizing SignalR.
-    * *LogHub*: Mapped dynamically at `/loghub`, this component leverages the backend `ILogStreamer` service to push
-      live deployment logs, container metrics, and build outputs directly to the UI, bypassing traditional HTTP polling.
-
-### API Gateway
-
-* **Routes**: Defines the robust Minimal API endpoints utilized by external integrations or specific background sync
-  tasks. To preserve clean abstractions, raw inline routing (e.g., `app.MapGet()`) is strictly avoided outside of
-  encapsulated classes.
-    * *IEndpoint*: A unified contract dictating how discrete HTTP endpoints must be registered.
-    * *Endpoints*: Focused implementations (such as Auth or Project routing) are housed here. These are auto-mapped via
-      reflection or explicit registration mechanisms (e.g., `builder.Services.AddEndpoint<T>()`) during application
-      initialization.
-
-### Presentation State
-
-* **Services**: Contains UI-specific transient and scoped state managers required exclusively by the front end. Distinct
-  from core business services, these components handle view-specific data aggregation, UI state persistence across
-  active Blazor circuits, and complex component-to-component event messaging.
+- `Configs/AppConfiguration.cs` configures:
+  - forwarded headers, exception handling/HSTS
+  - status page re-execution for 404 (`/not-found`)
+  - HTTPS, routing, rate limiting, auth, antiforgery
+  - SignalR hub `/loghub`
+  - health endpoint `/health`
+  - dynamically discovered Minimal API endpoints
 
 ---
 
-## Core Interaction Workflows
+## UI module map
 
-Modules within the Web project prioritize rapid rendering and immediate user feedback:
+### `Components/Pages/`
 
-1. **Initialization**: Application launch originates in `Program.cs`, immediately delegating execution to the `Configs`
-   module to wire up DI containers and the HTTP middleware pipeline.
-2. **Request Interception**: Incoming traffic is processed by `AppConfiguration`. Standard API calls are shunted to
-   specifically mapped instances in the `Routes` directory, while standard HTML/UI navigation falls back to Blazor
-   native routing.
-3. **Execution & Rendering**: The `Components` module leverages the Blazor Server hosting model to evaluate complex UI
-   logic server-side, transmitting highly optimized DOM delta updates over a continuous SignalR channel to the client
-   browser.
-4. **Live Data Streaming**: Upon deployment initiation, continuous stdout/stderr telemetry mapped by backend layers is
-   piped into the `Hubs` module. The `LogHub` instantly broadcasts these structured payloads to subscribing frontend
-   elements, achieving live observability.
+- `Home` (`/`)  
+  Marketing-style landing for anonymous users and quick actions for authenticated users.
+
+- `LoginForm` (`/login`)  
+  Local login form posting to `/api/auth/login`, plus GitHub OAuth entrypoint.
+
+- `RegistryForm` (`/register`, component name in codebase; registration page)  
+  Local registration flow with data annotations and email verification initiation.
+
+- `VerifyEmail` (`/verify-email`)  
+  Handles token verification and post-verification redirects.
+
+- `Dashboard` (`/dashboard`)  
+  Lists user projects, supports removal and deployment initiation, reacts to live status updates.
+
+- `GitHubRepos` (`/github-repos`)  
+  Fetches authenticated GitHub repositories and saves C# repositories into workspace.
+
+- `LocalGitRepos` (`/local-repos`)  
+  Scans local filesystem paths for Git/.NET projects and saves selected web projects.
+
+- `ProjectDetails` (`/project/{ProjectId:guid}`)  
+  Per-project operations: deploy/stop, live logs, live container metrics, and quick-open deployed app URL.
+
+- `Error` (`/Error`) and `NotFound` (`/not-found`)  
+  Error and fallback UX pages.
+
+### `Components/Layout/`
+
+- `MainLayout`  
+  Shared app shell, Docker daemon status indicator, and Swagger shortcut.
+
+- `NavMenu`  
+  Auth-aware navigation + theme toggle persisted in local storage.
+
+- `ReconnectModal`  
+  Blazor circuit reconnect/resume UX.
+
+### `Components/Shared/`
+
+- `ConfigurationForm`  
+  Deployment modal for environment/port/database/env-var configuration.
+- `DeploymentBadge`  
+  Compact status visualization for deployment state.
+- `Terminal`  
+  xterm.js wrapper component for live log streaming panels.
+
+---
+
+## Routing and API endpoints
+
+`Routes/IEndpoint` is the endpoint contract. Implementations are auto-discovered and mapped:
+
+- `StaticAssetsEndpoint` → static asset mapping
+- `RazorComponentsEndpoint` → root Blazor app mapping
+- `Auth/LoginEndpoint` → `POST /api/auth/login`
+- `Auth/LogoutEndpoint` → `POST /api/auth/logout`
+- `Auth/GitHubLoginEndpoint` → `GET /api/auth/github-login`
+
+---
+
+## Real-time log pipeline
+
+- `Hubs/LogHub`  
+  Clients join project groups with a short-lived, data-protected token.
+
+- `Services/RealTimeLogStreamer`  
+  Implements `ILogStreamer`, relays build logs/container logs/metrics to `project-{id}` SignalR groups.
+
+- `ProjectDetails` subscribes to:
+  - `ReceiveBuildLog`
+  - `ReceiveContainerLog`
+  - `ReceiveContainerMetrics`
+  and renders data in dedicated terminal tabs/metric cards.
+
+---
+
+## Frontend assets (`wwwroot/js`)
+
+- `theme.js`  
+  Applies/persists Bootstrap theme (`light` / `dark`).
+
+- `xterm-wrapper.js`  
+  Manages xterm.js terminal instances, fit behavior, writes, and disposal.
+
+---
+
+## Boundary
+
+This project should stay presentation-focused:
+
+- UI state, routing, and request orchestration belong here
+- domain/infrastructure rules remain in `Services`

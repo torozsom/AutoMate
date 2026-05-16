@@ -1,57 +1,72 @@
-# AutoMate Core Module
+# Core
 
-> The Core layer sits at the absolute center of the AutoMate Clean Architecture pattern. It encapsulates the pure domain
-> logic, enterprise entities, and static primitives required to represent the state of the application. It remains
-> completely agnostic to infrastructure, external integrations, or presentation layer concerns.
-
----
-
-## Architecture and Scope
-
-Adhering strictly to **Clean Architecture** principles, the `Core` project fundamentally dictates the shape of the
-system. It contains no implementations of business rules or external database persistence mapping; instead, it defines
-*what* data exists and *how* it should be transported across boundaries.
-
-This project must not depend on any other project within the solution (`Web` or `Services`). It provides the universal
-contracts that the outer layers must implement and utilize.
+The `Core` project is the domain contract of AutoMate.  
+It contains the shared model used by both `Services` and `Web`, with no dependencies on those outer layers.
 
 ---
 
-## Module Breakdown
+## Responsibilities
 
-The definitions within this module are categorized by their role in the data flow of the system.
+- define **domain entities** persisted by EF Core in the Services layer
+- define **DTOs** used for data exchange between services and UI
+- define **enums** that standardize source and deployment state
 
-### Domain Entities
-
-* **Entities**: The authoritative, state-bearing business objects mapped by the persistent layer. Entities derive
-  strictly from `BaseEntity` (which provides foundational identifiers and audit tracking).
-    * Examples include representations of deployment state (`Deployment`), repository abstractions (`Project`,
-      `CsProject`, `LocalProjectConfig`), and distinct identity structures utilizing Table-Per-Hierarchy persistence
-      patterns (`User`, `LocalUser`, `GitHubUser`).
-
-### Data Transport
-
-* **DTO**: Data Transfer Objects (DTOs) constructed expressly to shuffle formatted data over HTTP or function boundaries
-  without exposing the raw underlying database schema.
-    * Examples include payload structures for repository interactions (`GitHubRepositoryDto`), system analysis
-      metadata (`ProjectMetadataDto`), and configuration shapes (`DeploymentConfigDto`, `DatabaseConfigDto`).
-
-### Primitives & Types
-
-* **Enums**: Immutable, strictly-typed enumerations that restrict application state to predefined valid domains.
-    * *AppType*: Defines the runtime capability expected of a project.
-    * *DeploymentStatus*: Tracks the exact chronological state of a Docker orchestration workflow.
-    * *SourceType*: Differentiates between local code architectures and remote GitHub definitions.
+`Core` does **not** implement infrastructure, HTTP endpoints, Docker operations, or UI behavior.
 
 ---
 
-## Core Principles & Guidelines
+## Directory map
 
-When making modifications or extensions to the Core module, these rigid principles must be observed:
+### `Entities/`
 
-1. **No External Dependencies**: The Core module must not integrate NuGet packages related to Entity Framework, ASP.NET
-   Core, Docker, or external API consumption. Only rudimentary standard library logic belongs here.
-2. **Behavior Over State**: While primarily data-holding structures, entities should enforce their own internal
-   invariant logic if applicable, rather than exposing anemic objects to the Services layer.
-3. **Immutability and Encapsulation**: Limit public setters where logical. Changes to critical entity states should be
-   facilitated via domain operations, keeping the true state encapsulated from arbitrary manipulation.
+Domain model classes:
+
+- `BaseEntity`  
+  Common base with `Id`, `CreatedAt`, `UpdatedAt`.
+
+- `User` hierarchy  
+  - `LocalUser`: password hash + email verification token/expiry  
+  - `GitHubUser`: external account ID, avatar URL, GitHub access token
+
+- Project model  
+  - `Project`: owner, source type/path, app type, child C# projects  
+  - `CsProject`: individual `.csproj` unit, web project flag, deployment history  
+  - `LocalProjectConfig`: deployment defaults (port, db requirement, visibility, env var JSON)
+
+- Deployment model  
+  - `Deployment`: runtime status and Docker identity (`ImageTag`, `DockerContainerId`)
+
+### `DTO/`
+
+Transport records/classes used by scanner/orchestration/UI flows:
+
+- `LocalProjectDto`, `CsProjectDto` for scanner results
+- `ProjectMetadataDto` for parsed `.csproj` graph metadata
+- `DeploymentConfigDto` and `DatabaseConfigDto` for deployment setup
+- `GitHubRepositoryDto` for GitHub API repository payloads
+- `DbProviderRuleDto`, `TemplateManifestRuleDto` for scanner/template config
+
+### `Enums/`
+
+- `SourceType`: `Local`, `Remote`
+- `AppType`: `WebApi`, `Blazor`, `Mvc`
+- `DeploymentStatus`: `Starting`, `Running`, `Stopped`, `Failed`
+
+---
+
+## How Core is used in the solution
+
+- `Services` maps entities to PostgreSQL with EF Core.
+- `Services.Scanner` produces DTOs defined here.
+- `Services.Orchestration` consumes deployment DTOs/status enums.
+- `Web` uses entities/DTOs for UI rendering and component state.
+
+---
+
+## Design boundary
+
+Keep `Core` stable and framework-neutral:
+
+- no ASP.NET, EF configuration, Docker, or external API clients
+- model-first changes only (state + contracts)
+- changes in `Core` should be intentional because they affect all other projects
