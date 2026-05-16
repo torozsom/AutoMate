@@ -21,7 +21,7 @@ AutoMate is a modular .NET 10 application that helps you:
 - stream **live build logs, container logs, and container metrics** into the UI
 
 > Current deployment orchestration is implemented for **local projects**.  
-> GitHub repositories can be imported and managed, while cloud deployment is not implemented yet.
+> GitHub repositories can be imported and managed, while cloud deployment is not implemented yet (planned for a future release, no ETA).
 
 ---
 
