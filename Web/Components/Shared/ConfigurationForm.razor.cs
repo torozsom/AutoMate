@@ -56,12 +56,8 @@ public partial class ConfigurationForm : ComponentBase
         Config.Databases ??= [];
 
         if (Config.CustomEnvVars is not null)
-        {
             foreach (var kvp in Config.CustomEnvVars)
-            {
                 _envVars.Add(new EnvVarItem { Key = kvp.Key, Value = kvp.Value });
-            }
-        }
     }
 
 
@@ -78,12 +74,8 @@ public partial class ConfigurationForm : ComponentBase
 
         // Only add variables that are not already present in our UI list
         foreach (var kvp in scannedVars)
-        {
             if (!_envVars.Exists(e => e.Key.Equals(kvp.Key, StringComparison.OrdinalIgnoreCase)))
-            {
                 _envVars.Add(new EnvVarItem { Key = kvp.Key, Value = kvp.Value });
-            }
-        }
     }
 
 
@@ -97,13 +89,9 @@ public partial class ConfigurationForm : ComponentBase
 
         // Ignore completely empty keys to prevent dictionary crash or invalid configurations
         foreach (var item in _envVars)
-        {
             if (!string.IsNullOrWhiteSpace(item.Key))
-            {
                 // Clean the key from accidential whitespaces
                 Config.CustomEnvVars.TryAdd(item.Key.Trim(), item.Value?.Trim() ?? string.Empty);
-            }
-        }
 
         await OnDeployConfirmed.InvokeAsync(Config);
     }

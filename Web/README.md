@@ -17,25 +17,25 @@ It hosts the Blazor Server app, SignalR hub, and Minimal API endpoints while del
 ## Startup and configuration
 
 - `Program.cs` is intentionally slim:
-  - `builder.AddApplicationServices()`
-  - `app.UseApplicationPipeline()`
-  - `app.InitializeInfrastructureAsync()`
+    - `builder.AddApplicationServices()`
+    - `app.UseApplicationPipeline()`
+    - `app.InitializeInfrastructureAsync()`
 
 - `Configs/ServiceConfiguration.cs` registers:
-  - EF Core context + Data Protection key persistence
-  - Redis distributed cache
-  - authentication (cookie + GitHub OAuth), authorization, rate limiting
-  - Razor Components, SignalR, Swagger
-  - all domain services from `Services`
-  - reflection-based endpoint registration
+    - EF Core context + Data Protection key persistence
+    - Redis distributed cache
+    - authentication (cookie + GitHub OAuth), authorization, rate limiting
+    - Razor Components, SignalR, Swagger
+    - all domain services from `Services`
+    - reflection-based endpoint registration
 
 - `Configs/AppConfiguration.cs` configures:
-  - forwarded headers, exception handling/HSTS
-  - status page re-execution for 404 (`/not-found`)
-  - HTTPS, routing, rate limiting, auth, antiforgery
-  - SignalR hub `/loghub`
-  - health endpoint `/health`
-  - dynamically discovered Minimal API endpoints
+    - forwarded headers, exception handling/HSTS
+    - status page re-execution for 404 (`/not-found`)
+    - HTTPS, routing, rate limiting, auth, antiforgery
+    - SignalR hub `/loghub`
+    - health endpoint `/health`
+    - dynamically discovered Minimal API endpoints
 
 ---
 
@@ -113,10 +113,10 @@ It hosts the Blazor Server app, SignalR hub, and Minimal API endpoints while del
   Implements `ILogStreamer`, relays build logs/container logs/metrics to `project-{id}` SignalR groups.
 
 - `ProjectDetails` subscribes to:
-  - `ReceiveBuildLog`
-  - `ReceiveContainerLog`
-  - `ReceiveContainerMetrics`
-  and renders data in dedicated terminal tabs/metric cards.
+    - `ReceiveBuildLog`
+    - `ReceiveContainerLog`
+    - `ReceiveContainerMetrics`
+      and renders data in dedicated terminal tabs/metric cards.
 
 ---
 

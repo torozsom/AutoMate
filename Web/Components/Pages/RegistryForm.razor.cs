@@ -12,10 +12,12 @@ namespace Web.Components.Pages;
 public partial class RegistryForm : ComponentBase
 {
     /// Navigation manager to handle URL navigation after registration.
-    [Inject] private NavigationManager NavigationManager { get; set; } = null!;
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = null!;
 
     /// Authentication service for user registration and verification.
-    [Inject] private IAuthService AuthService { get; set; } = null!;
+    [Inject]
+    private IAuthService AuthService { get; set; } = null!;
 
 
     /// <summary>
@@ -32,7 +34,7 @@ public partial class RegistryForm : ComponentBase
 
 
     /// <summary>
-    ///    Initializes the component and ensures that the Model is not null to prevent issues with form binding.
+    ///     Initializes the component and ensures that the Model is not null to prevent issues with form binding.
     /// </summary>
     protected override void OnInitialized()
     {

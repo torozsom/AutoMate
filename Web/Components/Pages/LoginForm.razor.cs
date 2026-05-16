@@ -41,12 +41,7 @@ public partial class LoginForm : ComponentBase
     protected override void OnInitialized()
     {
         if (IsRegistered)
-        {
             SuccessMessage = "Registration successful! Please log in with your new account.";
-        }
-        else if (IsVerified)
-        {
-            SuccessMessage = "Email successfully verified! You can now log in to your account.";
-        }
+        else if (IsVerified) SuccessMessage = "Email successfully verified! You can now log in to your account.";
     }
 }

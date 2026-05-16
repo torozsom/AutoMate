@@ -6,12 +6,10 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.EntityFrameworkCore;
-using Services.Data;
-using Services.Docker;
-using Services.Orchestration;
 using Services.Data.Projects;
 using Services.Data.Users;
+using Services.Docker;
+using Services.Orchestration;
 using Services.Scanner;
 using Web.Components.Shared;
 
@@ -37,14 +35,23 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
 
-    /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
-    private string? _selectedProjectPath;
+    /// A terminal instance for displaying build logs.
+    private Terminal? _buildTerminal;
+
+    /// A nullable variable to hold the current deployment configuration when the user initiates a deployment.
+    private DeploymentConfigDto? _currentDeployConfig;
 
     /// The index of the currently displayed container's metrics in the list of container names.
     private int _currentMetricIndex;
 
+    /// A list of database tabs to be displayed in the UI, initialized as an empty list.
+    private IEnumerable<DatabaseTab> _databaseTabs = [];
+
     /// The port exposed by the web container.
     private int _exposedPort;
+
+    /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
+    private HubConnection? _hubConnection;
 
 
     /// A boolean flag to indicate whether the project is currently being deployed.
@@ -56,61 +63,63 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A boolean flag to indicate whether the deployment process is currently being stopped.
     private bool _isStopping;
 
-    /// A boolean flag to control the visibility of the deployment configuration modal.
-    private bool _showConfigModal;
-
 
     /// A nullable variable to hold the project details fetched from the database.
     private Project? _project;
 
-    /// A terminal instance for displaying build logs.
-    private Terminal? _buildTerminal;
+    /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
+    private string? _selectedProjectPath;
+
+    /// A boolean flag to control the visibility of the deployment configuration modal.
+    private bool _showConfigModal;
 
     /// A nullable variable to hold the terminal instance for displaying web container logs.
     private Terminal? _webTerminal;
 
-    /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
-    private HubConnection? _hubConnection;
-
-    /// A nullable variable to hold the current deployment configuration when the user initiates a deployment.
-    private DeploymentConfigDto? _currentDeployConfig;
-
-    /// A list of database tabs to be displayed in the UI, initialized as an empty list.
-    private IEnumerable<DatabaseTab> _databaseTabs = [];
-
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
-    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter]
+    public Guid ProjectId { get; set; }
 
     /// The project service used to fetch project details and manage project-related operations.
-    [Inject] private IProjectService ProjectService { get; set; } = null!;
+    [Inject]
+    private IProjectService ProjectService { get; set; } = null!;
 
     /// The authentication state provider used to retrieve the current user's authentication state and claims.
-    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+    [Inject]
+    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
     /// The service scope factory used to create scopes for resolving scoped services during asynchronous operations.
-    [Inject] private IServiceScopeFactory ScopeFactory { get; set; } = null!;
+    [Inject]
+    private IServiceScopeFactory ScopeFactory { get; set; } = null!;
 
     /// The user service used to retrieve user details and manage user-related operations.
-    [Inject] private IUserService UserService { get; set; } = null!;
+    [Inject]
+    private IUserService UserService { get; set; } = null!;
 
     /// The navigation manager used to navigate between pages and handle URL changes.
-    [Inject] private NavigationManager NavigationManager { get; set; } = null!;
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = null!;
 
     /// The data protection provider used to protect sensitive data.
-    [Inject] private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
+    [Inject]
+    private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
 
     /// The project scanner service used to analyze project dependencies and prepare deployment configurations.
-    [Inject] private IProjectScannerService ProjectScanner { get; set; } = null!;
+    [Inject]
+    private IProjectScannerService ProjectScanner { get; set; } = null!;
 
     /// The deployment orchestrator service used to manage Docker deployments.
-    [Inject] private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
+    [Inject]
+    private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
     /// The Docker service used to interact with the Docker daemon and manage Docker containers.
-    [Inject] private IDockerService DockerService { get; set; } = null!;
+    [Inject]
+    private IDockerService DockerService { get; set; } = null!;
 
     /// The logger used to log information and errors related to the project details component.
-    [Inject] private ILogger<ProjectDetails> Logger { get; set; } = null!;
+    [Inject]
+    private ILogger<ProjectDetails> Logger { get; set; } = null!;
 
 
     /// <summary>

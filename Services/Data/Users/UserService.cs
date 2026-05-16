@@ -4,18 +4,16 @@ using Microsoft.EntityFrameworkCore;
 namespace Services.Data.Users;
 
 /// <summary>
-///     Implementation of <see cref="IUserService"/> for managing users using Entity Framework Core.
+///     Implementation of <see cref="IUserService" /> for managing users using Entity Framework Core.
 /// </summary>
 /// <param name="dbContext">The database context used for data access.</param>
 public class UserService(AutoMateDbContext dbContext) : IUserService
 {
     /// <inheritdoc />
-    public async Task<Guid> GetUserIdByGithubAccountIdAsync(string githubAccountId, CancellationToken cancellationToken = default)
+    public async Task<Guid> GetUserIdByGithubAccountIdAsync(string githubAccountId,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(githubAccountId))
-        {
-            return Guid.Empty;
-        }
+        if (string.IsNullOrWhiteSpace(githubAccountId)) return Guid.Empty;
 
         var user = await dbContext.Users
             .OfType<GitHubUser>()

@@ -14,13 +14,16 @@ public partial class VerifyEmail : ComponentBase
 
 
     /// The authentication service used to verify the email token.
-    [Inject] private IAuthService AuthService { get; set; } = null!;
+    [Inject]
+    private IAuthService AuthService { get; set; } = null!;
 
     /// The navigation manager used to redirect users after successful verification.
-    [Inject] private NavigationManager NavigationManager { get; set; } = null!;
+    [Inject]
+    private NavigationManager NavigationManager { get; set; } = null!;
 
     /// The logger instance for logging verification-related events.
-    [Inject] private ILogger<VerifyEmail> Logger { get; set; } = null!;
+    [Inject]
+    private ILogger<VerifyEmail> Logger { get; set; } = null!;
 
 
     /// <summary>
@@ -73,13 +76,9 @@ public partial class VerifyEmail : ComponentBase
             var success = await AuthService.VerifyEmailAsync(Token);
 
             if (success)
-            {
                 NavigationManager.NavigateTo("/login?verified=true");
-            }
             else
-            {
                 ErrorMessage = "Invalid token or token has expired. Please check the link and try again.";
-            }
         }
         catch (Exception ex)
         {

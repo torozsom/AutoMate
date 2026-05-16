@@ -24,17 +24,17 @@ Domain model classes:
 - `BaseEntity`  
   Common base with `Id`, `CreatedAt`, `UpdatedAt`.
 
-- `User` hierarchy  
-  - `LocalUser`: password hash + email verification token/expiry  
-  - `GitHubUser`: external account ID, avatar URL, GitHub access token
+- `User` hierarchy
+    - `LocalUser`: password hash + email verification token/expiry
+    - `GitHubUser`: external account ID, avatar URL, GitHub access token
 
-- Project model  
-  - `Project`: owner, source type/path, app type, child C# projects  
-  - `CsProject`: individual `.csproj` unit, web project flag, deployment history  
-  - `LocalProjectConfig`: deployment defaults (port, db requirement, visibility, env var JSON)
+- Project model
+    - `Project`: owner, source type/path, app type, child C# projects
+    - `CsProject`: individual `.csproj` unit, web project flag, deployment history
+    - `LocalProjectConfig`: deployment defaults (port, db requirement, visibility, env var JSON)
 
-- Deployment model  
-  - `Deployment`: runtime status and Docker identity (`ImageTag`, `DockerContainerId`)
+- Deployment model
+    - `Deployment`: runtime status and Docker identity (`ImageTag`, `DockerContainerId`)
 
 ### `DTO/`
 

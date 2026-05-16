@@ -35,16 +35,20 @@ public partial class GitHubRepos : ComponentBase
 
 
     /// Authentication State Provider for checking user authentication and retrieving user information.
-    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+    [Inject]
+    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
     /// Service for managing user accounts.
-    [Inject] private IUserService UserService { get; set; } = null!;
+    [Inject]
+    private IUserService UserService { get; set; } = null!;
 
     /// Service for interacting with the GitHub API.
-    [Inject] private IGitHubService GitHubService { get; set; } = null!;
+    [Inject]
+    private IGitHubService GitHubService { get; set; } = null!;
 
     /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
-    [Inject] private IProjectService ProjectService { get; set; } = null!;
+    [Inject]
+    private IProjectService ProjectService { get; set; } = null!;
 
 
     /// <summary>
@@ -97,13 +101,9 @@ public partial class GitHubRepos : ComponentBase
         var success = await ProjectService.AddGitHubProjectAsync(_currentUserId, repo.Name, repo.HtmlUrl);
 
         if (success)
-        {
             SetStatusMessage($"{repo.Name} successfully saved!", false);
-        }
         else
-        {
             SetStatusMessage($"{repo.Name} repository is already saved!", true);
-        }
     }
 
 

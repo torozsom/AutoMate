@@ -3,9 +3,9 @@ using Core.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
-using Services.Scanner;
 using Services.Data.Projects;
 using Services.Data.Users;
+using Services.Scanner;
 
 namespace Web.Components.Pages;
 
@@ -16,6 +16,9 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class LocalGitRepos : ComponentBase
 {
+    /// The current user's identifier.
+    private Guid _currentUserId;
+
     /// A flag to indicate if the scanning process has been completed at least once.
     private bool _hasScanned;
 
@@ -37,21 +40,22 @@ public partial class LocalGitRepos : ComponentBase
     /// A message to display to the user, indicating the status of the last operation.
     private string? _statusMessage;
 
-    /// The current user's identifier.
-    private Guid _currentUserId;
-
 
     /// Authentication State Provider for checking user authentication and retrieving user information.
-    [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
+    [Inject]
+    private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
     /// Service for scanning local projects for Git repositories.
-    [Inject] private ILocalSystemScannerService SystemScannerService { get; set; } = null!;
+    [Inject]
+    private ILocalSystemScannerService SystemScannerService { get; set; } = null!;
 
     /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
-    [Inject] private IProjectService ProjectService { get; set; } = null!;
+    [Inject]
+    private IProjectService ProjectService { get; set; } = null!;
 
     /// Service for managing user accounts.
-    [Inject] private IUserService UserService { get; set; } = null!;
+    [Inject]
+    private IUserService UserService { get; set; } = null!;
 
 
     /// A computed property that determines whether the "Scan" button should be disabled.
@@ -101,7 +105,8 @@ public partial class LocalGitRepos : ComponentBase
         catch (Exception ex)
         {
             _localProjects = [];
-            SetStatusMessage($"An error occurred during scanning. Check the provided path. Error details: {ex.Message}", true);
+            SetStatusMessage($"An error occurred during scanning. Check the provided path. Error details: {ex.Message}",
+                true);
         }
         finally
         {
@@ -142,13 +147,9 @@ public partial class LocalGitRepos : ComponentBase
         var success = await ProjectService.AddLocalProjectAsync(_currentUserId, project, csproject);
 
         if (success)
-        {
             SetStatusMessage($"{csproject.Name} successfully saved!", false);
-        }
         else
-        {
             SetStatusMessage($"{csproject.Name} already exists in your workspace!", true);
-        }
     }
 
 
