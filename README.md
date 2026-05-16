@@ -84,7 +84,7 @@ Each module has its own README:
 ### 1) Start infrastructure
 
 ```bash
-cd /home/runner/work/AutoMate/AutoMate/.docker
+cd .docker
 docker compose up -d
 ```
 
@@ -102,14 +102,14 @@ Configure connection strings and secret settings (recommended via user secrets /
 ### 3) Apply database migrations
 
 ```bash
-cd /home/runner/work/AutoMate/AutoMate/Web
+cd Web
 dotnet ef database update --project ../Services
 ```
 
 ### 4) Run the app
 
 ```bash
-cd /home/runner/work/AutoMate/AutoMate/Web
+cd Web
 dotnet run
 ```
 

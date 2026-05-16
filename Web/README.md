@@ -49,7 +49,7 @@ It hosts the Blazor Server app, SignalR hub, and Minimal API endpoints while del
 - `LoginForm` (`/login`)  
   Local login form posting to `/api/auth/login`, plus GitHub OAuth entrypoint.
 
-- `RegistryForm` (`/register`)  
+- `RegistryForm` (`/register`, registration page)  
   Local registration flow with data annotations and email verification initiation.
 
 - `VerifyEmail` (`/verify-email`)  
