@@ -42,7 +42,11 @@ public static class ServiceConfiguration
         var githubId = context.User.GetProperty("id").GetInt32().ToString();
         var username = context.User.GetProperty("login").GetString() ?? "Unknown";
         var email = context.User.GetProperty("email").GetString() ?? "no-email@github.com";
-        var avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem) ? avatarElem.GetString() : null;
+
+        var avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem)
+            ? avatarElem.GetString()
+            : null;
+
         var accessToken = context.AccessToken;
 
         var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();

@@ -48,11 +48,11 @@ public static class AppConfiguration
             // Routing (Explicitly added to ensure correct middleware execution order)
             app.UseRouting();
 
-            // Security & Rate Limiting
-            app.UseRateLimiter();
-
             // Use authentication middleware to authenticate users.
             app.UseAuthentication();
+
+            // Security & Rate Limiting
+            app.UseRateLimiter();
 
             // Use authorization middleware to ensure that users are authorized to access certain resources.
             app.UseAuthorization();
@@ -93,7 +93,6 @@ public static class AppConfiguration
                 var canConnect = await db.Database.CanConnectAsync();
                 if (canConnect)
                     logger.LogInformation("[Startup] Successfully connected to the database.");
-                //await db.Database.MigrateAsync();
                 else
                     logger.LogWarning("[Startup] Failed to connect to the database. " +
                                       "Ensure the database is running and credentials are valid.");
