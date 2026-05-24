@@ -402,6 +402,7 @@ public static class ServiceConfiguration
             services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
             services.AddScoped<IAzureDeploymentOrchestrator, AzureDeploymentOrchestrator>();
+            services.AddScoped<IAzureContainerAppRuntimeStreamer, AzureContainerAppRuntimeStreamer>();
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
             services.AddHostedService<DeploymentCleanupHostedService>();
             services.AddScoped<ILogStreamer, RealTimeLogStreamer>();

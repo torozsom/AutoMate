@@ -18,6 +18,7 @@ public class CloudDeploymentOrchestrator(
     ITemplatingService templateService,
     IGitHubService gitHubService,
     IAzureDeploymentOrchestrator azureDeploymentOrchestrator,
+    IAzureContainerAppRuntimeStreamer azureContainerAppRuntimeStreamer,
     ILogger<CloudDeploymentOrchestrator> logger,
     IDeploymentStatusNotifier statusNotifier)
     : ICloudDeploymentOrchestrator
@@ -92,6 +93,10 @@ public class CloudDeploymentOrchestrator(
                 deployment.Status = DeploymentStatus.Failed;
                 await dbContext.SaveChangesAsync(cancellationToken);
                 statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
+            }
+            else
+            {
+                azureContainerAppRuntimeStreamer.StartStreaming(request.AzureCredentials, config);
             }
 
             logger.LogInformation(
