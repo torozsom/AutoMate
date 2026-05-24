@@ -250,9 +250,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         builder.OpenComponent<ConfigurationForm>(0);
         builder.AddAttribute(1, nameof(ConfigurationForm.Config), _currentDeployConfig);
         builder.AddAttribute(2, nameof(ConfigurationForm.ProjectPath), _selectedProjectPath);
-        builder.AddAttribute(3, nameof(ConfigurationForm.IsCloudDeployment), _currentDeployConfig.IsCloudDeployment);
-        builder.AddAttribute(4, nameof(ConfigurationForm.OnCancel), EventCallback.Factory.Create(this, HideConfigModal));
-        builder.AddAttribute(5, nameof(ConfigurationForm.OnDeployConfirmed),
+        builder.AddAttribute(3, nameof(ConfigurationForm.OnCancel), EventCallback.Factory.Create(this, HideConfigModal));
+        builder.AddAttribute(4, nameof(ConfigurationForm.OnDeployConfirmed),
             EventCallback.Factory.Create<DeploymentConfigDto>(this, ExecuteDeploymentAsync));
         builder.CloseComponent();
     };
