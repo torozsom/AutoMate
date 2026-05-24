@@ -211,7 +211,8 @@ public static class ServiceConfiguration
             string.IsNullOrWhiteSpace(clientSecret))
             return null;
 
-        using var httpClient = new HttpClient();
+        var httpClientFactory = context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
+        using var httpClient = httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint)
         {
             Content = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -245,7 +246,8 @@ public static class ServiceConfiguration
         if (string.IsNullOrWhiteSpace(accessToken))
             return null;
 
-        using var httpClient = new HttpClient();
+        var httpClientFactory = context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
+        using var httpClient = httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get,
             $"https://management.azure.com/subscriptions?api-version={AzureSubscriptionsApiVersion}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
