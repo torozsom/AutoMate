@@ -199,8 +199,9 @@ public partial class Dashboard : ComponentBase, IDisposable
                 return;
             }
 
-            _globalSuccessMessage =
-                $"Azure is connected. '{app.Name}' is ready for the cloud deployment workflow.";
+            _currentDeployConfig = CreateCloudDeploymentConfig(app);
+            _selectedProjectPath = string.Empty;
+            _showConfigModal = true;
             return;
         }
 
@@ -253,6 +254,14 @@ public partial class Dashboard : ComponentBase, IDisposable
     {
         HideConfigModal();
         ClearMessages();
+
+        if (finalConfig.IsCloudDeployment)
+        {
+            _globalSuccessMessage =
+                $"Cloud deployment configuration for '{finalConfig.ProjectName}' is ready for the Azure workflow.";
+            return;
+        }
+
         SetDeployingState(finalConfig.ProjectId, true);
 
         // Fire-and-forget pattern to run the deployment in the background without blocking the UI.
@@ -337,6 +346,50 @@ public partial class Dashboard : ComponentBase, IDisposable
         return app.SourceType == SourceType.Remote && !_isAzureConnected
             ? "Connect to Azure to deploy GitHub projects."
             : "Deploy project";
+    }
+
+
+    /// <summary>
+    ///     Creates a cloud deployment configuration for a saved remote repository.
+    /// </summary>
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Application app)
+    {
+        var resourceName = ToAzureResourceName(app.Name);
+
+        return new DeploymentConfigDto
+        {
+            ProjectId = app.Id,
+            CsProjectId = Guid.Empty,
+            ProjectName = app.Name,
+            EnvironmentName = "Production",
+            IsCloudDeployment = true,
+            CloudAzureRegion = "eastus",
+            CloudResourceGroupName = $"rg-{resourceName}",
+            CloudContainerAppName = resourceName,
+            CloudRegistryName = $"ghcr-{resourceName}",
+            Databases = []
+        };
+    }
+
+
+    /// <summary>
+    ///     Normalizes a project name into an Azure-friendly resource name.
+    /// </summary>
+    private static string ToAzureResourceName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized
+            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            normalized = "automate-app";
+
+        return normalized.Length <= 32 ? normalized : normalized[..32].TrimEnd('-');
     }
 
 

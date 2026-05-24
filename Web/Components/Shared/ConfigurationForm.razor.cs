@@ -28,6 +28,12 @@ public partial class ConfigurationForm : ComponentBase
     public string ProjectPath { get; set; } = string.Empty;
 
     /// <summary>
+    ///     Indicates whether the form should render cloud-specific deployment settings.
+    /// </summary>
+    [Parameter]
+    public bool IsCloudDeployment { get; set; }
+
+    /// <summary>
     ///     An event callback invoked when the user confirms the deployment with the specified configuration.
     /// </summary>
     [Parameter]
@@ -67,7 +73,7 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private async Task LoadVariablesFromConfigFilesAsync()
     {
-        if (string.IsNullOrWhiteSpace(ProjectPath)) return;
+        if (IsCloudDeployment || string.IsNullOrWhiteSpace(ProjectPath)) return;
 
         // Analyze the project files and extract environment variables.
         var scannedVars = await ProjectScanner.ExtractEnvironmentVariablesAsync(ProjectPath);

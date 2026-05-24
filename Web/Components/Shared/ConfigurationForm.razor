@@ -18,12 +18,52 @@
                             <option value="Production">Production</option>
                         </select>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Exposed Port (Host)</label>
-                        <input type="number" class="form-control bg-dark text-light border-secondary"
-                               @bind="Config.ExposedPort" placeholder="e.g., 8080" min="1" max="65535"/>
-                    </div>
+                    @if (IsCloudDeployment)
+                    {
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Azure Region</label>
+                            <select class="form-select bg-dark text-light border-secondary"
+                                    @bind="Config.CloudAzureRegion">
+                                <option value="eastus">East US</option>
+                                <option value="eastus2">East US 2</option>
+                                <option value="westus3">West US 3</option>
+                                <option value="centralus">Central US</option>
+                                <option value="westeurope">West Europe</option>
+                                <option value="northeurope">North Europe</option>
+                            </select>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Exposed Port (Host)</label>
+                            <input type="number" class="form-control bg-dark text-light border-secondary"
+                                   @bind="Config.ExposedPort" placeholder="e.g., 8080" min="1" max="65535"/>
+                        </div>
+                    }
                 </div>
+
+                @if (IsCloudDeployment)
+                {
+                    <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Azure Settings</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Resource Group</label>
+                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                                   @bind="Config.CloudResourceGroupName" placeholder="rg-my-app" autocomplete="off"/>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Container App Name</label>
+                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                                   @bind="Config.CloudContainerAppName" placeholder="my-app" autocomplete="off"/>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Registry Name</label>
+                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                                   @bind="Config.CloudRegistryName" placeholder="ghcr-my-app" autocomplete="off"/>
+                        </div>
+                    </div>
+                }
 
                 <div class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
                     <h6 class="text-primary fw-bold mb-0">Databases</h6>
@@ -90,10 +130,13 @@
                 <div class="d-flex justify-content-between align-items-end mb-3 mt-4 border-bottom pb-2">
                     <h6 class="text-primary fw-bold mb-0">Custom Environment Variables</h6>
                     <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary"
-                                @onclick="LoadVariablesFromConfigFilesAsync">
-                            <i class="bi bi-file-earmark-arrow-down"></i> Load Variables
-                        </button>
+                        @if (!IsCloudDeployment)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    @onclick="LoadVariablesFromConfigFilesAsync">
+                                <i class="bi bi-file-earmark-arrow-down"></i> Load Variables
+                            </button>
+                        }
                         <button type="button" class="btn btn-sm btn-success" @onclick="AddEmptyEnvVar">
                             <i class="bi bi-plus-lg"></i> Add
                         </button>

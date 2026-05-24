@@ -137,6 +137,7 @@
                         <ConfigurationForm
                             Config="@_currentDeployConfig"
                             ProjectPath="@_selectedProjectPath"
+                            IsCloudDeployment="@_currentDeployConfig.IsCloudDeployment"
                             OnCancel="@HideConfigModal"
                             OnDeployConfirmed="@ExecuteDeploymentAsync"/>
                     }
