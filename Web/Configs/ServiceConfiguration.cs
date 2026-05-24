@@ -98,7 +98,10 @@ public static class ServiceConfiguration
 
         var tenantId = GetJwtPayloadValue(idToken, "tid");
         var azureManagementToken = await ResolveAzureManagementTokenAsync(context);
-        var subscriptionId = await GetDefaultSubscriptionIdAsync(azureManagementToken, context.HttpContext.RequestAborted);
+        var subscriptionId = await GetDefaultSubscriptionIdAsync(
+            azureManagementToken,
+            context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>(),
+            context.HttpContext.RequestAborted);
 
         var expiresAt = GetTokenExpiresAt(context);
 
@@ -241,12 +244,12 @@ public static class ServiceConfiguration
     /// <summary>
     ///     Loads the first available Azure subscription ID for the connected account.
     /// </summary>
-    private static async Task<string?> GetDefaultSubscriptionIdAsync(string? accessToken, CancellationToken cancellationToken)
+    private static async Task<string?> GetDefaultSubscriptionIdAsync(string? accessToken,
+        IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(accessToken))
             return null;
 
-        var httpClientFactory = context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
         using var httpClient = httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get,
             $"https://management.azure.com/subscriptions?api-version={AzureSubscriptionsApiVersion}");
