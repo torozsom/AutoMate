@@ -240,6 +240,25 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
+    ///     Renders the deployment configuration modal when enough state is available.
+    /// </summary>
+    private RenderFragment RenderConfigurationForm() => builder =>
+    {
+        if (!_showConfigModal || _currentDeployConfig is null || _selectedProjectPath is null)
+            return;
+
+        builder.OpenComponent<ConfigurationForm>(0);
+        builder.AddAttribute(1, nameof(ConfigurationForm.Config), _currentDeployConfig);
+        builder.AddAttribute(2, nameof(ConfigurationForm.ProjectPath), _selectedProjectPath);
+        builder.AddAttribute(3, nameof(ConfigurationForm.IsCloudDeployment), _currentDeployConfig.IsCloudDeployment);
+        builder.AddAttribute(4, nameof(ConfigurationForm.OnCancel), EventCallback.Factory.Create(this, HideConfigModal));
+        builder.AddAttribute(5, nameof(ConfigurationForm.OnDeployConfirmed),
+            EventCallback.Factory.Create<DeploymentConfigDto>(this, ExecuteDeploymentAsync));
+        builder.CloseComponent();
+    };
+
+
+    /// <summary>
     ///     Executes the deployment process asynchronously by hiding the configuration modal,
     ///     setting the deploying state, and invoking the deployment orchestrator to deploy
     ///     the project with the specified configuration.

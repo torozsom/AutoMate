@@ -52,14 +52,7 @@
         }
     </div>
 
-    @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
-    {
-        <ConfigurationForm
-            Config="@_currentDeployConfig"
-            ProjectPath="@_selectedProjectPath"
-            OnCancel="@HideConfigModal"
-            OnDeployConfirmed="@ExecuteDeploymentAsync"/>
-    }
+    @RenderConfigurationForm()
 
     @if (_isLoading)
     {
