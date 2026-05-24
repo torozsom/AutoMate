@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
-using Services.Data.Projects;
+using Services.Data.Apps;
 using Services.Data.Users;
 using Services.Docker;
 using Services.Orchestration;
@@ -34,6 +34,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
+
+
+    /// A nullable variable to hold the app details fetched from the database.
+    private Application? _app;
 
     /// A terminal instance for displaying build logs.
     private Terminal? _buildTerminal;
@@ -63,10 +67,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A boolean flag to indicate whether the deployment process is currently being stopped.
     private bool _isStopping;
 
-
-    /// A nullable variable to hold the project details fetched from the database.
-    private Project? _project;
-
     /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
     private string? _selectedProjectPath;
 
@@ -83,7 +83,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The project service used to fetch project details and manage project-related operations.
     [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
+    private IApplicationService ApplicationService { get; set; } = null!;
 
     /// The authentication state provider used to retrieve the current user's authentication state and claims.
     [Inject]
@@ -159,13 +159,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task DeployProjectAsync()
     {
-        if (_project == null) return;
+        if (_app == null) return;
 
-        var csProject = _project.CsProjects.FirstOrDefault(p => p.IsWebProject);
+        var csProject = _app.CsProjects.FirstOrDefault(p => p.IsWebProject);
         if (csProject == null) return;
 
         _selectedProjectPath = csProject.Path;
-        _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(_project, csProject);
+        _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(_app, csProject);
 
         _showConfigModal = true;
     }
@@ -176,8 +176,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task StopDeploymentAsync()
     {
-        if (_project == null) return;
-        var csProject = _project.CsProjects.FirstOrDefault(p => p.IsWebProject);
+        if (_app == null) return;
+        var csProject = _app.CsProjects.FirstOrDefault(p => p.IsWebProject);
         if (csProject == null) return;
 
         _isStopping = true;
@@ -190,7 +190,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
             try
             {
-                await orchestrator.StopDeploymentAsync(ProjectId, _project.Name, csProject.Path);
+                await orchestrator.StopDeploymentAsync(ProjectId, _app.Name, csProject.Path);
 
                 await InvokeAsync(() =>
                 {
@@ -273,14 +273,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         if (currentUserId != Guid.Empty)
         {
-            _project = await ProjectService.GetProjectByIdAsync(ProjectId, currentUserId);
+            _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
 
-            if (_project != null)
+            if (_app != null)
             {
-                var csProject = _project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+                var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
                 if (csProject != null)
                 {
-                    var config = await ProjectScanner.AnalyzeDependenciesAsync(_project, csProject);
+                    var config = await ProjectScanner.AnalyzeDependenciesAsync(_app, csProject);
                     _exposedPort = config.ExposedPort;
                     _databaseTabs = config.Databases
                         .Select(db =>
@@ -305,9 +305,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <param name="status">The new deployment status.</param>
     private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
     {
-        if (_project != null && _project.Id == projectId)
+        if (_app != null && _app.Id == projectId)
         {
-            var latestDeployment = _project.CsProjects
+            var latestDeployment = _app.CsProjects
                 .SelectMany(c => c.Deployments)
                 .MaxBy(d => d.CreatedAt);
 
@@ -330,9 +330,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task UpdateExposedPortAsync()
     {
-        if (GetLatestStatus() == DeploymentStatus.Running && _project != null)
+        if (GetLatestStatus() == DeploymentStatus.Running && _app != null)
         {
-            var csProject = _project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+            var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
             if (csProject != null)
             {
                 var containerName = $"{csProject.Name.ToLowerInvariant()}-web";
@@ -351,7 +351,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         var currentUserId = await GetCurrentUserIdAsync();
         if (currentUserId != Guid.Empty)
         {
-            _project = await ProjectService.GetProjectByIdAsync(ProjectId, currentUserId);
+            _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
             await UpdateExposedPortAsync();
             await InvokeAsync(StateHasChanged);
         }
@@ -365,7 +365,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <returns></returns>
     private DeploymentStatus? GetLatestStatus()
     {
-        return _project?.CsProjects
+        return _app?.CsProjects
             .SelectMany(c => c.Deployments)
             .MaxBy(d => d.CreatedAt)?.Status;
     }

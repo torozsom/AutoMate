@@ -83,14 +83,14 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
 
     /// <inheritdoc />
-    public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject,
+    public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Application app, CsProject csProject,
         CancellationToken cancellationToken = default)
     {
         var config = new DeploymentConfigDto
         {
-            ProjectId = project.Id,
+            ProjectId = app.Id,
             CsProjectId = csProject.Id,
-            ProjectName = project.Name,
+            ProjectName = app.Name,
             ExposedPort = GetAvailablePort(),
             EnvironmentName = "Development",
             Databases = []
@@ -126,20 +126,20 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
                         logger.LogInformation(
                             "[ProjectScannerService] Database dependency detected for project '{ProjectName}': {DbType}",
-                            project.Name, rule.DbType);
+                            app.Name, rule.DbType);
                     }
                 }
         }
         catch (OperationCanceledException ex)
         {
             logger.LogWarning("[ProjectScannerService] Dependency analysis cancelled for project '{ProjectName}'." +
-                              "Ex: {ExceptionMessage}", project.Name, ex.Message);
+                              "Ex: {ExceptionMessage}", app.Name, ex.Message);
             throw;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "[ProjectScannerService] Error scanning csproj dependencies for project: {ProjectName}",
-                project.Name);
+                app.Name);
         }
 
         return config;

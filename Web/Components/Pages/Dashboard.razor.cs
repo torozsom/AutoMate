@@ -6,7 +6,7 @@ using Core.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
-using Services.Data.Projects;
+using Services.Data.Apps;
 using Services.Data.Users;
 using Services.Orchestration;
 using Services.Scanner;
@@ -23,6 +23,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A thread-safe dictionary containing the deployment states of projects.
     private readonly ConcurrentDictionary<Guid, bool> _deployingStates = new();
 
+    /// The list of apps associated with the authenticated user, fetched from the database.
+    private List<Application>? _apps;
+
     /// The current deployment configuration being edited by the user, if any.
     private DeploymentConfigDto? _currentDeployConfig;
 
@@ -38,9 +41,6 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
     private bool _isLoading = true;
 
-    /// The list of projects associated with the authenticated user, fetched from the database.
-    private List<Project>? _projects;
-
     /// The file system path of the project currently selected for deployment configuration.
     private string? _selectedProjectPath;
 
@@ -54,7 +54,7 @@ public partial class Dashboard : ComponentBase, IDisposable
 
     /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
     [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
+    private IApplicationService ApplicationService { get; set; } = null!;
 
     /// Factory for creating service scopes, allowing for proper dependency injection and lifetime management.
     [Inject]
@@ -111,97 +111,97 @@ public partial class Dashboard : ComponentBase, IDisposable
         _currentUserId = await GetCurrentUserIdAsync();
 
         if (_currentUserId != Guid.Empty)
-            _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
+            _apps = await ApplicationService.GetUserAppsAsync(_currentUserId);
 
         _isLoading = false;
     }
 
 
     /// <summary>
-    ///     Event handler that is called whenever the deployment status of a project changes. This method updates
-    ///     the status of the latest deployment for the affected project in the UI. If no deployment record exists
-    ///     yet for the project, it triggers a refresh of the projects list to ensure the UI reflects the status.
+    ///     Event handler that is called whenever the deployment status of an app changes. This method updates
+    ///     the status of the latest deployment for the affected app in the UI. If no deployment record exists
+    ///     yet for the app, it triggers a refresh of the apps list to ensure the UI reflects the status.
     /// </summary>
-    /// <param name="projectId">The unique identifier of the project whose deployment status has changed.</param>
+    /// <param name="appId">The unique identifier of the app whose deployment status has changed.</param>
     /// <param name="status">The new deployment status to be applied.</param>
-    private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
+    private void OnDeploymentStatusChanged(Guid appId, DeploymentStatus status)
     {
-        var project = _projects?.FirstOrDefault(p => p.Id == projectId);
-        if (project is null) return;
+        var app = _apps?.FirstOrDefault(p => p.Id == appId);
+        if (app is null) return;
 
-        var latestDeployment = project.CsProjects
+        var latestDeployment = app.CsProjects
             .SelectMany(c => c.Deployments)
             .MaxBy(d => d.CreatedAt);
 
         if (latestDeployment is not null)
             latestDeployment.Status = status;
         else
-            _ = RefreshProjectsAsync();
+            _ = RefreshAppsAsync();
 
         InvokeAsync(StateHasChanged);
     }
 
 
     /// <summary>
-    ///     Refreshes the list of projects for the current user.
+    ///     Refreshes the list of apps for the current user.
     /// </summary>
-    private async Task RefreshProjectsAsync()
+    private async Task RefreshAppsAsync()
     {
         if (_currentUserId != Guid.Empty)
         {
-            _projects = await ProjectService.GetUserProjectsAsync(_currentUserId);
+            _apps = await ApplicationService.GetUserAppsAsync(_currentUserId);
             await InvokeAsync(StateHasChanged);
         }
     }
 
 
     /// <summary>
-    ///     Deletes a project by its ID. This method first checks if the current user ID is valid.
-    ///     If it is, it calls the project service to delete the project.
+    ///     Deletes an app by its ID. This method first checks if the current user ID is valid.
+    ///     If it is, it calls the app service to delete the project.
     /// </summary>
-    /// <param name="projectId"></param>
-    private async Task DeleteProjectAsync(Guid projectId)
+    /// <param name="appId"></param>
+    private async Task DeleteAppAsync(Guid appId)
     {
         if (_currentUserId == Guid.Empty) return;
 
         ClearMessages();
 
-        var success = await ProjectService.DeleteProjectAsync(projectId, _currentUserId);
+        var success = await ApplicationService.DeleteAppAsync(appId, _currentUserId);
 
-        if (success && _projects is not null)
-            _projects.RemoveAll(p => p.Id == projectId);
+        if (success && _apps is not null)
+            _apps.RemoveAll(p => p.Id == appId);
         else
             _globalErrorMessage = "Failed to remove the project. It might have been already deleted.";
     }
 
 
     /// <summary>
-    ///     Initiates the deployment process for a given project. If the project is local,
+    ///     Initiates the deployment process for a given app. If the app is local,
     ///     it looks for a web project within the solution. If a web project is found, it analyzes
-    ///     the project's dependencies to prepare the deployment configuration.
+    ///     the app's dependencies to prepare the deployment configuration.
     /// </summary>
-    /// <param name="project"></param>
-    private async Task DeployProjectAsync(Project project)
+    /// <param name="app"></param>
+    private async Task DeployAppAsync(Application app)
     {
         ClearMessages();
 
-        if (project.SourceType == SourceType.Remote)
+        if (app.SourceType == SourceType.Remote)
         {
             _globalErrorMessage = "Cloud deployment for GitHub projects is not yet available in this version.";
             return;
         }
 
-        var csProjectToDeploy = project.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+        var csProjectToDeploy = app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
 
         if (csProjectToDeploy is null)
         {
-            _globalErrorMessage = $"No web project found in '{project.Name}' to deploy. Only web apps are supported.";
+            _globalErrorMessage = $"No web project found in '{app.Name}' to deploy. Only web apps are supported.";
             return;
         }
 
         try
         {
-            _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(project, csProjectToDeploy);
+            _currentDeployConfig = await ProjectScanner.AnalyzeDependenciesAsync(app, csProjectToDeploy);
             _selectedProjectPath = csProjectToDeploy.Path;
             _showConfigModal = true;
         }
@@ -308,24 +308,24 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Gets the latest deployment status of a project.
+    ///     Gets the latest deployment status of an app.
     /// </summary>
-    private DeploymentStatus? GetLatestStatus(Project project)
+    private static DeploymentStatus? GetLatestStatus(Application app)
     {
-        return project.CsProjects
+        return app.CsProjects
             .SelectMany(c => c.Deployments)
             .MaxBy(d => d.CreatedAt)?.Status;
     }
 
 
     /// <summary>
-    ///     Sets the deploying state for a specific project.
+    ///     Sets the deploying state for a specific app.
     /// </summary>
-    /// <param name="projectId">The ID of the project.</param>
+    /// <param name="appId">The ID of the app.</param>
     /// <param name="isDeploying">Indicates whether the project is currently deploying.</param>
-    private void SetDeployingState(Guid projectId, bool isDeploying)
+    private void SetDeployingState(Guid appId, bool isDeploying)
     {
-        _deployingStates[projectId] = isDeploying;
+        _deployingStates[appId] = isDeploying;
         StateHasChanged();
     }
 
@@ -344,9 +344,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Navigates the user to the project details page for a specific project.
     /// </summary>
-    /// <param name="projectId">The ID of the project to navigate to.</param>
-    private void NavigateToProject(Guid projectId)
+    /// <param name="appId">The ID of the project to navigate to.</param>
+    private void NavigateToProject(Guid appId)
     {
-        NavigationManager.NavigateTo($"/project/{projectId}");
+        NavigationManager.NavigateTo($"/project/{appId}");
     }
 }

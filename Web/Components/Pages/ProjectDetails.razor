@@ -7,7 +7,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div class="d-flex align-items-center gap-3">
             <h2 class="mb-0">
-                @if (_project?.SourceType == SourceType.Remote)
+                @if (_app?.SourceType == SourceType.Remote)
                 {
                     <i class="bi bi-github me-2"></i>
                 }
@@ -15,11 +15,11 @@
                 {
                     <i class="bi bi-folder2-open me-2 text-warning"></i>
                 }
-                @(_project?.Name ?? "Loading...")
+                @(_app?.Name ?? "Loading...")
             </h2>
         </div>
 
-        @if (_project is not null)
+        @if (_app is not null)
         {
             <div class="d-flex gap-2">
                 @{ var isDeploying = IsDeploying(); }
@@ -67,7 +67,7 @@
             <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
         </div>
     }
-    else if (_project is null)
+    else if (_app is null)
     {
         <div class="alert alert-danger shadow-sm">
             <i class="bi bi-exclamation-triangle-fill me-2"></i> Project not found or you don't have access.
@@ -88,8 +88,8 @@
                 <div class="card bg-dark-subtle border-0 shadow-sm h-100">
                     <div class="card-body">
                         <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.8rem;">Source Path</h6>
-                        <p class="mb-0 font-monospace text-truncate" title="@_project.SourcePathOrUrl">
-                            @_project.SourcePathOrUrl
+                        <p class="mb-0 font-monospace text-truncate" title="@_app.SourcePathOrUrl">
+                            @_app.SourcePathOrUrl
                         </p>
                     </div>
                 </div>

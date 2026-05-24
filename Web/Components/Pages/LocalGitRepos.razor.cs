@@ -3,7 +3,7 @@ using Core.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
-using Services.Data.Projects;
+using Services.Data.Apps;
 using Services.Data.Users;
 using Services.Scanner;
 
@@ -49,9 +49,9 @@ public partial class LocalGitRepos : ComponentBase
     [Inject]
     private ILocalSystemScannerService SystemScannerService { get; set; } = null!;
 
-    /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
+    /// Service for managing apps, including fetching, creating, and deleting apps associated with users.
     [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
+    private IApplicationService ApplicationService { get; set; } = null!;
 
     /// Service for managing user accounts.
     [Inject]
@@ -130,7 +130,7 @@ public partial class LocalGitRepos : ComponentBase
 
 
     /// <summary>
-    ///     Saves the selected project to the user's account.
+    ///     Saves the selected app to the user's account.
     ///     It updates the status message based on the success of the operation.
     /// </summary>
     /// <param name="project">The DTO of the Local Project to be saved.</param>
@@ -143,8 +143,8 @@ public partial class LocalGitRepos : ComponentBase
             return;
         }
 
-        // Attempt to save the project to the user's account
-        var success = await ProjectService.AddLocalProjectAsync(_currentUserId, project, csproject);
+        // Attempt to save the app to the user's account
+        var success = await ApplicationService.AddLocalAppAsync(_currentUserId, project, csproject);
 
         if (success)
             SetStatusMessage($"{csproject.Name} successfully saved!", false);

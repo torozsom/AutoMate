@@ -1,12 +1,12 @@
 using Core.DTO;
 using Core.Entities;
 
-namespace Services.Data.Projects;
+namespace Services.Data.Apps;
 
 /// <summary>
 ///     Service interface for managing projects. Provides methods for adding, retrieving, updating, and deleting projects.
 /// </summary>
-public interface IProjectService
+public interface IApplicationService
 {
     /// <summary>
     ///     Adds a local project to the database for a specific user. Checks if a project
@@ -17,7 +17,7 @@ public interface IProjectService
     /// <param name="csproject">The C# project file information.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task that returns true if the project was added successfully, or false if it already exists.</returns>
-    Task<bool> AddLocalProjectAsync(Guid userId, LocalProjectDto project, CsProjectDto csproject,
+    Task<bool> AddLocalAppAsync(Guid userId, LocalProjectDto project, CsProjectDto csproject,
         CancellationToken cancellationToken = default);
 
 
@@ -30,7 +30,7 @@ public interface IProjectService
     /// <param name="gitUrl">The git URL of the remote repository.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task that returns true if the project was added successfully, or false if it already exists.</returns>
-    Task<bool> AddGitHubProjectAsync(Guid userId, string projectName, string gitUrl,
+    Task<bool> AddGitHubAppAsync(Guid userId, string projectName, string gitUrl,
         CancellationToken cancellationToken = default);
 
 
@@ -41,7 +41,7 @@ public interface IProjectService
     /// <param name="userId">The unique identifier of the user.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A list of projects belonging to the user.</returns>
-    Task<List<Project>> GetUserProjectsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<List<Application>> GetUserAppsAsync(Guid userId, CancellationToken cancellationToken = default);
 
 
     /// <summary>
@@ -52,7 +52,7 @@ public interface IProjectService
     /// <param name="userId">The unique identifier of the user who owns the project.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task that returns true if the project was deleted successfully, or false if the project does not exist.</returns>
-    Task<bool> DeleteProjectAsync(Guid projectId, Guid userId, CancellationToken cancellationToken = default);
+    Task<bool> DeleteAppAsync(Guid projectId, Guid userId, CancellationToken cancellationToken = default);
 
 
     /// <summary>
@@ -63,5 +63,5 @@ public interface IProjectService
     /// <param name="userId">The unique identifier of the user who owns the project.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task that returns the project if found, or null if not found.</returns>
-    Task<Project?> GetProjectByIdAsync(Guid projectId, Guid userId, CancellationToken cancellationToken = default);
+    Task<Application?> GetAppByIdAsync(Guid projectId, Guid userId, CancellationToken cancellationToken = default);
 }

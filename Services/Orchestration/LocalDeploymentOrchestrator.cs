@@ -121,7 +121,7 @@ public class LocalDeploymentOrchestrator(
             }
 
             var latestDeployment = await dbContext.Deployments
-                .Where(d => d.CsProject!.ProjectId == projectId)
+                .Where(d => d.CsProject!.AppId == projectId)
                 .OrderByDescending(d => d.CreatedAt)
                 .FirstOrDefaultAsync();
 
