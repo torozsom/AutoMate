@@ -22,9 +22,9 @@ public class AutoMateDbContext(
     public DbSet<User> Users => Set<User>();
 
     /// <summary>
-    ///     Gets or sets the collection of Project entities in the database.
+    ///     Gets or sets the collection of Application entities in the database.
     /// </summary>
-    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<Application> Applications => Set<Application>();
 
     /// <summary>
     ///     Gets or sets the collection of CsProject entities in the database.
@@ -34,7 +34,7 @@ public class AutoMateDbContext(
     /// <summary>
     ///     Gets or sets the collection of ProjectConfiguration entities in the database.
     /// </summary>
-    public DbSet<LocalProjectConfig> LocalProjectConfigs => Set<LocalProjectConfig>();
+    public DbSet<Configuration> AppConfigs => Set<Configuration>();
 
     /// <summary>
     ///     Gets or sets the collection of Deployment entities in the database.
@@ -75,7 +75,7 @@ public class AutoMateDbContext(
             entity.Property(u => u.Email).HasMaxLength(255).IsRequired();
             entity.Property(u => u.Username).HasMaxLength(100).IsRequired();
 
-            entity.HasMany(u => u.Projects)
+            entity.HasMany(u => u.Applications)
                 .WithOne(p => p.User)
                 .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
@@ -87,14 +87,14 @@ public class AutoMateDbContext(
             entity.Property(gu => gu.AccessToken).HasConversion(tokenConverter);
         });
 
-        // Configure the Project entity
-        modelBuilder.Entity<Project>(entity =>
+        // Configure the Application entity
+        modelBuilder.Entity<Application>(entity =>
         {
-            entity.Property(p => p.Name).HasMaxLength(200).IsRequired();
+            entity.Property(a => a.Name).HasMaxLength(200).IsRequired();
 
-            entity.HasMany(p => p.CsProjects)
-                .WithOne(csp => csp.Project)
-                .HasForeignKey(csp => csp.ProjectId)
+            entity.HasMany(a => a.CsProjects)
+                .WithOne(csp => csp.Application)
+                .HasForeignKey(csp => csp.AppId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -103,7 +103,7 @@ public class AutoMateDbContext(
         {
             entity.HasOne(csp => csp.Configuration)
                 .WithOne(c => c.CsProject)
-                .HasForeignKey<LocalProjectConfig>(c => c.CsProjectId)
+                .HasForeignKey<Configuration>(c => c.CsProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasMany(csp => csp.Deployments)
