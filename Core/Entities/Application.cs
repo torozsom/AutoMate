@@ -6,12 +6,17 @@ namespace Core.Entities;
 ///     Represents a project created by a user, containing information
 ///     about the project's source code, type, and associated configuration and deployments.
 /// </summary>
-public class Project : BaseEntity
+public class Application : BaseEntity
 {
     /// <summary>
     ///     Gets or sets the unique identifier of the user who owns the project.
     /// </summary>
     public Guid UserId { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the user who owns the project.
+    /// </summary>
+    public User? User { get; set; }
 
     /// <summary>
     ///     Gets or sets the name of the project. This is a required field.
@@ -32,11 +37,6 @@ public class Project : BaseEntity
     ///     Gets or sets the type of the application (e.g., WebApi, Blazor, Mvc).
     /// </summary>
     public AppType AppType { get; set; }
-
-    /// <summary>
-    ///     Gets or sets the user who owns the project.
-    /// </summary>
-    public User? User { get; set; }
 
     /// <summary>
     ///     Gets or sets the collection of C# projects in the application.

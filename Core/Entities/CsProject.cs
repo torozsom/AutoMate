@@ -8,15 +8,15 @@ public class CsProject : BaseEntity
     /// <summary>
     ///     Gets or sets the unique identifier of the project associated with this C# project.
     /// </summary>
-    public Guid ProjectId { get; set; }
+    public Guid AppId { get; set; }
 
     /// <summary>
     ///     Gets or sets the reference to the project associated with this C# project.
     /// </summary>
-    public Project Project { get; set; } = null!;
+    public Application Application { get; set; } = null!;
 
     /// <summary>
-    ///     Gets or sets the name of the C# project.
+    ///     Gets or sets the name of the C# application.
     /// </summary>
     public string Name { get; set; } = string.Empty;
 
@@ -26,14 +26,14 @@ public class CsProject : BaseEntity
     public string Path { get; set; } = string.Empty;
 
     /// <summary>
-    ///     Gets or sets a value indicating whether the C# project is a web application.
+    ///     Gets or sets a value indicating whether the C# application is a web project.
     /// </summary>
     public bool IsWebProject { get; set; }
 
     /// <summary>
     ///     Gets or sets the reference to the project configuration associated with this C# project.
     /// </summary>
-    public LocalProjectConfig? Configuration { get; set; }
+    public Configuration? Configuration { get; set; }
 
     /// <summary>
     ///     Gets or sets the collection of deployments associated with this C# project.

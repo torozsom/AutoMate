@@ -16,7 +16,7 @@ public abstract class User : BaseEntity
     public required string Email { get; set; }
 
     /// <summary>
-    ///     Gets or sets the collection of projects owned by the user.
+    ///     Gets or sets the collection of applications owned by the user.
     /// </summary>
-    public ICollection<Project> Projects { get; set; } = [];
+    public ICollection<Application> Applications { get; set; } = [];
 }
