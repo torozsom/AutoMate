@@ -1,24 +1,33 @@
 FROM mcr.microsoft.com/dotnet/sdk:{{ dotnet_version }} AS build
 WORKDIR /src
 
-# Copy the project files
+# Copy project descriptors (when known)
 {{ for project in projects }}
 COPY ["{{ project.relative_path }}", "{{ project.folder }}/"]
 {{ end }}
 
-# Restore the main project
+# Restore the main project when metadata is available
+{{ if main_project_relative_path != "" }}
 RUN dotnet restore "{{ main_project_relative_path }}"
+{{ end }}
 
 # Copy the remaining files
 COPY . .
 
-# Build the main project
+{{ if main_project_relative_path != "" }}
+# Build and publish using the discovered main project metadata
 WORKDIR "/src/{{ main_project_folder }}"
 RUN dotnet build "{{ project_name }}.csproj" -c Release -o /app/build
 
-# Publish the main project
 FROM build AS publish
 RUN dotnet publish "{{ project_name }}.csproj" -c Release -o /app/publish /p:UseAppHost=false
+{{ else }}
+# Fallback for remote repositories: auto-discover the first .csproj in the repository
+RUN project_file="$(find . -name '*.csproj' | head -n 1)" && \
+    if [ -z "$project_file" ]; then echo "No .csproj file found in repository." >&2; exit 1; fi && \
+    dotnet restore "$project_file" && \
+    dotnet publish "$project_file" -c Release -o /app/publish /p:UseAppHost=false
+{{ end }}
 
 # Create the final image
 FROM mcr.microsoft.com/dotnet/aspnet:{{ dotnet_version }} AS final
