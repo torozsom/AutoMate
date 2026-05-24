@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
 using Core.Entities;
@@ -38,6 +39,8 @@ public static class ServiceConfiguration
     private const string AppName = "AutoMate";
     private const string AutoMateUserIdAuthProperty = "automate_user_id";
     private const string AzureConnectionRedirectUri = "/dashboard";
+    private const string AzureManagementScope = "https://management.azure.com/.default";
+    private const string AzureSubscriptionsApiVersion = "2022-12-01";
 
 
     /// <summary>
@@ -94,6 +97,8 @@ public static class ServiceConfiguration
                     ?? "no-email@microsoft.com";
 
         var tenantId = GetJwtPayloadValue(idToken, "tid");
+        var azureManagementToken = await ResolveAzureManagementTokenAsync(context);
+        var subscriptionId = await GetDefaultSubscriptionIdAsync(azureManagementToken, context.HttpContext.RequestAborted);
 
         var expiresAt = GetTokenExpiresAt(context);
 
@@ -105,8 +110,8 @@ public static class ServiceConfiguration
             email,
             displayName,
             tenantId,
-            null,
-            context.AccessToken,
+            subscriptionId,
+            azureManagementToken,
             context.RefreshToken,
             expiresAt,
             context.HttpContext.RequestAborted);
@@ -187,6 +192,98 @@ public static class ServiceConfiguration
                expiresInElement.TryGetInt32(out var expiresIn)
             ? DateTimeOffset.UtcNow.AddSeconds(expiresIn)
             : null;
+    }
+
+
+    /// <summary>
+    ///     Exchanges the OAuth refresh token for an Azure Resource Manager-scoped access token.
+    /// </summary>
+    private static async Task<string?> ResolveAzureManagementTokenAsync(OAuthCreatingTicketContext context)
+    {
+        var refreshToken = context.RefreshToken;
+        var tokenEndpoint = context.Options.TokenEndpoint;
+        var clientId = context.Options.ClientId;
+        var clientSecret = context.Options.ClientSecret;
+
+        if (string.IsNullOrWhiteSpace(refreshToken) ||
+            string.IsNullOrWhiteSpace(tokenEndpoint) ||
+            string.IsNullOrWhiteSpace(clientId) ||
+            string.IsNullOrWhiteSpace(clientSecret))
+            return null;
+
+        using var httpClient = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint)
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["client_secret"] = clientSecret,
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = refreshToken,
+                ["scope"] = AzureManagementScope
+            })
+        };
+
+        using var response = await httpClient.SendAsync(request, context.HttpContext.RequestAborted);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        await using var stream = await response.Content.ReadAsStreamAsync(context.HttpContext.RequestAborted);
+        var payload = await JsonDocument.ParseAsync(stream, cancellationToken: context.HttpContext.RequestAborted);
+
+        return payload.RootElement.TryGetProperty("access_token", out var tokenElement)
+            ? tokenElement.GetString()
+            : null;
+    }
+
+
+    /// <summary>
+    ///     Loads the first available Azure subscription ID for the connected account.
+    /// </summary>
+    private static async Task<string?> GetDefaultSubscriptionIdAsync(string? accessToken, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+            return null;
+
+        using var httpClient = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"https://management.azure.com/subscriptions?api-version={AzureSubscriptionsApiVersion}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+        if (!payload.RootElement.TryGetProperty("value", out var subscriptionsElement) ||
+            subscriptionsElement.ValueKind != JsonValueKind.Array)
+            return null;
+
+        string? firstFallback = null;
+
+        foreach (var subscription in subscriptionsElement.EnumerateArray())
+        {
+            if (!subscription.TryGetProperty("subscriptionId", out var idElement))
+                continue;
+
+            var id = idElement.GetString();
+            if (string.IsNullOrWhiteSpace(id))
+                continue;
+
+            if (firstFallback == null)
+                firstFallback = id;
+
+            var state = subscription.TryGetProperty("state", out var stateElement)
+                ? stateElement.GetString()
+                : null;
+
+            if (string.Equals(state, "Enabled", StringComparison.OrdinalIgnoreCase))
+                return id;
+        }
+
+        return firstFallback;
     }
 
 
