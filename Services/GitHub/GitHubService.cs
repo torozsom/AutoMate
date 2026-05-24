@@ -6,6 +6,7 @@ using System.Text.Json;
 using Core.DTO;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
+using Octokit;
 
 namespace Services.GitHub;
 
@@ -149,6 +150,104 @@ public class GitHubService : IGitHubService
         {
             _logger.LogError(ex, "[GitHubService] Network error occurred while contacting the GitHub API.");
             return [];
+        }
+    }
+
+
+    /// <inheritdoc />
+    public async Task<string> CommitCloudDeploymentFilesAsync(string accessToken, string repoOwner, string repoName,
+        List<TemplateFile> files, string branchName = "automate/azure-deployment",
+        string commitMessage = "Add AutoMate Azure deployment workflow", CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+            throw new ArgumentException("GitHub access token is required.", nameof(accessToken));
+
+        if (string.IsNullOrWhiteSpace(repoOwner))
+            throw new ArgumentException("Repository owner is required.", nameof(repoOwner));
+
+        if (string.IsNullOrWhiteSpace(repoName))
+            throw new ArgumentException("Repository name is required.", nameof(repoName));
+
+        if (files.Count == 0)
+            throw new ArgumentException("At least one file is required for a cloud deployment commit.", nameof(files));
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var gitHubClient = new GitHubClient(new Octokit.ProductHeaderValue("AutoMate"))
+        {
+            Credentials = new Credentials(accessToken)
+        };
+
+        try
+        {
+            var repository = await gitHubClient.Repository.Get(repoOwner, repoName);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var baseBranch = repository.DefaultBranch;
+            var baseReference = await gitHubClient.Git.Reference.Get(repoOwner, repoName, $"heads/{baseBranch}");
+            var targetReference = await GetOrCreateBranchReferenceAsync(gitHubClient, repoOwner, repoName, branchName,
+                baseReference.Object.Sha, cancellationToken);
+
+            var targetCommit = await gitHubClient.Git.Commit.Get(repoOwner, repoName, targetReference.Object.Sha);
+            var tree = new NewTree { BaseTree = targetCommit.Tree.Sha };
+
+            foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                tree.Tree.Add(new NewTreeItem
+                {
+                    Path = file.Path.Replace('\\', '/'),
+                    Mode = "100644",
+                    Type = TreeType.Blob,
+                    Content = file.Content
+                });
+            }
+
+            var createdTree = await gitHubClient.Git.Tree.Create(repoOwner, repoName, tree);
+            var commit = new NewCommit(commitMessage, createdTree.Sha, targetReference.Object.Sha);
+            var createdCommit = await gitHubClient.Git.Commit.Create(repoOwner, repoName, commit);
+
+            await gitHubClient.Git.Reference.Update(repoOwner, repoName, $"heads/{branchName}",
+                new ReferenceUpdate(createdCommit.Sha));
+
+            _logger.LogInformation(
+                "[GitHubService] Committed {FileCount} cloud deployment files to {Owner}/{Repo}@{Branch}. Commit: {Sha}",
+                files.Count, repoOwner, repoName, branchName, createdCommit.Sha);
+
+            return createdCommit.Sha;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning(
+                "[GitHubService] Cloud deployment commit was cancelled for {Owner}/{Repo}@{Branch}.",
+                repoOwner, repoName, branchName);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "[GitHubService] Failed to commit cloud deployment files to {Owner}/{Repo}@{Branch}.",
+                repoOwner, repoName, branchName);
+            throw;
+        }
+    }
+
+
+    /// <summary>
+    ///     Returns an existing branch reference or creates it from the supplied base SHA.
+    /// </summary>
+    private static async Task<Reference> GetOrCreateBranchReferenceAsync(GitHubClient gitHubClient, string repoOwner,
+        string repoName, string branchName, string baseSha, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await gitHubClient.Git.Reference.Get(repoOwner, repoName, $"heads/{branchName}");
+        }
+        catch (NotFoundException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return await gitHubClient.Git.Reference.Create(repoOwner, repoName,
+                new NewReference($"refs/heads/{branchName}", baseSha));
         }
     }
 

@@ -72,23 +72,28 @@ public static class ServiceConfiguration
             return;
 
         var idToken = GetTokenResponseString(context, "id_token");
+
         var azureAccountId = GetString(context.User, "sub")
                              ?? GetString(context.User, "oid")
                              ?? GetJwtPayloadValue(idToken, "sub")
                              ?? GetJwtPayloadValue(idToken, "oid")
                              ?? string.Empty;
+
         if (string.IsNullOrWhiteSpace(azureAccountId))
             return;
 
         var displayName = GetString(context.User, "name")
                           ?? GetJwtPayloadValue(idToken, "name")
                           ?? "Azure user";
+
         var email = GetString(context.User, "email")
                     ?? GetString(context.User, "preferred_username")
                     ?? GetJwtPayloadValue(idToken, "email")
                     ?? GetJwtPayloadValue(idToken, "preferred_username")
                     ?? "no-email@microsoft.com";
+
         var tenantId = GetJwtPayloadValue(idToken, "tid");
+
         var expiresAt = GetTokenExpiresAt(context);
 
         var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
@@ -394,6 +399,7 @@ public static class ServiceConfiguration
             // Orchestration & Docker
             services.AddScoped<IDockerService, DockerService>();
             services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+            services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
             services.AddHostedService<DeploymentCleanupHostedService>();
             services.AddScoped<ILogStreamer, RealTimeLogStreamer>();

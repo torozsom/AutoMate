@@ -1,0 +1,116 @@
+targetScope = 'resourceGroup'
+
+@description('Azure region for the Container Apps resources.')
+param location string = '{{ azure_location }}'
+
+@description('Container App name.')
+param containerAppName string = '{{ container_app_name }}'
+
+@description('Container Apps managed environment name.')
+param containerEnvironmentName string = '{{ container_environment_name }}'
+
+@description('Log Analytics workspace name.')
+param logAnalyticsWorkspaceName string = '{{ log_analytics_workspace_name }}'
+
+@description('Fully qualified container image, for example ghcr.io/owner/repository:sha.')
+param containerImage string
+
+@description('Container registry server.')
+param containerRegistryServer string = '{{ registry_server }}'
+
+@description('Container registry username. Required when the registry is private.')
+param containerRegistryUsername string = ''
+
+@secure()
+@description('Container registry password or PAT. Required when the registry is private.')
+param containerRegistryPassword string = ''
+
+@description('Application environment name exposed to ASP.NET Core.')
+param aspNetCoreEnvironment string = '{{ environment_name }}'
+
+var hasRegistryCredentials = !empty(containerRegistryUsername) && !empty(containerRegistryPassword)
+
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: logAnalyticsWorkspaceName
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
+resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
+  name: containerEnvironmentName
+  location: location
+  properties: {
+    appLogsConfiguration: {
+      destination: 'log-analytics'
+      logAnalyticsConfiguration: {
+        customerId: logAnalytics.properties.customerId
+        sharedKey: logAnalytics.listKeys().primarySharedKey
+      }
+    }
+  }
+}
+
+resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: containerAppName
+  location: location
+  properties: {
+    managedEnvironmentId: containerEnvironment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: {{ exposed_port }}
+        transport: 'auto'
+        allowInsecure: false
+      }
+      secrets: hasRegistryCredentials ? [
+        {
+          name: 'container-registry-password'
+          value: containerRegistryPassword
+        }
+      ] : []
+      registries: hasRegistryCredentials ? [
+        {
+          server: containerRegistryServer
+          username: containerRegistryUsername
+          passwordSecretRef: 'container-registry-password'
+        }
+      ] : []
+    }
+    template: {
+      containers: [
+        {
+          name: 'web'
+          image: containerImage
+          env: [
+            {
+              name: 'ASPNETCORE_ENVIRONMENT'
+              value: aspNetCoreEnvironment
+            }
+{{- for env_var in custom_env_vars }}
+            {
+              name: '{{ env_var.key }}'
+              value: '{{ env_var.value }}'
+            }
+{{- end }}
+          ]
+          resources: {
+            cpu: json('0.5')
+            memory: '1.0Gi'
+          }
+        }
+      ]
+      scale: {
+        minReplicas: 0
+        maxReplicas: 1
+      }
+    }
+  }
+}
+
+output containerAppUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'

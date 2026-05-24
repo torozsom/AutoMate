@@ -19,6 +19,12 @@ public record TemplateManifestRuleDto
     public string OutputFile { get; set; } = string.Empty;
 
     /// <summary>
+    ///     Indicates which deployment target should render this template.
+    ///     Supported values are "All", "Local", and "Cloud".
+    /// </summary>
+    public string DeploymentTarget { get; set; } = "All";
+
+    /// <summary>
     ///     A boolean flag indicating whether this template rule is active and should be applied during the templating process.
     /// </summary>
     public bool IsActive { get; set; } = true;

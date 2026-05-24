@@ -22,6 +22,29 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
     public async Task GenerateAndSaveAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata,
         string csProjectName, string outputDirectory, CancellationToken cancellationToken = default)
     {
+        var generatedFiles = await GenerateAllTemplatesAsync(config, metadata, csProjectName, outputDirectory,
+            cancellationToken);
+
+        if (!Directory.Exists(outputDirectory))
+            Directory.CreateDirectory(outputDirectory);
+
+        foreach (var file in generatedFiles)
+        {
+            var outputPath = Path.Combine(outputDirectory, file.Path);
+            var outputDir = Path.GetDirectoryName(outputPath);
+
+            if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
+                Directory.CreateDirectory(outputDir);
+
+            await File.WriteAllTextAsync(outputPath, file.Content, cancellationToken);
+            logger.LogInformation("[TemplateService] Generated file saved: {OutputPath}", outputPath);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<List<TemplateFile>> GenerateAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata,
+        string csProjectName, string outputDirectory, CancellationToken cancellationToken = default)
+    {
         if (!Directory.Exists(TemplatesDirectory))
         {
             logger.LogCritical("[TemplateService] Templates directory not found at: {TemplatesDirectory}",
@@ -35,18 +58,26 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
         {
             logger.LogWarning(
                 "[TemplateService] Template manifest is empty or could not be loaded. No templates will be generated.");
-            return;
+            return [];
         }
 
-        // Build the unified view-model for Scriban
         var unifiedModel = BuildTemplateModel(config, metadata, csProjectName, outputDirectory);
+        var generatedFiles = new List<TemplateFile>();
 
-        // Ensure the output directory exists
-        if (!Directory.Exists(outputDirectory))
-            Directory.CreateDirectory(outputDirectory);
+        foreach (var rule in templates.Where(t => t.IsActive && ShouldRenderTemplate(t, config)))
+        {
+            var content = await RenderTemplateAsync(rule, unifiedModel, cancellationToken);
+            if (content == null)
+                continue;
 
-        foreach (var rule in templates.Where(t => t.IsActive))
-            await RenderAndSaveTemplateAsync(rule, unifiedModel, outputDirectory, cancellationToken);
+            generatedFiles.Add(new TemplateFile
+            {
+                Path = rule.OutputFile.Replace('\\', '/'),
+                Content = content
+            });
+        }
+
+        return generatedFiles;
     }
 
 
@@ -174,6 +205,20 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
             container_suffix = db.ContainerNameSuffix
         }).ToList();
 
+        var normalizedAppName = NormalizeResourceName(config.ProjectName);
+
+        var containerAppName = string.IsNullOrWhiteSpace(config.CloudContainerAppName)
+            ? normalizedAppName
+            : NormalizeResourceName(config.CloudContainerAppName);
+
+        var resourceGroupName = string.IsNullOrWhiteSpace(config.CloudResourceGroupName)
+            ? $"rg-{containerAppName}"
+            : config.CloudResourceGroupName.Trim();
+
+        var registryName = string.IsNullOrWhiteSpace(config.CloudRegistryName)
+            ? "ghcr.io"
+            : config.CloudRegistryName.Trim();
+
         return new
         {
             // Metadata for the Dockerfile
@@ -191,6 +236,17 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
             requires_db = databasesForTemplate.Count > 0,
             databases = databasesForTemplate,
 
+            // Cloud deployment settings
+            is_cloud_deployment = config.IsCloudDeployment,
+            azure_location = config.CloudAzureRegion,
+            resource_group_name = resourceGroupName,
+            container_app_name = containerAppName,
+            container_environment_name = $"{containerAppName}-env",
+            log_analytics_workspace_name = $"{containerAppName}-logs",
+            managed_identity_name = $"{containerAppName}-identity",
+            registry_server = registryName,
+            image_name = normalizedAppName,
+
             // Custom environment variables as a list of key-value pairs for iteration in templates
             custom_env_vars = config.CustomEnvVars?
                 .Select(kvp => new { key = kvp.Key, value = kvp.Value })
@@ -200,8 +256,49 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
 
 
     /// <summary>
-    ///     Renders a Scriban template based on the provided rule and unified model,
-    ///     and saves the generated content to the specified output directory.
+    ///     Determines whether a manifest rule should be rendered for the selected deployment target.
+    /// </summary>
+    /// <param name="rule">The template manifest rule.</param>
+    /// <param name="config">The active deployment configuration.</param>
+    private static bool ShouldRenderTemplate(TemplateManifestRuleDto rule, DeploymentConfigDto config)
+    {
+        var target = string.IsNullOrWhiteSpace(rule.DeploymentTarget)
+            ? "All"
+            : rule.DeploymentTarget.Trim();
+
+        if (target.Equals("All", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (config.IsCloudDeployment)
+            return target.Equals("Cloud", StringComparison.OrdinalIgnoreCase);
+
+        return target.Equals("Local", StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    /// <summary>
+    ///     Creates a conservative Azure- and image-friendly name from user supplied project names.
+    /// </summary>
+    /// <param name="value">The source value.</param>
+    private static string NormalizeResourceName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        while (normalized.Contains("--", StringComparison.Ordinal))
+            normalized = normalized.Replace("--", "-", StringComparison.Ordinal);
+
+        normalized = normalized.Trim('-');
+
+        return string.IsNullOrWhiteSpace(normalized) ? "automate-app" : normalized;
+    }
+
+
+    /// <summary>
+    ///     Renders a Scriban template based on the provided rule and unified model.
     /// </summary>
     /// <param name="rule">
     ///     The template manifest rule containing the template file name, output file name,
@@ -211,19 +308,16 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
     ///     The unified view-model object that combines deployment configuration
     ///     and project metadata, used for rendering the Scriban template.
     /// </param>
-    /// <param name="outputDirectory">
-    ///     The directory where the generated templated file will be saved, used to calculate relative paths
-    ///     for projects in the template model and to determine the destination path for the generated file.
-    /// </param>
     /// <param name="cancellationToken">
     ///     A cancellation token that can be used to cancel the template generation process.
     /// </param>
+    /// <returns>The rendered template content, or null when the template file is missing.</returns>
     /// <exception cref="InvalidOperationException">
     ///     Throws InvalidOperationException if the specified template file cannot be parsed or rendered successfully,
     ///     including details about the parsing errors encountered in the Scriban template.
     /// </exception>
-    private async Task RenderAndSaveTemplateAsync(TemplateManifestRuleDto rule, object unifiedModel,
-        string outputDirectory, CancellationToken cancellationToken)
+    private async Task<string?> RenderTemplateAsync(TemplateManifestRuleDto rule, object unifiedModel,
+        CancellationToken cancellationToken)
     {
         var templatePath = Path.Combine(TemplatesDirectory, rule.TemplateFile);
 
@@ -231,7 +325,7 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
         {
             logger.LogWarning("[TemplateService] The template file '{TemplateFile}' does not exist!",
                 rule.TemplateFile);
-            return;
+            return null;
         }
 
         try
@@ -249,12 +343,8 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
 
             // Render the template with the unified model
             var renderedContent = await parsedTemplate.RenderAsync(unifiedModel);
-
-            // Save the rendered content to the specified output directory
-            var destinationPath = Path.Combine(outputDirectory, rule.OutputFile);
-            await File.WriteAllTextAsync(destinationPath, renderedContent, cancellationToken);
-
-            logger.LogInformation("[TemplateService] Successfully generated: {OutputFile}", rule.OutputFile);
+            logger.LogInformation("[TemplateService] Successfully rendered: {OutputFile}", rule.OutputFile);
+            return renderedContent;
         }
         catch (OperationCanceledException)
         {
