@@ -2,7 +2,7 @@ using System.Security.Claims;
 using Core.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Services.Data.Projects;
+using Services.Data.Apps;
 using Services.Data.Users;
 using Services.GitHub;
 
@@ -48,7 +48,7 @@ public partial class GitHubRepos : ComponentBase
 
     /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
     [Inject]
-    private IProjectService ProjectService { get; set; } = null!;
+    private IApplicationService ApplicationService { get; set; } = null!;
 
 
     /// <summary>
@@ -98,7 +98,7 @@ public partial class GitHubRepos : ComponentBase
             return;
         }
 
-        var success = await ProjectService.AddGitHubProjectAsync(_currentUserId, repo.Name, repo.HtmlUrl);
+        var success = await ApplicationService.AddGitHubAppAsync(_currentUserId, repo.Name, repo.HtmlUrl);
 
         if (success)
             SetStatusMessage($"{repo.Name} successfully saved!", false);

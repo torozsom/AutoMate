@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR;
-using Services.Data.Projects;
+using Services.Data.Apps;
 
 namespace Web.Hubs;
 
@@ -40,10 +40,10 @@ public class LogHub(IServiceProvider serviceProvider, IDataProtectionProvider da
             if (tokenProjectId != projectId) return;
 
             using var scope = serviceProvider.CreateScope();
-            var projectService = scope.ServiceProvider.GetRequiredService<IProjectService>();
+            var applicationService = scope.ServiceProvider.GetRequiredService<IApplicationService>();
 
-            var project = await projectService.GetProjectByIdAsync(projectId, userId);
-            if (project != null)
+            var app = await applicationService.GetAppByIdAsync(projectId, userId);
+            if (app != null)
                 await Groups.AddToGroupAsync(Context.ConnectionId, $"project-{projectId}");
         }
         catch (CryptographicException ex)

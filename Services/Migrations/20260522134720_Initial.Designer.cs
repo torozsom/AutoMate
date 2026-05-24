@@ -12,160 +12,20 @@ using Services.Data;
 namespace Services.Migrations
 {
     [DbContext(typeof(AutoMateDbContext))]
-    [Migration("20260423145135_AddAuditAndSnakeCase")]
-    partial class AddAuditAndSnakeCase
+    [Migration("20260522134720_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.7")
+                .HasAnnotation("ProductVersion", "10.0.8")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Core.Entities.CsProject", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("IsWebProject")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_web_project");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<string>("Path")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("path");
-
-                    b.Property<Guid>("ProjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("project_id");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_cs_projects");
-
-                    b.HasIndex("ProjectId")
-                        .HasDatabaseName("ix_cs_projects_project_id");
-
-                    b.ToTable("cs_projects");
-                });
-
-            modelBuilder.Entity("Core.Entities.Deployment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("BuildLogs")
-                        .HasColumnType("text")
-                        .HasColumnName("build_logs");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("CsProjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("cs_project_id");
-
-                    b.Property<string>("DockerContainerId")
-                        .HasColumnType("text")
-                        .HasColumnName("docker_container_id");
-
-                    b.Property<string>("ImageTag")
-                        .HasColumnType("text")
-                        .HasColumnName("image_tag");
-
-                    b.Property<string>("Logs")
-                        .HasColumnType("text")
-                        .HasColumnName("logs");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasColumnName("status");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_deployments");
-
-                    b.HasIndex("CsProjectId")
-                        .HasDatabaseName("ix_deployments_cs_project_id");
-
-                    b.ToTable("deployments");
-                });
-
-            modelBuilder.Entity("Core.Entities.LocalProjectConfig", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("CsProjectId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("cs_project_id");
-
-                    b.Property<string>("DotNetVersion")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("dot_net_version");
-
-                    b.Property<string>("EnvironmentVariablesJson")
-                        .HasColumnType("text")
-                        .HasColumnName("environment_variables_json");
-
-                    b.Property<int?>("ExposedPort")
-                        .HasColumnType("integer")
-                        .HasColumnName("exposed_port");
-
-                    b.Property<bool>("IsPublic")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_public");
-
-                    b.Property<bool>("RequiresDb")
-                        .HasColumnType("boolean")
-                        .HasColumnName("requires_db");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_local_project_configs");
-
-                    b.HasIndex("CsProjectId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_local_project_configs_cs_project_id");
-
-                    b.ToTable("local_project_configs");
-                });
-
-            modelBuilder.Entity("Core.Entities.Project", b =>
+            modelBuilder.Entity("Core.Entities.Application", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -204,12 +64,172 @@ namespace Services.Migrations
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
-                        .HasName("pk_projects");
+                        .HasName("pk_applications");
 
                     b.HasIndex("UserId")
-                        .HasDatabaseName("ix_projects_user_id");
+                        .HasDatabaseName("ix_applications_user_id");
 
-                    b.ToTable("projects");
+                    b.ToTable("applications", (string)null);
+                });
+
+            modelBuilder.Entity("Core.Entities.Configuration", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CloudAzureRegion")
+                        .HasColumnType("text")
+                        .HasColumnName("cloud_azure_region");
+
+                    b.Property<string>("CloudContainerAppName")
+                        .HasColumnType("text")
+                        .HasColumnName("cloud_container_app_name");
+
+                    b.Property<string>("CloudRegistryName")
+                        .HasColumnType("text")
+                        .HasColumnName("cloud_registry_name");
+
+                    b.Property<string>("CloudResourceGroupName")
+                        .HasColumnType("text")
+                        .HasColumnName("cloud_resource_group_name");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CsProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cs_project_id");
+
+                    b.Property<string>("DotNetVersion")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("dot_net_version");
+
+                    b.Property<string>("EnvironmentVariablesJson")
+                        .HasColumnType("text")
+                        .HasColumnName("environment_variables_json");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_public");
+
+                    b.Property<int?>("LocalExposedPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("local_exposed_port");
+
+                    b.Property<bool>("RequiresDb")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_db");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_app_configs");
+
+                    b.HasIndex("CsProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_app_configs_cs_project_id");
+
+                    b.ToTable("app_configs", (string)null);
+                });
+
+            modelBuilder.Entity("Core.Entities.CsProject", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("app_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsWebProject")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_web_project");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("path");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cs_projects");
+
+                    b.HasIndex("AppId")
+                        .HasDatabaseName("ix_cs_projects_app_id");
+
+                    b.ToTable("cs_projects", (string)null);
+                });
+
+            modelBuilder.Entity("Core.Entities.Deployment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CloudAppUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("cloud_app_url");
+
+                    b.Property<string>("CloudContainerRevision")
+                        .HasColumnType("text")
+                        .HasColumnName("cloud_container_revision");
+
+                    b.Property<long?>("CloudGitHubActionRunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cloud_git_hub_action_run_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CsProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cs_project_id");
+
+                    b.Property<string>("DockerContainerId")
+                        .HasColumnType("text")
+                        .HasColumnName("docker_container_id");
+
+                    b.Property<string>("ImageTag")
+                        .HasColumnType("text")
+                        .HasColumnName("image_tag");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deployments");
+
+                    b.HasIndex("CsProjectId")
+                        .HasDatabaseName("ix_deployments_cs_project_id");
+
+                    b.ToTable("deployments", (string)null);
                 });
 
             modelBuilder.Entity("Core.Entities.User", b =>
@@ -242,15 +262,17 @@ namespace Services.Migrations
                     b.Property<string>("user_type")
                         .IsRequired()
                         .HasMaxLength(8)
-                        .HasColumnType("character varying(8)");
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("user_type");
 
                     b.HasKey("Id")
                         .HasName("pk_users");
 
                     b.HasIndex("Email")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_users_email");
 
-                    b.ToTable("users");
+                    b.ToTable("users", (string)null);
 
                     b.HasDiscriminator<string>("user_type").HasValue("User");
 
@@ -277,7 +299,7 @@ namespace Services.Migrations
                     b.HasKey("Id")
                         .HasName("pk_data_protection_keys");
 
-                    b.ToTable("data_protection_keys");
+                    b.ToTable("data_protection_keys", (string)null);
                 });
 
             modelBuilder.Entity("Core.Entities.GitHubUser", b =>
@@ -285,14 +307,19 @@ namespace Services.Migrations
                     b.HasBaseType("Core.Entities.User");
 
                     b.Property<string>("AccessToken")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("access_token");
 
                     b.Property<string>("AccountId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("account_id");
 
                     b.Property<string>("AvatarUrl")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("avatar_url");
+
+                    b.ToTable("users", (string)null);
 
                     b.HasDiscriminator().HasValue("github");
                 });
@@ -302,30 +329,60 @@ namespace Services.Migrations
                     b.HasBaseType("Core.Entities.User");
 
                     b.Property<string>("EmailVerificationToken")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("email_verification_token");
 
                     b.Property<bool>("IsEmailVerified")
-                        .HasColumnType("boolean");
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_email_verified");
 
                     b.Property<string>("PasswordHash")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("password_hash");
 
                     b.Property<DateTimeOffset?>("VerificationTokenExpiry")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verification_token_expiry");
+
+                    b.ToTable("users", (string)null);
 
                     b.HasDiscriminator().HasValue("local");
                 });
 
-            modelBuilder.Entity("Core.Entities.CsProject", b =>
+            modelBuilder.Entity("Core.Entities.Application", b =>
                 {
-                    b.HasOne("Core.Entities.Project", "Project")
-                        .WithMany("CsProjects")
-                        .HasForeignKey("ProjectId")
+                    b.HasOne("Core.Entities.User", "User")
+                        .WithMany("Applications")
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_cs_projects_projects_project_id");
+                        .HasConstraintName("fk_applications_users_user_id");
 
-                    b.Navigation("Project");
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Core.Entities.Configuration", b =>
+                {
+                    b.HasOne("Core.Entities.CsProject", "CsProject")
+                        .WithOne("Configuration")
+                        .HasForeignKey("Core.Entities.Configuration", "CsProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_app_configs_cs_projects_cs_project_id");
+
+                    b.Navigation("CsProject");
+                });
+
+            modelBuilder.Entity("Core.Entities.CsProject", b =>
+                {
+                    b.HasOne("Core.Entities.Application", "Application")
+                        .WithMany("CsProjects")
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cs_projects_applications_app_id");
+
+                    b.Navigation("Application");
                 });
 
             modelBuilder.Entity("Core.Entities.Deployment", b =>
@@ -340,28 +397,9 @@ namespace Services.Migrations
                     b.Navigation("CsProject");
                 });
 
-            modelBuilder.Entity("Core.Entities.LocalProjectConfig", b =>
+            modelBuilder.Entity("Core.Entities.Application", b =>
                 {
-                    b.HasOne("Core.Entities.CsProject", "CsProject")
-                        .WithOne("Configuration")
-                        .HasForeignKey("Core.Entities.LocalProjectConfig", "CsProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_local_project_configs_cs_projects_cs_project_id");
-
-                    b.Navigation("CsProject");
-                });
-
-            modelBuilder.Entity("Core.Entities.Project", b =>
-                {
-                    b.HasOne("Core.Entities.User", "User")
-                        .WithMany("Projects")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_projects_users_user_id");
-
-                    b.Navigation("User");
+                    b.Navigation("CsProjects");
                 });
 
             modelBuilder.Entity("Core.Entities.CsProject", b =>
@@ -371,14 +409,9 @@ namespace Services.Migrations
                     b.Navigation("Deployments");
                 });
 
-            modelBuilder.Entity("Core.Entities.Project", b =>
-                {
-                    b.Navigation("CsProjects");
-                });
-
             modelBuilder.Entity("Core.Entities.User", b =>
                 {
-                    b.Navigation("Projects");
+                    b.Navigation("Applications");
                 });
 #pragma warning restore 612, 618
         }

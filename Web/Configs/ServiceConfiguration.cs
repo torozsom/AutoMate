@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Services.Auth;
 using Services.Data;
-using Services.Data.Projects;
+using Services.Data.Apps;
 using Services.Data.Users;
 using Services.Docker;
 using Services.Email;
@@ -245,7 +245,7 @@ public static class ServiceConfiguration
             services.AddScoped<ILogStreamer, RealTimeLogStreamer>();
 
             // Business & Utilities
-            services.AddScoped<IProjectService, ProjectService>();
+            services.AddScoped<IApplicationService, ApplicationService>();
             services.AddScoped<IUserService, UserService>();
             services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
             services.AddScoped<IProjectScannerService, ProjectScannerService>();

@@ -21,11 +21,11 @@ public interface IProjectScannerService
     /// <summary>
     ///     Analyzes the dependencies of the given project to determine deployment configurations.
     /// </summary>
-    /// <param name="project">The parent project entity.</param>
+    /// <param name="app">The parent project entity.</param>
     /// <param name="csProject">The specific C# project being analyzed.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A deployment configuration including identified database dependencies.</returns>
-    Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Project project, CsProject csProject,
+    Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Application app, CsProject csProject,
         CancellationToken cancellationToken = default);
 
 
