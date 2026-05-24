@@ -3,10 +3,12 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Core.DTO;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Octokit;
+using Sodium;
 
 namespace Services.GitHub;
 
@@ -233,6 +235,106 @@ public class GitHubService : IGitHubService
     }
 
 
+    /// <inheritdoc />
+    public async Task UpsertRepositorySecretsAsync(string accessToken, string repoOwner, string repoName,
+        IReadOnlyDictionary<string, string> secrets, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+            throw new ArgumentException("GitHub access token is required.", nameof(accessToken));
+
+        if (string.IsNullOrWhiteSpace(repoOwner))
+            throw new ArgumentException("Repository owner is required.", nameof(repoOwner));
+
+        if (string.IsNullOrWhiteSpace(repoName))
+            throw new ArgumentException("Repository name is required.", nameof(repoName));
+
+        if (secrets.Count == 0)
+            return;
+
+        var publicKeyRequest = CreateGitHubRequest(accessToken, HttpMethod.Get,
+            $"repos/{repoOwner}/{repoName}/actions/secrets/public-key");
+        using var publicKeyResponse = await _httpClient.SendAsync(publicKeyRequest, cancellationToken);
+        publicKeyResponse.EnsureSuccessStatusCode();
+
+        var publicKey = await publicKeyResponse.Content.ReadFromJsonAsync<GitHubRepositoryPublicKey>(JsonOptions,
+            cancellationToken);
+
+        if (publicKey == null || string.IsNullOrWhiteSpace(publicKey.Key) || string.IsNullOrWhiteSpace(publicKey.KeyId))
+            throw new InvalidOperationException("GitHub repository public key could not be loaded.");
+
+        foreach (var (secretName, secretValue) in secrets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var encryptedValue = EncryptSecret(secretValue, publicKey.Key);
+            var request = CreateGitHubRequest(accessToken, HttpMethod.Put,
+                $"repos/{repoOwner}/{repoName}/actions/secrets/{secretName}");
+            request.Content = JsonContent.Create(new GitHubRepositorySecretRequest(encryptedValue, publicKey.KeyId),
+                options: JsonOptions);
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            _logger.LogInformation("[GitHubService] Upserted repository secret {SecretName} for {Owner}/{Repo}.",
+                secretName, repoOwner, repoName);
+        }
+    }
+
+
+    /// <inheritdoc />
+    public async Task DispatchWorkflowAsync(string accessToken, string repoOwner, string repoName,
+        string workflowFileName, string branchName, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(workflowFileName))
+            throw new ArgumentException("Workflow file name is required.", nameof(workflowFileName));
+
+        var request = CreateGitHubRequest(accessToken, HttpMethod.Post,
+            $"repos/{repoOwner}/{repoName}/actions/workflows/{workflowFileName}/dispatches");
+        request.Content = JsonContent.Create(new GitHubWorkflowDispatchRequest(branchName), options: JsonOptions);
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        _logger.LogInformation("[GitHubService] Dispatched workflow {Workflow} for {Owner}/{Repo}@{Branch}.",
+            workflowFileName, repoOwner, repoName, branchName);
+    }
+
+
+    /// <inheritdoc />
+    public async Task<GitHubWorkflowRunDto?> GetLatestWorkflowRunAsync(string accessToken, string repoOwner,
+        string repoName, string workflowFileName, string branchName, string? headSha = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(workflowFileName))
+            throw new ArgumentException("Workflow file name is required.", nameof(workflowFileName));
+
+        var branchQuery = Uri.EscapeDataString(branchName);
+        var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
+            $"repos/{repoOwner}/{repoName}/actions/workflows/{workflowFileName}/runs?branch={branchQuery}&per_page=10");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        var runsResponse = await response.Content.ReadFromJsonAsync<GitHubWorkflowRunsResponse>(JsonOptions,
+            cancellationToken);
+
+        return runsResponse?.WorkflowRuns
+            .Where(r => string.IsNullOrWhiteSpace(headSha) || string.Equals(r.HeadSha, headSha,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(r => r.CreatedAt)
+            .Select(r => new GitHubWorkflowRunDto
+            {
+                Id = r.Id,
+                Status = r.Status,
+                Conclusion = r.Conclusion,
+                HtmlUrl = r.HtmlUrl,
+                HeadSha = r.HeadSha,
+                HeadBranch = r.HeadBranch
+            })
+            .FirstOrDefault();
+    }
+
+
     /// <summary>
     ///     Returns an existing branch reference or creates it from the supplied base SHA.
     /// </summary>
@@ -250,6 +352,55 @@ public class GitHubService : IGitHubService
                 new NewReference($"refs/heads/{branchName}", baseSha));
         }
     }
+
+
+    private static HttpRequestMessage CreateGitHubRequest(string accessToken, HttpMethod method, string requestUri)
+    {
+        if (string.IsNullOrWhiteSpace(accessToken))
+            throw new ArgumentException("GitHub access token is required.", nameof(accessToken));
+
+        var request = new HttpRequestMessage(method, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
+        return request;
+    }
+
+
+    private static string EncryptSecret(string secretValue, string base64PublicKey)
+    {
+        var secretBytes = Encoding.UTF8.GetBytes(secretValue);
+        var publicKeyBytes = Convert.FromBase64String(base64PublicKey);
+        var encryptedBytes = SealedPublicKeyBox.Create(secretBytes, publicKeyBytes);
+        return Convert.ToBase64String(encryptedBytes);
+    }
+
+
+    private sealed record GitHubRepositoryPublicKey(
+        [property: JsonPropertyName("key_id")] string KeyId,
+        [property: JsonPropertyName("key")] string Key);
+
+    private sealed record GitHubRepositorySecretRequest(
+        [property: JsonPropertyName("encrypted_value")]
+        string EncryptedValue,
+        [property: JsonPropertyName("key_id")] string KeyId);
+
+    private sealed record GitHubWorkflowDispatchRequest([property: JsonPropertyName("ref")] string Ref);
+
+    private sealed record GitHubWorkflowRunsResponse(
+        [property: JsonPropertyName("workflow_runs")]
+        List<GitHubWorkflowRunItem> WorkflowRuns);
+
+    private sealed record GitHubWorkflowRunItem(
+        [property: JsonPropertyName("id")] long Id,
+        [property: JsonPropertyName("status")] string Status,
+        [property: JsonPropertyName("conclusion")] string? Conclusion,
+        [property: JsonPropertyName("html_url")] string HtmlUrl,
+        [property: JsonPropertyName("head_sha")] string HeadSha,
+        [property: JsonPropertyName("head_branch")]
+        string HeadBranch,
+        [property: JsonPropertyName("created_at")]
+        DateTimeOffset CreatedAt);
 
 
     /// <summary>

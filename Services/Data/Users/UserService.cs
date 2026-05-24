@@ -1,3 +1,4 @@
+using Core.DTO;
 using Core.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -62,5 +63,30 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
                            && !string.IsNullOrWhiteSpace(u.AzureTenantId)
                            && !string.IsNullOrWhiteSpace(u.AzureAccessToken),
                 cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<AzureCloudCredentialsDto?> GetAzureCloudCredentialsAsync(Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty)
+            return null;
+
+        var credentials = await dbContext.Users
+            .OfType<RemoteUser>()
+            .AsNoTracking()
+            .Where(u => u.Id == userId
+                        && !string.IsNullOrWhiteSpace(u.AzureTenantId)
+                        && !string.IsNullOrWhiteSpace(u.AzureSubscriptionId)
+                        && !string.IsNullOrWhiteSpace(u.AzureAccessToken))
+            .Select(u => new AzureCloudCredentialsDto
+            {
+                TenantId = u.AzureTenantId!,
+                SubscriptionId = u.AzureSubscriptionId!,
+                AccessToken = u.AzureAccessToken!
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return credentials;
     }
 }

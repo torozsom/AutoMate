@@ -44,6 +44,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A flag indicating whether the current user has connected an Azure account.
     private bool _isAzureConnected;
 
+    /// The remote application currently selected for cloud deployment.
+    private Application? _selectedCloudApp;
+
     /// The file system path of the project currently selected for deployment configuration.
     private string? _selectedProjectPath;
 
@@ -70,6 +73,10 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// Service responsible for orchestrating the deployment process of local projects.
     [Inject]
     private ILocalDeploymentOrchestrator DeploymentOrchestrator { get; set; } = null!;
+
+    /// Service responsible for orchestrating cloud project deployments.
+    [Inject]
+    private ICloudDeploymentOrchestrator CloudDeploymentOrchestrator { get; set; } = null!;
 
     /// Service responsible for scanning project files to extract metadata and analyze dependencies.
     [Inject]
@@ -199,6 +206,7 @@ public partial class Dashboard : ComponentBase, IDisposable
                 return;
             }
 
+            _selectedCloudApp = app;
             _currentDeployConfig = CreateCloudDeploymentConfig(app);
             _selectedProjectPath = string.Empty;
             _showConfigModal = true;
@@ -235,6 +243,7 @@ public partial class Dashboard : ComponentBase, IDisposable
         _showConfigModal = false;
         _currentDeployConfig = null;
         _selectedProjectPath = null;
+        _selectedCloudApp = null;
     }
 
 
@@ -252,13 +261,81 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </returns>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
+        var cloudApp = _selectedCloudApp;
         HideConfigModal();
         ClearMessages();
 
         if (finalConfig.IsCloudDeployment)
         {
-            _globalSuccessMessage =
-                $"Cloud deployment configuration for '{finalConfig.ProjectName}' is ready for the Azure workflow.";
+            if (cloudApp == null)
+            {
+                _globalErrorMessage = "The selected GitHub project could not be found for cloud deployment.";
+                return;
+            }
+
+            if (!TryParseGitHubRepository(cloudApp.SourcePathOrUrl, out var repoOwner, out var repoName))
+            {
+                _globalErrorMessage = "AutoMate could not determine the GitHub repository owner/name for this project.";
+                return;
+            }
+
+            var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(_currentUserId);
+            if (azureCredentials == null)
+            {
+                _globalErrorMessage = "Connect your Azure account before deploying GitHub projects to the cloud.";
+                return;
+            }
+
+            var userDetails = await GetCurrentUserDetailsAsync();
+            if (string.IsNullOrWhiteSpace(userDetails.AccessToken))
+            {
+                _globalErrorMessage = "Connect your GitHub account before deploying GitHub projects to the cloud.";
+                return;
+            }
+
+            SetDeployingState(finalConfig.ProjectId, true);
+
+            _ = Task.Run((Func<Task>)(async () =>
+            {
+                using var scope = ScopeFactory.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>();
+
+                try
+                {
+                    await orchestrator.DeployCloudProjectAsync(new CloudDeploymentRequestDto
+                    {
+                        Config = finalConfig,
+                        Metadata = CreateRemoteProjectMetadata(),
+                        CsProjectName = cloudApp.Name,
+                        RepositoryRoot = ".",
+                        GitHubAccessToken = userDetails.AccessToken,
+                        GitHubContainerRegistryToken = userDetails.AccessToken,
+                        AzureCredentials = azureCredentials,
+                        RepositoryOwner = repoOwner,
+                        RepositoryName = repoName
+                    });
+
+                    await InvokeAsync(async () =>
+                    {
+                        _globalSuccessMessage =
+                            $"Cloud deployment workflow for '{finalConfig.ProjectName}' has been started in GitHub Actions.";
+                        SetDeployingState(finalConfig.ProjectId, false);
+                        await RefreshAppsAsync();
+                        StateHasChanged();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        _globalErrorMessage = $"Failed to start cloud deployment for '{finalConfig.ProjectName}': {ex.Message}";
+                        SetDeployingState(finalConfig.ProjectId, false);
+                        StateHasChanged();
+                    });
+                }
+            }));
+
+            await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
             return;
         }
 
@@ -317,6 +394,22 @@ public partial class Dashboard : ComponentBase, IDisposable
             return await UserService.GetUserIdByGithubAccountIdAsync(userIdString);
 
         return Guid.Empty;
+    }
+
+
+    /// <summary>
+    ///     Gets the current user details, including the GitHub token for remote deployments.
+    /// </summary>
+    private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrWhiteSpace(userIdString))
+            return (Guid.Empty, null, false);
+
+        return await UserService.GetUserDetailsFromIdentifierAsync(userIdString);
     }
 
 
@@ -390,6 +483,60 @@ public partial class Dashboard : ComponentBase, IDisposable
             normalized = "automate-app";
 
         return normalized.Length <= 32 ? normalized : normalized[..32].TrimEnd('-');
+    }
+
+
+    /// <summary>
+    ///     Creates a minimal metadata model for remote repositories that are deployed without a local checkout scan.
+    /// </summary>
+    private static ProjectMetadataDto CreateRemoteProjectMetadata()
+    {
+        return new ProjectMetadataDto
+        {
+            TargetFramework = "net10.0",
+            DotNetVersion = "10.0",
+            IsWebProject = true
+        };
+    }
+
+
+    /// <summary>
+    ///     Attempts to extract the owner and repository name from a GitHub repository URL.
+    /// </summary>
+    private static bool TryParseGitHubRepository(string repositoryUrl, out string owner, out string name)
+    {
+        owner = string.Empty;
+        name = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(repositoryUrl))
+            return false;
+
+        var normalized = repositoryUrl.Trim().TrimEnd('/');
+        if (normalized.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[..^4];
+
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+        {
+            var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length >= 2)
+            {
+                owner = segments[0];
+                name = segments[1];
+                return true;
+            }
+        }
+
+        var sshPrefixIndex = normalized.IndexOf(':', StringComparison.Ordinal);
+        if (normalized.StartsWith("git@github.com", StringComparison.OrdinalIgnoreCase) && sshPrefixIndex >= 0)
+            normalized = normalized[(sshPrefixIndex + 1)..];
+
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+            return false;
+
+        owner = parts[^2];
+        name = parts[^1];
+        return true;
     }
 
 

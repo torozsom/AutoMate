@@ -31,6 +31,16 @@ public record CloudDeploymentRequestDto
     public string GitHubAccessToken { get; init; } = string.Empty;
 
     /// <summary>
+    ///     Azure credentials for configuring the GitHub Actions OIDC trust.
+    /// </summary>
+    public AzureCloudCredentialsDto AzureCredentials { get; init; } = new();
+
+    /// <summary>
+    ///     The GitHub package/container registry token to expose to the generated workflow as GHCR_PAT.
+    /// </summary>
+    public string GitHubContainerRegistryToken { get; init; } = string.Empty;
+
+    /// <summary>
     ///     The GitHub repository owner or organization name.
     /// </summary>
     public string RepositoryOwner { get; init; } = string.Empty;
@@ -44,4 +54,9 @@ public record CloudDeploymentRequestDto
     ///     The branch where AutoMate should commit generated cloud deployment files.
     /// </summary>
     public string BranchName { get; init; } = "automate/azure-deployment";
+
+    /// <summary>
+    ///     The generated workflow file name to dispatch and poll after committing templates.
+    /// </summary>
+    public string WorkflowFileName { get; init; } = "deploy.yml";
 }

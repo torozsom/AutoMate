@@ -1,3 +1,5 @@
+using Core.DTO;
+
 namespace Services.Data.Users;
 
 /// <summary>
@@ -46,4 +48,13 @@ public interface IUserService
     /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
     /// <returns>True when Azure identity and token data are available; otherwise false.</returns>
     Task<bool> HasAzureConnectionAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Retrieves Azure cloud deployment credentials for the specified user.
+    /// </summary>
+    /// <param name="userId">The internal user ID.</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
+    /// <returns>The connected Azure credentials, or null when the user has not connected Azure.</returns>
+    Task<AzureCloudCredentialsDto?> GetAzureCloudCredentialsAsync(Guid userId,
+        CancellationToken cancellationToken = default);
 }

@@ -80,7 +80,7 @@
                 <div class="card bg-dark-subtle border-0 shadow-sm h-100">
                     <div class="card-body">
                         <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.8rem;">Status</h6>
-                        <DeploymentBadge Status="GetLatestStatus()" AdditionalClasses="fs-6"/>
+                        <DeploymentBadge Status="@GetLatestStatus()" AdditionalClasses="fs-6"/>
                     </div>
                 </div>
             </div>
@@ -95,6 +95,13 @@
                 </div>
             </div>
         </div>
+
+        @if (_app.SourceType == SourceType.Remote)
+        {
+            <WorkflowBadge Status="@GetLatestStatus()"
+                           Message="@_workflowStatusMessage"
+                           WorkflowUrl="@_workflowUrl"/>
+        }
 
         @if (GetLatestStatus() == DeploymentStatus.Running && _exposedPort > 0)
         {
@@ -153,7 +160,7 @@
                 <ul class="nav nav-tabs border-0" role="tablist">
                     <!-- Build Logs -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("build")" type="button" role="tab"
+                        <button class="@GetBuildTabClass()" type="button" role="tab"
                                 @onclick='() => SetActiveTab("build")'>
                             <i class="bi bi-hammer me-1"></i> Build Logs
                         </button>
@@ -161,7 +168,7 @@
 
                     <!-- Web App -->
                     <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("web")" type="button" role="tab"
+                        <button class="@GetWebTabClass()" type="button" role="tab"
                                 @onclick='() => SetActiveTab("web")'>
                             <i class="bi bi-globe me-1"></i> Web App
                         </button>
@@ -182,13 +189,13 @@
                  style="height: 470px; background-color: #1e1e1e; overflow: hidden; position: relative;">
 
                 <!-- Build Logs Terminal -->
-                <div style="@GetTerminalStyle("build")">
+                <div style="@GetBuildTerminalStyle()">
                     <Terminal @ref="_buildTerminal" Id="build-logs-term"
                               OnReady='() => OnTerminalReady(_buildTerminal, "Build")'/>
                 </div>
 
                 <!-- Web App Terminal -->
-                <div style="@GetTerminalStyle("web")">
+                <div style="@GetWebTerminalStyle()">
                     <Terminal @ref="_webTerminal" Id="web-logs-term"
                               OnReady='() => OnTerminalReady(_webTerminal, "Web App")'/>
                 </div>
@@ -196,7 +203,8 @@
                 <!-- Database Terminals -->
                 @foreach (var db in GetDatabaseTabs())
                 {
-                    <div style="@GetTerminalStyle(db.TabId)">
+                    var databaseTerminalStyle = GetDatabaseTerminalStyle(db.TabId);
+                    <div style="@databaseTerminalStyle">
                         <Terminal @ref="_dbTerminals[db.TabId]"
                                   Id="@($"term-{db.TabId}")"
                                   OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)'/>

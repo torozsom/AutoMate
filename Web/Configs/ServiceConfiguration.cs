@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Services.Auth;
+using Services.Azure;
 using Services.Data;
 using Services.Data.Apps;
 using Services.Data.Users;
@@ -400,6 +401,7 @@ public static class ServiceConfiguration
             services.AddScoped<IDockerService, DockerService>();
             services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
+            services.AddScoped<IAzureDeploymentOrchestrator, AzureDeploymentOrchestrator>();
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
             services.AddHostedService<DeploymentCleanupHostedService>();
             services.AddScoped<ILogStreamer, RealTimeLogStreamer>();

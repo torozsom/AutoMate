@@ -1,0 +1,59 @@
+@using Core.Enums
+
+<div class="alert @AlertClass shadow-sm d-flex align-items-center justify-content-between mb-4"
+     style="border-radius: 15px;">
+    <div class="d-flex align-items-center">
+        <i class="bi @IconClass fs-4 me-3"></i>
+        <div>
+            <h6 class="mb-0">GitHub Actions Workflow</h6>
+            <small>@DisplayMessage</small>
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(WorkflowUrl))
+    {
+        <a href="@WorkflowUrl" target="_blank" class="btn btn-outline-light fw-bold px-4 py-2"
+           style="border-radius: 10px;">
+            <i class="bi bi-box-arrow-up-right me-2"></i>Open workflow
+        </a>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public DeploymentStatus? Status { get; set; }
+
+    [Parameter]
+    public string? Message { get; set; }
+
+    [Parameter]
+    public string? WorkflowUrl { get; set; }
+
+    private string DisplayMessage => !string.IsNullOrWhiteSpace(Message)
+        ? Message
+        : Status switch
+        {
+            DeploymentStatus.Starting => "Workflow setup is starting.",
+            DeploymentStatus.Running => "Workflow is queued, running, or completed successfully.",
+            DeploymentStatus.Failed => "Workflow setup or execution failed.",
+            DeploymentStatus.Stopped => "Deployment has been stopped.",
+            _ => "No cloud workflow has been started yet."
+        };
+
+    private string AlertClass => Status switch
+    {
+        DeploymentStatus.Running => "alert-success",
+        DeploymentStatus.Starting => "alert-info",
+        DeploymentStatus.Failed => "alert-danger",
+        DeploymentStatus.Stopped => "alert-secondary",
+        _ => "alert-dark"
+    };
+
+    private string IconClass => Status switch
+    {
+        DeploymentStatus.Running => "bi-check-circle-fill",
+        DeploymentStatus.Starting => "bi-hourglass-split",
+        DeploymentStatus.Failed => "bi-exclamation-triangle-fill",
+        DeploymentStatus.Stopped => "bi-stop-circle-fill",
+        _ => "bi-github"
+    };
+}

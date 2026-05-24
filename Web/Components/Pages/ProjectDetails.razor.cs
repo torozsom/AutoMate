@@ -76,6 +76,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A nullable variable to hold the terminal instance for displaying web container logs.
     private Terminal? _webTerminal;
 
+    /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
+    private string? _workflowUrl;
+
+    /// A short workflow status message displayed for remote cloud deployments.
+    private string? _workflowStatusMessage;
+
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
     [Parameter]
@@ -161,6 +167,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (_app == null) return;
 
+        if (_app.SourceType == SourceType.Remote)
+        {
+            _selectedProjectPath = string.Empty;
+            _currentDeployConfig = CreateCloudDeploymentConfig(_app);
+            _showConfigModal = true;
+            return;
+        }
+
         var csProject = _app.CsProjects.FirstOrDefault(p => p.IsWebProject);
         if (csProject == null) return;
 
@@ -235,9 +249,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         HideConfigModal();
         _isDeploying = true;
+        _workflowStatusMessage = null;
+        _workflowUrl = null;
         StateHasChanged();
 
-        _ = Task.Run(async () =>
+        if (finalConfig.IsCloudDeployment)
+        {
+            await ExecuteCloudDeploymentAsync(finalConfig);
+            return;
+        }
+
+        _ = Task.Run((Func<Task>)(async () =>
         {
             try
             {
@@ -257,7 +279,76 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     StateHasChanged();
                 });
             }
-        });
+        }));
+    }
+
+    private async Task ExecuteCloudDeploymentAsync(DeploymentConfigDto finalConfig)
+    {
+        if (_app == null)
+            return;
+
+        if (!TryParseGitHubRepository(_app.SourcePathOrUrl, out var repoOwner, out var repoName))
+        {
+            _workflowStatusMessage = "AutoMate could not determine the GitHub repository owner/name.";
+            _isDeploying = false;
+            return;
+        }
+
+        var currentUserId = await GetCurrentUserIdAsync();
+        var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(currentUserId);
+        var userDetails = await GetCurrentUserDetailsAsync();
+
+        if (azureCredentials == null || string.IsNullOrWhiteSpace(userDetails.AccessToken))
+        {
+            _workflowStatusMessage = "Connect both GitHub and Azure before deploying to the cloud.";
+            _isDeploying = false;
+            return;
+        }
+
+        _workflowStatusMessage = "Configuring Azure OIDC and starting GitHub Actions workflow...";
+        StateHasChanged();
+
+        _ = Task.Run((Func<Task>)(async () =>
+        {
+            try
+            {
+                using var scope = ScopeFactory.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>();
+                var deployment = await orchestrator.DeployCloudProjectAsync(new CloudDeploymentRequestDto
+                {
+                    Config = finalConfig,
+                    Metadata = CreateRemoteProjectMetadata(),
+                    CsProjectName = _app.Name,
+                    RepositoryRoot = ".",
+                    GitHubAccessToken = userDetails.AccessToken,
+                    GitHubContainerRegistryToken = userDetails.AccessToken,
+                    AzureCredentials = azureCredentials,
+                    RepositoryOwner = repoOwner,
+                    RepositoryName = repoName
+                });
+
+                await InvokeAsync((Func<Task>)(async () =>
+                {
+                    _workflowStatusMessage = deployment.Status == DeploymentStatus.Failed
+                        ? "GitHub Actions workflow completed with a failure."
+                        : "GitHub Actions workflow has been started.";
+                    _workflowUrl = $"https://github.com/{repoOwner}/{repoName}/actions/workflows/deploy.yml";
+                    _isDeploying = false;
+                    await RefreshProjectAsync();
+                    StateHasChanged();
+                }));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to execute cloud deployment for project {ProjectId}", finalConfig.ProjectId);
+                await InvokeAsync(() =>
+                {
+                    _workflowStatusMessage = $"Cloud deployment failed to start: {ex.Message}";
+                    _isDeploying = false;
+                    StateHasChanged();
+                });
+            }
+        }));
     }
 
 
@@ -371,6 +462,104 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// <summary>
+    ///     Creates a cloud deployment configuration for a saved remote repository.
+    /// </summary>
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Application app)
+    {
+        var resourceName = ToAzureResourceName(app.Name);
+
+        return new DeploymentConfigDto
+        {
+            ProjectId = app.Id,
+            CsProjectId = Guid.Empty,
+            ProjectName = app.Name,
+            EnvironmentName = "Production",
+            IsCloudDeployment = true,
+            CloudAzureRegion = "eastus",
+            CloudResourceGroupName = $"rg-{resourceName}",
+            CloudContainerAppName = resourceName,
+            CloudRegistryName = $"ghcr-{resourceName}",
+            Databases = []
+        };
+    }
+
+
+    /// <summary>
+    ///     Normalizes a project name into an Azure-friendly resource name.
+    /// </summary>
+    private static string ToAzureResourceName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized
+            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            normalized = "automate-app";
+
+        return normalized.Length <= 32 ? normalized : normalized[..32].TrimEnd('-');
+    }
+
+
+    /// <summary>
+    ///     Creates a minimal metadata model for remote repositories that are deployed without a local checkout scan.
+    /// </summary>
+    private static ProjectMetadataDto CreateRemoteProjectMetadata()
+    {
+        return new ProjectMetadataDto
+        {
+            TargetFramework = "net10.0",
+            DotNetVersion = "10.0",
+            IsWebProject = true
+        };
+    }
+
+
+    /// <summary>
+    ///     Attempts to extract the owner and repository name from a GitHub repository URL.
+    /// </summary>
+    private static bool TryParseGitHubRepository(string repositoryUrl, out string owner, out string name)
+    {
+        owner = string.Empty;
+        name = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(repositoryUrl))
+            return false;
+
+        var normalized = repositoryUrl.Trim().TrimEnd('/');
+        if (normalized.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[..^4];
+
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+        {
+            var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length >= 2)
+            {
+                owner = segments[0];
+                name = segments[1];
+                return true;
+            }
+        }
+
+        var sshPrefixIndex = normalized.IndexOf(':', StringComparison.Ordinal);
+        if (normalized.StartsWith("git@github.com", StringComparison.OrdinalIgnoreCase) && sshPrefixIndex >= 0)
+            normalized = normalized[(sshPrefixIndex + 1)..];
+
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+            return false;
+
+        owner = parts[^2];
+        name = parts[^1];
+        return true;
+    }
+
+
     /// Sets the active tab in the UI based on the provided tab ID.
     private void SetActiveTab(string tabId)
     {
@@ -387,12 +576,42 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    private string GetBuildTabClass()
+    {
+        return $"nav-link {GetTabClass("build")}";
+    }
+
+
+    private string GetWebTabClass()
+    {
+        return $"nav-link {GetTabClass("web")}";
+    }
+
+
     /// Retrieves the inline style for a terminal based on whether its corresponding tab is active or not.
     private string GetTerminalStyle(string tabId)
     {
         return _activeTab == tabId
             ? "position: absolute; inset: 0; z-index: 1; visibility: visible;"
             : "position: absolute; inset: 0; z-index: 0; visibility: hidden;";
+    }
+
+
+    private string GetBuildTerminalStyle()
+    {
+        return GetTerminalStyle("build");
+    }
+
+
+    private string GetWebTerminalStyle()
+    {
+        return GetTerminalStyle("web");
+    }
+
+
+    private string GetDatabaseTerminalStyle(string tabId)
+    {
+        return GetTerminalStyle(tabId);
     }
 
 
@@ -534,6 +753,22 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
 
         return Guid.Empty;
+    }
+
+
+    /// <summary>
+    ///     Gets the current user details, including the GitHub token for remote deployments.
+    /// </summary>
+    private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrWhiteSpace(userIdString))
+            return (Guid.Empty, null, false);
+
+        return await UserService.GetUserDetailsFromIdentifierAsync(userIdString);
     }
 
 
