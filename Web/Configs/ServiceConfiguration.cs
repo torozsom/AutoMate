@@ -36,6 +36,7 @@ public static class ServiceConfiguration
     private const string RedisConnectionKey = "Redis";
     private const string AppName = "AutoMate";
     private const string AutoMateUserIdAuthProperty = "automate_user_id";
+    private const string AzureConnectionRedirectUri = "/dashboard";
 
 
     /// <summary>
@@ -114,7 +115,7 @@ public static class ServiceConfiguration
         if (context.Properties?.Items.ContainsKey(AutoMateUserIdAuthProperty) == true)
         {
             context.HandleResponse();
-            context.Response.Redirect(context.Properties.RedirectUri ?? "/");
+            context.Response.Redirect(AzureConnectionRedirectUri);
         }
 
         return Task.CompletedTask;

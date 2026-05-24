@@ -8,6 +8,8 @@ namespace Web.Routes.Endpoints.Auth;
 /// </summary>
 public class AzureLoginEndpoint : IEndpoint
 {
+    private const string AzureConnectionRedirectUri = "/dashboard";
+
     /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)
     {
@@ -20,7 +22,7 @@ public class AzureLoginEndpoint : IEndpoint
 
             var properties = new AuthenticationProperties
             {
-                RedirectUri = "/dashboard",
+                RedirectUri = AzureConnectionRedirectUri,
                 Items = { ["automate_user_id"] = userIdentifier }
             };
 
