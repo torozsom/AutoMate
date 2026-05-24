@@ -41,6 +41,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
     private bool _isLoading = true;
 
+    /// A flag indicating whether the current user has connected an Azure account.
+    private bool _isAzureConnected;
+
     /// The file system path of the project currently selected for deployment configuration.
     private string? _selectedProjectPath;
 
@@ -111,7 +114,10 @@ public partial class Dashboard : ComponentBase, IDisposable
         _currentUserId = await GetCurrentUserIdAsync();
 
         if (_currentUserId != Guid.Empty)
+        {
+            _isAzureConnected = await UserService.HasAzureConnectionAsync(_currentUserId);
             _apps = await ApplicationService.GetUserAppsAsync(_currentUserId);
+        }
 
         _isLoading = false;
     }
@@ -187,7 +193,14 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         if (app.SourceType == SourceType.Remote)
         {
-            _globalErrorMessage = "Cloud deployment for GitHub projects is not yet available in this version.";
+            if (!_isAzureConnected)
+            {
+                _globalErrorMessage = "Connect your Azure account before deploying GitHub projects to the cloud.";
+                return;
+            }
+
+            _globalSuccessMessage =
+                $"Azure is connected. '{app.Name}' is ready for the cloud deployment workflow.";
             return;
         }
 
@@ -304,6 +317,26 @@ public partial class Dashboard : ComponentBase, IDisposable
     private bool IsDeploying(Guid projectId)
     {
         return _deployingStates.GetValueOrDefault(projectId, false);
+    }
+
+
+    /// <summary>
+    ///     Determines whether a project card's deploy action should be disabled.
+    /// </summary>
+    private bool IsDeployDisabled(Application app)
+    {
+        return IsDeploying(app.Id) || app.SourceType == SourceType.Remote && !_isAzureConnected;
+    }
+
+
+    /// <summary>
+    ///     Gets a short tooltip explaining why a remote deploy action is disabled.
+    /// </summary>
+    private string GetDeployButtonTitle(Application app)
+    {
+        return app.SourceType == SourceType.Remote && !_isAzureConnected
+            ? "Connect to Azure to deploy GitHub projects."
+            : "Deploy project";
     }
 
 

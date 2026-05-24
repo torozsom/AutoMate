@@ -4,8 +4,25 @@
 <PageTitle>Dashboard</PageTitle>
 
 <div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>Dashboard</h1>
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+        <div>
+            <h1 class="mb-1">Dashboard</h1>
+            <div class="text-muted small">Manage local containers and cloud-ready GitHub projects.</div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            @if (_isAzureConnected)
+            {
+                <span class="badge rounded-pill text-bg-success px-3 py-2">
+                    <i class="bi bi-check-circle-fill me-1"></i> Azure connected
+                </span>
+            }
+
+            <a href="/api/auth/azure-login" class="btn azure-connect-button">
+                <i class="bi bi-microsoft me-2"></i>
+                <span>Connect to Azure</span>
+            </a>
+        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_globalErrorMessage))
@@ -55,6 +72,7 @@
                     @foreach (var project in _apps)
                     {
                         var isDeploying = IsDeploying(project.Id);
+                        var isDeployDisabled = IsDeployDisabled(project);
 
                         <div class="col">
                             <div class="card h-100 shadow border-2 project-card"
@@ -86,7 +104,8 @@
                                         <button class="btn btn-success flex-grow-1"
                                                 @onclick:stopPropagation="true"
                                                 @onclick="() => DeployAppAsync(project)"
-                                                disabled="@isDeploying">
+                                                disabled="@isDeployDisabled"
+                                                title="@GetDeployButtonTitle(project)">
                                             @if (isDeploying)
                                             {
                                                 <span class="spinner-border spinner-border-sm me-2" role="status"

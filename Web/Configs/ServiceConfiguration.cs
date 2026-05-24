@@ -1,5 +1,8 @@
 using System.Threading.RateLimiting;
+using System.Security.Claims;
+using System.Text.Json;
 using Core.Entities;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authorization;
@@ -32,6 +35,7 @@ public static class ServiceConfiguration
     private const string DefaultConnectionKey = "DefaultConnection";
     private const string RedisConnectionKey = "Redis";
     private const string AppName = "AutoMate";
+    private const string AutoMateUserIdAuthProperty = "automate_user_id";
 
 
     /// <summary>
@@ -54,6 +58,128 @@ public static class ServiceConfiguration
         // Call domain service to persist user
         await authService.CreateOrUpdateGitHubUserAsync(
             githubId, username, email, avatarUrl, accessToken, context.HttpContext.RequestAborted);
+    }
+
+
+    /// <summary>
+    ///     Extracts Microsoft identity data from the OAuth callback and links it to the current AutoMate user.
+    /// </summary>
+    private static async Task ProcessMicrosoftLoginAsync(OAuthCreatingTicketContext context)
+    {
+        if (!context.Properties.Items.TryGetValue(AutoMateUserIdAuthProperty, out var currentUserIdentifier) ||
+            string.IsNullOrWhiteSpace(currentUserIdentifier))
+            return;
+
+        var idToken = GetTokenResponseString(context, "id_token");
+        var azureAccountId = GetString(context.User, "sub")
+                             ?? GetString(context.User, "oid")
+                             ?? GetJwtPayloadValue(idToken, "sub")
+                             ?? GetJwtPayloadValue(idToken, "oid")
+                             ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(azureAccountId))
+            return;
+
+        var displayName = GetString(context.User, "name")
+                          ?? GetJwtPayloadValue(idToken, "name")
+                          ?? "Azure user";
+        var email = GetString(context.User, "email")
+                    ?? GetString(context.User, "preferred_username")
+                    ?? GetJwtPayloadValue(idToken, "email")
+                    ?? GetJwtPayloadValue(idToken, "preferred_username")
+                    ?? "no-email@microsoft.com";
+        var tenantId = GetJwtPayloadValue(idToken, "tid");
+        var expiresAt = GetTokenExpiresAt(context);
+
+        var authService = context.HttpContext.RequestServices.GetRequiredService<IAuthService>();
+
+        await authService.LinkAzureAccountAsync(
+            currentUserIdentifier,
+            azureAccountId,
+            email,
+            displayName,
+            tenantId,
+            null,
+            context.AccessToken,
+            context.RefreshToken,
+            expiresAt,
+            context.HttpContext.RequestAborted);
+    }
+
+
+    /// <summary>
+    ///     Prevents the Azure connect callback from replacing the existing AutoMate authentication cookie.
+    /// </summary>
+    private static Task CompleteMicrosoftConnectionAsync(TicketReceivedContext context)
+    {
+        if (context.Properties?.Items.ContainsKey(AutoMateUserIdAuthProperty) == true)
+        {
+            context.HandleResponse();
+            context.Response.Redirect(context.Properties.RedirectUri ?? "/");
+        }
+
+        return Task.CompletedTask;
+    }
+
+
+    /// <summary>
+    ///     Reads a string property from a JSON element.
+    /// </summary>
+    private static string? GetString(JsonElement source, string propertyName)
+    {
+        return source.TryGetProperty(propertyName, out var property) ? property.GetString() : null;
+    }
+
+
+    /// <summary>
+    ///     Extracts a value from a JWT payload without validating the token.
+    /// </summary>
+    private static string? GetJwtPayloadValue(string? jwt, string propertyName)
+    {
+        var parts = jwt?.Split('.');
+        if (parts is not { Length: >= 2 })
+            return null;
+
+        try
+        {
+            var payload = parts[1]
+                .Replace('-', '+')
+                .Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+
+            var json = JsonDocument.Parse(Convert.FromBase64String(payload));
+            return GetString(json.RootElement, propertyName);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+
+    /// <summary>
+    ///     Reads a string value from the OAuth token response payload.
+    /// </summary>
+    private static string? GetTokenResponseString(OAuthCreatingTicketContext context, string propertyName)
+    {
+        return context.TokenResponse.Response?.RootElement.TryGetProperty(propertyName, out var property) == true
+            ? property.GetString()
+            : null;
+    }
+
+
+    /// <summary>
+    ///     Calculates the access token expiry time from the OAuth token response.
+    /// </summary>
+    private static DateTimeOffset? GetTokenExpiresAt(OAuthCreatingTicketContext context)
+    {
+        return context.TokenResponse.Response?.RootElement.TryGetProperty("expires_in", out var expiresInElement) == true &&
+               expiresInElement.TryGetInt32(out var expiresIn)
+            ? DateTimeOffset.UtcNow.AddSeconds(expiresIn)
+            : null;
     }
 
 
@@ -169,18 +295,45 @@ public static class ServiceConfiguration
                 .AddCookie()
                 .AddGitHub(options =>
                 {
-                    options.ClientId = config["GitHub:ClientId"]
+                    options.ClientId = config["Authentication:GitHub:ClientId"]
                                        ?? throw new InvalidOperationException(
-                                           "GitHub:ClientId is missing from configuration.");
-                    options.ClientSecret = config["GitHub:ClientSecret"]
+                                           "Authentication:GitHub:ClientId is missing from configuration.");
+                    options.ClientSecret = config["Authentication:GitHub:ClientSecret"]
                                            ?? throw new InvalidOperationException(
-                                               "GitHub:ClientSecret is missing from configuration.");
+                                               "Authentication:GitHub:ClientSecret is missing from configuration.");
 
                     options.CallbackPath = new PathString("/signin-github");
                     options.Scope.Add("user:email");
                     options.Scope.Add("repo");
 
                     options.Events.OnCreatingTicket = async context => await ProcessGitHubLoginAsync(context);
+                })
+                .AddOAuth("Microsoft", options =>
+                {
+                    var tenantId = config["Authentication:Microsoft:TenantId"] ?? "common";
+
+                    options.ClientId = config["Authentication:Microsoft:ClientId"]
+                                       ?? throw new InvalidOperationException(
+                                           "Authentication:Microsoft:ClientId is missing from configuration.");
+                    options.ClientSecret = config["Authentication:Microsoft:ClientSecret"]
+                                           ?? throw new InvalidOperationException(
+                                               "Authentication:Microsoft:ClientSecret is missing from configuration.");
+
+                    options.CallbackPath = new PathString("/signin-microsoft");
+                    options.AuthorizationEndpoint =
+                        $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize";
+                    options.TokenEndpoint = $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
+                    options.UserInformationEndpoint = "https://graph.microsoft.com/oidc/userinfo";
+
+                    options.Scope.Add("openid");
+                    options.Scope.Add("profile");
+                    options.Scope.Add("email");
+                    options.Scope.Add("offline_access");
+                    options.Scope.Add("User.Read");
+                    options.SaveTokens = true;
+
+                    options.Events.OnCreatingTicket = async context => await ProcessMicrosoftLoginAsync(context);
+                    options.Events.OnTicketReceived = CompleteMicrosoftConnectionAsync;
                 });
 
             // Add a cascading authentication state provider

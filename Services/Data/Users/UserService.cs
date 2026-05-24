@@ -15,12 +15,12 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
     {
         if (string.IsNullOrWhiteSpace(githubAccountId)) return Guid.Empty;
 
-        var user = await dbContext.Users
-            .OfType<GitHubUser>()
+        return await dbContext.Users
+            .OfType<RemoteUser>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.AccountId == githubAccountId, cancellationToken);
-
-        return user?.Id ?? Guid.Empty;
+            .Where(u => u.AccountId == githubAccountId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
 
@@ -38,12 +38,29 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
         }
 
         var githubUser = await dbContext.Users
-            .OfType<GitHubUser>()
+            .OfType<RemoteUser>()
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.AccountId == identifier, cancellationToken);
 
         return githubUser is not null
-            ? (githubUser.Id, githubUser.AccessToken, true)
+            ? (githubUser.Id, AccessToken: githubUser.GitHubAccessToken, true)
             : (Guid.Empty, null, false);
+    }
+
+
+    /// <inheritdoc />
+    public async Task<bool> HasAzureConnectionAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty)
+            return false;
+
+        return await dbContext.Users
+            .OfType<RemoteUser>()
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == userId
+                           && !string.IsNullOrWhiteSpace(u.AzureAccountId)
+                           && !string.IsNullOrWhiteSpace(u.AzureTenantId)
+                           && !string.IsNullOrWhiteSpace(u.AzureAccessToken),
+                cancellationToken);
     }
 }

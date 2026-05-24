@@ -37,4 +37,13 @@ public interface IUserService
     /// </returns>
     Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetUserDetailsFromIdentifierAsync(string identifier,
         CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    ///     Determines whether the specified user has connected an Azure account.
+    /// </summary>
+    /// <param name="userId">The internal user ID.</param>
+    /// <param name="cancellationToken">A token to observe while waiting for the task to complete.</param>
+    /// <returns>True when Azure identity and token data are available; otherwise false.</returns>
+    Task<bool> HasAzureConnectionAsync(Guid userId, CancellationToken cancellationToken = default);
 }

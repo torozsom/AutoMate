@@ -110,18 +110,18 @@ public class AuthService(
         string? accessToken, CancellationToken cancellationToken = default)
     {
         var existingUser = await dbContext.Users
-            .OfType<GitHubUser>()
+            .OfType<RemoteUser>()
             .FirstOrDefaultAsync(u => u.AccountId == githubId, cancellationToken);
 
         if (existingUser == null)
         {
-            var newUser = new GitHubUser
+            var newUser = new RemoteUser
             {
                 AccountId = githubId,
                 Username = username,
                 Email = email,
                 AvatarUrl = avatarUrl,
-                AccessToken = accessToken
+                GitHubAccessToken = accessToken
             };
 
             dbContext.Users.Add(newUser);
@@ -132,12 +132,68 @@ public class AuthService(
             existingUser.Username = username;
             existingUser.Email = email;
             existingUser.AvatarUrl = avatarUrl;
-            existingUser.AccessToken = accessToken;
+            existingUser.GitHubAccessToken = accessToken;
 
             logger.LogInformation("[AuthService] Updated existing GitHub user: {Username}", username);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+
+    /// <inheritdoc />
+    public async Task LinkAzureAccountAsync(
+        string currentUserIdentifier,
+        string azureAccountId,
+        string email,
+        string displayName,
+        string? tenantId,
+        string? subscriptionId,
+        string? accessToken,
+        string? refreshToken,
+        DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await FindCurrentUserAsync(currentUserIdentifier, cancellationToken);
+
+        if (user == null)
+        {
+            logger.LogWarning(
+                "[AuthService] Azure account linking failed because current user '{Identifier}' was not found.",
+                currentUserIdentifier);
+            return;
+        }
+
+        user.AzureAccountId = azureAccountId;
+        user.AzureTenantId = tenantId;
+        user.AzureSubscriptionId = subscriptionId;
+        user.AzureAccessToken = accessToken;
+        user.AzureRefreshToken = refreshToken;
+        user.AzureTokenExpiresAt = expiresAt;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation("[AuthService] Linked Azure account '{AzureAccountId}' to user '{UserId}'.",
+            azureAccountId, user.Id);
+    }
+
+
+    /// <summary>
+    ///     Resolves the current user from either the local user ID claim or the GitHub account ID claim.
+    /// </summary>
+    /// <param name="identifier">The current authenticated user identifier.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>The current user entity, or null when no matching user is found.</returns>
+    private async Task<RemoteUser?> FindCurrentUserAsync(string identifier, CancellationToken cancellationToken)
+    {
+        if (Guid.TryParse(identifier, out var userId))
+            return await dbContext.Users
+                .OfType<RemoteUser>()
+                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        return await dbContext.Users
+            .OfType<RemoteUser>()
+            .FirstOrDefaultAsync(u => u.AccountId == identifier, cancellationToken);
     }
 
 
