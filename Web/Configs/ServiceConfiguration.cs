@@ -216,17 +216,15 @@ public static class ServiceConfiguration
 
         var httpClientFactory = context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
         using var httpClient = httpClientFactory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint)
+        using var request = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint);
+        request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["client_id"] = clientId,
-                ["client_secret"] = clientSecret,
-                ["grant_type"] = "refresh_token",
-                ["refresh_token"] = refreshToken,
-                ["scope"] = AzureManagementScope
-            })
-        };
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = refreshToken,
+            ["scope"] = AzureManagementScope
+        });
 
         using var response = await httpClient.SendAsync(request, context.HttpContext.RequestAborted);
         if (!response.IsSuccessStatusCode)
@@ -432,13 +430,13 @@ public static class ServiceConfiguration
                     options.AuthorizationEndpoint =
                         $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/authorize";
                     options.TokenEndpoint = $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token";
-                    options.UserInformationEndpoint = "https://graph.microsoft.com/oidc/userinfo";
 
                     options.Scope.Add("openid");
                     options.Scope.Add("profile");
                     options.Scope.Add("email");
                     options.Scope.Add("offline_access");
-                    options.Scope.Add("User.Read");
+                    options.Scope.Add(AzureManagementScope);
+
                     options.SaveTokens = true;
 
                     options.Events.OnCreatingTicket = async context => await ProcessMicrosoftLoginAsync(context);
