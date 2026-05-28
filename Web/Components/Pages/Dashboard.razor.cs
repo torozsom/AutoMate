@@ -457,9 +457,9 @@ public partial class Dashboard : ComponentBase, IDisposable
             EnvironmentName = "Production",
             IsCloudDeployment = true,
             CloudAzureRegion = "eastus",
-            CloudResourceGroupName = $"rg-{resourceName}",
-            CloudContainerAppName = resourceName,
-            CloudRegistryName = $"ghcr-{resourceName}",
+            CloudResourceGroupName = $"{resourceName}-prod-rg",
+            CloudContainerAppName = $"{resourceName}-prod-app",
+            CloudRegistryName = "ghcr.io",
             Databases = []
         };
     }

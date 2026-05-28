@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.IO.Compression;
 using Core.DTO;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
@@ -170,7 +171,7 @@ public class GitHubService : IGitHubService
         if (string.IsNullOrWhiteSpace(repoName))
             throw new ArgumentException("Repository name is required.", nameof(repoName));
 
-        if (files.Count == 0)
+        if (files is null || files.Count == 0)
             throw new ArgumentException("At least one file is required for a cloud deployment commit.", nameof(files));
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -285,8 +286,20 @@ public class GitHubService : IGitHubService
     public async Task DispatchWorkflowAsync(string accessToken, string repoOwner, string repoName,
         string workflowFileName, string branchName, CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(accessToken))
+            throw new ArgumentException("GitHub access token is required.", nameof(accessToken));
+
+        if (string.IsNullOrWhiteSpace(repoOwner))
+            throw new ArgumentException("Repository owner is required.", nameof(repoOwner));
+
+        if (string.IsNullOrWhiteSpace(repoName))
+            throw new ArgumentException("Repository name is required.", nameof(repoName));
+
         if (string.IsNullOrWhiteSpace(workflowFileName))
             throw new ArgumentException("Workflow file name is required.", nameof(workflowFileName));
+
+        if (string.IsNullOrWhiteSpace(branchName))
+            throw new ArgumentException("Branch name is required.", nameof(branchName));
 
         var request = CreateGitHubRequest(accessToken, HttpMethod.Post,
             $"repos/{repoOwner}/{repoName}/actions/workflows/{workflowFileName}/dispatches");
@@ -308,9 +321,21 @@ public class GitHubService : IGitHubService
         if (string.IsNullOrWhiteSpace(workflowFileName))
             throw new ArgumentException("Workflow file name is required.", nameof(workflowFileName));
 
+        if (string.IsNullOrWhiteSpace(accessToken))
+            throw new ArgumentException("GitHub access token is required.", nameof(accessToken));
+
+        if (string.IsNullOrWhiteSpace(repoOwner))
+            throw new ArgumentException("Repository owner is required.", nameof(repoOwner));
+
+        if (string.IsNullOrWhiteSpace(repoName))
+            throw new ArgumentException("Repository name is required.", nameof(repoName));
+
+        if (string.IsNullOrWhiteSpace(branchName))
+            throw new ArgumentException("Branch name is required.", nameof(branchName));
+
         var branchQuery = Uri.EscapeDataString(branchName);
         var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
-            $"repos/{repoOwner}/{repoName}/actions/workflows/{workflowFileName}/runs?branch={branchQuery}&per_page=10");
+            $"repos/{repoOwner}/{repoName}/actions/runs?branch={branchQuery}&per_page=20");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -318,9 +343,23 @@ public class GitHubService : IGitHubService
         var runsResponse = await response.Content.ReadFromJsonAsync<GitHubWorkflowRunsResponse>(JsonOptions,
             cancellationToken);
 
-        return runsResponse?.WorkflowRuns
-            .Where(r => string.IsNullOrWhiteSpace(headSha) || string.Equals(r.HeadSha, headSha,
-                StringComparison.OrdinalIgnoreCase))
+        var workflowRuns = runsResponse?.WorkflowRuns ?? [];
+        var matchingRuns = workflowRuns
+            .Where(r => string.IsNullOrWhiteSpace(headSha) ||
+                        string.Equals(r.HeadSha, headSha, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var workflowFilePathSuffix = $"/{workflowFileName}";
+        var preferredRuns = matchingRuns
+            .Where(r => string.IsNullOrWhiteSpace(workflowFileName) ||
+                        r.Path?.EndsWith(workflowFilePathSuffix, StringComparison.OrdinalIgnoreCase) == true ||
+                        string.Equals(r.Path, workflowFileName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (preferredRuns.Count == 0)
+            preferredRuns = matchingRuns;
+
+        return preferredRuns
             .OrderByDescending(r => r.CreatedAt)
             .Select(r => new GitHubWorkflowRunDto
             {
@@ -332,6 +371,48 @@ public class GitHubService : IGitHubService
                 HeadBranch = r.HeadBranch
             })
             .FirstOrDefault();
+    }
+
+
+    /// <inheritdoc />
+    public async Task<string?> DownloadWorkflowRunLogsAsync(string accessToken, string repoOwner, string repoName,
+        long runId, CancellationToken cancellationToken = default)
+    {
+        if (runId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(runId), "Workflow run ID must be a positive number.");
+
+        var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
+            $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/logs");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "[GitHubService] GitHub returned {StatusCode} while downloading workflow logs for run {RunId}.",
+                response.StatusCode, runId);
+            return null;
+        }
+
+        await using var zipStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+        var builder = new StringBuilder();
+
+        foreach (var entry in archive.Entries
+                     .Where(e => !string.IsNullOrWhiteSpace(e.Name))
+                     .OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            builder.AppendLine();
+            builder.AppendLine($"===== {entry.FullName} =====");
+
+            await using var entryStream = await entry.OpenAsync(cancellationToken);
+            using var reader = new StreamReader(entryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var content = await reader.ReadToEndAsync(cancellationToken);
+            builder.AppendLine(content);
+        }
+
+        return builder.Length == 0 ? null : builder.ToString();
     }
 
 
@@ -399,6 +480,7 @@ public class GitHubService : IGitHubService
         [property: JsonPropertyName("head_sha")] string HeadSha,
         [property: JsonPropertyName("head_branch")]
         string HeadBranch,
+        [property: JsonPropertyName("path")] string? Path,
         [property: JsonPropertyName("created_at")]
         DateTimeOffset CreatedAt);
 

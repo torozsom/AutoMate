@@ -96,7 +96,7 @@
                            WorkflowUrl="@_workflowUrl"/>
         }
 
-        @if (GetLatestStatus() == DeploymentStatus.Running && _exposedPort > 0)
+        @if (_app.SourceType == SourceType.Local && GetLatestStatus() == DeploymentStatus.Running && _exposedPort > 0)
         {
             <div class="alert alert-success shadow-sm d-flex align-items-center justify-content-between mb-4"
                  style="border-radius: 15px;">

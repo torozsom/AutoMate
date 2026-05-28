@@ -412,6 +412,9 @@ public static class ServiceConfiguration
                     options.CallbackPath = new PathString("/signin-github");
                     options.Scope.Add("user:email");
                     options.Scope.Add("repo");
+                    options.Scope.Add("workflow");
+                    options.Scope.Add("read:packages");
+                    options.Scope.Add("write:packages");
 
                     options.Events.OnCreatingTicket = async context => await ProcessGitHubLoginAsync(context);
                 })

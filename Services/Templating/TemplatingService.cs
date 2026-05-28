@@ -159,12 +159,12 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
     private static object BuildTemplateModel(DeploymentConfigDto config, ProjectMetadataDto metadata,
         string csProjectName, string outputDirectory)
     {
-        var solutionRoot = Path.GetDirectoryName(outputDirectory);
+        var solutionRoot = ResolveTemplateRoot(outputDirectory);
 
         var projectListForTemplate = metadata.AllProjectPaths
             .Select(p =>
             {
-                var relPath = Path.GetRelativePath(solutionRoot!, p).Replace('\\', '/');
+                var relPath = Path.GetRelativePath(solutionRoot, p).Replace('\\', '/');
                 var dir = Path.GetDirectoryName(relPath)?.Replace('\\', '/');
                 return new
                 {
@@ -180,7 +180,7 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
         // Calculate the relative path to the main project file from the output directory
         var relativeMainProjectFile = string.IsNullOrEmpty(mainProjectFile)
             ? ""
-            : Path.GetRelativePath(solutionRoot!, mainProjectFile).Replace('\\', '/');
+            : Path.GetRelativePath(solutionRoot, mainProjectFile).Replace('\\', '/');
 
         // Calculate the relative folder of the main project file for use in templates
         var relativeMainProjectFolder = string.IsNullOrEmpty(relativeMainProjectFile)
@@ -252,6 +252,16 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
                 .Select(kvp => new { key = kvp.Key, value = kvp.Value })
                 .ToList() ?? []
         };
+    }
+
+
+    private static string ResolveTemplateRoot(string outputDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(outputDirectory) || outputDirectory == ".")
+            return Directory.GetCurrentDirectory();
+
+        var fullOutputDirectory = Path.GetFullPath(outputDirectory);
+        return Path.GetDirectoryName(fullOutputDirectory) ?? fullOutputDirectory;
     }
 
 

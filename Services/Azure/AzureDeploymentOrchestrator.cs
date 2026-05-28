@@ -5,6 +5,8 @@ using Azure.ResourceManager.ManagedServiceIdentities.Models;
 using Azure.ResourceManager.Resources;
 using Core.DTO;
 using Microsoft.Extensions.Logging;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 
 namespace Services.Azure;
 
@@ -14,6 +16,9 @@ namespace Services.Azure;
 public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> logger) : IAzureDeploymentOrchestrator
 {
     private const string GitHubTokenIssuer = "https://token.actions.githubusercontent.com";
+    private const string AzureManagementApiVersion = "2022-04-01";
+    private const string ContributorRoleDefinitionId = "b24988ac-6180-42a0-ab88-20f7382dd24c";
+    private static readonly HttpClient HttpClient = new();
 
     /// <inheritdoc />
     public async Task<AzureOidcSetupResultDto> EnsureFederatedIdentityAsync(AzureCloudCredentialsDto credentials,
@@ -53,15 +58,16 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
             cancellationToken);
         await EnsureFederatedCredentialAsync(identity, federatedCredentialName, repositoryOwner, repositoryName,
             branchName, cancellationToken);
+        await EnsureContributorAssignmentAsync(resourceGroup, identity, credentials.AccessToken, cancellationToken);
 
         logger.LogInformation(
-            "[AzureDeploymentOrchestrator] OIDC trust configured for {Owner}/{Repo}@{Branch} using identity {IdentityName}.",
-            repositoryOwner, repositoryName, branchName, identityName);
+            "[AzureDeploymentOrchestrator] OIDC trust configured for {Owner}/{Repo}@{Branch} using identity {IdentityName} ({ClientId}) in tenant {TenantId}.",
+            repositoryOwner, repositoryName, branchName, identityName, identity.Data.ClientId, identity.Data.TenantId);
 
         return new AzureOidcSetupResultDto
         {
             ClientId = identity.Data.ClientId?.ToString() ?? string.Empty,
-            TenantId = credentials.TenantId,
+            TenantId = identity.Data.TenantId?.ToString() ?? credentials.TenantId,
             SubscriptionId = credentials.SubscriptionId
         };
     }
@@ -99,6 +105,50 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
         data.Audiences.Add("api://AzureADTokenExchange");
 
         await collection.CreateOrUpdateAsync(WaitUntil.Completed, credentialName, data, cancellationToken);
+    }
+
+    private static async Task EnsureContributorAssignmentAsync(ResourceGroupResource resourceGroup,
+        UserAssignedIdentityResource identity, string accessToken, CancellationToken cancellationToken)
+    {
+        var principalId = identity.Data.PrincipalId?.ToString();
+        if (string.IsNullOrWhiteSpace(principalId))
+            throw new InvalidOperationException("Azure managed identity principal ID could not be loaded.");
+
+        var scope = resourceGroup.Id.ToString();
+        var assignmentName = CreateDeterministicGuid($"{scope}:{principalId}:{ContributorRoleDefinitionId}");
+        var requestUri =
+            $"https://management.azure.com{scope}/providers/Microsoft.Authorization/roleAssignments/{assignmentName}?api-version={AzureManagementApiVersion}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Put, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent.Create(new
+        {
+            properties = new
+            {
+                roleDefinitionId = $"{scope}/providers/Microsoft.Authorization/roleDefinitions/{ContributorRoleDefinitionId}",
+                principalId,
+                principalType = "ServicePrincipal"
+            }
+        });
+
+        using var response = await HttpClient.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode)
+            return;
+
+        var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (response.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.Unauthorized)
+            throw new InvalidOperationException(
+                "AutoMate created the Azure managed identity, but the connected Azure account cannot assign the Contributor role to it. " +
+                "Connect with an account that has Owner or User Access Administrator rights on the resource group/subscription, " +
+                "or manually assign Contributor to the managed identity before redeploying. Azure response: " + responseText);
+
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static Guid CreateDeterministicGuid(string value)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
+        return new Guid(bytes[..16]);
     }
 
     private static string ToAzureIdentityName(string value)

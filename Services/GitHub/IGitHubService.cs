@@ -68,4 +68,16 @@ public interface IGitHubService
     /// <returns>The latest matching run, or null when no run exists yet.</returns>
     Task<GitHubWorkflowRunDto?> GetLatestWorkflowRunAsync(string accessToken, string repoOwner, string repoName,
         string workflowFileName, string branchName, string? headSha = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Downloads and flattens GitHub Actions logs for a workflow run.
+    /// </summary>
+    /// <param name="accessToken">The GitHub access token with workflow read permissions.</param>
+    /// <param name="repoOwner">The repository owner or organization.</param>
+    /// <param name="repoName">The repository name.</param>
+    /// <param name="runId">The GitHub workflow run ID.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>The flattened log text, or null when logs cannot be downloaded.</returns>
+    Task<string?> DownloadWorkflowRunLogsAsync(string accessToken, string repoOwner, string repoName, long runId,
+        CancellationToken cancellationToken = default);
 }

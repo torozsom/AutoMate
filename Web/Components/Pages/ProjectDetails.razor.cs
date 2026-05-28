@@ -250,8 +250,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         builder.OpenComponent<ConfigurationForm>(0);
         builder.AddAttribute(1, nameof(ConfigurationForm.Config), _currentDeployConfig);
         builder.AddAttribute(2, nameof(ConfigurationForm.ProjectPath), _selectedProjectPath);
-        builder.AddAttribute(3, nameof(ConfigurationForm.OnCancel), EventCallback.Factory.Create(this, HideConfigModal));
-        builder.AddAttribute(4, nameof(ConfigurationForm.OnDeployConfirmed),
+        builder.AddAttribute(3, nameof(ConfigurationForm.IsCloudDeployment), _currentDeployConfig.IsCloudDeployment);
+        builder.AddAttribute(4, nameof(ConfigurationForm.OnCancel), EventCallback.Factory.Create(this, HideConfigModal));
+        builder.AddAttribute(5, nameof(ConfigurationForm.OnDeployConfirmed),
             EventCallback.Factory.Create<DeploymentConfigDto>(this, ExecuteDeploymentAsync));
         builder.CloseComponent();
     };
@@ -384,7 +385,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
 
-            if (_app != null)
+            if (_app is { SourceType: SourceType.Local })
             {
                 var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
                 if (csProject != null)
@@ -439,7 +440,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task UpdateExposedPortAsync()
     {
-        if (GetLatestStatus() == DeploymentStatus.Running && _app != null)
+        if (GetLatestStatus() == DeploymentStatus.Running && _app is { SourceType: SourceType.Local })
         {
             var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
             if (csProject != null)
@@ -495,9 +496,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             EnvironmentName = "Production",
             IsCloudDeployment = true,
             CloudAzureRegion = "eastus",
-            CloudResourceGroupName = $"rg-{resourceName}",
-            CloudContainerAppName = resourceName,
-            CloudRegistryName = $"ghcr-{resourceName}",
+            CloudResourceGroupName = $"{resourceName}-prod-rg",
+            CloudContainerAppName = $"{resourceName}-prod-app",
+            CloudRegistryName = "ghcr.io",
             Databases = []
         };
     }

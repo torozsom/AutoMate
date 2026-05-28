@@ -77,6 +77,10 @@
         {
             Console.WriteLine($"Task was canceled during disposal of terminal '{Id}': {tcex.Message}");
         }
+        catch (InvalidOperationException ioex)
+        {
+            Console.WriteLine($"JS interop was unavailable during disposal of terminal '{Id}': {ioex.Message}");
+        }
     }
 
 }

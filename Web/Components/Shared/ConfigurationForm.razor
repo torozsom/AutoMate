@@ -12,7 +12,7 @@
                 <div class="row g-3 mb-4">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Environment</label>
-                        <select class="form-select bg-dark text-light border-secondary" @bind="Config.EnvironmentName">
+                        <select class="form-select bg-dark text-light border-secondary" @bind="SelectedEnvironment">
                             <option value="Development">Development</option>
                             <option value="Staging">Staging</option>
                             <option value="Production">Production</option>
@@ -58,9 +58,9 @@
                                    @bind="Config.CloudContainerAppName" placeholder="my-app" autocomplete="off"/>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Registry Name</label>
+                            <label class="form-label fw-semibold">Registry Server</label>
                             <input type="text" class="form-control bg-dark text-light border-secondary"
-                                   @bind="Config.CloudRegistryName" placeholder="ghcr-my-app" autocomplete="off"/>
+                                   @bind="Config.CloudRegistryName" placeholder="ghcr.io" autocomplete="off"/>
                         </div>
                     </div>
                 }
