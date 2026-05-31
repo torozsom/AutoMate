@@ -7,7 +7,11 @@ public partial class NavMenu : ComponentBase
 {
     private bool _isDarkMode;
 
-    [Inject] private IJSRuntime JS { get; set; } = null!;
+    [Inject]
+    private IJSRuntime JS { get; set; } = null!;
+
+    [Inject]
+    private ILogger<NavMenu> Logger { get; set; } = null!;
 
 
     /// <summary>
@@ -25,9 +29,9 @@ public partial class NavMenu : ComponentBase
                 _isDarkMode = theme == "dark";
                 StateHasChanged();
             }
-            catch
+            catch (JSException ex)
             {
-                // Fallback to light mode silently if JS interop fails
+                Logger.LogDebug(ex, "Could not read theme preference from local storage.");
                 _isDarkMode = false;
             }
     }
@@ -48,9 +52,9 @@ public partial class NavMenu : ComponentBase
         {
             await JS.InvokeVoidAsync("window.setTheme", theme);
         }
-        catch
+        catch (JSException ex)
         {
-            // Silently ignore if JS interop fails during toggle
+            Logger.LogDebug(ex, "Could not persist theme preference.");
         }
     }
 }

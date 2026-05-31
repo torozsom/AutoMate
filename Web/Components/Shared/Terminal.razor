@@ -1,4 +1,5 @@
 @inject IJSRuntime JSRuntime
+@inject ILogger<Terminal> Logger
 @implements IAsyncDisposable
 
 <div id="@Id" style="height: 100%; width: 100%; padding: 10px;"></div>
@@ -32,9 +33,7 @@
 
             // Invoke the OnReady event if it has been provided
             if (OnReady.HasDelegate)
-            {
                 await OnReady.InvokeAsync();
-            }
         }
     }
 
@@ -69,17 +68,17 @@
         {
             await JSRuntime.InvokeVoidAsync("xtermWrapper.dispose", Id);
         }
-        catch (JSDisconnectedException jsdex)
+        catch (JSDisconnectedException ex)
         {
-            Console.WriteLine($"JS interop failed during disposal of terminal '{Id}': {jsdex.Message}");
+            Logger.LogDebug(ex, "JS interop failed during disposal of terminal {TerminalId}.", Id);
         }
-        catch (TaskCanceledException tcex)
+        catch (TaskCanceledException ex)
         {
-            Console.WriteLine($"Task was canceled during disposal of terminal '{Id}': {tcex.Message}");
+            Logger.LogDebug(ex, "Terminal disposal was cancelled for {TerminalId}.", Id);
         }
-        catch (InvalidOperationException ioex)
+        catch (InvalidOperationException ex)
         {
-            Console.WriteLine($"JS interop was unavailable during disposal of terminal '{Id}': {ioex.Message}");
+            Logger.LogDebug(ex, "JS interop was unavailable during disposal of terminal {TerminalId}.", Id);
         }
     }
 

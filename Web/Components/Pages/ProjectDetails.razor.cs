@@ -51,8 +51,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
 
-    /// The port exposed by the web container.
-    private int _exposedPort;
+    /// The actual host port currently bound to the web container.
+    private int _webHostPort;
 
     /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
     private HubConnection? _hubConnection;
@@ -208,6 +208,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
                 await InvokeAsync(() =>
                 {
+                    _webHostPort = 0;
                     _isStopping = false;
                     StateHasChanged();
                 });
@@ -268,6 +269,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         HideConfigModal();
         _isDeploying = true;
+        _webHostPort = 0;
         _workflowStatusMessage = null;
         _workflowUrl = null;
         StateHasChanged();
@@ -292,9 +294,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
             finally
             {
-                await InvokeAsync(() =>
+                await InvokeAsync(async () =>
                 {
                     _isDeploying = false;
+                    await RefreshProjectAsync(resolveWebPortWithRetry: true);
                     StateHasChanged();
                 });
             }
@@ -391,7 +394,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 if (csProject != null)
                 {
                     var config = await ProjectScanner.AnalyzeDependenciesAsync(_app, csProject);
-                    _exposedPort = config.ExposedPort;
                     _databaseTabs = config.Databases
                         .Select(db =>
                             new DatabaseTab(db.DbType, db.ContainerNameSuffix, db.DbType))
@@ -400,7 +402,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
         }
 
-        await UpdateExposedPortAsync();
+        await UpdateWebHostPortAsync();
 
         _isLoading = false;
     }
@@ -415,6 +417,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <param name="status">The new deployment status.</param>
     private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
     {
+        _ = HandleDeploymentStatusChangedAsync(projectId, status);
+    }
+
+
+    /// <summary>
+    ///     Handles the deployment status change by checking if the status change is relevant to the current
+    ///     project, updating the latest deployment status, and refreshing the project details if necessary.
+    /// </summary>
+    /// <param name="projectId">The ID of the project for which the status has changed.</param>
+    /// <param name="status">The new deployment status.</param>
+    private async Task HandleDeploymentStatusChangedAsync(Guid projectId, DeploymentStatus status)
+    {
         if (_app != null && _app.Id == projectId)
         {
             var latestDeployment = _app.CsProjects
@@ -424,11 +438,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (latestDeployment != null)
             {
                 latestDeployment.Status = status;
-                _ = UpdateExposedPortAsync().ContinueWith(_ => InvokeAsync(StateHasChanged));
+                await UpdateWebHostPortAsync(maxAttempts: status == DeploymentStatus.Running ? 6 : 1);
+                await InvokeAsync(StateHasChanged);
             }
             else
             {
-                _ = RefreshProjectAsync();
+                await RefreshProjectAsync(resolveWebPortWithRetry: status == DeploymentStatus.Running);
             }
         }
     }
@@ -438,31 +453,52 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     ///     Updates the exposed port for the web container by checking the latest deployment status and retrieving
     ///     the host port mapped to the web container from the Docker service if the deployment is running.
     /// </summary>
-    private async Task UpdateExposedPortAsync()
+    private async Task UpdateWebHostPortAsync(int maxAttempts = 1)
     {
-        if (GetLatestStatus() == DeploymentStatus.Running && _app is { SourceType: SourceType.Local })
+        if (_app is not { SourceType: SourceType.Local } || GetLatestStatus() != DeploymentStatus.Running)
         {
-            var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
-            if (csProject != null)
-            {
-                var containerName = $"{csProject.Name.ToLowerInvariant()}-web";
-                var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
-                if (hostPort > 0) _exposedPort = hostPort;
-            }
+            _webHostPort = 0;
+            return;
         }
+
+        var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+        if (csProject == null)
+        {
+            _webHostPort = 0;
+            return;
+        }
+
+        var containerNames = GetWebContainerNameCandidates(csProject.Name);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            foreach (var containerName in containerNames)
+            {
+                var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
+                if (hostPort > 0)
+                {
+                    _webHostPort = hostPort;
+                    return;
+                }
+            }
+
+            if (attempt < maxAttempts)
+                await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        _webHostPort = 0;
     }
 
 
     /// <summary>
     ///     Refreshes the project details by re-fetching the project from the database.
     /// </summary>
-    private async Task RefreshProjectAsync()
+    private async Task RefreshProjectAsync(bool resolveWebPortWithRetry = false)
     {
         var currentUserId = await GetCurrentUserIdAsync();
         if (currentUserId != Guid.Empty)
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
-            await UpdateExposedPortAsync();
+            await UpdateWebHostPortAsync(resolveWebPortWithRetry ? 6 : 1);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -522,6 +558,41 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             normalized = "automate-app";
 
         return normalized.Length <= 32 ? normalized : normalized[..32].TrimEnd('-');
+    }
+
+
+    /// <summary>
+    ///     Mirrors the Docker Compose template's web container name convention.
+    /// </summary>
+    private static IReadOnlyList<string> GetWebContainerNameCandidates(string csProjectName)
+    {
+        var normalizedName = $"{NormalizeContainerName(csProjectName)}-web";
+        var legacyName = $"{csProjectName.Trim().ToLowerInvariant()}-web";
+
+        return string.Equals(normalizedName, legacyName, StringComparison.OrdinalIgnoreCase)
+            ? [normalizedName]
+            : [normalizedName, legacyName];
+    }
+
+
+    /// <summary>
+    ///     Normalizes a string to be used as a Docker container name by converting it to lowercase,
+    ///     replacing non-alphanumeric characters with hyphens, and trimming leading/trailing hyphens.
+    /// </summary>
+    /// <param name="value">The string to normalize.</param>
+    /// <returns>The normalized Docker container name.</returns>
+    private static string NormalizeContainerName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized
+            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        return string.IsNullOrWhiteSpace(normalized) ? "automate-project" : normalized;
     }
 
 
@@ -616,18 +687,21 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// Retrieves the inline style for the build terminal.
     private string GetBuildTerminalStyle()
     {
         return GetTerminalStyle("build");
     }
 
 
+    /// Retrieves the inline style for the web terminal.
     private string GetWebTerminalStyle()
     {
         return GetTerminalStyle("web");
     }
 
 
+    /// Retrieves the inline style for a database terminal based on its corresponding tab ID.
     private string GetDatabaseTerminalStyle(string tabId)
     {
         return GetTerminalStyle(tabId);

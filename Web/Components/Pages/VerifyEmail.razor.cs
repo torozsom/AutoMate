@@ -82,7 +82,7 @@ public partial class VerifyEmail : ComponentBase
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "An error occurred during email verification for token {Token}", Token);
+            Logger.LogError(ex, "An error occurred during email verification.");
             ErrorMessage = "A technical error occurred while verifying your email. Please try again later.";
         }
     }

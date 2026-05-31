@@ -8,6 +8,14 @@
             </div>
 
             <div class="modal-body p-4">
+                @if (!string.IsNullOrWhiteSpace(_validationMessage))
+                {
+                    <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <span>@_validationMessage</span>
+                    </div>
+                }
+
                 <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Basic Settings</h6>
                 <div class="row g-3 mb-4">
                     <div class="col-md-6">

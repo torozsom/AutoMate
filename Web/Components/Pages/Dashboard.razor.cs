@@ -70,14 +70,6 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IUserService UserService { get; set; } = null!;
 
-    /// Service responsible for orchestrating the deployment process of local projects.
-    [Inject]
-    private ILocalDeploymentOrchestrator DeploymentOrchestrator { get; set; } = null!;
-
-    /// Service responsible for orchestrating cloud project deployments.
-    [Inject]
-    private ICloudDeploymentOrchestrator CloudDeploymentOrchestrator { get; set; } = null!;
-
     /// Service responsible for scanning project files to extract metadata and analyze dependencies.
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
@@ -558,7 +550,11 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <param name="isDeploying">Indicates whether the project is currently deploying.</param>
     private void SetDeployingState(Guid appId, bool isDeploying)
     {
-        _deployingStates[appId] = isDeploying;
+        if (isDeploying)
+            _deployingStates[appId] = true;
+        else
+            _deployingStates.TryRemove(appId, out _);
+
         StateHasChanged();
     }
 

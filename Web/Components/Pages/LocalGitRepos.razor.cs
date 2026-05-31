@@ -14,8 +14,14 @@ namespace Web.Components.Pages;
 ///     that have been scanned and saved to the user's account. It also allows the user to search
 ///     for and save new projects.
 /// </summary>
-public partial class LocalGitRepos : ComponentBase
+public partial class LocalGitRepos : ComponentBase, IDisposable
 {
+    /// A cancellation token source to manage asynchronous operations and ensure they are cancelled when the component is disposed.
+    private readonly CancellationTokenSource _componentCancellation = new();
+
+    /// A set to keep track of the paths of projects that are currently being saved, to prevent duplicate save operations.
+    private readonly HashSet<string> _savingProjectPaths = new(StringComparer.OrdinalIgnoreCase);
+
     /// The current user's identifier.
     private Guid _currentUserId;
 
@@ -57,9 +63,22 @@ public partial class LocalGitRepos : ComponentBase
     [Inject]
     private IUserService UserService { get; set; } = null!;
 
+    /// Logger for logging errors and important information within the component.
+    [Inject]
+    private ILogger<LocalGitRepos> Logger { get; set; } = null!;
+
 
     /// A computed property that determines whether the "Scan" button should be disabled.
     private bool IsScanButtonDisabled => string.IsNullOrWhiteSpace(_searchPath) || _isScanning;
+
+
+    /// Disposes of the component, ensuring that any ongoing operations are cancelled and resources are released.
+    public void Dispose()
+    {
+        _componentCancellation.Cancel();
+        _componentCancellation.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
 
     /// <summary>
@@ -77,7 +96,8 @@ public partial class LocalGitRepos : ComponentBase
 
             if (!string.IsNullOrEmpty(nameIdentifier))
             {
-                var (userId, _, _) = await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier);
+                var (userId, _, _) = await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier,
+                    _componentCancellation.Token);
                 _currentUserId = userId;
             }
         }
@@ -97,22 +117,31 @@ public partial class LocalGitRepos : ComponentBase
         _lastSearchedPath = _searchPath;
         _localProjects = null;
         ClearStatusMessage();
+        var wasCancelled = false;
 
         try
         {
-            _localProjects = await SystemScannerService.ScanForProjectsAsync(_searchPath);
+            _localProjects = await SystemScannerService.ScanForProjectsAsync(_searchPath,
+                _componentCancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            wasCancelled = true;
+            _localProjects = [];
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to scan local repositories at {SearchPath}.", _searchPath);
             _localProjects = [];
-            SetStatusMessage($"An error occurred during scanning. Check the provided path. Error details: {ex.Message}",
-                true);
+            SetStatusMessage("An error occurred during scanning. Check the provided path and try again.", true);
         }
         finally
         {
             _isScanning = false;
-            _hasScanned = true;
-            StateHasChanged();
+            _hasScanned = !wasCancelled;
+
+            if (!_componentCancellation.IsCancellationRequested)
+                StateHasChanged();
         }
     }
 
@@ -143,13 +172,38 @@ public partial class LocalGitRepos : ComponentBase
             return;
         }
 
-        // Attempt to save the app to the user's account
-        var success = await ApplicationService.AddLocalAppAsync(_currentUserId, project, csproject);
+        if (!_savingProjectPaths.Add(csproject.Path))
+            return;
 
-        if (success)
-            SetStatusMessage($"{csproject.Name} successfully saved!", false);
-        else
-            SetStatusMessage($"{csproject.Name} already exists in your workspace!", true);
+        try
+        {
+            var success = await ApplicationService.AddLocalAppAsync(_currentUserId, project, csproject,
+                _componentCancellation.Token);
+
+            if (success)
+                SetStatusMessage($"{csproject.Name} successfully saved!", false);
+            else
+                SetStatusMessage($"{csproject.Name} already exists in your workspace!", true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Component was disposed while saving.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to save local project {ProjectPath}.", csproject.Path);
+            SetStatusMessage("Failed to save the project. Please try again later.", true);
+        }
+        finally
+        {
+            _savingProjectPaths.Remove(csproject.Path);
+        }
+    }
+
+
+    private bool IsSaving(CsProjectDto project)
+    {
+        return _savingProjectPaths.Contains(project.Path);
     }
 
 

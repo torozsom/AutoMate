@@ -6,10 +6,13 @@ namespace Web.Components.Layout;
 public partial class MainLayout : LayoutComponentBase
 {
     private bool _hasCheckedDocker;
-
     private bool? _isDockerRunning;
 
-    [Inject] private IDockerService DockerService { get; set; } = null!;
+    [Inject]
+    private IDockerService DockerService { get; set; } = null!;
+
+    [Inject]
+    private ILogger<MainLayout> Logger { get; set; } = null!;
 
 
     /// <summary>
@@ -36,16 +39,14 @@ public partial class MainLayout : LayoutComponentBase
         {
             _isDockerRunning = await DockerService.PingAsync();
         }
-        catch
+        catch (Exception ex)
         {
-            // If the PingAsync method throws an exception (e.g., socket closed, access denied),
-            // we safely default to the offline state instead of crashing the layout.
+            Logger.LogWarning(ex, "Docker status check failed.");
             _isDockerRunning = false;
         }
         finally
         {
-            // Notify Blazor that the background ping finished and the UI needs to be updated
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
         }
     }
 }

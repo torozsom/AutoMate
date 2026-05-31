@@ -16,6 +16,7 @@ public partial class ConfigurationForm : ComponentBase
 
     private CloudDefaults? _lastCloudDefaults;
     private string _selectedEnvironment = "Development";
+    private string? _validationMessage;
 
 
     /// <summary>
@@ -117,6 +118,14 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private async Task ConfirmDeploy()
     {
+        _validationMessage = null;
+
+        if (!IsCloudDeployment && Config.ExposedPort is < 1 or > 65535)
+        {
+            _validationMessage = "Choose a valid host port between 1 and 65535.";
+            return;
+        }
+
         Config.CustomEnvVars ??= new Dictionary<string, string>();
         Config.CustomEnvVars.Clear();
 

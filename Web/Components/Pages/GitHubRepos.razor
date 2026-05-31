@@ -62,8 +62,19 @@
                                         @if (repo.Language is "C#" or "JavaScript" or "TypeScript" )
                                         {
                                             <button class="btn btn-sm btn-primary w-100"
-                                                    @onclick="() => SaveProjectAsync(repo)">
-                                                <i class="bi bi-cloud-download me-1"></i> Save
+                                                    @onclick="() => SaveProjectAsync(repo)"
+                                                    disabled="@IsSaving(repo)">
+                                                @if (IsSaving(repo))
+                                                {
+                                                    <span class="spinner-border spinner-border-sm me-1" role="status"
+                                                          aria-hidden="true"></span>
+                                                    <span>Saving...</span>
+                                                }
+                                                else
+                                                {
+                                                    <i class="bi bi-cloud-download me-1"></i>
+                                                    <span>Save</span>
+                                                }
                                             </button>
                                         }
                                     </div>
