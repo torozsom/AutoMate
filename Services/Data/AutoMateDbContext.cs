@@ -137,6 +137,15 @@ public class AutoMateDbContext(
     }
 
 
+    /// <inheritdoc />
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        UpdateAuditFields();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+
     /// <summary>
     ///     Overrides the synchronous SaveChanges method to ensure audit fields are updated even if called synchronously.
     /// </summary>
@@ -145,6 +154,14 @@ public class AutoMateDbContext(
     {
         UpdateAuditFields();
         return base.SaveChanges();
+    }
+
+
+    /// <inheritdoc />
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        UpdateAuditFields();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
 
