@@ -11,8 +11,13 @@ namespace Web.Hubs;
 ///     project IDs, allowing them to receive log updates specific to the projects they are interested in.
 /// </summary>
 [AllowAnonymous]
-public class LogHub(IServiceProvider serviceProvider, IDataProtectionProvider dataProtectionProvider) : Hub<ILogClient>
+public class LogHub(
+    IApplicationService applicationService,
+    IDataProtectionProvider dataProtectionProvider,
+    ILogger<LogHub> logger) : Hub<ILogClient>
 {
+    private const string ProtectorPurpose = "LogHub";
+
     /// <summary>
     ///     Allows a client to join a SignalR group associated with a specific project ID using a secure token.
     ///     This enables the client to receive real-time log updates related to the specified project securely.
@@ -26,29 +31,30 @@ public class LogHub(IServiceProvider serviceProvider, IDataProtectionProvider da
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task JoinProjectGroup(Guid projectId, string secureToken)
     {
+        if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(secureToken))
+            return;
+
         try
         {
-            var protector = dataProtectionProvider.CreateProtector("LogHub").ToTimeLimitedDataProtector();
-            var unprotect = protector.Unprotect(secureToken);
+            var protector = dataProtectionProvider.CreateProtector(ProtectorPurpose).ToTimeLimitedDataProtector();
+            var payload = protector.Unprotect(secureToken);
 
-            var parts = unprotect.Split(':');
+            var parts = payload.Split(':');
             if (parts.Length != 2
                 || !Guid.TryParse(parts[0], out var tokenProjectId)
                 || !Guid.TryParse(parts[1], out var userId))
                 return;
 
-            if (tokenProjectId != projectId) return;
+            if (tokenProjectId != projectId)
+                return;
 
-            using var scope = serviceProvider.CreateScope();
-            var applicationService = scope.ServiceProvider.GetRequiredService<IApplicationService>();
-
-            var app = await applicationService.GetAppByIdAsync(projectId, userId);
+            var app = await applicationService.GetAppByIdAsync(projectId, userId, Context.ConnectionAborted);
             if (app != null)
-                await Groups.AddToGroupAsync(Context.ConnectionId, $"project-{projectId}");
+                await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId), Context.ConnectionAborted);
         }
         catch (CryptographicException ex)
         {
-            Console.WriteLine($"Failed to join project group due to invalid token: {ex.Message}");
+            logger.LogDebug(ex, "Rejected log hub group join because the secure token was invalid or expired.");
         }
     }
 
@@ -56,6 +62,13 @@ public class LogHub(IServiceProvider serviceProvider, IDataProtectionProvider da
     /// Allows a client to leave a SignalR group associated with a specific project ID.
     public async Task LeaveProjectGroup(Guid projectId)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"project-{projectId}");
+        if (projectId == Guid.Empty)
+            return;
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId), Context.ConnectionAborted);
     }
+
+
+    /// Generates a consistent group name for a given project ID, which is used to manage client subscriptions to log updates for that project.
+    internal static string GetProjectGroupName(Guid projectId) => $"project-{projectId}";
 }

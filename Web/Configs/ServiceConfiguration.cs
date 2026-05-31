@@ -48,9 +48,12 @@ public static class ServiceConfiguration
     /// </summary>
     private static async Task ProcessGitHubLoginAsync(OAuthCreatingTicketContext context)
     {
-        var githubId = context.User.GetProperty("id").GetInt32().ToString();
+        var githubId = context.User.GetProperty("id").GetInt64().ToString();
         var username = context.User.GetProperty("login").GetString() ?? "Unknown";
-        var email = context.User.GetProperty("email").GetString() ?? "no-email@github.com";
+        var email = context.User.GetProperty("email").GetString();
+
+        if (string.IsNullOrWhiteSpace(email))
+            email = $"{githubId}@users.noreply.github.com";
 
         var avatarUrl = context.User.TryGetProperty("avatar_url", out var avatarElem)
             ? avatarElem.GetString()
@@ -161,7 +164,7 @@ public static class ServiceConfiguration
                 .Replace('_', '/');
             payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
 
-            var json = JsonDocument.Parse(Convert.FromBase64String(payload));
+            using var json = JsonDocument.Parse(Convert.FromBase64String(payload));
             return GetString(json.RootElement, propertyName);
         }
         catch (JsonException)
@@ -231,7 +234,9 @@ public static class ServiceConfiguration
             return null;
 
         await using var stream = await response.Content.ReadAsStreamAsync(context.HttpContext.RequestAborted);
-        var payload = await JsonDocument.ParseAsync(stream, cancellationToken: context.HttpContext.RequestAborted);
+
+        using var payload = await JsonDocument.ParseAsync(stream,
+            cancellationToken: context.HttpContext.RequestAborted);
 
         return payload.RootElement.TryGetProperty("access_token", out var tokenElement)
             ? tokenElement.GetString()
@@ -258,7 +263,8 @@ public static class ServiceConfiguration
             return null;
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+        using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
         if (!payload.RootElement.TryGetProperty("value", out var subscriptionsElement) ||
             subscriptionsElement.ValueKind != JsonValueKind.Array)
@@ -399,7 +405,15 @@ public static class ServiceConfiguration
                     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
                     options.DefaultChallengeScheme = "GitHub";
                 })
-                .AddCookie()
+                .AddCookie(options =>
+                {
+                    options.Cookie.HttpOnly = true;
+                    options.Cookie.SameSite = SameSiteMode.Lax;
+                    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                    options.LoginPath = "/login";
+                    options.LogoutPath = "/api/auth/logout";
+                    options.AccessDeniedPath = "/login";
+                })
                 .AddGitHub(options =>
                 {
                     options.ClientId = config["Authentication:GitHub:ClientId"]
@@ -457,7 +471,9 @@ public static class ServiceConfiguration
                 options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
                 {
                     var partitionKey = context.User.Identity?.IsAuthenticated == true
-                        ? context.User.Identity.Name!
+                        ? context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                          ?? context.User.Identity.Name
+                          ?? "authenticated_unknown"
                         : context.Connection.RemoteIpAddress?.ToString() ?? "unknown_ip";
 
                     // Create a fixed window rate limiter that allows 100 requests per minute for each partition key.

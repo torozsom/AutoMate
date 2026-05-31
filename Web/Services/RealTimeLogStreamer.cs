@@ -20,8 +20,10 @@ public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : I
     /// <returns>A task representing the asynchronous operation of streaming the log message.</returns>
     public async Task StreamBuildLogsAsync(Guid projectId, string message)
     {
+        ValidateProjectId(projectId);
+
         await hubContext.Clients
-            .Group($"project-{projectId}")
+            .Group(LogHub.GetProjectGroupName(projectId))
             .ReceiveBuildLog(message);
     }
 
@@ -35,8 +37,11 @@ public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : I
     /// <returns>A task representing the asynchronous operation of streaming the log message.</returns>
     public async Task StreamContainerLogsAsync(Guid projectId, string containerName, string message)
     {
+        ValidateProjectId(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+
         await hubContext.Clients
-            .Group($"project-{projectId}")
+            .Group(LogHub.GetProjectGroupName(projectId))
             .ReceiveContainerLog(containerName, message);
     }
 
@@ -47,8 +52,23 @@ public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : I
     public async Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage,
         string memoryUsage)
     {
+        ValidateProjectId(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
+
         await hubContext.Clients
-            .Group($"project-{projectId}")
+            .Group(LogHub.GetProjectGroupName(projectId))
             .ReceiveContainerMetrics(containerName, cpuUsage, memoryUsage);
+    }
+
+
+    /// <summary>
+    ///     Validates the project ID to ensure it is not empty. This is important to prevent invalid group names.
+    /// </summary>
+    /// <param name="projectId">The project ID to validate.</param>
+    /// <exception cref="ArgumentException">Thrown if the project ID is empty.</exception>
+    private static void ValidateProjectId(Guid projectId)
+    {
+        if (projectId == Guid.Empty)
+            throw new ArgumentException("Project id must not be empty.", nameof(projectId));
     }
 }

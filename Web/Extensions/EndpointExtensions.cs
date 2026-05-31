@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Web.Routes;
 
 namespace Web.Extensions;
@@ -21,11 +22,24 @@ public static class EndpointExtensions
 
         var endpointTypes = assembly
             .GetTypes()
-            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IEndpoint).IsAssignableFrom(t));
+            .Where(t => t is { IsClass: true, IsAbstract: false } && typeof(IEndpoint).IsAssignableFrom(t))
+            .OrderBy(GetEndpointRegistrationOrder)
+            .ThenBy(t => t.FullName, StringComparer.Ordinal);
 
         foreach (var type in endpointTypes)
-            services.AddTransient(typeof(IEndpoint), type);
+            services.TryAddEnumerable(ServiceDescriptor.Transient(typeof(IEndpoint), type));
 
         return services;
+    }
+
+
+    private static int GetEndpointRegistrationOrder(Type endpointType)
+    {
+        return endpointType.Name switch
+        {
+            "StaticAssetsEndpoint" => 0,
+            "RazorComponentsEndpoint" => 200,
+            _ => 100
+        };
     }
 }

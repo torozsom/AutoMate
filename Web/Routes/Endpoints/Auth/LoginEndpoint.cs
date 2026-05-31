@@ -24,7 +24,10 @@ public class LoginEndpoint : IEndpoint
                 [FromForm] string email,
                 [FromForm] string password) =>
             {
-                var (user, errorMessage) = await authService.LoginAsync(email, password);
+                if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+                    return Results.LocalRedirect("/login?error=Email%20and%20password%20are%20required");
+
+                var (user, errorMessage) = await authService.LoginAsync(email, password, context.RequestAborted);
 
                 if (user == null)
                 {
@@ -42,8 +45,14 @@ public class LoginEndpoint : IEndpoint
 
                 var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
                 var principal = new ClaimsPrincipal(identity);
+                var properties = new AuthenticationProperties
+                {
+                    AllowRefresh = true,
+                    IsPersistent = false,
+                    IssuedUtc = DateTimeOffset.UtcNow
+                };
 
-                await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+                await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, properties);
 
                 return Results.LocalRedirect("/"); // Safe internal redirect
             })
