@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Globalization;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
@@ -661,8 +662,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private string GetTabClass(string tabId)
     {
         return _activeTab == tabId
-            ? "text-light bg-dark border-secondary border-opacity-50 active"
-            : "text-secondary bg-transparent border-0";
+            ? "terminal-tab-link active"
+            : "terminal-tab-link";
     }
 
 
@@ -712,6 +713,103 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private IEnumerable<DatabaseTab> GetDatabaseTabs()
     {
         return _databaseTabs;
+    }
+
+
+    /// <summary>
+    ///     Gets a compact label for the selected container in the metrics panel.
+    /// </summary>
+    private static string GetContainerInitial(string containerName)
+    {
+        return string.IsNullOrWhiteSpace(containerName)
+            ? "#"
+            : char.ToUpperInvariant(containerName.Trim()[0]).ToString(CultureInfo.InvariantCulture);
+    }
+
+
+    /// <summary>
+    ///     Converts metric text into a CSS width value for the lightweight utilization bar.
+    /// </summary>
+    private static string GetMetricTrackStyle(string metricValue, bool isMemoryMetric)
+    {
+        var percent = isMemoryMetric
+            ? TryCalculateMemoryUsagePercent(metricValue)
+            : TryParsePercentage(metricValue);
+
+        if (percent is null)
+            return "width: 0%;";
+
+        var normalized = Math.Clamp(percent.Value, 0, 100);
+        if (normalized > 0 && normalized < 1)
+            normalized = 1;
+
+        return $"width: {normalized.ToString("0.##", CultureInfo.InvariantCulture)}%;";
+    }
+
+
+    private static decimal? TryParsePercentage(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var percentIndex = value.IndexOf('%', StringComparison.Ordinal);
+        var numberPart = percentIndex >= 0 ? value[..percentIndex] : value;
+
+        return decimal.TryParse(numberPart.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+
+    private static decimal? TryCalculateMemoryUsagePercent(string memoryUsage)
+    {
+        var parts = memoryUsage.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2)
+            return null;
+
+        var usedBytes = TryParseDataSize(parts[0]);
+        var limitBytes = TryParseDataSize(parts[1]);
+
+        if (usedBytes is null || limitBytes is null || limitBytes <= 0)
+            return null;
+
+        return usedBytes.Value / limitBytes.Value * 100;
+    }
+
+
+    private static decimal? TryParseDataSize(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        var numberLength = 0;
+
+        while (numberLength < trimmed.Length &&
+               (char.IsDigit(trimmed[numberLength]) || trimmed[numberLength] is '.' or ','))
+            numberLength++;
+
+        if (numberLength == 0)
+            return null;
+
+        var numberPart = trimmed[..numberLength].Replace(',', '.');
+        if (!decimal.TryParse(numberPart, NumberStyles.Float, CultureInfo.InvariantCulture, out var amount))
+            return null;
+
+        var unit = trimmed[numberLength..].Trim().ToUpperInvariant();
+        var multiplier = unit switch
+        {
+            "B" or "" => 1m,
+            "KB" => 1_000m,
+            "KIB" => 1_024m,
+            "MB" => 1_000_000m,
+            "MIB" => 1_048_576m,
+            "GB" => 1_000_000_000m,
+            "GIB" => 1_073_741_824m,
+            _ => 1m
+        };
+
+        return amount * multiplier;
     }
 
 
