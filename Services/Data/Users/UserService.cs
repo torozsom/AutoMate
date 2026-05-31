@@ -34,14 +34,30 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
 
         if (Guid.TryParse(identifier, out var localUserId))
         {
-            var exists = await dbContext.Users.AnyAsync(u => u.Id == localUserId, cancellationToken);
-            return exists ? (localUserId, null, false) : (Guid.Empty, null, false);
+            var remoteUser = await dbContext.Users
+                .OfType<RemoteUser>()
+                .AsNoTracking()
+                .Where(u => u.Id == localUserId)
+                .Select(u => new { u.Id, u.GitHubAccessToken })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (remoteUser is not null)
+                return (remoteUser.Id, remoteUser.GitHubAccessToken, true);
+
+            var localUserExists = await dbContext.Users
+                .OfType<LocalUser>()
+                .AsNoTracking()
+                .AnyAsync(u => u.Id == localUserId, cancellationToken);
+
+            return localUserExists ? (localUserId, null, false) : (Guid.Empty, null, false);
         }
 
         var githubUser = await dbContext.Users
             .OfType<RemoteUser>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.AccountId == identifier, cancellationToken);
+            .Where(u => u.AccountId == identifier)
+            .Select(u => new { u.Id, u.GitHubAccessToken })
+            .FirstOrDefaultAsync(cancellationToken);
 
         return githubUser is not null
             ? (githubUser.Id, AccessToken: githubUser.GitHubAccessToken, true)
