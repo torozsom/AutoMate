@@ -1,15 +1,16 @@
+using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.IO.Compression;
 using Core.DTO;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Octokit;
 using Sodium;
+using ProductHeaderValue = Octokit.ProductHeaderValue;
 
 namespace Services.GitHub;
 
@@ -120,7 +121,8 @@ public class GitHubService : IGitHubService
             try
             {
                 // Cache the retrieved repository list in the distributed cache for 10 minutes.
-                var cacheOptions = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = RepositoryCacheTtl };
+                var cacheOptions = new DistributedCacheEntryOptions
+                    { AbsoluteExpirationRelativeToNow = RepositoryCacheTtl };
                 var serializedRepos = JsonSerializer.Serialize(repositories, JsonOptions);
 
                 // Store the serialized repository list in the distributed cache using the generated cache key and cache options.
@@ -181,7 +183,7 @@ public class GitHubService : IGitHubService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var gitHubClient = new GitHubClient(new Octokit.ProductHeaderValue("AutoMate"))
+        var gitHubClient = new GitHubClient(new ProductHeaderValue("AutoMate"))
         {
             Credentials = new Credentials(accessToken)
         };
@@ -421,7 +423,7 @@ public class GitHubService : IGitHubService
             builder.AppendLine($"===== {entry.FullName} =====");
 
             await using var entryStream = await entry.OpenAsync(cancellationToken);
-            using var reader = new StreamReader(entryStream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            using var reader = new StreamReader(entryStream, Encoding.UTF8, true);
             var content = await reader.ReadToEndAsync(cancellationToken);
             builder.AppendLine(content);
         }
@@ -506,6 +508,24 @@ public class GitHubService : IGitHubService
     }
 
 
+    /// <summary>
+    ///     Generates a cache key based on the provided access token by
+    ///     hashing it using SHA256 and encoding it in a URL-safe format.
+    /// </summary>
+    /// <param name="token">The token to be hashed.</param>
+    /// <returns>The safe cache key.</returns>
+    private static string GenerateCacheKey(string token)
+    {
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        var safeHash = Convert.ToBase64String(hashBytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+
+        return $"github_repos_{safeHash}";
+    }
+
+
     /// Record class for representing a GitHub repository public key.
     private sealed record GitHubRepositoryPublicKey(
         [property: JsonPropertyName("key_id")] string KeyId,
@@ -533,30 +553,15 @@ public class GitHubService : IGitHubService
     private sealed record GitHubWorkflowRunItem(
         [property: JsonPropertyName("id")] long Id,
         [property: JsonPropertyName("status")] string Status,
-        [property: JsonPropertyName("conclusion")] string? Conclusion,
-        [property: JsonPropertyName("html_url")] string HtmlUrl,
-        [property: JsonPropertyName("head_sha")] string HeadSha,
+        [property: JsonPropertyName("conclusion")]
+        string? Conclusion,
+        [property: JsonPropertyName("html_url")]
+        string HtmlUrl,
+        [property: JsonPropertyName("head_sha")]
+        string HeadSha,
         [property: JsonPropertyName("head_branch")]
         string HeadBranch,
         [property: JsonPropertyName("path")] string? Path,
         [property: JsonPropertyName("created_at")]
         DateTimeOffset CreatedAt);
-
-
-    /// <summary>
-    ///     Generates a cache key based on the provided access token by
-    ///     hashing it using SHA256 and encoding it in a URL-safe format.
-    /// </summary>
-    /// <param name="token">The token to be hashed.</param>
-    /// <returns>The safe cache key.</returns>
-    private static string GenerateCacheKey(string token)
-    {
-        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
-        var safeHash = Convert.ToBase64String(hashBytes)
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .TrimEnd('=');
-
-        return $"github_repos_{safeHash}";
-    }
 }

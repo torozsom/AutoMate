@@ -42,7 +42,8 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
     }
 
     /// <inheritdoc />
-    public async Task<List<TemplateFile>> GenerateAllTemplatesAsync(DeploymentConfigDto config, ProjectMetadataDto metadata,
+    public async Task<List<TemplateFile>> GenerateAllTemplatesAsync(DeploymentConfigDto config,
+        ProjectMetadataDto metadata,
         string csProjectName, string outputDirectory, CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(TemplatesDirectory))

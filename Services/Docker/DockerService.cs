@@ -386,7 +386,7 @@ public partial class DockerService : IDockerService, IDisposable
             _logger.LogInformation("[DockerService] Starting to stream metrics for container '{ContainerName}'",
                 containerName);
 
-            var startInfo = CreateDockerProcessStartInfo(redirectStandardError: false);
+            var startInfo = CreateDockerProcessStartInfo(false);
             startInfo.ArgumentList.Add("stats");
             startInfo.ArgumentList.Add(containerName);
             startInfo.ArgumentList.Add("--format");
@@ -454,7 +454,7 @@ public partial class DockerService : IDockerService, IDisposable
     {
         try
         {
-            var startInfo = CreateDockerProcessStartInfo(redirectStandardError: false);
+            var startInfo = CreateDockerProcessStartInfo(false);
             startInfo.ArgumentList.Add("port");
             startInfo.ArgumentList.Add(containerName);
 

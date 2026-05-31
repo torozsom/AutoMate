@@ -67,7 +67,8 @@ public interface IGitHubService
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>The latest matching run, or null when no run exists yet.</returns>
     Task<GitHubWorkflowRunDto?> GetLatestWorkflowRunAsync(string accessToken, string repoOwner, string repoName,
-        string workflowFileName, string branchName, string? headSha = null, CancellationToken cancellationToken = default);
+        string workflowFileName, string branchName, string? headSha = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     ///     Downloads and flattens GitHub Actions logs for a workflow run.

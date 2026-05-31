@@ -1,7 +1,7 @@
-using System.Threading.RateLimiting;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 using Core.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -194,7 +194,8 @@ public static class ServiceConfiguration
     /// </summary>
     private static DateTimeOffset? GetTokenExpiresAt(OAuthCreatingTicketContext context)
     {
-        return context.TokenResponse.Response?.RootElement.TryGetProperty("expires_in", out var expiresInElement) == true &&
+        return context.TokenResponse.Response?.RootElement.TryGetProperty("expires_in", out var expiresInElement) ==
+               true &&
                expiresInElement.TryGetInt32(out var expiresIn)
             ? DateTimeOffset.UtcNow.AddSeconds(expiresIn)
             : null;

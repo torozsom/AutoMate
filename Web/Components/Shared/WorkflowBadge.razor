@@ -1,5 +1,4 @@
 @using Core.Enums
-
 <div class="alert @AlertClass shadow-sm d-flex align-items-center justify-content-between mb-4"
      style="border-radius: 15px;">
     <div class="d-flex align-items-center">
@@ -19,14 +18,11 @@
 </div>
 
 @code {
-    [Parameter]
-    public DeploymentStatus? Status { get; set; }
+    [Parameter] public DeploymentStatus? Status { get; set; }
 
-    [Parameter]
-    public string? Message { get; set; }
+    [Parameter] public string? Message { get; set; }
 
-    [Parameter]
-    public string? WorkflowUrl { get; set; }
+    [Parameter] public string? WorkflowUrl { get; set; }
 
     private string DisplayMessage => !string.IsNullOrWhiteSpace(Message)
         ? Message
@@ -56,4 +52,5 @@
         DeploymentStatus.Stopped => "bi-stop-circle-fill",
         _ => "bi-github"
     };
+
 }

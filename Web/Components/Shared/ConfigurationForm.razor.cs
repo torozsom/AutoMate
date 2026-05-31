@@ -69,7 +69,7 @@ public partial class ConfigurationForm : ComponentBase
             Config.EnvironmentName = value;
 
             if (IsCloudDeployment)
-                ApplyCloudDefaults(overwriteOnlyEmptyFields: false, previousDefaults);
+                ApplyCloudDefaults(false, previousDefaults);
         }
     }
 
@@ -87,7 +87,7 @@ public partial class ConfigurationForm : ComponentBase
         _selectedEnvironment = Config.EnvironmentName;
 
         if (IsCloudDeployment)
-            ApplyCloudDefaults(overwriteOnlyEmptyFields: true);
+            ApplyCloudDefaults(true);
 
         if (Config.CustomEnvVars is not null)
             foreach (var kvp in Config.CustomEnvVars)
@@ -178,9 +178,9 @@ public partial class ConfigurationForm : ComponentBase
         var baseName = $"{resourceName}-{environmentSuffix}";
 
         return new CloudDefaults(
-            ResourceGroup: $"{baseName}-rg",
-            ContainerApp: $"{baseName}-app",
-            RegistryServer: "ghcr.io");
+            $"{baseName}-rg",
+            $"{baseName}-app",
+            "ghcr.io");
     }
 
 

@@ -50,7 +50,8 @@ public class LogHub(
 
             var app = await applicationService.GetAppByIdAsync(projectId, userId, Context.ConnectionAborted);
             if (app != null)
-                await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId), Context.ConnectionAborted);
+                await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
+                    Context.ConnectionAborted);
         }
         catch (CryptographicException ex)
         {
@@ -65,10 +66,14 @@ public class LogHub(
         if (projectId == Guid.Empty)
             return;
 
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId), Context.ConnectionAborted);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
+            Context.ConnectionAborted);
     }
 
 
     /// Generates a consistent group name for a given project ID, which is used to manage client subscriptions to log updates for that project.
-    internal static string GetProjectGroupName(Guid projectId) => $"project-{projectId}";
+    internal static string GetProjectGroupName(Guid projectId)
+    {
+        return $"project-{projectId}";
+    }
 }

@@ -38,11 +38,11 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A message to display global success notifications, such as successful deployments.
     private string? _globalSuccessMessage;
 
-    /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
-    private bool _isLoading = true;
-
     /// A flag indicating whether the current user has connected an Azure account.
     private bool _isAzureConnected;
+
+    /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
+    private bool _isLoading = true;
 
     /// The remote application currently selected for cloud deployment.
     private Application? _selectedCloudApp;
@@ -320,7 +320,8 @@ public partial class Dashboard : ComponentBase, IDisposable
                 {
                     await InvokeAsync(() =>
                     {
-                        _globalErrorMessage = $"Failed to start cloud deployment for '{finalConfig.ProjectName}': {ex.Message}";
+                        _globalErrorMessage =
+                            $"Failed to start cloud deployment for '{finalConfig.ProjectName}': {ex.Message}";
                         SetDeployingState(finalConfig.ProjectId, false);
                         StateHasChanged();
                     });
@@ -419,7 +420,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private bool IsDeployDisabled(Application app)
     {
-        return IsDeploying(app.Id) || app.SourceType == SourceType.Remote && !_isAzureConnected;
+        return IsDeploying(app.Id) || (app.SourceType == SourceType.Remote && !_isAzureConnected);
     }
 
 

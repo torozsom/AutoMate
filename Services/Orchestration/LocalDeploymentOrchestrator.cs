@@ -87,7 +87,8 @@ public partial class LocalDeploymentOrchestrator(
             logger.LogError(ex,
                 "[LocalDeploymentOrchestrator] Deployment failed during execution for project '{ProjectName}'.",
                 config.ProjectName);
-            await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Failed, cancellationToken);
+            await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
+                cancellationToken);
             throw;
         }
     }
@@ -266,7 +267,8 @@ public partial class LocalDeploymentOrchestrator(
             }
             finally
             {
-                if (ActiveLogStreams.TryGetValue(config.ProjectId, out var activeCts) && ReferenceEquals(activeCts, cts))
+                if (ActiveLogStreams.TryGetValue(config.ProjectId, out var activeCts) &&
+                    ReferenceEquals(activeCts, cts))
                     ActiveLogStreams.TryRemove(config.ProjectId, out _);
 
                 cts.Dispose();

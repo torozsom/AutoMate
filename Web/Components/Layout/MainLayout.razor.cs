@@ -8,11 +8,9 @@ public partial class MainLayout : LayoutComponentBase
     private bool _hasCheckedDocker;
     private bool? _isDockerRunning;
 
-    [Inject]
-    private IDockerService DockerService { get; set; } = null!;
+    [Inject] private IDockerService DockerService { get; set; } = null!;
 
-    [Inject]
-    private ILogger<MainLayout> Logger { get; set; } = null!;
+    [Inject] private ILogger<MainLayout> Logger { get; set; } = null!;
 
 
     /// <summary>

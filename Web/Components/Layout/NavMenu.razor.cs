@@ -7,11 +7,9 @@ public partial class NavMenu : ComponentBase
 {
     private bool _isDarkMode;
 
-    [Inject]
-    private IJSRuntime JS { get; set; } = null!;
+    [Inject] private IJSRuntime JS { get; set; } = null!;
 
-    [Inject]
-    private ILogger<NavMenu> Logger { get; set; } = null!;
+    [Inject] private ILogger<NavMenu> Logger { get; set; } = null!;
 
 
     /// <summary>

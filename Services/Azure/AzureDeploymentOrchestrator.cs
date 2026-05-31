@@ -1,12 +1,14 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Azure;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ManagedServiceIdentities;
-using Azure.ResourceManager.ManagedServiceIdentities.Models;
 using Azure.ResourceManager.Resources;
 using Core.DTO;
 using Microsoft.Extensions.Logging;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 
 namespace Services.Azure;
 
@@ -127,7 +129,7 @@ public class AzureDeploymentOrchestrator(
 
 
     /// <summary>
-    ///    Ensures the specified federated credential exists for the given user-assigned identity, creating it if necessary.
+    ///     Ensures the specified federated credential exists for the given user-assigned identity, creating it if necessary.
     /// </summary>
     /// <param name="identity">The user-assigned identity for which to ensure the federated credential exists.</param>
     /// <param name="credentialName">The name of the federated credential to ensure.</param>
@@ -179,7 +181,8 @@ public class AzureDeploymentOrchestrator(
         {
             properties = new
             {
-                roleDefinitionId = $"{scope}/providers/Microsoft.Authorization/roleDefinitions/{ContributorRoleDefinitionId}",
+                roleDefinitionId =
+                    $"{scope}/providers/Microsoft.Authorization/roleDefinitions/{ContributorRoleDefinitionId}",
                 principalId,
                 principalType = "ServicePrincipal"
             }
@@ -191,24 +194,25 @@ public class AzureDeploymentOrchestrator(
             return;
 
         var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (response.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.Unauthorized)
+        if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
             throw new InvalidOperationException(
                 "AutoMate created the Azure managed identity, but the connected Azure account cannot assign the Contributor role to it. " +
                 "Connect with an account that has Owner or User Access Administrator rights on the resource group/subscription, " +
-                "or manually assign Contributor to the managed identity before redeploying. Azure response: " + responseText);
+                "or manually assign Contributor to the managed identity before redeploying. Azure response: " +
+                responseText);
 
         response.EnsureSuccessStatusCode();
     }
 
 
     /// <summary>
-    ///    Creates a deterministic GUID based on the input string using SHA-256 hashing.
+    ///     Creates a deterministic GUID based on the input string using SHA-256 hashing.
     /// </summary>
     /// <param name="value">The input string for which to create a deterministic GUID.</param>
     /// <returns>The deterministic GUID.</returns>
     private static Guid CreateDeterministicGuid(string value)
     {
-        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return new Guid(bytes[..16]);
     }
 

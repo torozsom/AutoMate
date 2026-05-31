@@ -1,5 +1,5 @@
-using System.Security.Claims;
 using System.Globalization;
+using System.Security.Claims;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
@@ -52,9 +52,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
 
-    /// The actual host port currently bound to the web container.
-    private int _webHostPort;
-
     /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
     private HubConnection? _hubConnection;
 
@@ -74,14 +71,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A boolean flag to control the visibility of the deployment configuration modal.
     private bool _showConfigModal;
 
+    /// The actual host port currently bound to the web container.
+    private int _webHostPort;
+
     /// A nullable variable to hold the terminal instance for displaying web container logs.
     private Terminal? _webTerminal;
 
-    /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
-    private string? _workflowUrl;
-
     /// A short workflow status message displayed for remote cloud deployments.
     private string? _workflowStatusMessage;
+
+    /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
+    private string? _workflowUrl;
 
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
@@ -244,20 +244,27 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Renders the deployment configuration modal when enough state is available.
     /// </summary>
-    private RenderFragment RenderConfigurationForm() => builder =>
+    private RenderFragment RenderConfigurationForm()
     {
-        if (!_showConfigModal || _currentDeployConfig is null || _selectedProjectPath is null)
-            return;
+        return builder =>
+        {
+            if (!_showConfigModal || _currentDeployConfig is null || _selectedProjectPath is null)
+                return;
 
-        builder.OpenComponent<ConfigurationForm>(0);
-        builder.AddAttribute(1, nameof(ConfigurationForm.Config), _currentDeployConfig);
-        builder.AddAttribute(2, nameof(ConfigurationForm.ProjectPath), _selectedProjectPath);
-        builder.AddAttribute(3, nameof(ConfigurationForm.IsCloudDeployment), _currentDeployConfig.IsCloudDeployment);
-        builder.AddAttribute(4, nameof(ConfigurationForm.OnCancel), EventCallback.Factory.Create(this, HideConfigModal));
-        builder.AddAttribute(5, nameof(ConfigurationForm.OnDeployConfirmed),
-            EventCallback.Factory.Create<DeploymentConfigDto>(this, ExecuteDeploymentAsync));
-        builder.CloseComponent();
-    };
+            builder.OpenComponent<ConfigurationForm>(0);
+
+            builder.AddAttribute(1, nameof(ConfigurationForm.Config), _currentDeployConfig);
+            builder.AddAttribute(2, nameof(ConfigurationForm.ProjectPath), _selectedProjectPath);
+            builder.AddAttribute(3, nameof(ConfigurationForm.IsCloudDeployment),
+                _currentDeployConfig.IsCloudDeployment);
+            builder.AddAttribute(4, nameof(ConfigurationForm.OnCancel),
+                EventCallback.Factory.Create(this, HideConfigModal));
+            builder.AddAttribute(5, nameof(ConfigurationForm.OnDeployConfirmed),
+                EventCallback.Factory.Create<DeploymentConfigDto>(this, ExecuteDeploymentAsync));
+
+            builder.CloseComponent();
+        };
+    }
 
 
     /// <summary>
@@ -298,7 +305,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 await InvokeAsync(async () =>
                 {
                     _isDeploying = false;
-                    await RefreshProjectAsync(resolveWebPortWithRetry: true);
+                    await RefreshProjectAsync(true);
                     StateHasChanged();
                 });
             }
@@ -363,7 +370,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Failed to execute cloud deployment for project {ProjectId}", finalConfig.ProjectId);
+                Logger.LogError(ex, "Failed to execute cloud deployment for project {ProjectId}",
+                    finalConfig.ProjectId);
                 await InvokeAsync(() =>
                 {
                     _workflowStatusMessage = $"Cloud deployment failed to start: {ex.Message}";
@@ -439,12 +447,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (latestDeployment != null)
             {
                 latestDeployment.Status = status;
-                await UpdateWebHostPortAsync(maxAttempts: status == DeploymentStatus.Running ? 6 : 1);
+                await UpdateWebHostPortAsync(status == DeploymentStatus.Running ? 6 : 1);
                 await InvokeAsync(StateHasChanged);
             }
             else
             {
-                await RefreshProjectAsync(resolveWebPortWithRetry: status == DeploymentStatus.Running);
+                await RefreshProjectAsync(status == DeploymentStatus.Running);
             }
         }
     }

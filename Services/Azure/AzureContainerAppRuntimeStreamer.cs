@@ -110,7 +110,7 @@ public class AzureContainerAppRuntimeStreamer(
 
 
     /// <summary>
-    ///   Retrieves the current state of the Azure Container App, including the latest ready revision and FQDN.
+    ///     Retrieves the current state of the Azure Container App, including the latest ready revision and FQDN.
     /// </summary>
     /// <param name="resourceId">The Azure resource ID of the container app.</param>
     /// <param name="accessToken">The access token for authenticating with the Azure API.</param>
@@ -145,7 +145,6 @@ public class AzureContainerAppRuntimeStreamer(
     /// <param name="accessToken">The access token for authenticating with the Azure API.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The current metrics of the container app, or null if an error occurred.</returns>
-
     private async Task<ContainerAppMetrics?> GetContainerAppMetricsAsync(string resourceId, string accessToken,
         CancellationToken cancellationToken)
     {
@@ -190,7 +189,6 @@ public class AzureContainerAppRuntimeStreamer(
     /// <param name="accessToken">The access token for authenticating with the Azure API.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     /// <returns>The parsed JSON document, or null if an error occurred.</returns>
-
     private async Task<JsonDocument?> SendAzureRequestAsync(string requestUri, string accessToken,
         CancellationToken cancellationToken)
     {
@@ -208,7 +206,7 @@ public class AzureContainerAppRuntimeStreamer(
 
 
     /// <summary>
-    ///    Extracts the latest average value from the metric timeseries data.
+    ///     Extracts the latest average value from the metric timeseries data.
     /// </summary>
     /// <param name="metric">The metric element containing timeseries data.</param>
     /// <returns>The latest average value, or null if not found.</returns>
@@ -240,7 +238,9 @@ public class AzureContainerAppRuntimeStreamer(
     /// <returns>The value of the property, or an empty string if not found or null.</returns>
     private static string GetString(JsonElement element, string propertyName)
     {
-        return element.TryGetProperty(propertyName, out var property) ? property.GetString() ?? string.Empty : string.Empty;
+        return element.TryGetProperty(propertyName, out var property)
+            ? property.GetString() ?? string.Empty
+            : string.Empty;
     }
 
 
@@ -267,7 +267,8 @@ public class AzureContainerAppRuntimeStreamer(
     private static string BuildContainerAppResourceId(string subscriptionId, string resourceGroupName,
         string containerAppName)
     {
-        return $"/subscriptions/{Uri.EscapeDataString(subscriptionId)}/resourceGroups/{Uri.EscapeDataString(resourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(containerAppName)}";
+        return
+            $"/subscriptions/{Uri.EscapeDataString(subscriptionId)}/resourceGroups/{Uri.EscapeDataString(resourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(containerAppName)}";
     }
 
 

@@ -28,7 +28,8 @@
         {
             <div class="project-actions">
                 @{ var isDeploying = IsDeploying(); }
-                <button class="btn btn-success action-button" @onclick="DeployProjectAsync" disabled="@(isDeploying || _isStopping)">
+                <button class="btn btn-success action-button" @onclick="DeployProjectAsync"
+                        disabled="@(isDeploying || _isStopping)">
                     @if (isDeploying)
                     {
                         <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -140,7 +141,8 @@
                     <h2 class="monitoring-title">Logs and metrics</h2>
                 </div>
                 <div class="monitoring-state">
-                    <span class="state-dot @(GetLatestStatus() == DeploymentStatus.Running ? "state-dot-running" : "")"></span>
+                    <span
+                        class="state-dot @(GetLatestStatus() == DeploymentStatus.Running ? "state-dot-running" : "")"></span>
                     <span>@(GetLatestStatus()?.ToString() ?? "Not deployed")</span>
                 </div>
             </div>
@@ -150,7 +152,8 @@
                 var currentContainer = _metricContainerNames[_currentMetricIndex];
                 var metrics = _containerMetrics[currentContainer];
                 <div class="metrics-panel mb-4">
-                    <button class="btn metric-nav-button" @onclick="PreviousMetric" aria-label="Previous container metrics">
+                    <button class="btn metric-nav-button" @onclick="PreviousMetric"
+                            aria-label="Previous container metrics">
                         <i class="bi bi-chevron-left"></i>
                     </button>
 
@@ -159,7 +162,8 @@
                             <span class="container-initial">@GetContainerInitial(currentContainer)</span>
                             <div class="min-w-0">
                                 <div class="metric-label">Container</div>
-                                <div class="container-name text-truncate" title="@currentContainer">@currentContainer</div>
+                                <div class="container-name text-truncate"
+                                     title="@currentContainer">@currentContainer</div>
                             </div>
                         </div>
                     </div>
