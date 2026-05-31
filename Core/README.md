@@ -1,72 +1,120 @@
 # Core
 
-The `Core` project is the domain contract of AutoMate.  
-It contains the shared model used by both `Services` and `Web`, with no dependencies on those outer layers.
+`Core` is AutoMate's domain contract project.
+
+It contains framework-neutral entities, DTOs, and enums shared by `Services` and `Web`. It should remain independent from persistence, UI, Docker, GitHub, Azure, and ASP.NET-specific concerns.
 
 ---
 
 ## Responsibilities
 
-- define **domain entities** persisted by EF Core in the Services layer
-- define **DTOs** used for data exchange between services and UI
-- define **enums** that standardize source and deployment state
+- Define persisted domain entities.
+- Define DTOs used by scanners, orchestrators, API calls, and Blazor components.
+- Define enums for standardized source and deployment state.
+- Keep shared contracts stable and infrastructure-free.
 
-`Core` does **not** implement infrastructure, HTTP endpoints, Docker operations, or UI behavior.
-
----
-
-## Directory map
-
-### `Entities/`
-
-Domain model classes:
-
-- `BaseEntity`  
-  Common base with `Id`, `CreatedAt`, `UpdatedAt`.
-
-- `User` hierarchy
-    - `LocalUser`: password hash + email verification token/expiry
-    - `GitHubUser`: external account ID, avatar URL, GitHub access token
-
-- Project model
-    - `Project`: owner, source type/path, app type, child C# projects
-    - `CsProject`: individual `.csproj` unit, web project flag, deployment history
-    - `LocalProjectConfig`: deployment defaults (port, db requirement, visibility, env var JSON)
-
-- Deployment model
-    - `Deployment`: runtime status and Docker identity (`ImageTag`, `DockerContainerId`)
-
-### `DTO/`
-
-Transport records/classes used by scanner/orchestration/UI flows:
-
-- `LocalProjectDto`, `CsProjectDto` for scanner results
-- `ProjectMetadataDto` for parsed `.csproj` graph metadata
-- `DeploymentConfigDto` and `DatabaseConfigDto` for deployment setup
-- `GitHubRepositoryDto` for GitHub API repository payloads
-- `DbProviderRuleDto`, `TemplateManifestRuleDto` for scanner/template config
-
-### `Enums/`
-
-- `SourceType`: `Local`, `Remote`
-- `AppType`: `WebApi`, `Blazor`, `Mvc`
-- `DeploymentStatus`: `Starting`, `Running`, `Stopped`, `Failed`
+`Core` does not configure EF Core, call external APIs, render UI, or run deployments.
 
 ---
 
-## How Core is used in the solution
+## Entity Model
 
-- `Services` maps entities to PostgreSQL with EF Core.
-- `Services.Scanner` produces DTOs defined here.
-- `Services.Orchestration` consumes deployment DTOs/status enums.
-- `Web` uses entities/DTOs for UI rendering and component state.
+### Base
+
+| Entity | Purpose |
+|---|---|
+| `BaseEntity` | Common `Id`, `CreatedAt`, and `UpdatedAt` fields |
+
+### Users
+
+| Entity | Purpose |
+|---|---|
+| `User` | Abstract user root with username, email, and owned applications |
+| `LocalUser` | Local account data, password hash, email verification state |
+| `RemoteUser` | GitHub-authenticated user with GitHub and Azure OAuth linkage |
+
+`RemoteUser` can store:
+
+- GitHub account ID, avatar URL, and access token
+- Azure account ID, tenant ID, subscription ID
+- Azure access and refresh tokens
+- Azure token expiration timestamp
+
+Sensitive token encryption is configured in `Services`, not here.
+
+### Projects and Deployment
+
+| Entity | Purpose |
+|---|---|
+| `Application` | A user-owned source project, either local or remote |
+| `CsProject` | A discovered `.csproj` entry within an application |
+| `Configuration` | Persisted deployment configuration for a C# project |
+| `Deployment` | Runtime deployment record and cloud/local deployment metadata |
+
+`Deployment` tracks status, Docker image/container identifiers, cloud GitHub Actions run IDs, Container Apps revision, and generated app URL data.
 
 ---
 
-## Design boundary
+## DTO Map
 
-Keep `Core` stable and framework-neutral:
+### Project Discovery and Metadata
 
-- no ASP.NET, EF configuration, Docker, or external API clients
-- model-first changes only (state + contracts)
-- changes in `Core` should be intentional because they affect all other projects
+| DTO | Purpose |
+|---|---|
+| `LocalProjectDto` | Local repository/project discovery result |
+| `CsProjectDto` | Discovered C# project descriptor |
+| `ProjectMetadataDto` | Parsed project metadata, target framework, references, web flag |
+| `GitHubRepositoryDto` | GitHub repository API payload |
+
+### Deployment Configuration
+
+| DTO | Purpose |
+|---|---|
+| `DeploymentConfigDto` | User-confirmed deployment configuration |
+| `DatabaseConfigDto` | Database engine, credentials, and connection-string binding |
+| `TemplateFile` | Generated deployment artifact path/content pair |
+| `TemplateManifestRuleDto` | Template manifest entry for local/cloud generation |
+| `DbProviderRuleDto` | Database provider detection rule |
+
+### Cloud Deployment
+
+| DTO | Purpose |
+|---|---|
+| `CloudDeploymentRequestDto` | End-to-end cloud deployment orchestration request |
+| `AzureCloudCredentialsDto` | Connected Azure tenant/subscription/access-token data |
+| `AzureOidcSetupResultDto` | GitHub Actions OIDC values and diagnostic Azure identity metadata |
+| `GitHubWorkflowRunDto` | GitHub Actions run status tracked by AutoMate |
+
+---
+
+## Enums
+
+| Enum | Values | Purpose |
+|---|---|---|
+| `SourceType` | `Local`, `Remote` | Distinguishes filesystem and GitHub-backed projects |
+| `AppType` | `WebApi`, `Blazor`, `Mvc` | Classifies supported .NET web project styles |
+| `DeploymentStatus` | `Starting`, `Running`, `Stopped`, `Failed` | Shared deployment lifecycle state |
+
+---
+
+## Layer Boundary
+
+Keep `Core` intentionally small and stable:
+
+- no EF Core fluent configuration
+- no ASP.NET abstractions
+- no SignalR, Docker, GitHub, Azure, Redis, or SMTP dependencies
+- no service implementations
+- no UI state
+
+Changes in this project affect the full solution, so model changes should be explicit and coordinated with `Services` and `Web`.
+
+---
+
+## How Other Projects Use Core
+
+- `Services.Data` maps entities to PostgreSQL through EF Core.
+- `Services.Scanner` produces project metadata DTOs.
+- `Services.Templating` consumes deployment config and metadata DTOs.
+- `Services.Orchestration` coordinates local and cloud deployments through shared request/status DTOs.
+- `Web` uses entities and DTOs for Blazor component state, forms, and pages.

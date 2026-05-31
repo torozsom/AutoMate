@@ -1,114 +1,253 @@
 # Services
 
-The `Services` project is the application backend layer of AutoMate.  
-It implements business workflows, infrastructure adapters, and deployment orchestration on top of `Core`.
+`Services` is AutoMate's application and infrastructure layer.
+
+It implements business workflows, persistence, scanning, templating, external integrations, and deployment orchestration on top of the domain contracts from `Core`.
 
 ---
 
 ## Responsibilities
 
-- persist users/projects/deployments in PostgreSQL via EF Core
-- handle local + GitHub user auth flows and email verification
-- scan local repositories and analyze `.csproj` dependency graphs
-- generate deployment artifacts from templates
-- run Docker Compose operations and stream runtime telemetry
-- expose orchestration services consumed by the Blazor UI
+- Persist users, applications, C# projects, configurations, and deployments with EF Core.
+- Manage local, GitHub, and Azure-linked user data.
+- Discover local repositories and analyze `.NET` projects.
+- Render local and cloud deployment artifacts from templates.
+- Run Docker Compose deployments for local projects.
+- Prepare GitHub Actions based Azure Container Apps deployments for remote repositories.
+- Configure Azure managed identity, OIDC federation, resource providers, and RBAC.
+- Call GitHub APIs for repositories, workflow runs, logs, commits, and secrets.
+- Stream deployment logs and metrics through the `ILogStreamer` abstraction.
 
 ---
 
-## Module map
+## Module Map
 
 ### `Auth/`
 
-- `IAuthService`, `AuthService`
-- Local registration and login
-- Email verification token lifecycle
-- GitHub user creation/update during OAuth ticket processing
+Implements account lifecycle logic:
+
+- local registration and login
+- email verification token lifecycle
+- GitHub user creation/update during OAuth
+- Azure account linking after Microsoft OAuth
+
+Main types:
+
+- `IAuthService`
+- `AuthService`
 
 ### `Data/`
 
-- `AutoMateDbContext` with:
-    - user TPH discriminator (`local` / `github`)
-    - encrypted `GitHubUser.AccessToken` via Data Protection
-    - cascade relationships (`User -> Project -> CsProject -> Deployment`)
-    - audit timestamp updates on save
-- `Projects/ProjectService`: save/list/delete local and GitHub project entries
-- `Users/UserService`: resolve internal IDs and GitHub-linked user context
+EF Core and user/application persistence.
+
+`AutoMateDbContext` configures:
+
+- TPH user inheritance (`local`, `github`)
+- encrypted GitHub and Azure OAuth token columns through Data Protection
+- `User -> Application -> CsProject -> Deployment` cascade relationships
+- deployment/configuration relationships
+- audit timestamp updates on save
+
+Submodules:
+
+- `Data/Apps` - application/project persistence
+- `Data/Users` - user lookup, GitHub token access, Azure credential retrieval
+- `Migrations` - schema history
 
 ### `GitHub/`
 
-- `GitHubService` calls GitHub `user/repos`
-- distributed cache (Redis) keyed by hashed access token
-- refresh-on-demand support (`forceRefresh`)
+GitHub API integration.
 
-### `Email/`
+Capabilities:
 
-- `GmailSenderService` (MailKit SMTP)
-- used by registration verification flow
-- configured through `EmailOptions`
+- list authenticated user's repositories
+- cache repository data in Redis using a hashed token cache key
+- create/update GitHub repository secrets
+- commit generated cloud deployment files to a deployment branch
+- dispatch and poll workflow runs
+- download workflow logs as zip archives and stream them back to the UI
 
-### `Scanner/`
+Main types:
 
-- `LocalSystemScannerService`:
-    - recursively scans paths for Git repos
-    - skips symlinks/hidden/build output folders
-    - detects `.sln`, `.slnx`, `.csproj`
-- `ProjectScannerService`:
-    - parses `.csproj` + project references recursively
-    - detects database dependencies from `database-providers.json`
-    - extracts env vars from config files (`appsettings`, `launchSettings`, `.env`)
+- `IGitHubService`
+- `GitHubService`
 
-### `Templating/`
+### `Azure/`
 
-- `TemplatingService` with Scriban templates
-- reads `Templates/template-manifest.json`
-- generates:
-    - `Dockerfile`
-    - `Dockerfile.dockerignore`
-    - `docker-compose.yml`
+Azure deployment preparation and runtime streaming.
+
+Capabilities:
+
+- create or update Azure resource groups
+- create or update user-assigned managed identities
+- register required Azure resource providers:
+  - `Microsoft.App`
+  - `Microsoft.OperationalInsights`
+- configure GitHub Actions OIDC federated credentials
+- assign Contributor to the workflow identity at resource group scope
+- stream Azure Container Apps runtime logs/metadata after successful deployment
+
+Important implementation notes:
+
+- OIDC federation uses exact GitHub issuer/subject/audience matching.
+- Federated credentials are created through ARM REST to preserve the issuer string exactly.
+- GitHub Actions receives only repository secrets needed for OIDC login and GHCR pull.
+
+Main types:
+
+- `IAzureDeploymentOrchestrator`
+- `AzureDeploymentOrchestrator`
+- `IAzureContainerAppRuntimeStreamer`
+- `AzureContainerAppRuntimeStreamer`
+- `StaticAccessTokenCredential`
 
 ### `Docker/`
 
-- `DockerService` with Docker.DotNet + `docker` CLI integration
-- ping daemon, compose up/down, running project detection
-- container log and metrics streaming
-- host port lookup for running web containers
+Local Docker integration.
+
+Capabilities:
+
+- check Docker daemon availability
+- run Compose deployments
+- stop local deployments
+- stream container logs
+- stream lightweight container metrics
+- resolve mapped host ports for web containers
+
+Main types:
+
+- `IDockerService`
+- `DockerService`
+- `DockerOptions`
+
+### `Scanner/`
+
+Local project discovery and project analysis.
+
+Capabilities:
+
+- recursively scan local paths for Git repositories
+- ignore hidden/build/system folders
+- detect `.sln`, `.slnx`, and `.csproj`
+- parse project metadata and project references
+- detect database provider usage from `database-providers.json`
+- extract environment variables from common configuration files
+
+Main types:
+
+- `ILocalSystemScannerService`
+- `LocalSystemScannerService`
+- `IProjectScannerService`
+- `ProjectScannerService`
+
+### `Templating/`
+
+Deployment artifact generation.
+
+Capabilities:
+
+- read `Templates/template-manifest.json`
+- render Scriban templates
+- generate local Docker artifacts
+- generate cloud Docker, Bicep, and GitHub Actions artifacts
+
+Templates:
+
+- `Dockerfile.scriban`
+- `dockerignore.scriban`
+- `docker-compose.scriban`
+- `azure-aca.bicep.scriban`
+- `github-actions.yml.scriban`
 
 ### `Orchestration/`
 
-- `LocalDeploymentOrchestrator`:
-    1. locate solution root
-    2. scan metadata/dependencies
-    3. generate deployment files under `.automate/`
-    4. run `docker compose up`
-    5. persist status transitions and start stream tasks
-- `DeploymentStatusNotifier`: in-process status event bridge
-- `DeploymentCleanupHostedService`: startup sync of deployment status with actual Docker state
+Deployment workflow coordination.
+
+Local workflow:
+
+1. load project metadata
+2. apply deployment configuration
+3. generate `.automate` artifacts
+4. run Docker Compose
+5. persist deployment state
+6. start log/metric streaming
+
+Cloud workflow:
+
+1. prepare Azure OIDC trust and resource provider registration
+2. upsert GitHub repository secrets
+3. generate cloud deployment artifacts
+4. commit artifacts to `automate/azure-deployment`
+5. poll GitHub Actions run state
+6. download workflow logs on completion
+7. start Azure runtime streaming after successful deployment
+
+Main types:
+
+- `ILocalDeploymentOrchestrator`
+- `LocalDeploymentOrchestrator`
+- `ICloudDeploymentOrchestrator`
+- `CloudDeploymentOrchestrator`
+- `IDeploymentStatusNotifier`
+- `DeploymentStatusNotifier`
+- `DeploymentCleanupHostedService`
 
 ### `LogStreaming/`
 
-- `ILogStreamer` abstraction for real-time log/metric publishing
-- implemented in `Web` by SignalR-backed `RealTimeLogStreamer`
+Defines a presentation-independent log streaming contract.
 
-### `Migrations/`
+`Web` implements this contract with SignalR.
 
-- EF Core migration history for schema evolution
+Main type:
+
+- `ILogStreamer`
+
+### `Email/`
+
+SMTP email integration for account verification.
+
+Main types:
+
+- `IEmailSenderService`
+- `GmailSenderService`
+- `EmailOptions`
 
 ---
 
-## End-to-end deployment flow (local project)
+## Design Patterns and Approaches
 
-1. UI requests deployment for a selected local web project.
-2. Scanner analyzes project metadata and inferred DB dependencies.
-3. User confirms generated config (ports, DB entries, env vars).
-4. Templating writes deployment files into `.automate`.
-5. Docker service runs compose and streams build/container telemetry.
-6. Deployment status is updated and broadcast to UI subscribers.
+- **Interface-first orchestration:** external effects sit behind service interfaces.
+- **Dependency inversion:** UI components depend on contracts, not concrete deployment logic.
+- **Template manifest routing:** local and cloud templates are selected through metadata, not hardcoded calls.
+- **Provider adapters:** GitHub, Azure, Docker, SMTP, and EF Core integrations are isolated in dedicated modules.
+- **Resilient HTTP:** GitHub HTTP client is registered with standard resilience handling.
+- **Encrypted token persistence:** OAuth tokens are protected with ASP.NET Core Data Protection.
+- **Hosted lifecycle work:** cleanup/reconciliation uses `IHostedService`.
+- **Real-time event bridge:** deployment status changes are broadcast through an in-process notifier and streamed through SignalR.
 
 ---
 
-## Notes for contributors
+## Cloud Deployment Security Model
 
-- Interfaces are first-class contracts; keep implementations behind DI boundaries.
-- Treat scanner/template behavior as part of deployment compatibility.
-- Avoid coupling this layer to Blazor component concerns.
+AutoMate does not store Azure client secrets for deployment.
+
+Instead:
+
+- the user connects Azure with Microsoft OAuth
+- AutoMate uses the delegated Azure token to prepare resources
+- GitHub Actions authenticates to Azure with OIDC
+- an Azure user-assigned managed identity receives scoped Contributor access
+- generated GitHub repository secrets contain OIDC login IDs and GHCR credentials
+
+This avoids long-lived Azure service principal secrets in GitHub repositories.
+
+---
+
+## Contributor Notes
+
+- Keep orchestration logic in this project, not in Blazor components.
+- Keep all external API clients behind interfaces.
+- Add new deployment templates through `Templating/Templates` and `template-manifest.json`.
+- Update `Core` only when shared contracts actually change.
+- Do not add UI-specific dependencies to `Services`.
+- Do not spawn manual background timer threads; use hosted services.
