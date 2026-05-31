@@ -41,6 +41,27 @@ public static class ServiceConfiguration
     private const string AzureConnectionRedirectUri = "/dashboard";
     private const string AzureManagementScope = "https://management.azure.com/.default";
     private const string AzureSubscriptionsApiVersion = "2022-12-01";
+    private const string DefaultMicrosoftAuthorityTenant = "organizations";
+
+
+    /// <summary>
+    ///     Resolves the Microsoft identity authority tenant used for Azure account connection.
+    /// </summary>
+    /// <param name="configuredTenant">The optional tenant configured for local development or single-tenant installs.</param>
+    /// <returns>The configured tenant, or a multi-tenant organizations authority by default.</returns>
+    private static string GetMicrosoftAuthorityTenant(string? configuredTenant)
+    {
+        if (string.IsNullOrWhiteSpace(configuredTenant))
+            return DefaultMicrosoftAuthorityTenant;
+
+        var tenant = configuredTenant.Trim();
+        return tenant.Equals("common", StringComparison.OrdinalIgnoreCase) ||
+               tenant.Equals("organizations", StringComparison.OrdinalIgnoreCase) ||
+               tenant.Equals("consumers", StringComparison.OrdinalIgnoreCase) ||
+               Guid.TryParse(tenant, out _)
+            ? tenant
+            : DefaultMicrosoftAuthorityTenant;
+    }
 
 
     /// <summary>
@@ -435,7 +456,7 @@ public static class ServiceConfiguration
                 })
                 .AddOAuth("Microsoft", options =>
                 {
-                    var tenantId = config["Authentication:Microsoft:TenantId"] ?? "common";
+                    var tenantId = GetMicrosoftAuthorityTenant(config["Authentication:Microsoft:TenantId"]);
 
                     options.ClientId = config["Authentication:Microsoft:ClientId"]
                                        ?? throw new InvalidOperationException(

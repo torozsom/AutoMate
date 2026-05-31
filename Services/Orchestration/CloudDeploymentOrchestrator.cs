@@ -72,7 +72,8 @@ public class CloudDeploymentOrchestrator(
             var oidcSetup = await azureDeploymentOrchestrator.EnsureFederatedIdentityAsync(request.AzureCredentials,
                 config, request.RepositoryOwner, request.RepositoryName, request.BranchName, cancellationToken);
 
-            await StreamBuildLogAsync(config.ProjectId, "Azure OIDC trust configured for GitHub Actions.");
+            await StreamBuildLogAsync(config.ProjectId,
+                $"Azure OIDC trust configured for GitHub Actions. Identity: {oidcSetup.IdentityResourceId}. Federated credential: {oidcSetup.FederatedCredentialName}. Subject: {oidcSetup.Subject}. Audience: {oidcSetup.Audience}.");
 
             if (string.IsNullOrWhiteSpace(oidcSetup.ClientId) ||
                 string.IsNullOrWhiteSpace(oidcSetup.TenantId) ||

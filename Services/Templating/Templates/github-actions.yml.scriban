@@ -18,6 +18,7 @@ env:
   AZURE_LOCATION: {{ azure_location }}
   CONTAINER_APP_NAME: {{ container_app_name }}
   CONTAINER_IMAGE: ghcr.io/${{ "{{" }} github.repository_owner {{ "}}" }}/{{ image_name }}:${{ "{{" }} github.sha {{ "}}" }}
+  AZURE_CORE_OUTPUT: none
 
 jobs:
   deploy:
@@ -40,9 +41,16 @@ jobs:
       - name: Push image
         run: docker push "$CONTAINER_IMAGE"
 
+      - name: Show expected Azure OIDC context
+        run: |
+          echo "GitHub repository: $GITHUB_REPOSITORY"
+          echo "GitHub ref: $GITHUB_REF"
+          echo "Expected subject: repo:${GITHUB_REPOSITORY}:ref:${GITHUB_REF}"
+          echo "Expected audience: api://AzureADTokenExchange"
+
       - name: Azure login
         id: azure_login
-        uses: azure/login@v2
+        uses: azure/login@v3
         continue-on-error: true
         with:
           auth-type: SERVICE_PRINCIPAL
@@ -56,7 +64,7 @@ jobs:
 
       - name: Retry Azure login
         if: steps.azure_login.outcome == 'failure'
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           auth-type: SERVICE_PRINCIPAL
           client-id: ${{ "{{" }} secrets.AZURE_CLIENT_ID {{ "}}" }}
