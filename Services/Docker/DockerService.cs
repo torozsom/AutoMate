@@ -106,7 +106,9 @@ public partial class DockerService : IDockerService, IDisposable
 
             await CreateTarContextAsync(sourcePath, tempTarFilePath, cancellationToken);
 
-            await using var fileStream = new FileStream(tempTarFilePath, FileMode.Open, FileAccess.Read);
+            await using var fileStream = new FileStream(tempTarFilePath, FileMode.Open, FileAccess.Read,
+                FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
             var buildParameters = new ImageBuildParameters { Tags = [imageTag] };
             var buildErrorOccurred = false;
 
@@ -136,8 +138,7 @@ public partial class DockerService : IDockerService, IDisposable
         }
         finally
         {
-            if (File.Exists(tempTarFilePath))
-                File.Delete(tempTarFilePath);
+            DeleteTempFile(tempTarFilePath);
         }
     }
 
@@ -237,16 +238,7 @@ public partial class DockerService : IDockerService, IDisposable
             "[DockerService] Starting 'docker compose down' for project '{ProjectName}' in {Directory}",
             safeProjectName, workingDir);
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "docker",
-            Arguments = $"compose -p {safeProjectName} down",
-            WorkingDirectory = workingDir,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var startInfo = CreateDockerComposeStartInfo(workingDir, safeProjectName, "down");
 
         return await ExecuteProcessStreamingLogsAsync(startInfo, projectId, cancellationToken);
     }
@@ -259,15 +251,11 @@ public partial class DockerService : IDockerService, IDisposable
     /// <returns>A list of project names that are currently running.</returns>
     public async Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "docker",
-            Arguments = "compose ls --format json",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        var startInfo = CreateDockerProcessStartInfo();
+        startInfo.ArgumentList.Add("compose");
+        startInfo.ArgumentList.Add("ls");
+        startInfo.ArgumentList.Add("--format");
+        startInfo.ArgumentList.Add("json");
 
         using var process = new Process();
         process.StartInfo = startInfo;
@@ -281,14 +269,14 @@ public partial class DockerService : IDockerService, IDisposable
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
             var outputTask = process.StandardOutput.ReadToEndAsync(linkedCts.Token);
+            var errorTask = process.StandardError.ReadToEndAsync(linkedCts.Token);
             await process.WaitForExitAsync(linkedCts.Token);
 
             var output = await outputTask;
+            var error = await errorTask;
 
             if (process.ExitCode != 0)
             {
-                // If the command fails, log the error and return an empty list
-                var error = await process.StandardError.ReadToEndAsync(CancellationToken.None);
                 _logger.LogWarning("[DockerService] 'docker compose ls' failed. Exit Code: {Code}, Error: {Error}",
                     process.ExitCode, error);
                 return [];
@@ -398,14 +386,11 @@ public partial class DockerService : IDockerService, IDisposable
             _logger.LogInformation("[DockerService] Starting to stream metrics for container '{ContainerName}'",
                 containerName);
 
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "docker",
-                Arguments = $"stats {containerName} --format \"{{{{.CPUPerc}}}}|{{{{.MemUsage}}}}\"",
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
+            var startInfo = CreateDockerProcessStartInfo(false);
+            startInfo.ArgumentList.Add("stats");
+            startInfo.ArgumentList.Add(containerName);
+            startInfo.ArgumentList.Add("--format");
+            startInfo.ArgumentList.Add("{{.CPUPerc}}|{{.MemUsage}}");
 
             using var process = Process.Start(startInfo);
             if (process == null) return;
@@ -429,7 +414,11 @@ public partial class DockerService : IDockerService, IDisposable
             {
                 // Read each line of output, which contains the CPU and memory usage separated by '|'
                 var line = await reader.ReadLineAsync(cancellationToken);
-                if (string.IsNullOrWhiteSpace(line)) continue;
+                if (line == null)
+                    break;
+
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
 
                 line = MetricsRegex().Replace(line, "");
                 var parts = line.Split('|');
@@ -465,12 +454,9 @@ public partial class DockerService : IDockerService, IDisposable
     {
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "docker",
-                Arguments = $"port {containerName}",
-                RedirectStandardOutput = true, UseShellExecute = false, CreateNoWindow = true
-            };
+            var startInfo = CreateDockerProcessStartInfo(false);
+            startInfo.ArgumentList.Add("port");
+            startInfo.ArgumentList.Add(containerName);
 
             using var process = new Process();
             process.StartInfo = startInfo;
@@ -544,7 +530,7 @@ public partial class DockerService : IDockerService, IDisposable
             if (process.ExitCode != 0)
             {
                 _logger.LogError("[DockerService] Process failed with exit code {Code}. Command: {Cmd}",
-                    process.ExitCode, startInfo.Arguments);
+                    process.ExitCode, CreateProcessCommandDescription(startInfo));
                 return false;
             }
 
@@ -553,7 +539,7 @@ public partial class DockerService : IDockerService, IDisposable
         catch (OperationCanceledException ex)
         {
             _logger.LogError("[DockerService] Process timed out or was cancelled. Command: {Cmd}," +
-                             " Exception: {Ex}", startInfo.Arguments, ex.Message);
+                             " Exception: {Ex}", CreateProcessCommandDescription(startInfo), ex.Message);
             if (!process.HasExited)
                 process.Kill(true);
             return false;
@@ -561,7 +547,7 @@ public partial class DockerService : IDockerService, IDisposable
         catch (Exception ex)
         {
             _logger.LogCritical(ex, "[DockerService] Critical error launching process. Command: {Cmd}",
-                startInfo.Arguments);
+                CreateProcessCommandDescription(startInfo));
             return false;
         }
     }
@@ -596,11 +582,13 @@ public partial class DockerService : IDockerService, IDisposable
         }
 
         // Create the tar file and write entries while respecting the ignore rules
-        await using var fileStream = new FileStream(targetTarFilePath, FileMode.Create, FileAccess.Write);
+        await using var fileStream = new FileStream(targetTarFilePath, FileMode.Create, FileAccess.Write,
+            FileShare.None, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
         await using var tarWriter = new TarWriter(fileStream);
 
         // Enumerate all files in the source directory and its subdirectories, and write them to the tar file if they are not ignored
-        var allFiles = Directory.EnumerateFiles(sourceDirectory, "*.*", SearchOption.AllDirectories);
+        var allFiles = Directory.EnumerateFiles(sourceDirectory, "*", SearchOption.AllDirectories);
         foreach (var filePath in allFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -622,15 +610,15 @@ public partial class DockerService : IDockerService, IDisposable
     {
         if (!string.IsNullOrEmpty(msg.Stream))
         {
-            Console.Write(msg.Stream);
+            _logger.LogDebug("[DockerService] {Message}", msg.Stream.TrimEnd());
         }
 
         else if (!string.IsNullOrEmpty(msg.Status))
         {
             if (!string.IsNullOrEmpty(msg.ProgressMessage))
-                Console.Write($"\r{msg.Status} {msg.ProgressMessage}");
+                _logger.LogDebug("[DockerService] {Status} {Progress}", msg.Status, msg.ProgressMessage);
             else
-                Console.WriteLine(msg.Status);
+                _logger.LogDebug("[DockerService] {Status}", msg.Status);
         }
 
         if (string.IsNullOrEmpty(msg.ErrorMessage)) return;
@@ -694,7 +682,11 @@ public partial class DockerService : IDockerService, IDisposable
     /// <returns>The safe name to be used.</returns>
     private static string NormalizeProjectName(string projectName)
     {
-        return projectName.ToLowerInvariant().Replace(" ", "-").Replace(".", "-");
+        var normalized = ProjectNameRegex().Replace(projectName.Trim().ToLowerInvariant(), "-");
+        normalized = string.Join('-', normalized.Split('-',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        return string.IsNullOrWhiteSpace(normalized) ? "automate-project" : normalized;
     }
 
 
@@ -707,16 +699,81 @@ public partial class DockerService : IDockerService, IDisposable
     /// <returns></returns>
     private static ProcessStartInfo CreateDockerComposeStartInfo(string workingDir, string safeProjectName)
     {
+        return CreateDockerComposeStartInfo(workingDir, safeProjectName, "up", "-d", "--build");
+    }
+
+
+    /// <summary>
+    ///     Creates a ProcessStartInfo object configured to run a Docker Compose command.
+    /// </summary>
+    private static ProcessStartInfo CreateDockerComposeStartInfo(string workingDir, string safeProjectName,
+        params string[] composeArguments)
+    {
+        var startInfo = CreateDockerProcessStartInfo();
+        startInfo.WorkingDirectory = workingDir;
+        startInfo.ArgumentList.Add("compose");
+        startInfo.ArgumentList.Add("-p");
+        startInfo.ArgumentList.Add(safeProjectName);
+
+        foreach (var argument in composeArguments)
+            startInfo.ArgumentList.Add(argument);
+
+        return startInfo;
+    }
+
+
+    /// <summary>
+    ///     Creates a ProcessStartInfo object configured to run a Docker command with the specified arguments.
+    /// </summary>
+    /// <param name="redirectStandardError">Indicates whether to redirect standard error.</param>
+    /// <returns>The configured ProcessStartInfo object.</returns>
+    private static ProcessStartInfo CreateDockerProcessStartInfo(bool redirectStandardError = true)
+    {
         return new ProcessStartInfo
         {
             FileName = "docker",
-            Arguments = $"compose -p {safeProjectName} up -d --build",
-            WorkingDirectory = workingDir,
             RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardError = redirectStandardError,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+    }
+
+
+    /// <summary>
+    ///     Creates a human-readable description of the process command being executed, based on the provided ProcessStartInfo.
+    /// </summary>
+    /// <param name="startInfo">The ProcessStartInfo object.</param>
+    /// <returns>The human-readable description.</returns>
+    private static string CreateProcessCommandDescription(ProcessStartInfo startInfo)
+    {
+        var arguments = startInfo.ArgumentList.Count > 0
+            ? string.Join(' ', startInfo.ArgumentList)
+            : startInfo.Arguments;
+
+        return $"{startInfo.FileName} {arguments}".Trim();
+    }
+
+
+    /// <summary>
+    ///     Deletes the specified temporary file, handling any exceptions that may occur during the deletion process.
+    /// </summary>
+    /// <param name="path">The path of the temporary file to delete.</param>
+    private void DeleteTempFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "[DockerService] Failed to delete temporary Docker build context '{Path}'.", path);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "[DockerService] Failed to delete temporary Docker build context '{Path}'.", path);
+        }
     }
 
 
@@ -728,4 +785,9 @@ public partial class DockerService : IDockerService, IDisposable
     /// A regular expression to extract the host port from the output of the 'docker port' command.
     [GeneratedRegex(@":(\d+)")]
     private static partial Regex HostPortRegex();
+
+
+    /// A regular expression to normalize Docker Compose project names.
+    [GeneratedRegex(@"[^a-z0-9_-]+")]
+    private static partial Regex ProjectNameRegex();
 }

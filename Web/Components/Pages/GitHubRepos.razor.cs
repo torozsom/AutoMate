@@ -13,8 +13,14 @@ namespace Web.Components.Pages;
 ///     associated with the authenticated user. It checks the user's authentication state and integrates
 ///     with the user service to fetch GitHub tokens securely.
 /// </summary>
-public partial class GitHubRepos : ComponentBase
+public partial class GitHubRepos : ComponentBase, IDisposable
 {
+    /// A cancellation token source to manage asynchronous operations and ensure they are cancelled when the component is disposed.
+    private readonly CancellationTokenSource _componentCancellation = new();
+
+    /// A set to keep track of the URLs of repositories that are currently being saved.
+    private readonly HashSet<string> _savingRepositoryUrls = new(StringComparer.OrdinalIgnoreCase);
+
     /// The current user's identifier.
     private Guid _currentUserId;
 
@@ -50,6 +56,18 @@ public partial class GitHubRepos : ComponentBase
     [Inject]
     private IApplicationService ApplicationService { get; set; } = null!;
 
+    /// Logger for logging errors and important information within the component.
+    [Inject]
+    private ILogger<GitHubRepos> Logger { get; set; } = null!;
+
+
+    public void Dispose()
+    {
+        _componentCancellation.Cancel();
+        _componentCancellation.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
 
     /// <summary>
     ///     On component initialization, we check the user's authentication state.
@@ -59,27 +77,43 @@ public partial class GitHubRepos : ComponentBase
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var userClaims = authState.User;
-
-        if (userClaims.Identity is not null && userClaims.Identity.IsAuthenticated)
+        try
         {
-            var nameIdentifier = userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var userClaims = authState.User;
 
-            if (!string.IsNullOrEmpty(nameIdentifier))
+            if (userClaims.Identity is not null && userClaims.Identity.IsAuthenticated)
             {
-                var (userId, accessToken, isGitHubUser) =
-                    await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier);
+                var nameIdentifier = userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-                _currentUserId = userId;
-                _isGitHubUser = isGitHubUser;
+                if (!string.IsNullOrEmpty(nameIdentifier))
+                {
+                    var (userId, accessToken, isGitHubUser) =
+                        await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier,
+                            _componentCancellation.Token);
 
-                if (_isGitHubUser && !string.IsNullOrEmpty(accessToken))
-                    _githubRepos = await GitHubService.GetUserRepositoriesAsync(accessToken);
+                    _currentUserId = userId;
+                    _isGitHubUser = isGitHubUser;
+
+                    if (_isGitHubUser && !string.IsNullOrEmpty(accessToken))
+                        _githubRepos = await GitHubService.GetUserRepositoriesAsync(accessToken,
+                            cancellationToken: _componentCancellation.Token);
+                }
             }
         }
-
-        _isLoading = false;
+        catch (OperationCanceledException)
+        {
+            // Component was disposed while the repository list was loading.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load GitHub repositories.");
+            SetStatusMessage("Failed to load GitHub repositories. Please try again later.", true);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
     }
 
 
@@ -98,12 +132,38 @@ public partial class GitHubRepos : ComponentBase
             return;
         }
 
-        var success = await ApplicationService.AddGitHubAppAsync(_currentUserId, repo.Name, repo.HtmlUrl);
+        if (!_savingRepositoryUrls.Add(repo.HtmlUrl))
+            return;
 
-        if (success)
-            SetStatusMessage($"{repo.Name} successfully saved!", false);
-        else
-            SetStatusMessage($"{repo.Name} repository is already saved!", true);
+        try
+        {
+            var success = await ApplicationService.AddGitHubAppAsync(_currentUserId, repo.Name, repo.HtmlUrl,
+                _componentCancellation.Token);
+
+            if (success)
+                SetStatusMessage($"{repo.Name} successfully saved!", false);
+            else
+                SetStatusMessage($"{repo.Name} repository is already saved!", true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Component was disposed while saving.
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to save GitHub repository {RepositoryUrl}.", repo.HtmlUrl);
+            SetStatusMessage("Failed to save the repository. Please try again later.", true);
+        }
+        finally
+        {
+            _savingRepositoryUrls.Remove(repo.HtmlUrl);
+        }
+    }
+
+
+    private bool IsSaving(GitHubRepositoryDto repo)
+    {
+        return _savingRepositoryUrls.Contains(repo.HtmlUrl);
     }
 
 

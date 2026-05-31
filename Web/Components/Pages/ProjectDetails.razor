@@ -3,27 +3,33 @@
 
 <PageTitle>Project Details</PageTitle>
 
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div class="d-flex align-items-center gap-3">
-            <h2 class="mb-0">
+<div class="container project-details-page py-4">
+    <div class="project-hero mb-4">
+        <div class="project-hero-main">
+            <div class="project-avatar" aria-hidden="true">
                 @if (_app?.SourceType == SourceType.Remote)
                 {
-                    <i class="bi bi-github me-2"></i>
+                    <i class="bi bi-github"></i>
                 }
                 else
                 {
-                    <i class="bi bi-folder2-open me-2 text-warning"></i>
+                    <i class="bi bi-folder2-open"></i>
                 }
-                @(_app?.Name ?? "Loading...")
-            </h2>
+            </div>
+            <div class="min-w-0">
+                <div class="project-eyebrow">
+                    <span>@(_app?.SourceType == SourceType.Remote ? "GitHub Repository" : "Local Workspace")</span>
+                </div>
+                <h1 class="project-title" title="@_app?.Name">@(_app?.Name ?? "Loading..")</h1>
+            </div>
         </div>
 
         @if (_app is not null)
         {
-            <div class="d-flex gap-2">
+            <div class="project-actions">
                 @{ var isDeploying = IsDeploying(); }
-                <button class="btn btn-success" @onclick="DeployProjectAsync" disabled="@(isDeploying || _isStopping)">
+                <button class="btn btn-success action-button" @onclick="DeployProjectAsync"
+                        disabled="@(isDeploying || _isStopping)">
                     @if (isDeploying)
                     {
                         <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
@@ -35,7 +41,7 @@
                         <span>Deploy</span>
                     }
                 </button>
-                <button class="btn btn-outline-danger" @onclick="StopDeploymentAsync"
+                <button class="btn btn-outline-danger action-button" @onclick="StopDeploymentAsync"
                         disabled="@(_isStopping || isDeploying)">
                     @if (_isStopping)
                     {
@@ -52,14 +58,7 @@
         }
     </div>
 
-    @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
-    {
-        <ConfigurationForm
-            Config="@_currentDeployConfig"
-            ProjectPath="@_selectedProjectPath"
-            OnCancel="@HideConfigModal"
-            OnDeployConfirmed="@ExecuteDeploymentAsync"/>
-    }
+    @RenderConfigurationForm()
 
     @if (_isLoading)
     {
@@ -75,134 +74,187 @@
     }
     else
     {
-        <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <div class="card bg-dark-subtle border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.8rem;">Status</h6>
-                        <DeploymentBadge Status="GetLatestStatus()" AdditionalClasses="fs-6"/>
+        <div class="project-overview mb-4">
+            <div class="overview-tile">
+                <div class="overview-icon overview-icon-status">
+                    <i class="bi bi-activity"></i>
+                </div>
+                <div>
+                    <div class="overview-label">Deployment</div>
+                    <DeploymentBadge Status="@GetLatestStatus()" AdditionalClasses="fs-6"/>
+                </div>
+            </div>
+
+            <div class="overview-tile overview-tile-wide">
+                <div class="overview-icon">
+                    <i class="bi bi-link-45deg"></i>
+                </div>
+                <div class="min-w-0">
+                    <div class="overview-label">Source Path</div>
+                    <div class="overview-value text-truncate" title="@_app.SourcePathOrUrl">
+                        @_app.SourcePathOrUrl
                     </div>
                 </div>
             </div>
-            <div class="col-md-8">
-                <div class="card bg-dark-subtle border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <h6 class="text-muted text-uppercase mb-1" style="font-size: 0.8rem;">Source Path</h6>
-                        <p class="mb-0 font-monospace text-truncate" title="@_app.SourcePathOrUrl">
-                            @_app.SourcePathOrUrl
-                        </p>
+
+            @if (_app.SourceType == SourceType.Local && _webHostPort > 0)
+            {
+                <div class="overview-tile">
+                    <div class="overview-icon overview-icon-port">
+                        <i class="bi bi-hdd-network"></i>
+                    </div>
+                    <div>
+                        <div class="overview-label">Web Port</div>
+                        <div class="overview-value">@_webHostPort</div>
                     </div>
                 </div>
-            </div>
+            }
         </div>
 
-        @if (GetLatestStatus() == DeploymentStatus.Running && _exposedPort > 0)
+        @if (_app.SourceType == SourceType.Local && GetLatestStatus() == DeploymentStatus.Running && _webHostPort > 0)
         {
-            <div class="alert alert-success shadow-sm d-flex align-items-center justify-content-between mb-4"
-                 style="border-radius: 15px;">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-rocket-takeoff-fill fs-4 me-3"></i>
+            <div class="live-launch mb-4">
+                <div class="live-launch-copy">
+                    <span class="live-dot" aria-hidden="true"></span>
                     <div>
-                        <h6 class="mb-0">Web App is Live!</h6>
-                        <small class="text-muted">You can access your deployed project by clicking the link
-                            here:</small>
+                        <div class="live-title">Web App is Live</div>
+                        <div class="live-subtitle">Local endpoint is ready for this deployment.</div>
                     </div>
                 </div>
-                <a href="http://localhost:@_exposedPort" target="_blank" class="btn btn-success fw-bold px-4 py-2"
-                   style="border-radius: 10px;">
-                    <i class="bi bi-box-arrow-up-right me-2"></i>http://localhost:@_exposedPort
+                <a href="http://localhost:@_webHostPort" target="_blank" class="btn btn-success live-link">
+                    <i class="bi bi-box-arrow-up-right me-2"></i>http://localhost:@_webHostPort
                 </a>
             </div>
         }
 
-        <!-- Metrics Card -->
-        @if (GetLatestStatus() == DeploymentStatus.Running && _metricContainerNames.Count > 0)
+        @if (_app.SourceType == SourceType.Remote)
         {
-            var currentContainer = _metricContainerNames[_currentMetricIndex];
-            var metrics = _containerMetrics[currentContainer];
-            <div class="card bg-dark-subtle border-secondary border-opacity-25 shadow-sm mb-4"
-                 style="border-radius: 15px;">
-                <div class="card-body d-flex align-items-center justify-content-between p-3">
-                    <button class="btn px-2 py-1 border-0" @onclick="PreviousMetric">
-                        <i class="bi bi-arrow-left-square-fill fs-5"></i>
+            <WorkflowBadge Status="@GetLatestStatus()"
+                           Message="@_workflowStatusMessage"
+                           WorkflowUrl="@_workflowUrl"/>
+        }
+
+        <section class="monitoring-shell">
+            <div class="monitoring-header">
+                <div>
+                    <div class="section-kicker">Runtime Monitoring</div>
+                    <h2 class="monitoring-title">Logs and metrics</h2>
+                </div>
+                <div class="monitoring-state">
+                    <span
+                        class="state-dot @(GetLatestStatus() == DeploymentStatus.Running ? "state-dot-running" : "")"></span>
+                    <span>@(GetLatestStatus()?.ToString() ?? "Not deployed")</span>
+                </div>
+            </div>
+
+            @if (GetLatestStatus() == DeploymentStatus.Running && _metricContainerNames.Count > 0)
+            {
+                var currentContainer = _metricContainerNames[_currentMetricIndex];
+                var metrics = _containerMetrics[currentContainer];
+                <div class="metrics-panel mb-4">
+                    <button class="btn metric-nav-button" @onclick="PreviousMetric"
+                            aria-label="Previous container metrics">
+                        <i class="bi bi-chevron-left"></i>
                     </button>
-                    <div class="text-center mx-3 flex-grow-1">
-                        <h6 class="text-muted text-uppercase text-truncate mb-3" style="font-size: 0.85rem;"><i
-                                class="bi bi-box me-1"></i> @currentContainer</h6>
-                        <div class="d-flex justify-content-center gap-4">
-                            <div>
-                                <span class="small d-block mb-1">CPU</span>
-                                <span class="fw-bold">@metrics.Cpu</span>
-                            </div>
-                            <div class="border-start border-secondary opacity-50 mx-2"></div>
-                            <div>
-                                <span class="small d-block mb-1">Memory</span>
-                                <span class="fw-bold">@metrics.Memory</span>
+
+                    <div class="metrics-summary">
+                        <div class="container-chip">
+                            <span class="container-initial">@GetContainerInitial(currentContainer)</span>
+                            <div class="min-w-0">
+                                <div class="metric-label">Container</div>
+                                <div class="container-name text-truncate"
+                                     title="@currentContainer">@currentContainer</div>
                             </div>
                         </div>
                     </div>
-                    <button class="btn px-2 py-1 border-0" @onclick="NextMetric">
-                        <i class="bi bi-arrow-right-square-fill fs-5"></i>
+
+                    <div class="metric-cards">
+                        <div class="metric-card">
+                            <div class="metric-card-head">
+                                <span>CPU</span>
+                                <i class="bi bi-cpu"></i>
+                            </div>
+                            <div class="metric-value">@metrics.Cpu</div>
+                            <div class="metric-track" aria-hidden="true">
+                                <span style="@GetMetricTrackStyle(metrics.Cpu, false)"></span>
+                            </div>
+                        </div>
+
+                        <div class="metric-card">
+                            <div class="metric-card-head">
+                                <span>Memory</span>
+                                <i class="bi bi-memory"></i>
+                            </div>
+                            <div class="metric-value">@metrics.Memory</div>
+                            <div class="metric-track" aria-hidden="true">
+                                <span style="@GetMetricTrackStyle(metrics.Memory, true)"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="btn metric-nav-button" @onclick="NextMetric" aria-label="Next container metrics">
+                        <i class="bi bi-chevron-right"></i>
                     </button>
                 </div>
-            </div>
-        }
+            }
+            else
+            {
+                <div class="metrics-empty mb-4">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Metrics will appear when containers are running.</span>
+                </div>
+            }
 
-        <div class="card shadow-sm border-secondary border-opacity-25 bg-dark">
-            <div class="card-header border-bottom border-secondary border-opacity-25 pt-3 pb-0">
-                <ul class="nav nav-tabs border-0" role="tablist">
-                    <!-- Build Logs -->
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("build")" type="button" role="tab"
-                                @onclick='() => SetActiveTab("build")'>
-                            <i class="bi bi-hammer me-1"></i> Build Logs
-                        </button>
-                    </li>
+            <div class="terminal-panel">
+                <div class="terminal-panel-header">
+                    <ul class="nav nav-pills terminal-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="@GetBuildTabClass()" type="button" role="tab"
+                                    @onclick='() => SetActiveTab("build")'>
+                                <i class="bi bi-hammer me-1"></i> Build Logs
+                            </button>
+                        </li>
 
-                    <!-- Web App -->
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link @GetTabClass("web")" type="button" role="tab"
-                                @onclick='() => SetActiveTab("web")'>
-                            <i class="bi bi-globe me-1"></i> Web App
-                        </button>
-                    </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="@GetWebTabClass()" type="button" role="tab"
+                                    @onclick='() => SetActiveTab("web")'>
+                                <i class="bi bi-globe me-1"></i> Web App
+                            </button>
+                        </li>
+
+                        @foreach (var db in GetDatabaseTabs())
+                        {
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab"
+                                        @onclick="() => SetActiveTab(db.TabId)">
+                                    <i class="bi bi-database me-1"></i> @db.DisplayName
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </div>
+                <div class="terminal-panel-body">
+                    <div style="@GetBuildTerminalStyle()">
+                        <Terminal @ref="_buildTerminal" Id="build-logs-term"
+                                  OnReady='() => OnTerminalReady(_buildTerminal, "Build")'/>
+                    </div>
+
+                    <div style="@GetWebTerminalStyle()">
+                        <Terminal @ref="_webTerminal" Id="web-logs-term"
+                                  OnReady='() => OnTerminalReady(_webTerminal, "Web App")'/>
+                    </div>
 
                     @foreach (var db in GetDatabaseTabs())
                     {
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab"
-                                    @onclick="() => SetActiveTab(db.TabId)">
-                                <i class="bi bi-database me-1"></i> @db.DisplayName
-                            </button>
-                        </li>
+                        var databaseTerminalStyle = GetDatabaseTerminalStyle(db.TabId);
+                        <div style="@databaseTerminalStyle">
+                            <Terminal @ref="_dbTerminals[db.TabId]"
+                                      Id="@($"term-{db.TabId}")"
+                                      OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)'/>
+                        </div>
                     }
-                </ul>
-            </div>
-            <div class="card-body p-0"
-                 style="height: 470px; background-color: #1e1e1e; overflow: hidden; position: relative;">
-
-                <!-- Build Logs Terminal -->
-                <div style="@GetTerminalStyle("build")">
-                    <Terminal @ref="_buildTerminal" Id="build-logs-term"
-                              OnReady='() => OnTerminalReady(_buildTerminal, "Build")'/>
                 </div>
-
-                <!-- Web App Terminal -->
-                <div style="@GetTerminalStyle("web")">
-                    <Terminal @ref="_webTerminal" Id="web-logs-term"
-                              OnReady='() => OnTerminalReady(_webTerminal, "Web App")'/>
-                </div>
-
-                <!-- Database Terminals -->
-                @foreach (var db in GetDatabaseTabs())
-                {
-                    <div style="@GetTerminalStyle(db.TabId)">
-                        <Terminal @ref="_dbTerminals[db.TabId]"
-                                  Id="@($"term-{db.TabId}")"
-                                  OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)'/>
-                    </div>
-                }
             </div>
-        </div>
+        </section>
     }
 </div>

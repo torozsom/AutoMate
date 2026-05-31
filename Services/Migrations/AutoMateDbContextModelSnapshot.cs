@@ -299,28 +299,6 @@ namespace Services.Migrations
                     b.ToTable("data_protection_keys", (string)null);
                 });
 
-            modelBuilder.Entity("Core.Entities.GitHubUser", b =>
-                {
-                    b.HasBaseType("Core.Entities.User");
-
-                    b.Property<string>("AccessToken")
-                        .HasColumnType("text")
-                        .HasColumnName("access_token");
-
-                    b.Property<string>("AccountId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("account_id");
-
-                    b.Property<string>("AvatarUrl")
-                        .HasColumnType("text")
-                        .HasColumnName("avatar_url");
-
-                    b.ToTable("users", (string)null);
-
-                    b.HasDiscriminator().HasValue("github");
-                });
-
             modelBuilder.Entity("Core.Entities.LocalUser", b =>
                 {
                     b.HasBaseType("Core.Entities.User");
@@ -344,6 +322,55 @@ namespace Services.Migrations
                     b.ToTable("users", (string)null);
 
                     b.HasDiscriminator().HasValue("local");
+                });
+
+            modelBuilder.Entity("Core.Entities.RemoteUser", b =>
+                {
+                    b.HasBaseType("Core.Entities.User");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("account_id");
+
+                    b.Property<string>("AvatarUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("avatar_url");
+
+                    b.Property<string>("AzureAccessToken")
+                        .HasColumnType("text")
+                        .HasColumnName("azure_access_token");
+
+                    b.Property<string>("AzureAccountId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("azure_account_id");
+
+                    b.Property<string>("AzureRefreshToken")
+                        .HasColumnType("text")
+                        .HasColumnName("azure_refresh_token");
+
+                    b.Property<string>("AzureSubscriptionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("azure_subscription_id");
+
+                    b.Property<string>("AzureTenantId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("azure_tenant_id");
+
+                    b.Property<DateTimeOffset?>("AzureTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("azure_token_expires_at");
+
+                    b.Property<string>("GitHubAccessToken")
+                        .HasColumnType("text")
+                        .HasColumnName("git_hub_access_token");
+
+                    b.ToTable("users", (string)null);
+
+                    b.HasDiscriminator().HasValue("github");
                 });
 
             modelBuilder.Entity("Core.Entities.Application", b =>

@@ -56,18 +56,24 @@ public class AutoMateDbContext(
     {
         base.OnModelCreating(modelBuilder);
 
-        // Setup encryption for sensitive data (GitHub Tokens)
-        var protector = dataProtectionProvider.CreateProtector("AutoMate.GitHubTokenProtector");
-        var tokenConverter = new ValueConverter<string?, string?>(
-            plainText => plainText != null ? protector.Protect(plainText) : null,
-            encryptedText => encryptedText != null ? protector.Unprotect(encryptedText) : null
+        // Setup encryption for sensitive OAuth token data.
+        var githubTokenProtector = dataProtectionProvider.CreateProtector("AutoMate.GitHubTokenProtector");
+        var githubTokenConverter = new ValueConverter<string?, string?>(
+            plainText => plainText != null ? githubTokenProtector.Protect(plainText) : null,
+            encryptedText => encryptedText != null ? githubTokenProtector.Unprotect(encryptedText) : null
+        );
+
+        var azureTokenProtector = dataProtectionProvider.CreateProtector("AutoMate.AzureTokenProtector");
+        var azureTokenConverter = new ValueConverter<string?, string?>(
+            plainText => plainText != null ? azureTokenProtector.Protect(plainText) : null,
+            encryptedText => encryptedText != null ? azureTokenProtector.Unprotect(encryptedText) : null
         );
 
         // Configure the User entity hierarchy (TPH)
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasDiscriminator<string>("user_type")
-                .HasValue<GitHubUser>("github")
+                .HasValue<RemoteUser>("github")
                 .HasValue<LocalUser>("local");
 
             entity.HasIndex(u => u.Email).IsUnique();
@@ -81,10 +87,15 @@ public class AutoMateDbContext(
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // Configure the GitHubUser entity to encrypt the AccessToken property
-        modelBuilder.Entity<GitHubUser>(entity =>
+        // Configure the RemoteUser entity to encrypt provider OAuth tokens.
+        modelBuilder.Entity<RemoteUser>(entity =>
         {
-            entity.Property(gu => gu.AccessToken).HasConversion(tokenConverter);
+            entity.Property(ru => ru.GitHubAccessToken).HasConversion(githubTokenConverter);
+            entity.Property(ru => ru.AzureAccountId).HasMaxLength(100);
+            entity.Property(ru => ru.AzureTenantId).HasMaxLength(100);
+            entity.Property(ru => ru.AzureSubscriptionId).HasMaxLength(100);
+            entity.Property(ru => ru.AzureAccessToken).HasConversion(azureTokenConverter);
+            entity.Property(ru => ru.AzureRefreshToken).HasConversion(azureTokenConverter);
         });
 
         // Configure the Application entity
@@ -126,6 +137,15 @@ public class AutoMateDbContext(
     }
 
 
+    /// <inheritdoc />
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        UpdateAuditFields();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+
     /// <summary>
     ///     Overrides the synchronous SaveChanges method to ensure audit fields are updated even if called synchronously.
     /// </summary>
@@ -134,6 +154,14 @@ public class AutoMateDbContext(
     {
         UpdateAuditFields();
         return base.SaveChanges();
+    }
+
+
+    /// <inheritdoc />
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        UpdateAuditFields();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
 

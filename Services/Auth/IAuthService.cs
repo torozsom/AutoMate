@@ -51,4 +51,30 @@ public interface IAuthService
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
         string? accessToken, CancellationToken cancellationToken = default);
+
+
+    /// <summary>
+    ///     Links or refreshes Azure OAuth identity data on an existing AutoMate user.
+    /// </summary>
+    /// <param name="currentUserIdentifier">The current authenticated user's local ID or GitHub account ID.</param>
+    /// <param name="azureAccountId">The unique Microsoft Entra user account ID.</param>
+    /// <param name="email">The email address returned by Microsoft identity.</param>
+    /// <param name="displayName">The display name returned by Microsoft identity.</param>
+    /// <param name="tenantId">The Microsoft Entra tenant ID associated with the token.</param>
+    /// <param name="subscriptionId">The Azure subscription ID selected for deployments, if already known.</param>
+    /// <param name="accessToken">The Azure OAuth access token.</param>
+    /// <param name="refreshToken">The Azure OAuth refresh token.</param>
+    /// <param name="expiresAt">The UTC timestamp when the access token expires.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    Task LinkAzureAccountAsync(
+        string currentUserIdentifier,
+        string azureAccountId,
+        string email,
+        string displayName,
+        string? tenantId,
+        string? subscriptionId,
+        string? accessToken,
+        string? refreshToken,
+        DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default);
 }

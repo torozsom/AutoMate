@@ -14,6 +14,10 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private readonly List<EnvVarItem> _envVars = [];
 
+    private CloudDefaults? _lastCloudDefaults;
+    private string _selectedEnvironment = "Development";
+    private string? _validationMessage;
+
 
     /// <summary>
     ///     The deployment configuration settings for the project being deployed.
@@ -26,6 +30,12 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     [Parameter]
     public string ProjectPath { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Indicates whether the form should render cloud-specific deployment settings.
+    /// </summary>
+    [Parameter]
+    public bool IsCloudDeployment { get; set; }
 
     /// <summary>
     ///     An event callback invoked when the user confirms the deployment with the specified configuration.
@@ -46,6 +56,23 @@ public partial class ConfigurationForm : ComponentBase
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
 
+    private string SelectedEnvironment
+    {
+        get => _selectedEnvironment;
+        set
+        {
+            if (string.Equals(_selectedEnvironment, value, StringComparison.Ordinal))
+                return;
+
+            var previousDefaults = _lastCloudDefaults ?? BuildCloudDefaults(Config.ProjectName, _selectedEnvironment);
+            _selectedEnvironment = value;
+            Config.EnvironmentName = value;
+
+            if (IsCloudDeployment)
+                ApplyCloudDefaults(false, previousDefaults);
+        }
+    }
+
 
     /// <summary>
     ///     Initializes the component and populates the UI list of environment variables
@@ -54,6 +81,13 @@ public partial class ConfigurationForm : ComponentBase
     protected override void OnInitialized()
     {
         Config.Databases ??= [];
+        Config.EnvironmentName = string.IsNullOrWhiteSpace(Config.EnvironmentName)
+            ? "Development"
+            : Config.EnvironmentName;
+        _selectedEnvironment = Config.EnvironmentName;
+
+        if (IsCloudDeployment)
+            ApplyCloudDefaults(true);
 
         if (Config.CustomEnvVars is not null)
             foreach (var kvp in Config.CustomEnvVars)
@@ -67,7 +101,7 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private async Task LoadVariablesFromConfigFilesAsync()
     {
-        if (string.IsNullOrWhiteSpace(ProjectPath)) return;
+        if (IsCloudDeployment || string.IsNullOrWhiteSpace(ProjectPath)) return;
 
         // Analyze the project files and extract environment variables.
         var scannedVars = await ProjectScanner.ExtractEnvironmentVariablesAsync(ProjectPath);
@@ -84,6 +118,14 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private async Task ConfirmDeploy()
     {
+        _validationMessage = null;
+
+        if (!IsCloudDeployment && Config.ExposedPort is < 1 or > 65535)
+        {
+            _validationMessage = "Choose a valid host port between 1 and 65535.";
+            return;
+        }
+
         Config.CustomEnvVars ??= new Dictionary<string, string>();
         Config.CustomEnvVars.Clear();
 
@@ -94,6 +136,84 @@ public partial class ConfigurationForm : ComponentBase
                 Config.CustomEnvVars.TryAdd(item.Key.Trim(), item.Value?.Trim() ?? string.Empty);
 
         await OnDeployConfirmed.InvokeAsync(Config);
+    }
+
+
+    private void ApplyCloudDefaults(bool overwriteOnlyEmptyFields, CloudDefaults? previousDefaults = null)
+    {
+        var defaults = BuildCloudDefaults(Config.ProjectName, Config.EnvironmentName);
+
+        if (ShouldApplyCloudDefault(Config.CloudResourceGroupName, previousDefaults?.ResourceGroup,
+                overwriteOnlyEmptyFields))
+            Config.CloudResourceGroupName = defaults.ResourceGroup;
+
+        if (ShouldApplyCloudDefault(Config.CloudContainerAppName, previousDefaults?.ContainerApp,
+                overwriteOnlyEmptyFields))
+            Config.CloudContainerAppName = defaults.ContainerApp;
+
+        if (ShouldApplyCloudDefault(Config.CloudRegistryName, previousDefaults?.RegistryServer,
+                overwriteOnlyEmptyFields))
+            Config.CloudRegistryName = defaults.RegistryServer;
+
+        _lastCloudDefaults = defaults;
+    }
+
+
+    private static bool ShouldApplyCloudDefault(string currentValue, string? previousDefault,
+        bool overwriteOnlyEmptyFields)
+    {
+        if (string.IsNullOrWhiteSpace(currentValue))
+            return true;
+
+        return !overwriteOnlyEmptyFields &&
+               !string.IsNullOrWhiteSpace(previousDefault) &&
+               string.Equals(currentValue, previousDefault, StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static CloudDefaults BuildCloudDefaults(string projectName, string environmentName)
+    {
+        var resourceName = NormalizeResourceName(projectName);
+        var environmentSuffix = GetEnvironmentSuffix(environmentName);
+        var baseName = $"{resourceName}-{environmentSuffix}";
+
+        return new CloudDefaults(
+            $"{baseName}-rg",
+            $"{baseName}-app",
+            "ghcr.io");
+    }
+
+
+    private static string GetEnvironmentSuffix(string environmentName)
+    {
+        var normalized = environmentName.Trim().ToLowerInvariant();
+
+        return normalized switch
+        {
+            "production" => "prod",
+            "staging" => "stg",
+            "development" => "dev",
+            _ when normalized.Length > 0 => NormalizeResourceName(normalized),
+            _ => "dev"
+        };
+    }
+
+
+    private static string NormalizeResourceName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized
+            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            normalized = "automate-app";
+
+        return normalized.Length <= 23 ? normalized : normalized[..23].TrimEnd('-');
     }
 
 
@@ -152,4 +272,6 @@ public partial class ConfigurationForm : ComponentBase
         public string Key { get; set; } = string.Empty;
         public string Value { get; set; } = string.Empty;
     }
+
+    private sealed record CloudDefaults(string ResourceGroup, string ContainerApp, string RegistryServer);
 }

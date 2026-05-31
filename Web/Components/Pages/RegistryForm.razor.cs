@@ -19,6 +19,10 @@ public partial class RegistryForm : ComponentBase
     [Inject]
     private IAuthService AuthService { get; set; } = null!;
 
+    /// Logger for logging registration-related events.
+    [Inject]
+    private ILogger<RegistryForm> Logger { get; set; } = null!;
+
 
     /// <summary>
     ///     The model bound to the registration form. Auto-initialized to avoid null references.
@@ -27,10 +31,11 @@ public partial class RegistryForm : ComponentBase
     public RegisterModel? Model { get; set; }
 
 
-    /// <summary>
-    ///     An optional error message to display if the registration fails.
-    /// </summary>
+    /// An optional error message to display if the registration fails.
     private string? ErrorMessage { get; set; }
+
+    /// Indicates whether the registration form is currently being submitted.
+    private bool IsSubmitting { get; set; }
 
 
     /// <summary>
@@ -48,23 +53,36 @@ public partial class RegistryForm : ComponentBase
     /// </summary>
     private async Task HandleRegistration()
     {
-        if (Model is null) return;
+        if (Model is null || IsSubmitting) return;
 
         ErrorMessage = null;
+        IsSubmitting = true;
 
-        var success = await AuthService.RegisterAsync(
-            Model.Username,
-            Model.Email,
-            Model.Password,
-            GenerateVerificationLink);
-
-        if (!success)
+        try
         {
-            ErrorMessage = "This email address is already in use.";
-            return;
-        }
+            var success = await AuthService.RegisterAsync(
+                Model.Username,
+                Model.Email,
+                Model.Password,
+                GenerateVerificationLink);
 
-        NavigationManager.NavigateTo("/verify-email?checkemail=true");
+            if (!success)
+            {
+                ErrorMessage = "This email address is already in use or the verification email could not be sent.";
+                return;
+            }
+
+            NavigationManager.NavigateTo("/verify-email?checkemail=true");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Registration failed unexpectedly for email {Email}.", Model.Email);
+            ErrorMessage = "Registration failed unexpectedly. Please try again later.";
+        }
+        finally
+        {
+            IsSubmitting = false;
+        }
     }
 
 

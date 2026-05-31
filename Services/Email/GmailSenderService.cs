@@ -20,9 +20,15 @@ public class GmailSenderService(
     public async Task SendEmailAsync(string toEmail, string subject, string message,
         CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(toEmail))
+            throw new ArgumentException("Recipient email is required.", nameof(toEmail));
+
+        if (string.IsNullOrWhiteSpace(subject))
+            throw new ArgumentException("Email subject is required.", nameof(subject));
+
         if (string.IsNullOrWhiteSpace(_options.SenderEmail) || string.IsNullOrWhiteSpace(_options.AppPassword))
         {
-            logger.LogCritical("[GmailSenderService] Email sender credentials are not configured!");
+            logger.LogCritical("[GmailSenderService] Email sender credentials are not configured.");
             throw new InvalidOperationException("Email sender credentials are not configured.");
         }
 
@@ -35,18 +41,25 @@ public class GmailSenderService(
         mimeMessage.To.Add(MailboxAddress.Parse(toEmail));
         mimeMessage.Subject = subject;
 
-        var bodyBuilder = new BodyBuilder { HtmlBody = message };
+        var bodyBuilder = new BodyBuilder { TextBody = message };
         mimeMessage.Body = bodyBuilder.ToMessageBody();
 
         // Send the email using Gmail's SMTP server
         using var smtpClient = new SmtpClient();
 
-        await smtpClient.ConnectAsync(_options.SmtpHost, _options.SmtpPort, SecureSocketOptions.StartTls,
-            cancellationToken);
-        await smtpClient.AuthenticateAsync(_options.SenderEmail, _options.AppPassword, cancellationToken);
-        await smtpClient.SendAsync(mimeMessage, cancellationToken);
-        await smtpClient.DisconnectAsync(true, cancellationToken);
+        try
+        {
+            await smtpClient.ConnectAsync(_options.SmtpHost, _options.SmtpPort, SecureSocketOptions.StartTls,
+                cancellationToken);
+            await smtpClient.AuthenticateAsync(_options.SenderEmail, _options.AppPassword, cancellationToken);
+            await smtpClient.SendAsync(mimeMessage, cancellationToken);
+        }
+        finally
+        {
+            if (smtpClient.IsConnected)
+                await smtpClient.DisconnectAsync(true, CancellationToken.None);
+        }
 
-        logger.LogInformation("[GmailSenderService] Email successfully sent.'.");
+        logger.LogInformation("[GmailSenderService] Email successfully sent.");
     }
 }

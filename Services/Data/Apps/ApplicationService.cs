@@ -24,9 +24,14 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
     {
         if (userId == Guid.Empty)
         {
-            logger.LogWarning("[ProjectService] Attempted to add a local project with an empty user ID.");
+            logger.LogWarning("[ApplicationService] Attempted to add a local project with an empty user ID.");
             return false;
         }
+
+        var sourcePath = project.Path.Trim();
+        var projectName = project.Name.Trim();
+        var csProjectPath = csproject.Path.Trim();
+        var csProjectName = csproject.Name.Trim();
 
         try
         {
@@ -35,7 +40,7 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
                 .Include(a => a.CsProjects)
                 .FirstOrDefaultAsync(a => a.UserId == userId
                                           && a.SourceType == SourceType.Local
-                                          && a.SourcePathOrUrl == project.Path, cancellationToken);
+                                          && a.SourcePathOrUrl == sourcePath, cancellationToken);
 
             // If not, create a new project
             if (app == null)
@@ -43,41 +48,43 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
                 app = new Application
                 {
                     UserId = userId,
-                    Name = project.Name,
+                    Name = projectName,
                     SourceType = SourceType.Local,
-                    SourcePathOrUrl = project.Path,
+                    SourcePathOrUrl = sourcePath,
                     CsProjects = []
                 };
                 context.Applications.Add(app);
-                logger.LogInformation("[ProjectService] Creating new local project '{ProjectName}' for user {UserId}.",
-                    project.Name, userId);
+                logger.LogInformation(
+                    "[ApplicationService] Creating new local project '{ProjectName}' for user {UserId}.",
+                    projectName, userId);
             }
 
             // Check if a C# project with the same path already exists for this project
-            var csprojExists = app.CsProjects.Any(csp => csp.Path == csproject.Path);
+            var csprojExists = app.CsProjects.Any(csp => csp.Path == csProjectPath);
             if (csprojExists)
             {
                 logger.LogInformation(
-                    "[ProjectService] C# project '{CsProjectName}' already exists in project '{ProjectName}'.",
-                    csproject.Name, project.Name);
+                    "[ApplicationService] C# project '{CsProjectName}' already exists in project '{ProjectName}'.",
+                    csProjectName, projectName);
                 return false;
             }
 
             // If not, create a new C# project and add it to the project
-            var newCsProject = CreateDefaultCsProject(app.Id, csproject);
+            var newCsProject = CreateDefaultCsProject(app.Id, csProjectName, csProjectPath, csproject.IsWebProject);
             app.CsProjects.Add(newCsProject);
 
             await context.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation(
-                "[ProjectService] Successfully added C# project '{CsProjectName}' to project '{ProjectName}'.",
-                csproject.Name, project.Name);
+                "[ApplicationService] Successfully added C# project '{CsProjectName}' to project '{ProjectName}'.",
+                csProjectName, projectName);
             return true;
         }
         catch (DbUpdateException ex)
         {
-            logger.LogError(ex, "[ProjectService] Database error occurred while adding local project '{ProjectName}'.",
-                project.Name);
+            logger.LogError(ex,
+                "[ApplicationService] Database error occurred while adding local project '{ProjectName}'.",
+                projectName);
             return false;
         }
     }
@@ -89,22 +96,26 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
     {
         if (userId == Guid.Empty || string.IsNullOrWhiteSpace(gitUrl))
         {
-            logger.LogWarning("[ProjectService] Attempted to add a GitHub project with invalid parameters.");
+            logger.LogWarning("[ApplicationService] Attempted to add a GitHub project with invalid parameters.");
             return false;
         }
+
+        var normalizedGitUrl = gitUrl.Trim();
+        var normalizedAppName = string.IsNullOrWhiteSpace(appName) ? normalizedGitUrl : appName.Trim();
 
         try
         {
             // Check if an app with the same source URL already exists for the user
             var alreadyExists = await context.Applications
-                .AnyAsync(a => a.UserId == userId && a.SourceType == SourceType.Remote && a.SourcePathOrUrl == gitUrl,
-                    cancellationToken);
+                .AnyAsync(a => a.UserId == userId
+                               && a.SourceType == SourceType.Remote
+                               && a.SourcePathOrUrl == normalizedGitUrl, cancellationToken);
 
             if (alreadyExists)
             {
                 logger.LogInformation(
-                    "[ProjectService] GitHub project with URL '{GitUrl}' already exists for user {UserId}.", gitUrl,
-                    userId);
+                    "[ApplicationService] GitHub project with URL '{GitUrl}' already exists for user {UserId}.",
+                    normalizedGitUrl, userId);
                 return false;
             }
 
@@ -112,23 +123,25 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
             var app = new Application
             {
                 UserId = userId,
-                Name = appName,
+                Name = normalizedAppName,
                 SourceType = SourceType.Remote,
-                SourcePathOrUrl = gitUrl
+                SourcePathOrUrl = normalizedGitUrl
             };
 
             context.Applications.Add(app);
             await context.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation(
-                "[ProjectService] Successfully added GitHub project '{AppName}' for user {UserId}.", appName,
+                "[ApplicationService] Successfully added GitHub project '{AppName}' for user {UserId}.",
+                normalizedAppName,
                 userId);
             return true;
         }
         catch (DbUpdateException ex)
         {
-            logger.LogError(ex, "[ProjectService] Database error occurred while adding GitHub project '{AppName}'.",
-                appName);
+            logger.LogError(ex,
+                "[ApplicationService] Database error occurred while adding GitHub project '{AppName}'.",
+                normalizedAppName);
             return false;
         }
     }
@@ -160,7 +173,7 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
             if (app == null)
             {
                 logger.LogWarning(
-                    "[ProjectService] Project with ID {AppId} not found or does not belong to user {UserId}.",
+                    "[ApplicationService] Project with ID {AppId} not found or does not belong to user {UserId}.",
                     appId, userId);
                 return false;
             }
@@ -169,13 +182,13 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
             context.Applications.Remove(app);
             await context.SaveChangesAsync(cancellationToken);
 
-            logger.LogInformation("[ProjectService] Successfully deleted project {AppId} for user {UserId}.",
+            logger.LogInformation("[ApplicationService] Successfully deleted project {AppId} for user {UserId}.",
                 appId, userId);
             return true;
         }
         catch (DbUpdateException ex)
         {
-            logger.LogError(ex, "[ProjectService] Database error occurred while deleting project {AppId}.",
+            logger.LogError(ex, "[ApplicationService] Database error occurred while deleting project {AppId}.",
                 appId);
             return false;
         }
@@ -187,8 +200,10 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
         CancellationToken cancellationToken = default)
     {
         return await context.Applications
+            .AsNoTracking()
             .Include(a => a.CsProjects)
             .ThenInclude(csp => csp.Deployments)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(a => a.Id == appId && a.UserId == userId, cancellationToken);
     }
 
@@ -196,14 +211,14 @@ public class ApplicationService(AutoMateDbContext context, ILogger<ApplicationSe
     /// <summary>
     ///     Creates a default C# project with predefined configuration settings.
     /// </summary>
-    private static CsProject CreateDefaultCsProject(Guid projectId, CsProjectDto dto)
+    private static CsProject CreateDefaultCsProject(Guid projectId, string name, string path, bool isWebProject)
     {
         return new CsProject
         {
             AppId = projectId,
-            Name = dto.Name,
-            Path = dto.Path,
-            IsWebProject = dto.IsWebProject,
+            Name = name,
+            Path = path,
+            IsWebProject = isWebProject,
             Configuration = new Configuration
             {
                 DotNetVersion = DefaultDotNetVersion,

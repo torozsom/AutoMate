@@ -1,0 +1,94 @@
+name: Deploy to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - automate/azure-deployment
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  AZURE_RESOURCE_GROUP: {{ resource_group_name }}
+  AZURE_LOCATION: {{ azure_location }}
+  CONTAINER_APP_NAME: {{ container_app_name }}
+  CONTAINER_IMAGE: ghcr.io/${{ "{{" }} github.repository_owner {{ "}}" }}/{{ image_name }}:${{ "{{" }} github.sha {{ "}}" }}
+  AZURE_CORE_OUTPUT: none
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ "{{" }} github.actor {{ "}}" }}
+          password: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
+
+      - name: Build image
+        run: docker build --file .automate/Dockerfile --tag "$CONTAINER_IMAGE" .
+
+      - name: Push image
+        run: docker push "$CONTAINER_IMAGE"
+
+      - name: Show expected Azure OIDC context
+        run: |
+          echo "GitHub repository: $GITHUB_REPOSITORY"
+          echo "GitHub ref: $GITHUB_REF"
+          echo "Expected subject: repo:${GITHUB_REPOSITORY}:ref:${GITHUB_REF}"
+          echo "Expected audience: api://AzureADTokenExchange"
+
+      - name: Azure login
+        id: azure_login
+        uses: azure/login@v3
+        continue-on-error: true
+        with:
+          auth-type: SERVICE_PRINCIPAL
+          client-id: ${{ "{{" }} secrets.AZURE_CLIENT_ID {{ "}}" }}
+          tenant-id: ${{ "{{" }} secrets.AZURE_TENANT_ID {{ "}}" }}
+          subscription-id: ${{ "{{" }} secrets.AZURE_SUBSCRIPTION_ID {{ "}}" }}
+
+      - name: Wait for Azure OIDC propagation
+        if: steps.azure_login.outcome == 'failure'
+        run: sleep 90
+
+      - name: Retry Azure login
+        if: steps.azure_login.outcome == 'failure'
+        uses: azure/login@v3
+        with:
+          auth-type: SERVICE_PRINCIPAL
+          client-id: ${{ "{{" }} secrets.AZURE_CLIENT_ID {{ "}}" }}
+          tenant-id: ${{ "{{" }} secrets.AZURE_TENANT_ID {{ "}}" }}
+          subscription-id: ${{ "{{" }} secrets.AZURE_SUBSCRIPTION_ID {{ "}}" }}
+
+      - name: Ensure resource group
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az group create --name "$AZURE_RESOURCE_GROUP" --location "$AZURE_LOCATION"
+
+      - name: Deploy infrastructure
+        uses: azure/arm-deploy@v2
+        with:
+          scope: resourcegroup
+          resourceGroupName: ${{ "{{" }} env.AZURE_RESOURCE_GROUP {{ "}}" }}
+          template: ./infra/main.bicep
+          parameters: >
+            location=${{ "{{" }} env.AZURE_LOCATION {{ "}}" }}
+            containerAppName=${{ "{{" }} env.CONTAINER_APP_NAME {{ "}}" }}
+            containerImage=${{ "{{" }} env.CONTAINER_IMAGE {{ "}}" }}
+            containerRegistryServer=ghcr.io
+            containerRegistryUsername=${{ "{{" }} github.actor {{ "}}" }}
+            containerRegistryPassword=${{ "{{" }} secrets.GHCR_PAT {{ "}}" }}
+            aspNetCoreEnvironment={{ environment_name }}
+          deploymentName: automate-aca-${{ "{{" }} github.run_number {{ "}}" }}

@@ -1,3 +1,4 @@
+using Core.DTO;
 using Core.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,12 +16,12 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
     {
         if (string.IsNullOrWhiteSpace(githubAccountId)) return Guid.Empty;
 
-        var user = await dbContext.Users
-            .OfType<GitHubUser>()
+        return await dbContext.Users
+            .OfType<RemoteUser>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.AccountId == githubAccountId, cancellationToken);
-
-        return user?.Id ?? Guid.Empty;
+            .Where(u => u.AccountId == githubAccountId)
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
 
@@ -33,17 +34,75 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
 
         if (Guid.TryParse(identifier, out var localUserId))
         {
-            var exists = await dbContext.Users.AnyAsync(u => u.Id == localUserId, cancellationToken);
-            return exists ? (localUserId, null, false) : (Guid.Empty, null, false);
+            var remoteUser = await dbContext.Users
+                .OfType<RemoteUser>()
+                .AsNoTracking()
+                .Where(u => u.Id == localUserId)
+                .Select(u => new { u.Id, u.GitHubAccessToken })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (remoteUser is not null)
+                return (remoteUser.Id, remoteUser.GitHubAccessToken, true);
+
+            var localUserExists = await dbContext.Users
+                .OfType<LocalUser>()
+                .AsNoTracking()
+                .AnyAsync(u => u.Id == localUserId, cancellationToken);
+
+            return localUserExists ? (localUserId, null, false) : (Guid.Empty, null, false);
         }
 
         var githubUser = await dbContext.Users
-            .OfType<GitHubUser>()
+            .OfType<RemoteUser>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(u => u.AccountId == identifier, cancellationToken);
+            .Where(u => u.AccountId == identifier)
+            .Select(u => new { u.Id, u.GitHubAccessToken })
+            .FirstOrDefaultAsync(cancellationToken);
 
         return githubUser is not null
-            ? (githubUser.Id, githubUser.AccessToken, true)
+            ? (githubUser.Id, AccessToken: githubUser.GitHubAccessToken, true)
             : (Guid.Empty, null, false);
+    }
+
+
+    /// <inheritdoc />
+    public async Task<bool> HasAzureConnectionAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty)
+            return false;
+
+        return await dbContext.Users
+            .OfType<RemoteUser>()
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == userId
+                           && !string.IsNullOrWhiteSpace(u.AzureAccountId)
+                           && !string.IsNullOrWhiteSpace(u.AzureTenantId)
+                           && !string.IsNullOrWhiteSpace(u.AzureAccessToken),
+                cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<AzureCloudCredentialsDto?> GetAzureCloudCredentialsAsync(Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        if (userId == Guid.Empty)
+            return null;
+
+        var credentials = await dbContext.Users
+            .OfType<RemoteUser>()
+            .AsNoTracking()
+            .Where(u => u.Id == userId
+                        && !string.IsNullOrWhiteSpace(u.AzureTenantId)
+                        && !string.IsNullOrWhiteSpace(u.AzureSubscriptionId)
+                        && !string.IsNullOrWhiteSpace(u.AzureAccessToken))
+            .Select(u => new AzureCloudCredentialsDto
+            {
+                TenantId = u.AzureTenantId!,
+                SubscriptionId = u.AzureSubscriptionId!,
+                AccessToken = u.AzureAccessToken!
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return credentials;
     }
 }

@@ -2,16 +2,43 @@
   {
     "TemplateFile": "Dockerfile.scriban",
     "OutputFile": "Dockerfile",
+    "DeploymentTarget": "Local",
     "IsActive": true
   },
   {
     "TemplateFile": "dockerignore.scriban",
     "OutputFile": "Dockerfile.dockerignore",
+    "DeploymentTarget": "Local",
+    "IsActive": true
+  },
+  {
+    "TemplateFile": "Dockerfile.scriban",
+    "OutputFile": ".automate/Dockerfile",
+    "DeploymentTarget": "Cloud",
+    "IsActive": true
+  },
+  {
+    "TemplateFile": "dockerignore.scriban",
+    "OutputFile": ".automate/Dockerfile.dockerignore",
+    "DeploymentTarget": "Cloud",
     "IsActive": true
   },
   {
     "TemplateFile": "docker-compose.scriban",
     "OutputFile": "docker-compose.yml",
+    "DeploymentTarget": "Local",
+    "IsActive": true
+  },
+  {
+    "TemplateFile": "azure-aca.bicep.scriban",
+    "OutputFile": "infra/main.bicep",
+    "DeploymentTarget": "Cloud",
+    "IsActive": true
+  },
+  {
+    "TemplateFile": "github-actions.yml.scriban",
+    "OutputFile": ".github/workflows/deploy.yml",
+    "DeploymentTarget": "Cloud",
     "IsActive": true
   }
 ]

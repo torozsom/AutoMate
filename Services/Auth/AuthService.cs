@@ -17,49 +17,64 @@ public class AuthService(
     IPasswordHasher<LocalUser> passwordHasher,
     ILogger<AuthService> logger) : IAuthService
 {
+    private const int VerificationTokenLifetimeHours = 24;
+
     /// <inheritdoc />
     public async Task<bool> RegisterAsync(string username, string email, string password,
         Func<string, string> verificationLinkFactory, CancellationToken cancellationToken = default)
     {
-        if (await IsEmailInUseAsync(email, cancellationToken))
+        ArgumentNullException.ThrowIfNull(verificationLinkFactory);
+
+        var normalizedEmail = NormalizeEmail(email);
+        var normalizedUsername = username.Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedUsername) ||
+            string.IsNullOrWhiteSpace(normalizedEmail) ||
+            string.IsNullOrWhiteSpace(password))
         {
-            logger.LogWarning("[AuthService] Registration failed: email is already in use for username '{Username}'.",
-                username);
+            logger.LogWarning("[AuthService] Registration failed because required fields were empty.");
             return false;
         }
 
-        var newUser = CreateLocalUserEntity(username, email, password);
+        if (await IsEmailInUseAsync(normalizedEmail, cancellationToken))
+        {
+            logger.LogWarning("[AuthService] Registration failed: email is already in use for username '{Username}'.",
+                normalizedUsername);
+            return false;
+        }
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var newUser = CreateLocalUserEntity(normalizedUsername, normalizedEmail, password);
+
         try
         {
             dbContext.Users.Add(newUser);
             await dbContext.SaveChangesAsync(cancellationToken);
-
-            var isEmailSent = await TrySendVerificationEmailAsync(newUser, verificationLinkFactory, cancellationToken);
-            if (!isEmailSent)
-            {
-                await transaction.RollbackAsync(cancellationToken);
-                return false;
-            }
-
-            await transaction.CommitAsync(cancellationToken);
-            logger.LogInformation("[AuthService] Successfully registered new user '{Username}'.", username);
-            return true;
         }
-        catch (Exception ex)
+        catch (DbUpdateException ex)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            logger.LogCritical(ex,
-                "[AuthService] CRITICAL: Transaction failed during user registration for '{Username}'.", username);
+            logger.LogWarning(ex, "[AuthService] Registration failed while saving user '{Username}'.",
+                normalizedUsername);
             return false;
         }
+
+        var isEmailSent = await TrySendVerificationEmailAsync(newUser, verificationLinkFactory, cancellationToken);
+        if (!isEmailSent)
+        {
+            await RemoveUnverifiedUserAsync(newUser, cancellationToken);
+            return false;
+        }
+
+        logger.LogInformation("[AuthService] Successfully registered new user '{Username}'.", normalizedUsername);
+        return true;
     }
 
 
     /// <inheritdoc />
     public async Task<bool> VerifyEmailAsync(string token, CancellationToken cancellationToken = default)
     {
+        if (string.IsNullOrWhiteSpace(token))
+            return false;
+
         var user = await dbContext.Users
             .OfType<LocalUser>()
             .FirstOrDefaultAsync(u => u.EmailVerificationToken == token, cancellationToken);
@@ -86,20 +101,30 @@ public class AuthService(
     public async Task<(LocalUser? User, string? ErrorMessage)> LoginAsync(string email, string password,
         CancellationToken cancellationToken = default)
     {
-        var user = await dbContext.Users
-            .OfType<LocalUser>()
-            .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
-
-        if (user == null)
+        var normalizedEmail = NormalizeEmail(email);
+        if (string.IsNullOrWhiteSpace(normalizedEmail) || string.IsNullOrWhiteSpace(password))
             return (null, "Invalid credentials");
 
-        var verificationResult = passwordHasher.VerifyHashedPassword(user, user.PasswordHash!, password);
+        var user = await dbContext.Users
+            .OfType<LocalUser>()
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
+
+        if (user?.PasswordHash == null)
+            return (null, "Invalid credentials");
+
+        var verificationResult = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
 
         if (verificationResult == PasswordVerificationResult.Failed)
             return (null, "Invalid credentials");
 
         if (!user.IsEmailVerified)
             return (null, "Email not verified");
+
+        if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            user.PasswordHash = passwordHasher.HashPassword(user, password);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         return (user, null);
     }
@@ -109,35 +134,94 @@ public class AuthService(
     public async Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
         string? accessToken, CancellationToken cancellationToken = default)
     {
+        var normalizedEmail = NormalizeEmail(email);
+        var normalizedUsername = string.IsNullOrWhiteSpace(username) ? "Unknown" : username.Trim();
+
         var existingUser = await dbContext.Users
-            .OfType<GitHubUser>()
+            .OfType<RemoteUser>()
             .FirstOrDefaultAsync(u => u.AccountId == githubId, cancellationToken);
 
         if (existingUser == null)
         {
-            var newUser = new GitHubUser
+            var newUser = new RemoteUser
             {
                 AccountId = githubId,
-                Username = username,
-                Email = email,
+                Username = normalizedUsername,
+                Email = normalizedEmail,
                 AvatarUrl = avatarUrl,
-                AccessToken = accessToken
+                GitHubAccessToken = accessToken
             };
 
             dbContext.Users.Add(newUser);
-            logger.LogInformation("[AuthService] Created new GitHub user: {Username}", username);
+            logger.LogInformation("[AuthService] Created new GitHub user: {Username}", normalizedUsername);
         }
         else
         {
-            existingUser.Username = username;
-            existingUser.Email = email;
+            existingUser.Username = normalizedUsername;
+            existingUser.Email = normalizedEmail;
             existingUser.AvatarUrl = avatarUrl;
-            existingUser.AccessToken = accessToken;
+            existingUser.GitHubAccessToken = accessToken;
 
-            logger.LogInformation("[AuthService] Updated existing GitHub user: {Username}", username);
+            logger.LogInformation("[AuthService] Updated existing GitHub user: {Username}", normalizedUsername);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+
+    /// <inheritdoc />
+    public async Task LinkAzureAccountAsync(
+        string currentUserIdentifier,
+        string azureAccountId,
+        string email,
+        string displayName,
+        string? tenantId,
+        string? subscriptionId,
+        string? accessToken,
+        string? refreshToken,
+        DateTimeOffset? expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await FindCurrentUserAsync(currentUserIdentifier, cancellationToken);
+
+        if (user == null)
+        {
+            logger.LogWarning(
+                "[AuthService] Azure account linking failed because current user '{Identifier}' was not found.",
+                currentUserIdentifier);
+            return;
+        }
+
+        user.AzureAccountId = azureAccountId;
+        user.AzureTenantId = tenantId;
+        user.AzureSubscriptionId = subscriptionId;
+        user.AzureAccessToken = accessToken;
+        user.AzureRefreshToken = refreshToken;
+        user.AzureTokenExpiresAt = expiresAt;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation("[AuthService] Linked Azure account '{AzureAccountId}' to user '{UserId}'.",
+            azureAccountId, user.Id);
+    }
+
+
+    /// <summary>
+    ///     Resolves the current user from either the local user ID claim or the GitHub account ID claim.
+    /// </summary>
+    /// <param name="identifier">The current authenticated user identifier.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>The current user entity, or null when no matching user is found.</returns>
+    private async Task<RemoteUser?> FindCurrentUserAsync(string identifier, CancellationToken cancellationToken)
+    {
+        if (Guid.TryParse(identifier, out var userId))
+            return await dbContext.Users
+                .OfType<RemoteUser>()
+                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        return await dbContext.Users
+            .OfType<RemoteUser>()
+            .FirstOrDefaultAsync(u => u.AccountId == identifier, cancellationToken);
     }
 
 
@@ -169,7 +253,7 @@ public class AuthService(
             Username = username,
             IsEmailVerified = false,
             EmailVerificationToken = GenerateSecureToken(),
-            VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(24)
+            VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(VerificationTokenLifetimeHours)
         };
 
         user.PasswordHash = passwordHasher.HashPassword(user, password);
@@ -223,5 +307,24 @@ public class AuthService(
             .Replace("+", "-")
             .Replace("/", "_")
             .TrimEnd('=');
+    }
+
+    private async Task RemoveUnverifiedUserAsync(LocalUser user, CancellationToken cancellationToken)
+    {
+        try
+        {
+            dbContext.Users.Remove(user);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            logger.LogError(ex,
+                "[AuthService] Verification email failed and cleanup failed for user '{UserId}'.", user.Id);
+        }
+    }
+
+    private static string NormalizeEmail(string email)
+    {
+        return email.Trim().ToLowerInvariant();
     }
 }

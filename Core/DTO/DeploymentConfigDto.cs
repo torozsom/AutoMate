@@ -35,6 +35,31 @@ public class DeploymentConfigDto
     /// </summary>
     public int ExposedPort { get; set; } = 8080;
 
+    /// <summary>
+    ///     Indicates whether this configuration targets Azure cloud deployment instead of local Docker deployment.
+    /// </summary>
+    public bool IsCloudDeployment { get; set; }
+
+    /// <summary>
+    ///     The Azure region where cloud resources should be created.
+    /// </summary>
+    public string CloudAzureRegion { get; set; } = "eastus";
+
+    /// <summary>
+    ///     The Azure resource group that will contain the deployment resources.
+    /// </summary>
+    public string CloudResourceGroupName { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The Azure Container App name.
+    /// </summary>
+    public string CloudContainerAppName { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     The container registry name used by generated cloud deployment assets.
+    /// </summary>
+    public string CloudRegistryName { get; set; } = string.Empty;
+
     // <summary>
     /// A list of databases required by the deployed application.
     /// </summary>

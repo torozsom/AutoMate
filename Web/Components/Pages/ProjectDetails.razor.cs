@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using Core.DTO;
 using Core.Entities;
@@ -51,9 +52,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
 
-    /// The port exposed by the web container.
-    private int _exposedPort;
-
     /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
     private HubConnection? _hubConnection;
 
@@ -73,8 +71,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A boolean flag to control the visibility of the deployment configuration modal.
     private bool _showConfigModal;
 
+    /// The actual host port currently bound to the web container.
+    private int _webHostPort;
+
     /// A nullable variable to hold the terminal instance for displaying web container logs.
     private Terminal? _webTerminal;
+
+    /// A short workflow status message displayed for remote cloud deployments.
+    private string? _workflowStatusMessage;
+
+    /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
+    private string? _workflowUrl;
 
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
@@ -161,6 +168,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (_app == null) return;
 
+        if (_app.SourceType == SourceType.Remote)
+        {
+            _selectedProjectPath = string.Empty;
+            _currentDeployConfig = CreateCloudDeploymentConfig(_app);
+            _showConfigModal = true;
+            return;
+        }
+
         var csProject = _app.CsProjects.FirstOrDefault(p => p.IsWebProject);
         if (csProject == null) return;
 
@@ -194,6 +209,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
                 await InvokeAsync(() =>
                 {
+                    _webHostPort = 0;
                     _isStopping = false;
                     StateHasChanged();
                 });
@@ -226,6 +242,32 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
+    ///     Renders the deployment configuration modal when enough state is available.
+    /// </summary>
+    private RenderFragment RenderConfigurationForm()
+    {
+        return builder =>
+        {
+            if (!_showConfigModal || _currentDeployConfig is null || _selectedProjectPath is null)
+                return;
+
+            builder.OpenComponent<ConfigurationForm>(0);
+
+            builder.AddAttribute(1, nameof(ConfigurationForm.Config), _currentDeployConfig);
+            builder.AddAttribute(2, nameof(ConfigurationForm.ProjectPath), _selectedProjectPath);
+            builder.AddAttribute(3, nameof(ConfigurationForm.IsCloudDeployment),
+                _currentDeployConfig.IsCloudDeployment);
+            builder.AddAttribute(4, nameof(ConfigurationForm.OnCancel),
+                EventCallback.Factory.Create(this, HideConfigModal));
+            builder.AddAttribute(5, nameof(ConfigurationForm.OnDeployConfirmed),
+                EventCallback.Factory.Create<DeploymentConfigDto>(this, ExecuteDeploymentAsync));
+
+            builder.CloseComponent();
+        };
+    }
+
+
+    /// <summary>
     ///     Executes the deployment process asynchronously by hiding the configuration modal,
     ///     setting the deploying state, and invoking the deployment orchestrator to deploy
     ///     the project with the specified configuration.
@@ -235,9 +277,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         HideConfigModal();
         _isDeploying = true;
+        _webHostPort = 0;
+        _workflowStatusMessage = null;
+        _workflowUrl = null;
         StateHasChanged();
 
-        _ = Task.Run(async () =>
+        if (finalConfig.IsCloudDeployment)
+        {
+            await ExecuteCloudDeploymentAsync(finalConfig);
+            return;
+        }
+
+        _ = Task.Run((Func<Task>)(async () =>
         {
             try
             {
@@ -251,13 +302,84 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
             finally
             {
+                await InvokeAsync(async () =>
+                {
+                    _isDeploying = false;
+                    await RefreshProjectAsync(true);
+                    StateHasChanged();
+                });
+            }
+        }));
+    }
+
+    private async Task ExecuteCloudDeploymentAsync(DeploymentConfigDto finalConfig)
+    {
+        if (_app == null)
+            return;
+
+        if (!TryParseGitHubRepository(_app.SourcePathOrUrl, out var repoOwner, out var repoName))
+        {
+            _workflowStatusMessage = "AutoMate could not determine the GitHub repository owner/name.";
+            _isDeploying = false;
+            return;
+        }
+
+        var currentUserId = await GetCurrentUserIdAsync();
+        var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(currentUserId);
+        var userDetails = await GetCurrentUserDetailsAsync();
+
+        if (azureCredentials == null || string.IsNullOrWhiteSpace(userDetails.AccessToken))
+        {
+            _workflowStatusMessage = "Connect both GitHub and Azure before deploying to the cloud.";
+            _isDeploying = false;
+            return;
+        }
+
+        _workflowStatusMessage = "Configuring Azure OIDC and starting GitHub Actions workflow...";
+        StateHasChanged();
+
+        _ = Task.Run((Func<Task>)(async () =>
+        {
+            try
+            {
+                using var scope = ScopeFactory.CreateScope();
+                var orchestrator = scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>();
+                var deployment = await orchestrator.DeployCloudProjectAsync(new CloudDeploymentRequestDto
+                {
+                    Config = finalConfig,
+                    Metadata = CreateRemoteProjectMetadata(),
+                    CsProjectName = _app.Name,
+                    RepositoryRoot = ".",
+                    GitHubAccessToken = userDetails.AccessToken,
+                    GitHubContainerRegistryToken = userDetails.AccessToken,
+                    AzureCredentials = azureCredentials,
+                    RepositoryOwner = repoOwner,
+                    RepositoryName = repoName
+                });
+
+                await InvokeAsync((Func<Task>)(async () =>
+                {
+                    _workflowStatusMessage = deployment.Status == DeploymentStatus.Failed
+                        ? "GitHub Actions workflow completed with a failure."
+                        : "GitHub Actions workflow has been started.";
+                    _workflowUrl = $"https://github.com/{repoOwner}/{repoName}/actions/workflows/deploy.yml";
+                    _isDeploying = false;
+                    await RefreshProjectAsync();
+                    StateHasChanged();
+                }));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Failed to execute cloud deployment for project {ProjectId}",
+                    finalConfig.ProjectId);
                 await InvokeAsync(() =>
                 {
+                    _workflowStatusMessage = $"Cloud deployment failed to start: {ex.Message}";
                     _isDeploying = false;
                     StateHasChanged();
                 });
             }
-        });
+        }));
     }
 
 
@@ -275,13 +397,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
 
-            if (_app != null)
+            if (_app is { SourceType: SourceType.Local })
             {
                 var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
                 if (csProject != null)
                 {
                     var config = await ProjectScanner.AnalyzeDependenciesAsync(_app, csProject);
-                    _exposedPort = config.ExposedPort;
                     _databaseTabs = config.Databases
                         .Select(db =>
                             new DatabaseTab(db.DbType, db.ContainerNameSuffix, db.DbType))
@@ -290,7 +411,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
         }
 
-        await UpdateExposedPortAsync();
+        await UpdateWebHostPortAsync();
 
         _isLoading = false;
     }
@@ -305,6 +426,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <param name="status">The new deployment status.</param>
     private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
     {
+        _ = HandleDeploymentStatusChangedAsync(projectId, status);
+    }
+
+
+    /// <summary>
+    ///     Handles the deployment status change by checking if the status change is relevant to the current
+    ///     project, updating the latest deployment status, and refreshing the project details if necessary.
+    /// </summary>
+    /// <param name="projectId">The ID of the project for which the status has changed.</param>
+    /// <param name="status">The new deployment status.</param>
+    private async Task HandleDeploymentStatusChangedAsync(Guid projectId, DeploymentStatus status)
+    {
         if (_app != null && _app.Id == projectId)
         {
             var latestDeployment = _app.CsProjects
@@ -314,11 +447,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (latestDeployment != null)
             {
                 latestDeployment.Status = status;
-                _ = UpdateExposedPortAsync().ContinueWith(_ => InvokeAsync(StateHasChanged));
+                await UpdateWebHostPortAsync(status == DeploymentStatus.Running ? 6 : 1);
+                await InvokeAsync(StateHasChanged);
             }
             else
             {
-                _ = RefreshProjectAsync();
+                await RefreshProjectAsync(status == DeploymentStatus.Running);
             }
         }
     }
@@ -328,31 +462,52 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     ///     Updates the exposed port for the web container by checking the latest deployment status and retrieving
     ///     the host port mapped to the web container from the Docker service if the deployment is running.
     /// </summary>
-    private async Task UpdateExposedPortAsync()
+    private async Task UpdateWebHostPortAsync(int maxAttempts = 1)
     {
-        if (GetLatestStatus() == DeploymentStatus.Running && _app != null)
+        if (_app is not { SourceType: SourceType.Local } || GetLatestStatus() != DeploymentStatus.Running)
         {
-            var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
-            if (csProject != null)
-            {
-                var containerName = $"{csProject.Name.ToLowerInvariant()}-web";
-                var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
-                if (hostPort > 0) _exposedPort = hostPort;
-            }
+            _webHostPort = 0;
+            return;
         }
+
+        var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+        if (csProject == null)
+        {
+            _webHostPort = 0;
+            return;
+        }
+
+        var containerNames = GetWebContainerNameCandidates(csProject.Name);
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            foreach (var containerName in containerNames)
+            {
+                var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
+                if (hostPort > 0)
+                {
+                    _webHostPort = hostPort;
+                    return;
+                }
+            }
+
+            if (attempt < maxAttempts)
+                await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        _webHostPort = 0;
     }
 
 
     /// <summary>
     ///     Refreshes the project details by re-fetching the project from the database.
     /// </summary>
-    private async Task RefreshProjectAsync()
+    private async Task RefreshProjectAsync(bool resolveWebPortWithRetry = false)
     {
         var currentUserId = await GetCurrentUserIdAsync();
         if (currentUserId != Guid.Empty)
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
-            await UpdateExposedPortAsync();
+            await UpdateWebHostPortAsync(resolveWebPortWithRetry ? 6 : 1);
             await InvokeAsync(StateHasChanged);
         }
     }
@@ -371,6 +526,139 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// <summary>
+    ///     Creates a cloud deployment configuration for a saved remote repository.
+    /// </summary>
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Application app)
+    {
+        var resourceName = ToAzureResourceName(app.Name);
+
+        return new DeploymentConfigDto
+        {
+            ProjectId = app.Id,
+            CsProjectId = Guid.Empty,
+            ProjectName = app.Name,
+            EnvironmentName = "Production",
+            IsCloudDeployment = true,
+            CloudAzureRegion = "eastus",
+            CloudResourceGroupName = $"{resourceName}-prod-rg",
+            CloudContainerAppName = $"{resourceName}-prod-app",
+            CloudRegistryName = "ghcr.io",
+            Databases = []
+        };
+    }
+
+
+    /// <summary>
+    ///     Normalizes a project name into an Azure-friendly resource name.
+    /// </summary>
+    private static string ToAzureResourceName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized
+            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            normalized = "automate-app";
+
+        return normalized.Length <= 32 ? normalized : normalized[..32].TrimEnd('-');
+    }
+
+
+    /// <summary>
+    ///     Mirrors the Docker Compose template's web container name convention.
+    /// </summary>
+    private static IReadOnlyList<string> GetWebContainerNameCandidates(string csProjectName)
+    {
+        var normalizedName = $"{NormalizeContainerName(csProjectName)}-web";
+        var legacyName = $"{csProjectName.Trim().ToLowerInvariant()}-web";
+
+        return string.Equals(normalizedName, legacyName, StringComparison.OrdinalIgnoreCase)
+            ? [normalizedName]
+            : [normalizedName, legacyName];
+    }
+
+
+    /// <summary>
+    ///     Normalizes a string to be used as a Docker container name by converting it to lowercase,
+    ///     replacing non-alphanumeric characters with hyphens, and trimming leading/trailing hyphens.
+    /// </summary>
+    /// <param name="value">The string to normalize.</param>
+    /// <returns>The normalized Docker container name.</returns>
+    private static string NormalizeContainerName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized
+            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        return string.IsNullOrWhiteSpace(normalized) ? "automate-project" : normalized;
+    }
+
+
+    /// <summary>
+    ///     Creates a minimal metadata model for remote repositories that are deployed without a local checkout scan.
+    /// </summary>
+    private static ProjectMetadataDto CreateRemoteProjectMetadata()
+    {
+        return new ProjectMetadataDto
+        {
+            TargetFramework = "net10.0",
+            DotNetVersion = "10.0",
+            IsWebProject = true
+        };
+    }
+
+
+    /// <summary>
+    ///     Attempts to extract the owner and repository name from a GitHub repository URL.
+    /// </summary>
+    private static bool TryParseGitHubRepository(string repositoryUrl, out string owner, out string name)
+    {
+        owner = string.Empty;
+        name = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(repositoryUrl))
+            return false;
+
+        var normalized = repositoryUrl.Trim().TrimEnd('/');
+        if (normalized.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+            normalized = normalized[..^4];
+
+        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+        {
+            var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length >= 2)
+            {
+                owner = segments[0];
+                name = segments[1];
+                return true;
+            }
+        }
+
+        var sshPrefixIndex = normalized.IndexOf(':', StringComparison.Ordinal);
+        if (normalized.StartsWith("git@github.com", StringComparison.OrdinalIgnoreCase) && sshPrefixIndex >= 0)
+            normalized = normalized[(sshPrefixIndex + 1)..];
+
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+            return false;
+
+        owner = parts[^2];
+        name = parts[^1];
+        return true;
+    }
+
+
     /// Sets the active tab in the UI based on the provided tab ID.
     private void SetActiveTab(string tabId)
     {
@@ -382,8 +670,20 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private string GetTabClass(string tabId)
     {
         return _activeTab == tabId
-            ? "text-light bg-dark border-secondary border-opacity-50 active"
-            : "text-secondary bg-transparent border-0";
+            ? "terminal-tab-link active"
+            : "terminal-tab-link";
+    }
+
+
+    private string GetBuildTabClass()
+    {
+        return $"nav-link {GetTabClass("build")}";
+    }
+
+
+    private string GetWebTabClass()
+    {
+        return $"nav-link {GetTabClass("web")}";
     }
 
 
@@ -396,10 +696,128 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// Retrieves the inline style for the build terminal.
+    private string GetBuildTerminalStyle()
+    {
+        return GetTerminalStyle("build");
+    }
+
+
+    /// Retrieves the inline style for the web terminal.
+    private string GetWebTerminalStyle()
+    {
+        return GetTerminalStyle("web");
+    }
+
+
+    /// Retrieves the inline style for a database terminal based on its corresponding tab ID.
+    private string GetDatabaseTerminalStyle(string tabId)
+    {
+        return GetTerminalStyle(tabId);
+    }
+
+
     /// Retrieves the list of database tabs to be displayed in the UI.
     private IEnumerable<DatabaseTab> GetDatabaseTabs()
     {
         return _databaseTabs;
+    }
+
+
+    /// <summary>
+    ///     Gets a compact label for the selected container in the metrics panel.
+    /// </summary>
+    private static string GetContainerInitial(string containerName)
+    {
+        return string.IsNullOrWhiteSpace(containerName)
+            ? "#"
+            : char.ToUpperInvariant(containerName.Trim()[0]).ToString(CultureInfo.InvariantCulture);
+    }
+
+
+    /// <summary>
+    ///     Converts metric text into a CSS width value for the lightweight utilization bar.
+    /// </summary>
+    private static string GetMetricTrackStyle(string metricValue, bool isMemoryMetric)
+    {
+        var percent = isMemoryMetric
+            ? TryCalculateMemoryUsagePercent(metricValue)
+            : TryParsePercentage(metricValue);
+
+        if (percent is null)
+            return "width: 0%;";
+
+        var normalized = Math.Clamp(percent.Value, 0, 100);
+        if (normalized > 0 && normalized < 1)
+            normalized = 1;
+
+        return $"width: {normalized.ToString("0.##", CultureInfo.InvariantCulture)}%;";
+    }
+
+
+    private static decimal? TryParsePercentage(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var percentIndex = value.IndexOf('%', StringComparison.Ordinal);
+        var numberPart = percentIndex >= 0 ? value[..percentIndex] : value;
+
+        return decimal.TryParse(numberPart.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+
+    private static decimal? TryCalculateMemoryUsagePercent(string memoryUsage)
+    {
+        var parts = memoryUsage.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2)
+            return null;
+
+        var usedBytes = TryParseDataSize(parts[0]);
+        var limitBytes = TryParseDataSize(parts[1]);
+
+        if (usedBytes is null || limitBytes is null || limitBytes <= 0)
+            return null;
+
+        return usedBytes.Value / limitBytes.Value * 100;
+    }
+
+
+    private static decimal? TryParseDataSize(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        var numberLength = 0;
+
+        while (numberLength < trimmed.Length &&
+               (char.IsDigit(trimmed[numberLength]) || trimmed[numberLength] is '.' or ','))
+            numberLength++;
+
+        if (numberLength == 0)
+            return null;
+
+        var numberPart = trimmed[..numberLength].Replace(',', '.');
+        if (!decimal.TryParse(numberPart, NumberStyles.Float, CultureInfo.InvariantCulture, out var amount))
+            return null;
+
+        var unit = trimmed[numberLength..].Trim().ToUpperInvariant();
+        var multiplier = unit switch
+        {
+            "B" or "" => 1m,
+            "KB" => 1_000m,
+            "KIB" => 1_024m,
+            "MB" => 1_000_000m,
+            "MIB" => 1_048_576m,
+            "GB" => 1_000_000_000m,
+            "GIB" => 1_073_741_824m,
+            _ => 1m
+        };
+
+        return amount * multiplier;
     }
 
 
@@ -534,6 +952,22 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
 
         return Guid.Empty;
+    }
+
+
+    /// <summary>
+    ///     Gets the current user details, including the GitHub token for remote deployments.
+    /// </summary>
+    private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrWhiteSpace(userIdString))
+            return (Guid.Empty, null, false);
+
+        return await UserService.GetUserDetailsFromIdentifierAsync(userIdString);
     }
 
 

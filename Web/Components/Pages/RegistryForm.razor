@@ -50,8 +50,18 @@
 
             <div class="row g-3">
                 <div class="col-md-6">
-                    <button type="submit" class="btn btn-primary-custom text-white w-100 h-100">
-                        Create account
+                    <button type="submit" class="btn btn-primary-custom text-white w-100 h-100"
+                            disabled="@IsSubmitting">
+                        @if (IsSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"
+                                  aria-hidden="true"></span>
+                            <span>Creating...</span>
+                        }
+                        else
+                        {
+                            <span>Create account</span>
+                        }
                     </button>
                 </div>
                 <div class="col-md-6">

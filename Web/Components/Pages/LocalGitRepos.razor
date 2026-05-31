@@ -94,8 +94,19 @@
                                                     @if (subProj.IsWebProject)
                                                     {
                                                         <button class="btn btn-sm btn-primary w-25"
-                                                                @onclick="() => SaveProjectAsync(project, subProj)">
-                                                            <i class="bi bi-cloud-download me-1"></i> Save
+                                                                @onclick="() => SaveProjectAsync(project, subProj)"
+                                                                disabled="@IsSaving(subProj)">
+                                                            @if (IsSaving(subProj))
+                                                            {
+                                                                <span class="spinner-border spinner-border-sm me-1"
+                                                                      role="status" aria-hidden="true"></span>
+                                                                <span>Saving...</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <i class="bi bi-cloud-download me-1"></i>
+                                                                <span>Save</span>
+                                                            }
                                                         </button>
                                                     }
                                                 </li>
