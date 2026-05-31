@@ -19,6 +19,8 @@ namespace Services.GitHub;
 /// </summary>
 public class GitHubService : IGitHubService
 {
+    private static readonly TimeSpan RepositoryCacheTtl = TimeSpan.FromMinutes(10);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -118,10 +120,7 @@ public class GitHubService : IGitHubService
             try
             {
                 // Cache the retrieved repository list in the distributed cache for 10 minutes.
-                var cacheOptions = new DistributedCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10)
-                };
+                var cacheOptions = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = RepositoryCacheTtl };
                 var serializedRepos = JsonSerializer.Serialize(repositories, JsonOptions);
 
                 // Store the serialized repository list in the distributed cache using the generated cache key and cache options.
@@ -174,6 +173,12 @@ public class GitHubService : IGitHubService
         if (files is null || files.Count == 0)
             throw new ArgumentException("At least one file is required for a cloud deployment commit.", nameof(files));
 
+        if (string.IsNullOrWhiteSpace(branchName))
+            throw new ArgumentException("Branch name is required.", nameof(branchName));
+
+        if (string.IsNullOrWhiteSpace(commitMessage))
+            throw new ArgumentException("Commit message is required.", nameof(commitMessage));
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var gitHubClient = new GitHubClient(new Octokit.ProductHeaderValue("AutoMate"))
@@ -197,6 +202,9 @@ public class GitHubService : IGitHubService
             foreach (var file in files)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(file.Path))
+                    throw new ArgumentException("Generated files must have non-empty paths.", nameof(files));
+
                 tree.Tree.Add(new NewTreeItem
                 {
                     Path = file.Path.Replace('\\', '/'),
@@ -249,10 +257,12 @@ public class GitHubService : IGitHubService
         if (string.IsNullOrWhiteSpace(repoName))
             throw new ArgumentException("Repository name is required.", nameof(repoName));
 
+        ArgumentNullException.ThrowIfNull(secrets);
+
         if (secrets.Count == 0)
             return;
 
-        var publicKeyRequest = CreateGitHubRequest(accessToken, HttpMethod.Get,
+        using var publicKeyRequest = CreateGitHubRequest(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/secrets/public-key");
         using var publicKeyResponse = await _httpClient.SendAsync(publicKeyRequest, cancellationToken);
         publicKeyResponse.EnsureSuccessStatusCode();
@@ -266,10 +276,14 @@ public class GitHubService : IGitHubService
         foreach (var (secretName, secretValue) in secrets)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(secretName))
+                throw new ArgumentException("GitHub repository secret names cannot be empty.", nameof(secrets));
 
             var encryptedValue = EncryptSecret(secretValue, publicKey.Key);
-            var request = CreateGitHubRequest(accessToken, HttpMethod.Put,
+
+            using var request = CreateGitHubRequest(accessToken, HttpMethod.Put,
                 $"repos/{repoOwner}/{repoName}/actions/secrets/{secretName}");
+
             request.Content = JsonContent.Create(new GitHubRepositorySecretRequest(encryptedValue, publicKey.KeyId),
                 options: JsonOptions);
 
@@ -301,8 +315,9 @@ public class GitHubService : IGitHubService
         if (string.IsNullOrWhiteSpace(branchName))
             throw new ArgumentException("Branch name is required.", nameof(branchName));
 
-        var request = CreateGitHubRequest(accessToken, HttpMethod.Post,
+        using var request = CreateGitHubRequest(accessToken, HttpMethod.Post,
             $"repos/{repoOwner}/{repoName}/actions/workflows/{workflowFileName}/dispatches");
+
         request.Content = JsonContent.Create(new GitHubWorkflowDispatchRequest(branchName), options: JsonOptions);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -333,9 +348,8 @@ public class GitHubService : IGitHubService
         if (string.IsNullOrWhiteSpace(branchName))
             throw new ArgumentException("Branch name is required.", nameof(branchName));
 
-        var branchQuery = Uri.EscapeDataString(branchName);
-        var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
-            $"repos/{repoOwner}/{repoName}/actions/runs?branch={branchQuery}&per_page=20");
+        using var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
+            $"repos/{repoOwner}/{repoName}/actions/runs?branch={Uri.EscapeDataString(branchName)}&per_page=20");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -381,7 +395,7 @@ public class GitHubService : IGitHubService
         if (runId <= 0)
             throw new ArgumentOutOfRangeException(nameof(runId), "Workflow run ID must be a positive number.");
 
-        var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
+        using var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/logs");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -435,12 +449,22 @@ public class GitHubService : IGitHubService
     }
 
 
+    /// <summary>
+    ///     Creates an HttpRequestMessage for GitHub API calls, setting the
+    ///     appropriate headers for authentication and content type.
+    /// </summary>
+    /// <param name="accessToken">GitHub access token for authentication.</param>
+    /// <param name="method">HTTP method for the request.</param>
+    /// <param name="requestUri">The URI for the GitHub API endpoint.</param>
+    /// <returns>An HttpRequestMessage configured for the GitHub API call.</returns>
+    /// <exception cref="ArgumentException">Thrown if the accessToken is null or whitespace.</exception>
     private static HttpRequestMessage CreateGitHubRequest(string accessToken, HttpMethod method, string requestUri)
     {
         if (string.IsNullOrWhiteSpace(accessToken))
             throw new ArgumentException("GitHub access token is required.", nameof(accessToken));
 
-        var request = new HttpRequestMessage(method, requestUri);
+        var escapedRequestUri = EscapeGitHubRequestUri(requestUri);
+        var request = new HttpRequestMessage(method, escapedRequestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
@@ -448,6 +472,31 @@ public class GitHubService : IGitHubService
     }
 
 
+    /// <summary>
+    ///     Escapes the path segments of a GitHub API request URI while preserving query parameters.
+    /// </summary>
+    /// <param name="requestUri">The URI to escape.</param>
+    /// <returns>The escaped URI.</returns>
+    private static string EscapeGitHubRequestUri(string requestUri)
+    {
+        var queryStart = requestUri.IndexOf('?');
+        var path = queryStart >= 0 ? requestUri[..queryStart] : requestUri;
+        var query = queryStart >= 0 ? requestUri[queryStart..] : string.Empty;
+
+        var escapedPath = string.Join('/',
+            path.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Select(Uri.EscapeDataString));
+
+        return $"{escapedPath}{query}";
+    }
+
+
+    /// <summary>
+    ///     Encrypts a secret value using the repository's public key with the NaCl sealed box algorithm.
+    /// </summary>
+    /// <param name="secretValue">The secret value to encrypt.</param>
+    /// <param name="base64PublicKey">The base64-encoded public key.</param>
+    /// <returns>The encrypted secret value.</returns>
     private static string EncryptSecret(string secretValue, string base64PublicKey)
     {
         var secretBytes = Encoding.UTF8.GetBytes(secretValue);
@@ -457,21 +506,30 @@ public class GitHubService : IGitHubService
     }
 
 
+    /// Record class for representing a GitHub repository public key.
     private sealed record GitHubRepositoryPublicKey(
         [property: JsonPropertyName("key_id")] string KeyId,
         [property: JsonPropertyName("key")] string Key);
 
+
+    /// Record class for representing a request to create or update a GitHub repository secret.
     private sealed record GitHubRepositorySecretRequest(
         [property: JsonPropertyName("encrypted_value")]
         string EncryptedValue,
         [property: JsonPropertyName("key_id")] string KeyId);
 
+
+    /// Record class for representing a request to dispatch a GitHub workflow.
     private sealed record GitHubWorkflowDispatchRequest([property: JsonPropertyName("ref")] string Ref);
 
+
+    /// Record classes for representing the response from GitHub API when fetching workflow runs.
     private sealed record GitHubWorkflowRunsResponse(
         [property: JsonPropertyName("workflow_runs")]
         List<GitHubWorkflowRunItem> WorkflowRuns);
 
+
+    /// Record class for representing a GitHub workflow run item in the response.
     private sealed record GitHubWorkflowRunItem(
         [property: JsonPropertyName("id")] long Id,
         [property: JsonPropertyName("status")] string Status,
