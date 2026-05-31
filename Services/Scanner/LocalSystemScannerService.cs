@@ -15,7 +15,7 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
     /// A set of directory names that should be ignored during the scanning process.
     private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
-        "bin", "obj", "node_modules", "testresults", ".vs", ".idea"
+        ".git", "bin", "obj", "node_modules", "testresults", ".vs", ".idea"
     };
 
     /// <inheritdoc />
@@ -33,16 +33,12 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         logger.LogInformation("[LocalSystemScannerService] Starting system scan for .NET projects in: {RootPath}",
             rootPath);
 
-        //
-        return await Task.Run(async () =>
-        {
-            var result = new List<LocalProjectDto>();
-            await ScanDirectorySafeAsync(rootPath, result, cancellationToken);
+        var result = new List<LocalProjectDto>();
+        await ScanDirectorySafeAsync(Path.GetFullPath(rootPath), result, cancellationToken);
 
-            logger.LogInformation("[LocalSystemScannerService] Scan completed. Found {Count} local projects.",
-                result.Count);
-            return result;
-        }, cancellationToken);
+        logger.LogInformation("[LocalSystemScannerService] Scan completed. Found {Count} local projects.",
+            result.Count);
+        return result;
     }
 
 
@@ -155,9 +151,9 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
             var csprojFiles = FindCsprojFilesSafe(repoPath, cancellationToken);
 
             // Determine if this repository is a .NET project by checking for the presence of .sln files or .csproj files
-            var isDotNet = Directory.EnumerateFiles(repoPath).Any(f =>
-                               f.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) ||
-                               f.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
+            var isDotNet = Directory.EnumerateFiles(repoPath, "*", SearchOption.TopDirectoryOnly).Any(f =>
+                               Path.GetExtension(f).Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
+                               Path.GetExtension(f).Equals(".slnx", StringComparison.OrdinalIgnoreCase))
                            || csprojFiles.Count > 0;
 
             var subProjects = new List<CsProjectDto>();
@@ -200,7 +196,9 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         {
             // Use a FileStream with asynchronous reading to load the .csproj file, which allows for cancellation support
             await using var stream =
-                new FileStream(csprojPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+                new FileStream(csprojPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+
             var doc = await XDocument.LoadAsync(stream, LoadOptions.None, cancellationToken);
 
             var sdkAttribute = doc.Root?.Attribute("Sdk")?.Value;

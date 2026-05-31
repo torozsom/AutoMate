@@ -215,7 +215,8 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
             // Try to read the database providers JSON file
             await using var stream = new FileStream(DbProvidersJsonPath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                4096, true);
+                4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
             _cachedDbProviders =
                 await JsonSerializer.DeserializeAsync<List<DbProviderRuleDto>>(stream,
                     cancellationToken: cancellationToken);
@@ -256,10 +257,16 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
         CancellationToken cancellationToken)
     {
         // Try to read the project file content
-        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
         var document = await XDocument.LoadAsync(stream, LoadOptions.None, cancellationToken);
 
         var targetFramework = document.Descendants("TargetFramework").FirstOrDefault()?.Value;
+        if (string.IsNullOrEmpty(targetFramework))
+            targetFramework = document.Descendants("TargetFrameworks").FirstOrDefault()?.Value
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault();
+
         if (string.IsNullOrEmpty(targetFramework)) targetFramework = "net10.0";
 
         var dotNetVersion = targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase)
@@ -269,7 +276,7 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
         // Check if the project is a web project by looking for the Sdk attribute in the root element
         var sdkAttribute = document.Root?.Attribute("Sdk")?.Value;
         var isWebProject = sdkAttribute != null &&
-                           sdkAttribute.Equals("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase);
+                           sdkAttribute.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase);
 
         // Extract the UserSecretsId if it exists
         var userSecretsId = document.Descendants("UserSecretsId").FirstOrDefault()?.Value;
@@ -279,7 +286,7 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
         foreach (var pr in document.Descendants("PackageReference"))
         {
             var include = pr.Attribute("Include")?.Value;
-            var version = pr.Attribute("Version")?.Value;
+            var version = pr.Attribute("Version")?.Value ?? pr.Element("Version")?.Value;
             if (!string.IsNullOrEmpty(include) && !string.IsNullOrEmpty(version))
                 packageReferences[include] = version;
         }
@@ -352,12 +359,14 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
 
         var configFiles = Directory.GetFiles(directory, "appsettings*.json");
 
-        foreach (var file in configFiles.OrderBy(f => f.Length))
+        foreach (var file in configFiles.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
             try
             {
                 // Use a FileStream with asynchronous reading to efficiently read the JSON file content
                 await using var stream =
-                    new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+                    new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
+                        FileOptions.Asynchronous | FileOptions.SequentialScan);
+
                 using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
                 FlattenJsonElement(doc.RootElement, "", settings);
             }
@@ -400,7 +409,8 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
         try
         {
             await using var stream = new FileStream(launchSettingsPath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                4096, true);
+                4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
 
             if (doc.RootElement.TryGetProperty("profiles", out var profiles))
@@ -481,6 +491,9 @@ public class ProjectScannerService(ILogger<ProjectScannerService> logger) : IPro
                     // Ignore empty lines and comments
                     if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith('#'))
                         continue;
+
+                    if (trimmedLine.StartsWith("export ", StringComparison.OrdinalIgnoreCase))
+                        trimmedLine = trimmedLine["export ".Length..].TrimStart();
 
                     // Remove inline comments by splitting on the first occurrence of " #"
                     var commentIndex = trimmedLine.IndexOf(" #", StringComparison.Ordinal);
