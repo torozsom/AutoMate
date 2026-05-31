@@ -30,7 +30,7 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
 
         foreach (var file in generatedFiles)
         {
-            var outputPath = Path.Combine(outputDirectory, file.Path);
+            var outputPath = ResolveOutputPath(outputDirectory, file.Path);
             var outputDir = Path.GetDirectoryName(outputPath);
 
             if (!string.IsNullOrEmpty(outputDir) && !Directory.Exists(outputDir))
@@ -72,7 +72,7 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
 
             generatedFiles.Add(new TemplateFile
             {
-                Path = rule.OutputFile.Replace('\\', '/'),
+                Path = NormalizeRelativeOutputPath(rule.OutputFile),
                 Content = content
             });
         }
@@ -206,6 +206,7 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
         }).ToList();
 
         var normalizedAppName = NormalizeResourceName(config.ProjectName);
+        var normalizedProjectName = NormalizeResourceName(csProjectName);
 
         var containerAppName = string.IsNullOrWhiteSpace(config.CloudContainerAppName)
             ? normalizedAppName
@@ -224,6 +225,8 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
             // Metadata for the Dockerfile
             app_name = config.ProjectName,
             project_name = csProjectName,
+            app_slug = normalizedAppName,
+            project_slug = normalizedProjectName,
 
             dotnet_version = metadata.DotNetVersion,
             projects = projectListForTemplate,
@@ -261,7 +264,9 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
             return Directory.GetCurrentDirectory();
 
         var fullOutputDirectory = Path.GetFullPath(outputDirectory);
-        return Path.GetDirectoryName(fullOutputDirectory) ?? fullOutputDirectory;
+        return string.Equals(Path.GetFileName(fullOutputDirectory), ".automate", StringComparison.OrdinalIgnoreCase)
+            ? Path.GetDirectoryName(fullOutputDirectory) ?? fullOutputDirectory
+            : fullOutputDirectory;
     }
 
 
@@ -329,7 +334,7 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
     private async Task<string?> RenderTemplateAsync(TemplateManifestRuleDto rule, object unifiedModel,
         CancellationToken cancellationToken)
     {
-        var templatePath = Path.Combine(TemplatesDirectory, rule.TemplateFile);
+        var templatePath = ResolveTemplatePath(rule.TemplateFile);
 
         if (!File.Exists(templatePath))
         {
@@ -367,5 +372,56 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
                 rule.TemplateFile);
             throw;
         }
+    }
+
+
+    private static string ResolveTemplatePath(string templateFile)
+    {
+        var templatePath = Path.GetFullPath(Path.Combine(TemplatesDirectory, templateFile));
+        var templatesRoot = Path.GetFullPath(TemplatesDirectory);
+
+        if (!IsPathUnderRoot(templatePath, templatesRoot))
+            throw new InvalidOperationException($"Template path escapes the templates directory: {templateFile}");
+
+        return templatePath;
+    }
+
+
+    private static string ResolveOutputPath(string outputDirectory, string relativePath)
+    {
+        var outputRoot = Path.GetFullPath(outputDirectory);
+        var outputPath = Path.GetFullPath(Path.Combine(outputRoot, relativePath));
+
+        if (!IsPathUnderRoot(outputPath, outputRoot))
+            throw new InvalidOperationException($"Generated output path escapes the target directory: {relativePath}");
+
+        return outputPath;
+    }
+
+
+    private static string NormalizeRelativeOutputPath(string outputFile)
+    {
+        if (string.IsNullOrWhiteSpace(outputFile))
+            throw new InvalidOperationException("Template manifest contains an empty output file path.");
+
+        if (Path.IsPathRooted(outputFile))
+            throw new InvalidOperationException($"Template output path must be relative: {outputFile}");
+
+        var normalized = outputFile.Replace('\\', '/');
+        if (normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(segment => segment == ".."))
+            throw new InvalidOperationException($"Template output path cannot contain parent traversal: {outputFile}");
+
+        return normalized;
+    }
+
+
+    private static bool IsPathUnderRoot(string path, string root)
+    {
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                             + Path.DirectorySeparatorChar;
+        var normalizedPath = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+        return normalizedPath.Equals(root, StringComparison.OrdinalIgnoreCase) ||
+               normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
     }
 }

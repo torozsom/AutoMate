@@ -1,6 +1,6 @@
 services:
   web:
-    container_name: {{ project_name | string.downcase }}-web
+    container_name: {{ project_slug }}-web
     build:
       context: ..
       dockerfile: .automate/Dockerfile
@@ -13,15 +13,15 @@ services:
       # --- Automatically generated connection strings for the databases ---
       {{- for db in databases }}
       {{- if db.type == 'PostgreSQL' }}
-      - ConnectionStrings__{{ db.conn_name }}=Host={{ app_name | string.downcase }}-{{ db.container_suffix }};Port=5432;Database={{ db.name }};Username={{ db.user }};Password={{ db.password }}
+      - ConnectionStrings__{{ db.conn_name }}=Host={{ app_slug }}-{{ db.container_suffix }};Port=5432;Database={{ db.name }};Username={{ db.user }};Password={{ db.password }}
       {{- else if db.type == 'MySQL' }}
-      - ConnectionStrings__{{ db.conn_name }}=Server={{ app_name | string.downcase }}-{{ db.container_suffix }};Port=3306;Database={{ db.name }};Uid={{ db.user }};Pwd={{ db.password }}
+      - ConnectionStrings__{{ db.conn_name }}=Server={{ app_slug }}-{{ db.container_suffix }};Port=3306;Database={{ db.name }};Uid={{ db.user }};Pwd={{ db.password }}
       {{- else if db.type == 'SQLServer' }}
-      - ConnectionStrings__{{ db.conn_name }}=Server={{ app_name | string.downcase }}-{{ db.container_suffix }},1433;Database={{ db.name }};User Id={{ db.user }};Password={{ db.password }};TrustServerCertificate=True
+      - ConnectionStrings__{{ db.conn_name }}=Server={{ app_slug }}-{{ db.container_suffix }},1433;Database={{ db.name }};User Id={{ db.user }};Password={{ db.password }};TrustServerCertificate=True
       {{- else if db.type == 'MongoDB' }}
-      - ConnectionStrings__{{ db.conn_name }}=mongodb://{{ db.user_encoded }}:{{ db.password_encoded }}@{{ app_name | string.downcase }}-{{ db.container_suffix }}:27017/{{ db.name }}?authSource=admin
+      - ConnectionStrings__{{ db.conn_name }}=mongodb://{{ db.user_encoded }}:{{ db.password_encoded }}@{{ app_slug }}-{{ db.container_suffix }}:27017/{{ db.name }}?authSource=admin
       {{- else if db.type == 'Redis' }}
-      - ConnectionStrings__{{ db.conn_name }}={{ app_name | string.downcase }}-{{ db.container_suffix }}:6379{{ if db.password != "" }},password={{ db.password }}{{ end }}
+      - ConnectionStrings__{{ db.conn_name }}={{ app_slug }}-{{ db.container_suffix }}:6379{{ if db.password != "" }},password={{ db.password }}{{ end }}
       {{- end }}
       {{- end }}
       {{- end }}
@@ -34,14 +34,14 @@ services:
     {{- if requires_db }}
     depends_on:
       {{- for db in databases }}
-      - {{ app_name | string.downcase }}-{{ db.container_suffix }}
+      - {{ app_slug }}-{{ db.container_suffix }}
       {{- end }}
     {{- end }}
 
 {{ if requires_db }}
   {{- for db in databases }}
-  {{ app_name | string.downcase }}-{{ db.container_suffix }}:
-    container_name: {{ app_name | string.downcase }}-{{ db.container_suffix }}
+  {{ app_slug }}-{{ db.container_suffix }}:
+    container_name: {{ app_slug }}-{{ db.container_suffix }}
     {{- if db.type == 'PostgreSQL' }}
     image: postgres:15-alpine
     environment:
@@ -57,7 +57,7 @@ services:
       - MYSQL_ROOT_PASSWORD={{ db.password }}
       - MYSQL_DATABASE={{ db.name }}
       - MYSQL_USER={{ db.user }}
-      - MYSQL_PASSWORD={{ db_password }}
+      - MYSQL_PASSWORD={{ db.password }}
     ports:
       - "3306"
 
