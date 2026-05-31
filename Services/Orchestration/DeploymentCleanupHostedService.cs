@@ -18,10 +18,6 @@ public class DeploymentCleanupHostedService(
     ILogger<DeploymentCleanupHostedService> logger)
     : IHostedService
 {
-    private const string SystemFailureLog
-        = "\n[System]: Deployment marked as failed due to application restart or timeout.";
-
-
     /// <summary>
     ///     This method is called when the application starts. It initiates the cleanup process by running the
     ///     CleanupStuckDeploymentsAsync method in a separate task. This allows the cleanup to run asynchronously
@@ -30,10 +26,11 @@ public class DeploymentCleanupHostedService(
     /// <param name="cancellationToken">
     ///     A cancellation token that can be used to cancel the operation if needed.
     /// </param>
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation("[DeploymentCleanupHostedService] Starting to clean up and sync deployments...");
         _ = Task.Run(async () => await CleanupStuckDeploymentsAsync(cancellationToken), cancellationToken);
+        return Task.CompletedTask;
     }
 
 
@@ -75,6 +72,7 @@ public class DeploymentCleanupHostedService(
             // 2. Synchronize 'Running' and 'Stopped' deployments with Docker daemon
             var runningDeployments = await dbContext.Deployments
                 .Include(d => d.CsProject)
+                .ThenInclude(csp => csp!.Application)
                 .Where(d => d.Status == DeploymentStatus.Running || d.Status == DeploymentStatus.Stopped)
                 .ToListAsync(cancellationToken);
 
@@ -87,7 +85,8 @@ public class DeploymentCleanupHostedService(
                 {
                     if (deployment.CsProject == null) continue;
 
-                    var expectedProjectName = deployment.CsProject.Name.ToLowerInvariant().Replace(" ", "");
+                    var expectedProjectName = NormalizeComposeProjectName(
+                        deployment.CsProject.Application?.Name ?? deployment.CsProject.Name);
                     var isActuallyRunning =
                         runningProjectsInDocker.Contains(expectedProjectName, StringComparer.OrdinalIgnoreCase);
 
@@ -113,10 +112,35 @@ public class DeploymentCleanupHostedService(
 
             logger.LogInformation("[DeploymentCleanupHostedService] Deployment sync completed.");
         }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation("[DeploymentCleanupHostedService] Deployment cleanup was cancelled.");
+        }
         catch (Exception ex)
         {
             logger.LogCritical(ex, "[DeploymentCleanupHostedService] CRITICAL: Error occurred while " +
                                    "executing bulk update to clean up and sync deployments.");
         }
+    }
+
+
+    /// <summary>
+    ///     Normalizes a string to be used as a Docker Compose project name by converting to lowercase,
+    ///     replacing invalid characters with hyphens, and collapsing multiple hyphens into a single one.
+    /// </summary>
+    /// <param name="value">The string to normalize.</param>
+    /// <returns>The normalized Docker Compose project name.</returns>
+    private static string NormalizeComposeProjectName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized.Split('-',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        return string.IsNullOrWhiteSpace(normalized) ? "automate-project" : normalized;
     }
 }

@@ -35,6 +35,15 @@ public class CloudDeploymentOrchestrator(
             throw new ArgumentException("Repository root is required for cloud deployment template generation.",
                 nameof(request));
 
+        if (string.IsNullOrWhiteSpace(request.RepositoryOwner))
+            throw new ArgumentException("Repository owner is required for cloud deployment.", nameof(request));
+
+        if (string.IsNullOrWhiteSpace(request.RepositoryName))
+            throw new ArgumentException("Repository name is required for cloud deployment.", nameof(request));
+
+        if (string.IsNullOrWhiteSpace(request.GitHubAccessToken))
+            throw new ArgumentException("GitHub access token is required for cloud deployment.", nameof(request));
+
         var config = request.Config;
         config.IsCloudDeployment = true;
         ApplyCloudDefaults(config);
@@ -62,7 +71,13 @@ public class CloudDeploymentOrchestrator(
         {
             var oidcSetup = await azureDeploymentOrchestrator.EnsureFederatedIdentityAsync(request.AzureCredentials,
                 config, request.RepositoryOwner, request.RepositoryName, request.BranchName, cancellationToken);
+
             await StreamBuildLogAsync(config.ProjectId, "Azure OIDC trust configured for GitHub Actions.");
+
+            if (string.IsNullOrWhiteSpace(oidcSetup.ClientId) ||
+                string.IsNullOrWhiteSpace(oidcSetup.TenantId) ||
+                string.IsNullOrWhiteSpace(oidcSetup.SubscriptionId))
+                throw new InvalidOperationException("Azure OIDC setup did not return complete credentials.");
 
             await gitHubService.UpsertRepositorySecretsAsync(request.GitHubAccessToken, request.RepositoryOwner,
                 request.RepositoryName, new Dictionary<string, string>
@@ -74,6 +89,7 @@ public class CloudDeploymentOrchestrator(
                         ? request.GitHubAccessToken
                         : request.GitHubContainerRegistryToken
                 }, cancellationToken);
+
             await StreamBuildLogAsync(config.ProjectId, "GitHub Actions repository secrets upserted.");
 
             var files = await templateService.GenerateAllTemplatesAsync(config, request.Metadata, request.CsProjectName,
@@ -149,6 +165,14 @@ public class CloudDeploymentOrchestrator(
         }
     }
 
+
+    /// <summary>
+    ///     Retrieves an existing CsProject for the cloud deployment or creates a new one if it doesn't exist.
+    /// </summary>
+    /// <param name="request">The cloud deployment request.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The CsProject instance.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if the project ID is invalid or project not found.</exception>
     private async Task<CsProject> GetOrCreateCloudCsProjectAsync(CloudDeploymentRequestDto request,
         CancellationToken cancellationToken)
     {
@@ -188,6 +212,15 @@ public class CloudDeploymentOrchestrator(
         return csProject;
     }
 
+
+    /// <summary>
+    ///     Polls GitHub for the latest workflow run associated with the given
+    ///     commit SHA until it completes or a timeout is reached.
+    /// </summary>
+    /// <param name="request">The cloud deployment request.</param>
+    /// <param name="commitSha">The commit SHA.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The latest workflow run, or null if not found.</returns>
     private async Task<GitHubWorkflowRunDto?> PollWorkflowRunAsync(CloudDeploymentRequestDto request, string commitSha,
         CancellationToken cancellationToken)
     {
@@ -231,6 +264,13 @@ public class CloudDeploymentOrchestrator(
     }
 
 
+    /// <summary>
+    ///     Downloads the logs for the specified GitHub Actions workflow run and streams them to the client.
+    /// </summary>
+    /// <param name="request">The cloud deployment request.</param>
+    /// <param name="runId">The workflow run ID.</param>
+    /// <param name="projectId">The project ID.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
     private async Task StreamWorkflowLogsAsync(CloudDeploymentRequestDto request, long runId, Guid projectId,
         CancellationToken cancellationToken)
     {
@@ -250,12 +290,21 @@ public class CloudDeploymentOrchestrator(
     }
 
 
+    /// <summary>
+    ///     Streams a log message to the client with a consistent prefix for cloud deployment logs.
+    /// </summary>
+    /// <param name="projectId">The project ID.</param>
+    /// <param name="message">The log message.</param>
     private async Task StreamBuildLogAsync(Guid projectId, string message)
     {
         await logStreamer.StreamBuildLogsAsync(projectId, $"[cloud] {message}\r\n");
     }
 
 
+    /// <summary>
+    ///     Applies default values to the deployment configuration for any missing cloud-related settings.
+    /// </summary>
+    /// <param name="config">The deployment configuration.</param>
     private static void ApplyCloudDefaults(DeploymentConfigDto config)
     {
         var resourceName = NormalizeResourceName(config.ProjectName);
@@ -276,6 +325,12 @@ public class CloudDeploymentOrchestrator(
     }
 
 
+    /// <summary>
+    ///     Generates a short suffix for resource names based on the environment name, using common
+    ///     abbreviations for known environments and normalized values for custom ones.
+    /// </summary>
+    /// <param name="environmentName">The environment name.</param>
+    /// <returns>The environment suffix.</returns>
     private static string GetEnvironmentSuffix(string environmentName)
     {
         var normalized = environmentName.Trim().ToLowerInvariant();
@@ -291,6 +346,12 @@ public class CloudDeploymentOrchestrator(
     }
 
 
+    /// <summary>
+    ///     Normalizes a string to be used in resource names by converting to lowercase, replacing non-alphanumeric
+    ///     characters with dashes, collapsing multiple dashes, and trimming to a maximum length of 23 characters.
+    /// </summary>
+    /// <param name="value">The string to normalize.</param>
+    /// <returns>The normalized resource name.</returns>
     private static string NormalizeResourceName(string value)
     {
         var normalized = new string(value

@@ -10,8 +10,9 @@ namespace Services.Orchestration;
 public interface ILocalDeploymentOrchestrator
 {
     /// Initiates the deployment process for a local .NET project.
-    Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config);
+    Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config, CancellationToken cancellationToken = default);
 
     /// Stops an existing deployment for a local .NET project.
-    Task StopDeploymentAsync(Guid projectId, string projectName, string csProjectPath);
+    Task StopDeploymentAsync(Guid projectId, string projectName, string csProjectPath,
+        CancellationToken cancellationToken = default);
 }
