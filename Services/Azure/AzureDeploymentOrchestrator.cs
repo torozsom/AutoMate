@@ -13,12 +13,14 @@ namespace Services.Azure;
 /// <summary>
 ///     Uses Azure Resource Manager to prepare OIDC trust for GitHub Actions cloud deployments.
 /// </summary>
-public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> logger) : IAzureDeploymentOrchestrator
+public class AzureDeploymentOrchestrator(
+    IHttpClientFactory httpClientFactory,
+    ILogger<AzureDeploymentOrchestrator> logger) : IAzureDeploymentOrchestrator
 {
     private const string GitHubTokenIssuer = "https://token.actions.githubusercontent.com";
     private const string AzureManagementApiVersion = "2022-04-01";
     private const string ContributorRoleDefinitionId = "b24988ac-6180-42a0-ab88-20f7382dd24c";
-    private static readonly HttpClient HttpClient = new();
+
 
     /// <inheritdoc />
     public async Task<AzureOidcSetupResultDto> EnsureFederatedIdentityAsync(AzureCloudCredentialsDto credentials,
@@ -39,6 +41,17 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
         if (string.IsNullOrWhiteSpace(credentials.TenantId))
             throw new ArgumentException("Azure tenant ID is required for cloud deployment setup.", nameof(credentials));
 
+        if (string.IsNullOrWhiteSpace(repositoryOwner))
+            throw new ArgumentException("Repository owner is required for cloud deployment setup.",
+                nameof(repositoryOwner));
+
+        if (string.IsNullOrWhiteSpace(repositoryName))
+            throw new ArgumentException("Repository name is required for cloud deployment setup.",
+                nameof(repositoryName));
+
+        if (string.IsNullOrWhiteSpace(branchName))
+            throw new ArgumentException("Branch name is required for cloud deployment setup.", nameof(branchName));
+
         var resourceGroupName = config.CloudResourceGroupName;
         if (string.IsNullOrWhiteSpace(resourceGroupName))
             throw new ArgumentException("Azure resource group name is required for cloud deployment setup.",
@@ -54,10 +67,13 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
 
         var resourceGroup = await EnsureResourceGroupAsync(subscription, resourceGroupName, config.CloudAzureRegion,
             cancellationToken);
+
         var identity = await EnsureUserAssignedIdentityAsync(resourceGroup, identityName, config.CloudAzureRegion,
             cancellationToken);
+
         await EnsureFederatedCredentialAsync(identity, federatedCredentialName, repositoryOwner, repositoryName,
             branchName, cancellationToken);
+
         await EnsureContributorAssignmentAsync(resourceGroup, identity, credentials.AccessToken, cancellationToken);
 
         logger.LogInformation(
@@ -72,6 +88,15 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
         };
     }
 
+
+    /// <summary>
+    ///     Ensures the specified resource group exists, creating it if necessary.
+    /// </summary>
+    /// <param name="subscription">The Azure subscription resource.</param>
+    /// <param name="resourceGroupName">The name of the resource group to ensure.</param>
+    /// <param name="location">The Azure region for the resource group.</param>
+    /// <param name="cancellationToken">The cancellation token for the operation.</param>
+    /// <returns>The existing or newly created resource group resource.</returns>
     private static async Task<ResourceGroupResource> EnsureResourceGroupAsync(SubscriptionResource subscription,
         string resourceGroupName, string location, CancellationToken cancellationToken)
     {
@@ -82,6 +107,15 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
         return result.Value;
     }
 
+
+    /// <summary>
+    ///     Ensures the specified user-assigned identity exists, creating it if necessary.
+    /// </summary>
+    /// <param name="resourceGroup">The resource group to which the identity belongs.</param>
+    /// <param name="identityName">The name of the identity to ensure.</param>
+    /// <param name="location">The Azure region for the identity.</param>
+    /// <param name="cancellationToken">The cancellation token for the operation.</param>
+    /// <returns>The existing or newly created user-assigned identity resource.</returns>
     private static async Task<UserAssignedIdentityResource> EnsureUserAssignedIdentityAsync(
         ResourceGroupResource resourceGroup, string identityName, string location, CancellationToken cancellationToken)
     {
@@ -91,6 +125,16 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
         return result.Value;
     }
 
+
+    /// <summary>
+    ///    Ensures the specified federated credential exists for the given user-assigned identity, creating it if necessary.
+    /// </summary>
+    /// <param name="identity">The user-assigned identity for which to ensure the federated credential exists.</param>
+    /// <param name="credentialName">The name of the federated credential to ensure.</param>
+    /// <param name="repositoryOwner">The owner of the Git repository.</param>
+    /// <param name="repositoryName">The name of the Git repository.</param>
+    /// <param name="branchName">The name of the branch.</param>
+    /// <param name="cancellationToken">The cancellation token for the operation.</param>
     private static async Task EnsureFederatedCredentialAsync(UserAssignedIdentityResource identity,
         string credentialName, string repositoryOwner, string repositoryName, string branchName,
         CancellationToken cancellationToken)
@@ -107,7 +151,17 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
         await collection.CreateOrUpdateAsync(WaitUntil.Completed, credentialName, data, cancellationToken);
     }
 
-    private static async Task EnsureContributorAssignmentAsync(ResourceGroupResource resourceGroup,
+
+    /// <summary>
+    ///     Ensures the specified user-assigned identity has the Contributor role assignment
+    ///     on the resource group, creating it if necessary.
+    /// </summary>
+    /// <param name="resourceGroup">The resource group on which to assign the role.</param>
+    /// <param name="identity">The user-assigned identity for which to assign the role.</param>
+    /// <param name="accessToken">The access token for the Azure API request.</param>
+    /// <param name="cancellationToken">The cancellation token for the operation.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the principal ID of the identity cannot be determined.</exception>
+    private async Task EnsureContributorAssignmentAsync(ResourceGroupResource resourceGroup,
         UserAssignedIdentityResource identity, string accessToken, CancellationToken cancellationToken)
     {
         var principalId = identity.Data.PrincipalId?.ToString();
@@ -131,7 +185,8 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
             }
         });
 
-        using var response = await HttpClient.SendAsync(request, cancellationToken);
+        var httpClient = httpClientFactory.CreateClient();
+        using var response = await httpClient.SendAsync(request, cancellationToken);
         if (response.IsSuccessStatusCode)
             return;
 
@@ -145,12 +200,25 @@ public class AzureDeploymentOrchestrator(ILogger<AzureDeploymentOrchestrator> lo
         response.EnsureSuccessStatusCode();
     }
 
+
+    /// <summary>
+    ///    Creates a deterministic GUID based on the input string using SHA-256 hashing.
+    /// </summary>
+    /// <param name="value">The input string for which to create a deterministic GUID.</param>
+    /// <returns>The deterministic GUID.</returns>
     private static Guid CreateDeterministicGuid(string value)
     {
         var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value));
         return new Guid(bytes[..16]);
     }
 
+
+    /// <summary>
+    ///     Normalizes the input string to create a valid Azure resource name by converting to lowercase,
+    ///     replacing invalid characters with hyphens, and trimming to a maximum length of 80 characters.
+    /// </summary>
+    /// <param name="value">The input string to normalize.</param>
+    /// <returns>The normalized Azure resource name.</returns>
     private static string ToAzureIdentityName(string value)
     {
         var normalized = new string(value
