@@ -10,18 +10,36 @@
             <div class="text-muted small">Manage local containers and cloud-ready GitHub projects.</div>
         </div>
 
-        <div class="d-flex align-items-center gap-2">
-            @if (_isAzureConnected)
-            {
-                <span class="badge rounded-pill text-bg-success px-3 py-2">
-                    <i class="bi bi-check-circle-fill me-1"></i> Azure connected
-                </span>
-            }
+        <div class="azure-connect-actions">
+            <div class="d-flex align-items-center justify-content-lg-end gap-2">
+                @if (_isAzureConnected)
+                {
+                    <span class="badge rounded-pill text-bg-success px-3 py-2">
+                        <i class="bi bi-check-circle-fill me-1"></i> Azure connected
+                    </span>
+                }
 
-            <a href="/api/auth/azure-login" class="btn azure-connect-button">
-                <i class="bi bi-microsoft me-2"></i>
-                <span>Connect to Azure</span>
-            </a>
+                <a href="/api/auth/azure-login" class="btn azure-connect-button">
+                    <i class="bi bi-microsoft me-2"></i>
+                    <span>Connect work/school Azure</span>
+                </a>
+            </div>
+
+            <div class="input-group input-group-sm azure-tenant-connect">
+                <span class="input-group-text">
+                    <i class="bi bi-key-fill me-1"></i> Tenant ID
+                </span>
+                <input class="form-control"
+                       placeholder="00000000-0000-0000-0000-000000000000"
+                       @bind="_azureTenantId"
+                       @bind:event="oninput"/>
+                <button type="button"
+                        class="btn btn-outline-primary"
+                        @onclick="ConnectPersonalAzureAccount">
+                    <i class="bi bi-person-circle me-1"></i>
+                    <span>Connect personal Azure</span>
+                </button>
+            </div>
         </div>
     </div>
 

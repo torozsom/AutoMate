@@ -91,4 +91,14 @@ jobs:
             containerRegistryUsername=${{ "{{" }} github.actor {{ "}}" }}
             containerRegistryPassword=${{ "{{" }} secrets.GHCR_PAT {{ "}}" }}
             aspNetCoreEnvironment={{ environment_name }}
+{{- for db in databases }}
+{{- if db.requires_login }}
+            {{ db.bicep_username_param }}=${{ "{{" }} secrets.{{ db.github_username_secret }} {{ "}}" }}
+            {{ db.bicep_password_param }}=${{ "{{" }} secrets.{{ db.github_password_secret }} {{ "}}" }}
+{{- end }}
+{{- end }}
+{{- for env_var in custom_env_vars }}
+            {{ env_var.bicep_value_param }}=${{ "{{" }} secrets.{{ env_var.github_value_secret }} {{ "}}" }}
+{{- end }}
           deploymentName: automate-aca-${{ "{{" }} github.run_number {{ "}}" }}
+          failOnStdErr: false

@@ -41,6 +41,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A flag indicating whether the current user has connected an Azure account.
     private bool _isAzureConnected;
 
+    /// The Azure tenant ID entered for personal Microsoft account connections.
+    private string _azureTenantId = string.Empty;
+
     /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
     private bool _isLoading = true;
 
@@ -86,6 +89,11 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IJSRuntime JSRuntime { get; set; } = null!;
 
+    /// Azure connection error returned by the OAuth callback, if any.
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "azure_error")]
+    public string? AzureConnectionError { get; set; }
+
 
     /// <summary>
     ///     Disposes of the component by unsubscribing from the deployment status change notifications.
@@ -117,6 +125,9 @@ public partial class Dashboard : ComponentBase, IDisposable
             _isAzureConnected = await UserService.HasAzureConnectionAsync(_currentUserId);
             _apps = await ApplicationService.GetUserAppsAsync(_currentUserId);
         }
+
+        if (!string.IsNullOrWhiteSpace(AzureConnectionError))
+            _globalErrorMessage = $"Azure connection failed: {AzureConnectionError}";
 
         _isLoading = false;
     }
@@ -455,6 +466,26 @@ public partial class Dashboard : ComponentBase, IDisposable
             CloudRegistryName = "ghcr.io",
             Databases = []
         };
+    }
+
+
+    /// <summary>
+    ///     Starts the tenant-specific Azure OAuth flow for personal Microsoft account tenants.
+    /// </summary>
+    private void ConnectPersonalAzureAccount()
+    {
+        ClearMessages();
+
+        var tenantId = _azureTenantId.Trim();
+        if (!Guid.TryParse(tenantId, out _))
+        {
+            _globalErrorMessage = "Enter a valid Azure tenant ID before connecting a personal Azure account.";
+            return;
+        }
+
+        NavigationManager.NavigateTo(
+            $"/api/auth/azure-login?tenantId={Uri.EscapeDataString(tenantId)}",
+            true);
     }
 
 

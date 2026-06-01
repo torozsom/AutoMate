@@ -126,6 +126,9 @@ public partial class ConfigurationForm : ComponentBase
             return;
         }
 
+        if (IsCloudDeployment && !ValidateCloudRuntimeConfiguration())
+            return;
+
         Config.CustomEnvVars ??= new Dictionary<string, string>();
         Config.CustomEnvVars.Clear();
 
@@ -136,6 +139,150 @@ public partial class ConfigurationForm : ComponentBase
                 Config.CustomEnvVars.TryAdd(item.Key.Trim(), item.Value?.Trim() ?? string.Empty);
 
         await OnDeployConfirmed.InvokeAsync(Config);
+    }
+
+
+    private bool ValidateCloudRuntimeConfiguration()
+    {
+        var connectionStringEnvNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var database in Config.Databases)
+        {
+            if (!IsSupportedDatabaseEngine(database.DbType))
+            {
+                _validationMessage =
+                    $"Database engine '{database.DbType}' is not supported for Azure deployments.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(database.ConnectionStringName) ||
+                !IsValidConfigurationKeySegment(database.ConnectionStringName))
+            {
+                _validationMessage =
+                    "Database connection string names may contain only letters, numbers, and underscores.";
+                return false;
+            }
+
+            if (!connectionStringEnvNames.Add($"ConnectionStrings__{database.ConnectionStringName.Trim()}"))
+            {
+                _validationMessage =
+                    $"Connection string name '{database.ConnectionStringName}' is used more than once.";
+                return false;
+            }
+
+            if (!string.Equals(database.DbType, "Redis", StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrWhiteSpace(database.DbName))
+            {
+                _validationMessage = "Database name is required for every non-Redis database.";
+                return false;
+            }
+
+            if (RequiresDatabaseLogin(database.DbType) && string.IsNullOrWhiteSpace(database.DbUser))
+            {
+                _validationMessage = "PostgreSQL, MySQL, and SQL Server databases require an administrator username.";
+                return false;
+            }
+
+            if (RequiresDatabaseLogin(database.DbType) && !IsValidDatabaseAdministrator(database.DbUser))
+            {
+                _validationMessage =
+                    "Database administrator usernames may contain only letters and numbers, must start with a letter, and cannot use common reserved names.";
+                return false;
+            }
+
+            if (RequiresDatabaseLogin(database.DbType) && string.IsNullOrWhiteSpace(database.DbPassword))
+            {
+                _validationMessage = "PostgreSQL, MySQL, and SQL Server databases require an administrator password.";
+                return false;
+            }
+
+            if (RequiresDatabaseLogin(database.DbType) && !IsStrongEnoughDatabasePassword(database.DbPassword))
+            {
+                _validationMessage =
+                    "Database passwords must be at least 8 characters and include uppercase, lowercase, and numeric characters.";
+                return false;
+            }
+        }
+
+        var customEnvKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var envVar in _envVars.Where(envVar => !string.IsNullOrWhiteSpace(envVar.Key)))
+        {
+            var key = envVar.Key.Trim();
+            if (!IsValidEnvironmentVariableName(key))
+            {
+                _validationMessage =
+                    "Environment variable names may contain only letters, numbers, and underscores, and cannot start with a number.";
+                return false;
+            }
+
+            if (!customEnvKeys.Add(key))
+            {
+                _validationMessage = $"Environment variable '{key}' is defined more than once.";
+                return false;
+            }
+
+            if (connectionStringEnvNames.Contains(key))
+            {
+                _validationMessage =
+                    $"Environment variable '{key}' is already generated from the database configuration.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+
+    private static bool IsSupportedDatabaseEngine(string dbType)
+    {
+        return dbType.Trim().ToLowerInvariant() switch
+        {
+            "postgresql" or "mysql" or "sqlserver" or "mongodb" or "redis" => true,
+            _ => false
+        };
+    }
+
+
+    private static bool RequiresDatabaseLogin(string dbType)
+    {
+        return dbType.Trim().ToLowerInvariant() is "postgresql" or "mysql" or "sqlserver";
+    }
+
+
+    private static bool IsValidConfigurationKeySegment(string value)
+    {
+        return !string.IsNullOrWhiteSpace(value) &&
+               value.Trim().All(c => char.IsLetterOrDigit(c) || c == '_');
+    }
+
+
+    private static bool IsValidDatabaseAdministrator(string value)
+    {
+        var trimmed = value.Trim();
+        string[] reservedNames = ["admin", "administrator", "root", "guest", "public", "sa"];
+
+        return trimmed.Length > 0 &&
+               char.IsLetter(trimmed[0]) &&
+               trimmed.All(char.IsLetterOrDigit) &&
+               !reservedNames.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
+    }
+
+
+    private static bool IsStrongEnoughDatabasePassword(string value)
+    {
+        return value.Length >= 8 &&
+               value.Any(char.IsUpper) &&
+               value.Any(char.IsLower) &&
+               value.Any(char.IsDigit);
+    }
+
+
+    private static bool IsValidEnvironmentVariableName(string value)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length > 0 &&
+               (char.IsLetter(trimmed[0]) || trimmed[0] == '_') &&
+               trimmed.All(c => char.IsLetterOrDigit(c) || c == '_');
     }
 
 
@@ -227,7 +374,7 @@ public partial class ConfigurationForm : ComponentBase
         {
             DbType = "PostgreSQL",
             DbName = $"appdb{dbCount}",
-            DbUser = "admin",
+            DbUser = "automateadmin",
             DbPassword = "AdminPwd123",
             ConnectionStringName = $"Database{dbCount}Connection",
             ContainerNameSuffix = $"db{dbCount}"
