@@ -318,6 +318,9 @@ public class CloudDeploymentOrchestrator(
 
         foreach (var (database, index) in request.Config.Databases.Select((database, index) => (database, index)))
         {
+            if (!RequiresDatabaseLogin(database.DbType))
+                continue;
+
             secrets[CloudDeploymentSecretNames.GetDatabaseUsernameSecretName(index)] =
                 Base64Encode(string.IsNullOrWhiteSpace(database.DbUser) ? "automateadmin" : database.DbUser.Trim());
             secrets[CloudDeploymentSecretNames.GetDatabasePasswordSecretName(index)] =
@@ -338,6 +341,13 @@ public class CloudDeploymentOrchestrator(
     private static string Base64Encode(string value)
     {
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
+    }
+
+
+    private static bool RequiresDatabaseLogin(string databaseType)
+    {
+        return databaseType.Trim().ToLowerInvariant() is "postgresql" or "postgres" or "mysql" or "sqlserver"
+            or "sql-server" or "mssql" or "microsoft sql server";
     }
 
 

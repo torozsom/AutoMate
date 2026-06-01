@@ -207,11 +207,13 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
                     ? $"appdb{index + 1}"
                     : db.DbName.Trim();
                 var resourceSuffix = NormalizeResourceSegment($"{connectionName}-{index}", 18);
+                var requiresLogin = RequiresDatabaseLogin(type);
 
                 return new
                 {
                     index,
                     type,
+                    requires_login = requiresLogin,
                     name = databaseName,
                     user = db.DbUser,
                     password = db.DbPassword,
@@ -358,6 +360,12 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
             "redis" => "Redis",
             _ => value.Trim()
         };
+    }
+
+
+    private static bool RequiresDatabaseLogin(string databaseType)
+    {
+        return databaseType is "PostgreSQL" or "MySQL" or "SQLServer";
     }
 
 

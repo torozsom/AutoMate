@@ -29,6 +29,7 @@ param containerRegistryPassword string = ''
 param aspNetCoreEnvironment string = '{{ environment_name }}'
 
 {{- for db in databases }}
+{{- if db.requires_login }}
 @secure()
 @description('Base64-encoded administrator username for database {{ db.conn_name }}.')
 param {{ db.bicep_username_param }} string
@@ -37,6 +38,7 @@ param {{ db.bicep_username_param }} string
 @description('Base64-encoded administrator password for database {{ db.conn_name }}.')
 param {{ db.bicep_password_param }} string
 
+{{- end }}
 {{- end }}
 {{- for env_var in custom_env_vars }}
 @secure()
@@ -48,8 +50,10 @@ var hasRegistryCredentials = !empty(containerRegistryUsername) && !empty(contain
 
 {{- for db in databases }}
 var db{{ db.index }}ServerName = take('${containerAppName}-{{ db.resource_suffix }}-${uniqueString(resourceGroup().id)}', {{ if db.type == 'MongoDB' }}44{{ else }}63{{ end }})
+{{- if db.requires_login }}
 var {{ db.bicep_username_value }} = base64ToString({{ db.bicep_username_param }})
 var {{ db.bicep_password_value }} = base64ToString({{ db.bicep_password_param }})
+{{- end }}
 {{- end }}
 {{- for env_var in custom_env_vars }}
 var {{ env_var.bicep_decoded_value }} = base64ToString({{ env_var.bicep_value_param }})
