@@ -28,7 +28,32 @@ param containerRegistryPassword string = ''
 @description('Application environment name exposed to ASP.NET Core.')
 param aspNetCoreEnvironment string = '{{ environment_name }}'
 
+{{- for db in databases }}
+@secure()
+@description('Base64-encoded administrator username for database {{ db.conn_name }}.')
+param {{ db.bicep_username_param }} string
+
+@secure()
+@description('Base64-encoded administrator password for database {{ db.conn_name }}.')
+param {{ db.bicep_password_param }} string
+
+{{- end }}
+{{- for env_var in custom_env_vars }}
+@secure()
+@description('Base64-encoded runtime value for environment variable {{ env_var.key }}.')
+param {{ env_var.bicep_value_param }} string
+
+{{- end }}
 var hasRegistryCredentials = !empty(containerRegistryUsername) && !empty(containerRegistryPassword)
+
+{{- for db in databases }}
+var db{{ db.index }}ServerName = take('${containerAppName}-{{ db.resource_suffix }}-${uniqueString(resourceGroup().id)}', {{ if db.type == 'MongoDB' }}44{{ else }}63{{ end }})
+var {{ db.bicep_username_value }} = base64ToString({{ db.bicep_username_param }})
+var {{ db.bicep_password_value }} = base64ToString({{ db.bicep_password_param }})
+{{- end }}
+{{- for env_var in custom_env_vars }}
+var {{ env_var.bicep_decoded_value }} = base64ToString({{ env_var.bicep_value_param }})
+{{- end }}
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsWorkspaceName
@@ -55,9 +80,225 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
+{{- for db in databases }}
+{{- if db.type == 'PostgreSQL' }}
+resource postgres{{ db.index }} 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
+  name: db{{ db.index }}ServerName
+  location: location
+  sku: {
+    name: 'Standard_B1ms'
+    tier: 'Burstable'
+  }
+  properties: {
+    version: '15'
+    administratorLogin: {{ db.bicep_username_value }}
+    administratorLoginPassword: {{ db.bicep_password_value }}
+    storage: {
+      storageSizeGB: 32
+    }
+    backup: {
+      backupRetentionDays: 7
+      geoRedundantBackup: 'Disabled'
+    }
+    highAvailability: {
+      mode: 'Disabled'
+    }
+  }
+}
+
+resource postgres{{ db.index }}Database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06-01-preview' = {
+  parent: postgres{{ db.index }}
+  name: '{{ db.name }}'
+  properties: {
+    charset: 'UTF8'
+    collation: 'en_US.utf8'
+  }
+}
+
+resource postgres{{ db.index }}Firewall 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = {
+  parent: postgres{{ db.index }}
+  name: 'allow-azure-services'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
+var db{{ db.index }}ConnectionString = format('Host={0};Port=5432;Database={{ db.name }};Username={1};Password={2};Ssl Mode=Require;Trust Server Certificate=true', postgres{{ db.index }}.properties.fullyQualifiedDomainName, {{ db.bicep_username_value }}, {{ db.bicep_password_value }})
+{{- else if db.type == 'MySQL' }}
+resource mysql{{ db.index }} 'Microsoft.DBforMySQL/flexibleServers@2023-12-30' = {
+  name: db{{ db.index }}ServerName
+  location: location
+  sku: {
+    name: 'Standard_B1ms'
+    tier: 'Burstable'
+  }
+  properties: {
+    version: '8.0.21'
+    administratorLogin: {{ db.bicep_username_value }}
+    administratorLoginPassword: {{ db.bicep_password_value }}
+    storage: {
+      storageSizeGB: 20
+    }
+    backup: {
+      backupRetentionDays: 7
+      geoRedundantBackup: 'Disabled'
+    }
+  }
+}
+
+resource mysql{{ db.index }}Database 'Microsoft.DBforMySQL/flexibleServers/databases@2023-12-30' = {
+  parent: mysql{{ db.index }}
+  name: '{{ db.name }}'
+  properties: {
+    charset: 'utf8'
+    collation: 'utf8_general_ci'
+  }
+}
+
+resource mysql{{ db.index }}Firewall 'Microsoft.DBforMySQL/flexibleServers/firewallRules@2023-12-30' = {
+  parent: mysql{{ db.index }}
+  name: 'allow-azure-services'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
+var db{{ db.index }}ConnectionString = format('Server={0};Port=3306;Database={{ db.name }};Uid={1};Pwd={2};SslMode=Required', mysql{{ db.index }}.properties.fullyQualifiedDomainName, {{ db.bicep_username_value }}, {{ db.bicep_password_value }})
+{{- else if db.type == 'SQLServer' }}
+resource sqlServer{{ db.index }} 'Microsoft.Sql/servers@2023-08-01' = {
+  name: db{{ db.index }}ServerName
+  location: location
+  properties: {
+    administratorLogin: {{ db.bicep_username_value }}
+    administratorLoginPassword: {{ db.bicep_password_value }}
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource sqlServer{{ db.index }}Database 'Microsoft.Sql/servers/databases@2023-08-01' = {
+  parent: sqlServer{{ db.index }}
+  name: '{{ db.name }}'
+  location: location
+  sku: {
+    name: 'Basic'
+    tier: 'Basic'
+    capacity: 5
+  }
+}
+
+resource sqlServer{{ db.index }}Firewall 'Microsoft.Sql/servers/firewallRules@2023-08-01' = {
+  parent: sqlServer{{ db.index }}
+  name: 'AllowAllWindowsAzureIps'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
+var db{{ db.index }}ConnectionString = format('Server=tcp:{0},1433;Initial Catalog={{ db.name }};User ID={1};Password={2};Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', sqlServer{{ db.index }}.properties.fullyQualifiedDomainName, {{ db.bicep_username_value }}, {{ db.bicep_password_value }})
+{{- else if db.type == 'MongoDB' }}
+resource cosmosMongo{{ db.index }} 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
+  name: db{{ db.index }}ServerName
+  location: location
+  kind: 'MongoDB'
+  properties: {
+    databaseAccountOfferType: 'Standard'
+    publicNetworkAccess: 'Enabled'
+    locations: [
+      {
+        locationName: location
+        failoverPriority: 0
+        isZoneRedundant: false
+      }
+    ]
+    capabilities: [
+      {
+        name: 'EnableMongo'
+      }
+    ]
+    apiProperties: {
+      serverVersion: '4.2'
+    }
+  }
+}
+
+resource cosmosMongo{{ db.index }}Database 'Microsoft.DocumentDB/databaseAccounts/mongodbDatabases@2024-05-15' = {
+  parent: cosmosMongo{{ db.index }}
+  name: '{{ db.name }}'
+  properties: {
+    resource: {
+      id: '{{ db.name }}'
+    }
+    options: {
+      throughput: 400
+    }
+  }
+}
+
+var db{{ db.index }}ConnectionString = format('mongodb://{0}:{1}@{0}.mongo.cosmos.azure.com:10255/{{ db.name }}?ssl=true&replicaSet=globaldb&retrywrites=false&maxIdleTimeMS=120000&appName=@{0}@', cosmosMongo{{ db.index }}.name, cosmosMongo{{ db.index }}.listKeys().primaryMasterKey)
+{{- else if db.type == 'Redis' }}
+resource redis{{ db.index }} 'Microsoft.Cache/Redis@2023-08-01' = {
+  name: db{{ db.index }}ServerName
+  location: location
+  properties: {
+    sku: {
+      name: 'Basic'
+      family: 'C'
+      capacity: 0
+    }
+    enableNonSslPort: false
+    minimumTlsVersion: '1.2'
+  }
+}
+
+var db{{ db.index }}ConnectionString = format('{0}:6380,password={1},ssl=True,abortConnect=False', redis{{ db.index }}.properties.hostName, redis{{ db.index }}.listKeys().primaryKey)
+{{- end }}
+
+{{- end }}
+
+var databaseConnectionSecrets = [
+{{- for db in databases }}
+  {
+    name: '{{ db.connection_secret_name }}'
+    value: db{{ db.index }}ConnectionString
+  }
+{{- end }}
+]
+
+var customEnvironmentSecrets = [
+{{- for env_var in custom_env_vars }}
+  {
+    name: '{{ env_var.container_secret_name }}'
+    value: {{ env_var.bicep_decoded_value }}
+  }
+{{- end }}
+]
+
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
+{{- if requires_db }}
+  dependsOn: [
+{{- for db in databases }}
+{{- if db.type == 'PostgreSQL' }}
+    postgres{{ db.index }}Database
+    postgres{{ db.index }}Firewall
+{{- else if db.type == 'MySQL' }}
+    mysql{{ db.index }}Database
+    mysql{{ db.index }}Firewall
+{{- else if db.type == 'SQLServer' }}
+    sqlServer{{ db.index }}Database
+    sqlServer{{ db.index }}Firewall
+{{- else if db.type == 'MongoDB' }}
+    cosmosMongo{{ db.index }}Database
+{{- else if db.type == 'Redis' }}
+    redis{{ db.index }}
+{{- end }}
+{{- end }}
+  ]
+{{- end }}
   properties: {
     managedEnvironmentId: containerEnvironment.id
     configuration: {
@@ -68,12 +309,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
         allowInsecure: false
       }
-      secrets: hasRegistryCredentials ? [
+      secrets: concat(hasRegistryCredentials ? [
         {
           name: 'container-registry-password'
           value: containerRegistryPassword
         }
-      ] : []
+      ] : [], databaseConnectionSecrets, customEnvironmentSecrets)
       registries: hasRegistryCredentials ? [
         {
           server: containerRegistryServer
@@ -92,10 +333,16 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'ASPNETCORE_ENVIRONMENT'
               value: aspNetCoreEnvironment
             }
+{{- for db in databases }}
+            {
+              name: '{{ db.connection_env_name }}'
+              secretRef: '{{ db.connection_secret_name }}'
+            }
+{{- end }}
 {{- for env_var in custom_env_vars }}
             {
               name: '{{ env_var.key }}'
-              value: '{{ env_var.value }}'
+              secretRef: '{{ env_var.container_secret_name }}'
             }
 {{- end }}
           ]

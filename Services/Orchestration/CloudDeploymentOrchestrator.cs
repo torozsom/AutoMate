@@ -1,6 +1,7 @@
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Services.Azure;
@@ -80,16 +81,10 @@ public class CloudDeploymentOrchestrator(
                 string.IsNullOrWhiteSpace(oidcSetup.SubscriptionId))
                 throw new InvalidOperationException("Azure OIDC setup did not return complete credentials.");
 
+            var repositorySecrets = BuildRepositorySecrets(request, oidcSetup);
+
             await gitHubService.UpsertRepositorySecretsAsync(request.GitHubAccessToken, request.RepositoryOwner,
-                request.RepositoryName, new Dictionary<string, string>
-                {
-                    ["AZURE_CLIENT_ID"] = oidcSetup.ClientId,
-                    ["AZURE_TENANT_ID"] = oidcSetup.TenantId,
-                    ["AZURE_SUBSCRIPTION_ID"] = oidcSetup.SubscriptionId,
-                    ["GHCR_PAT"] = string.IsNullOrWhiteSpace(request.GitHubContainerRegistryToken)
-                        ? request.GitHubAccessToken
-                        : request.GitHubContainerRegistryToken
-                }, cancellationToken);
+                request.RepositoryName, repositorySecrets, cancellationToken);
 
             await StreamBuildLogAsync(config.ProjectId, "GitHub Actions repository secrets upserted.");
 
@@ -299,6 +294,50 @@ public class CloudDeploymentOrchestrator(
     private async Task StreamBuildLogAsync(Guid projectId, string message)
     {
         await logStreamer.StreamBuildLogsAsync(projectId, $"[cloud] {message}\r\n");
+    }
+
+
+    /// <summary>
+    ///     Builds the repository secrets consumed by the generated GitHub Actions workflow.
+    /// </summary>
+    /// <param name="request">The cloud deployment request.</param>
+    /// <param name="oidcSetup">The Azure OIDC setup result.</param>
+    /// <returns>The GitHub Actions repository secrets to create or update.</returns>
+    private static Dictionary<string, string> BuildRepositorySecrets(CloudDeploymentRequestDto request,
+        AzureOidcSetupResultDto oidcSetup)
+    {
+        var secrets = new Dictionary<string, string>
+        {
+            ["AZURE_CLIENT_ID"] = oidcSetup.ClientId,
+            ["AZURE_TENANT_ID"] = oidcSetup.TenantId,
+            ["AZURE_SUBSCRIPTION_ID"] = oidcSetup.SubscriptionId,
+            ["GHCR_PAT"] = string.IsNullOrWhiteSpace(request.GitHubContainerRegistryToken)
+                ? request.GitHubAccessToken
+                : request.GitHubContainerRegistryToken
+        };
+
+        foreach (var (database, index) in request.Config.Databases.Select((database, index) => (database, index)))
+        {
+            secrets[CloudDeploymentSecretNames.GetDatabaseUsernameSecretName(index)] =
+                Base64Encode(string.IsNullOrWhiteSpace(database.DbUser) ? "automateadmin" : database.DbUser.Trim());
+            secrets[CloudDeploymentSecretNames.GetDatabasePasswordSecretName(index)] =
+                Base64Encode(database.DbPassword ?? string.Empty);
+        }
+
+        foreach (var (envVar, index) in request.Config.CustomEnvVars
+                     .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Key))
+                     .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                     .Select((envVar, index) => (envVar, index)))
+            secrets[CloudDeploymentSecretNames.GetCustomEnvironmentSecretName(index, envVar.Key.Trim())] =
+                Base64Encode(envVar.Value ?? string.Empty);
+
+        return secrets;
+    }
+
+
+    private static string Base64Encode(string value)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
     }
 
 

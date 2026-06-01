@@ -29,7 +29,7 @@ public class AzureDeploymentOrchestrator(
     private const int FederatedCredentialReadinessAttempts = 6;
     private const int ProviderRegistrationAttempts = 24;
 
-    private static readonly string[] RequiredResourceProviders =
+    private static readonly string[] BaseRequiredResourceProviders =
     [
         "Microsoft.App",
         "Microsoft.OperationalInsights"
@@ -82,7 +82,7 @@ public class AzureDeploymentOrchestrator(
         var subscription = armClient.GetSubscriptionResource(SubscriptionResource.CreateResourceIdentifier(
             credentials.SubscriptionId));
 
-        foreach (var providerNamespace in RequiredResourceProviders)
+        foreach (var providerNamespace in GetRequiredResourceProviders(config))
             await EnsureResourceProviderRegisteredAsync(credentials.SubscriptionId, providerNamespace,
                 credentials.AccessToken, cancellationToken);
 
@@ -396,6 +396,44 @@ public class AzureDeploymentOrchestrator(
 
         throw new InvalidOperationException(
             $"Azure resource provider '{providerNamespace}' registration did not complete before the timeout. Current state: {registrationState ?? "<unknown>"}.");
+    }
+
+
+    /// <summary>
+    ///     Returns the Azure resource providers required by Container Apps plus the selected managed database services.
+    /// </summary>
+    /// <param name="config">The active deployment configuration.</param>
+    /// <returns>The provider namespaces that must be registered before deployment.</returns>
+    private static IReadOnlyCollection<string> GetRequiredResourceProviders(DeploymentConfigDto config)
+    {
+        var providers = new HashSet<string>(BaseRequiredResourceProviders, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var database in config.Databases)
+            switch (database.DbType.Trim().ToLowerInvariant())
+            {
+                case "postgresql":
+                case "postgres":
+                    providers.Add("Microsoft.DBforPostgreSQL");
+                    break;
+                case "mysql":
+                    providers.Add("Microsoft.DBforMySQL");
+                    break;
+                case "sqlserver":
+                case "sql-server":
+                case "mssql":
+                case "microsoft sql server":
+                    providers.Add("Microsoft.Sql");
+                    break;
+                case "mongodb":
+                case "mongo":
+                    providers.Add("Microsoft.DocumentDB");
+                    break;
+                case "redis":
+                    providers.Add("Microsoft.Cache");
+                    break;
+            }
+
+        return providers;
     }
 
 

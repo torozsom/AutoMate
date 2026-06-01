@@ -192,22 +192,44 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
         if (string.IsNullOrEmpty(relativeMainProjectFolder))
             relativeMainProjectFolder = ".";
 
-        var databasesForTemplate = config.Databases.Select(db => new
-        {
-            type = db.DbType,
-            name = db.DbName,
-            user = db.DbUser,
-            password = db.DbPassword,
-
-            user_encoded = string.IsNullOrEmpty(db.DbUser) ? "" : Uri.EscapeDataString(db.DbUser),
-            password_encoded = string.IsNullOrEmpty(db.DbPassword) ? "" : Uri.EscapeDataString(db.DbPassword),
-
-            conn_name = db.ConnectionStringName,
-            container_suffix = db.ContainerNameSuffix
-        }).ToList();
-
         var normalizedAppName = NormalizeResourceName(config.ProjectName);
         var normalizedProjectName = NormalizeResourceName(csProjectName);
+
+        var databasesForTemplate = config.Databases
+            .Where(db => !string.IsNullOrWhiteSpace(db.DbType))
+            .Select((db, index) =>
+            {
+                var type = NormalizeDatabaseType(db.DbType);
+                var connectionName = string.IsNullOrWhiteSpace(db.ConnectionStringName)
+                    ? $"Database{index + 1}Connection"
+                    : db.ConnectionStringName.Trim();
+                var databaseName = string.IsNullOrWhiteSpace(db.DbName)
+                    ? $"appdb{index + 1}"
+                    : db.DbName.Trim();
+                var resourceSuffix = NormalizeResourceSegment($"{connectionName}-{index}", 18);
+
+                return new
+                {
+                    index,
+                    type,
+                    name = databaseName,
+                    user = db.DbUser,
+                    password = db.DbPassword,
+                    conn_name = connectionName,
+                    connection_env_name = $"ConnectionStrings__{connectionName}",
+                    container_suffix = string.IsNullOrWhiteSpace(db.ContainerNameSuffix)
+                        ? $"db{index + 1}"
+                        : db.ContainerNameSuffix.Trim(),
+                    resource_suffix = resourceSuffix,
+                    bicep_username_param = $"db{index}Username",
+                    bicep_password_param = $"db{index}Password",
+                    bicep_username_value = $"db{index}UsernameValue",
+                    bicep_password_value = $"db{index}PasswordValue",
+                    github_username_secret = CloudDeploymentSecretNames.GetDatabaseUsernameSecretName(index),
+                    github_password_secret = CloudDeploymentSecretNames.GetDatabasePasswordSecretName(index),
+                    connection_secret_name = NormalizeContainerAppSecretName($"db-{index}-{connectionName}-connection")
+                };
+            }).ToList();
 
         var containerAppName = string.IsNullOrWhiteSpace(config.CloudContainerAppName)
             ? normalizedAppName
@@ -253,7 +275,19 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
 
             // Custom environment variables as a list of key-value pairs for iteration in templates
             custom_env_vars = config.CustomEnvVars?
-                .Select(kvp => new { key = kvp.Key, value = kvp.Value })
+                .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Key))
+                .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                .Select((kvp, index) => new
+                {
+                    index,
+                    key = kvp.Key.Trim(),
+                    value = kvp.Value,
+                    bicep_value_param = $"customEnv{index}Value",
+                    bicep_decoded_value = $"customEnv{index}DecodedValue",
+                    github_value_secret = CloudDeploymentSecretNames.GetCustomEnvironmentSecretName(index,
+                        kvp.Key.Trim()),
+                    container_secret_name = NormalizeContainerAppSecretName($"env-{index}-{kvp.Key}")
+                })
                 .ToList() ?? []
         };
     }
@@ -310,6 +344,45 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
         normalized = normalized.Trim('-');
 
         return string.IsNullOrWhiteSpace(normalized) ? "automate-app" : normalized;
+    }
+
+
+    private static string NormalizeDatabaseType(string value)
+    {
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "postgresql" or "postgres" => "PostgreSQL",
+            "mysql" => "MySQL",
+            "sqlserver" or "sql-server" or "mssql" or "microsoft sql server" => "SQLServer",
+            "mongodb" or "mongo" => "MongoDB",
+            "redis" => "Redis",
+            _ => value.Trim()
+        };
+    }
+
+
+    private static string NormalizeResourceSegment(string value, int maxLength)
+    {
+        var normalized = NormalizeResourceName(value);
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength].TrimEnd('-');
+    }
+
+
+    private static string NormalizeContainerAppSecretName(string value)
+    {
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
+            .ToArray());
+
+        normalized = string.Join('-', normalized
+            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        if (string.IsNullOrWhiteSpace(normalized))
+            normalized = "automate-secret";
+
+        return normalized.Length <= 63 ? normalized : normalized[..63].TrimEnd('-');
     }
 
 
