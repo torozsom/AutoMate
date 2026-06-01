@@ -217,6 +217,10 @@ public class TemplatingService(ILogger<TemplatingService> logger) : ITemplatingS
                     name = databaseName,
                     user = db.DbUser,
                     password = db.DbPassword,
+                    user_encoded = string.IsNullOrEmpty(db.DbUser) ? string.Empty : Uri.EscapeDataString(db.DbUser),
+                    password_encoded = string.IsNullOrEmpty(db.DbPassword)
+                        ? string.Empty
+                        : Uri.EscapeDataString(db.DbPassword),
                     conn_name = connectionName,
                     connection_env_name = $"ConnectionStrings__{connectionName}",
                     container_suffix = string.IsNullOrWhiteSpace(db.ContainerNameSuffix)
