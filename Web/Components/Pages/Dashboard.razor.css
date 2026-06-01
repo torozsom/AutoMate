@@ -26,6 +26,39 @@
     transform: translateY(0);
 }
 
+.azure-connect-actions {
+    align-items: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    min-width: min(100%, 34rem);
+}
+
+.azure-tenant-connect {
+    max-width: 34rem;
+}
+
+.azure-tenant-connect .input-group-text {
+    background: var(--bs-tertiary-bg);
+    font-weight: 700;
+}
+
+.azure-tenant-connect .form-control {
+    min-width: 13rem;
+}
+
 [data-bs-theme="dark"] .azure-connect-button {
     box-shadow: 0 10px 24px rgba(0, 164, 239, 0.22);
+}
+
+@media (max-width: 767.98px) {
+    .azure-tenant-connect {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    .azure-tenant-connect > * {
+        border-radius: var(--bs-border-radius-sm) !important;
+        width: 100%;
+    }
 }
