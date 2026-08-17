@@ -7,16 +7,18 @@ using Services.Data.Apps;
 namespace Web.Hubs;
 
 /// <summary>
-///     A SignalR hub that manages real-time communication for project logs. Clients can join or leave groups based on
-///     project IDs, allowing them to receive log updates specific to the projects they are interested in.
+///     Authorizes project log subscriptions and manages project-specific SignalR groups.
 /// </summary>
 [AllowAnonymous]
-public class LogHub(
+public sealed class LogHub(
     IApplicationService applicationService,
     IDataProtectionProvider dataProtectionProvider,
     ILogger<LogHub> logger) : Hub<ILogClient>
 {
-    private const string ProtectorPurpose = "LogHub";
+    /// <summary>
+    ///     Data Protection purpose shared with project details pages when generating log hub join tokens.
+    /// </summary>
+    internal const string ProtectorPurpose = "LogHub";
 
     /// <summary>
     ///     Allows a client to join a SignalR group associated with a specific project ID using a secure token.
@@ -60,7 +62,9 @@ public class LogHub(
     }
 
 
-    /// Allows a client to leave a SignalR group associated with a specific project ID.
+    /// <summary>
+    ///     Allows a client to leave a SignalR group associated with a specific project ID.
+    /// </summary>
     public async Task LeaveProjectGroup(Guid projectId)
     {
         if (projectId == Guid.Empty)
@@ -71,7 +75,9 @@ public class LogHub(
     }
 
 
-    /// Generates a consistent group name for a given project ID, which is used to manage client subscriptions to log updates for that project.
+    /// <summary>
+    ///     Generates the SignalR group name used for one project's log stream.
+    /// </summary>
     internal static string GetProjectGroupName(Guid projectId)
     {
         return $"project-{projectId}";

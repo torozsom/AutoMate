@@ -6,22 +6,22 @@ namespace Core.DTO;
 public record LocalProjectDto
 {
     /// <summary>
-    ///     Gets or sets the name of the project.
+    ///     The local repository or solution folder name.
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Gets or sets the full path to the project directory on the local file system.
+    ///     The full path to the local repository or solution folder.
     /// </summary>
-    public string Path { get; set; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Gets or sets a value indicating whether the project is a valid .NET project.
+    ///     Indicates whether the scanned folder contains one or more .NET projects.
     /// </summary>
-    public bool IsDotNetProject { get; set; }
+    public bool IsDotNetProject { get; init; }
 
     /// <summary>
-    ///     Gets or sets the list of csprojects within the solution of the app.
+    ///     The discovered C# projects inside the scanned repository or solution folder.
     /// </summary>
-    public IEnumerable<CsProjectDto> CsProjects { get; set; } = [];
+    public IEnumerable<CsProjectDto> CsProjects { get; init; } = [];
 }

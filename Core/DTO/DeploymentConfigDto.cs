@@ -1,3 +1,5 @@
+using Core.Defaults;
+
 namespace Core.DTO;
 
 /// <summary>
@@ -28,12 +30,12 @@ public class DeploymentConfigDto
     ///     The name of the environment for which the project is being deployed (e.g., "Development", "Staging", "Production").
     ///     This setting can be used to apply environment-specific configurations and optimizations during deployment.
     /// </summary>
-    public string EnvironmentName { get; set; } = "Development";
+    public string EnvironmentName { get; set; } = DeploymentDefaults.DevelopmentEnvironmentName;
 
     /// <summary>
     ///     The port number that the deployed application will expose for incoming HTTP requests.
     /// </summary>
-    public int ExposedPort { get; set; } = 8080;
+    public int ExposedPort { get; set; } = DeploymentDefaults.LocalExposedPort;
 
     /// <summary>
     ///     Indicates whether this configuration targets Azure cloud deployment instead of local Docker deployment.
@@ -43,7 +45,7 @@ public class DeploymentConfigDto
     /// <summary>
     ///     The Azure region where cloud resources should be created.
     /// </summary>
-    public string CloudAzureRegion { get; set; } = "eastus";
+    public string CloudAzureRegion { get; set; } = DeploymentDefaults.AzureRegion;
 
     /// <summary>
     ///     The Azure resource group that will contain the deployment resources.
@@ -60,8 +62,8 @@ public class DeploymentConfigDto
     /// </summary>
     public string CloudRegistryName { get; set; } = string.Empty;
 
-    // <summary>
-    /// A list of databases required by the deployed application.
+    /// <summary>
+    ///     A list of databases required by the deployed application.
     /// </summary>
     public List<DatabaseConfigDto> Databases { get; set; } = [];
 

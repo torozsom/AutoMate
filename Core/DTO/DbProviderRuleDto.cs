@@ -1,18 +1,17 @@
 namespace Core.DTO;
 
 /// <summary>
-///     Represents a database provider rule, which includes the type of the database provider and a list of associated
-///     package names.
+///     Represents a database provider detection rule loaded from the scanner rule catalog.
 /// </summary>
 public record DbProviderRuleDto
 {
     /// <summary>
-    ///     The type of the database provider (e.g., "SqlServer", "PostgreSql", "MySql").
+    ///     The database provider type to apply when a matching package is detected.
     /// </summary>
-    public string DbType { get; set; } = string.Empty;
+    public string DbType { get; init; } = string.Empty;
 
     /// <summary>
-    ///     A list of package names that are associated with the database provider.
+    ///     The package-name fragments that identify this provider.
     /// </summary>
-    public List<string> Packages { get; set; } = [];
+    public List<string> Packages { get; init; } = [];
 }

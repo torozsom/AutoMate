@@ -1,3 +1,4 @@
+using Core.Defaults;
 using Core.DTO;
 using Microsoft.AspNetCore.Components;
 using Services.Scanner;
@@ -15,7 +16,7 @@ public partial class ConfigurationForm : ComponentBase
     private readonly List<EnvVarItem> _envVars = [];
 
     private CloudDefaults? _lastCloudDefaults;
-    private string _selectedEnvironment = "Development";
+    private string _selectedEnvironment = DeploymentDefaults.DevelopmentEnvironmentName;
     private string? _validationMessage;
 
 
@@ -82,7 +83,7 @@ public partial class ConfigurationForm : ComponentBase
     {
         Config.Databases ??= [];
         Config.EnvironmentName = string.IsNullOrWhiteSpace(Config.EnvironmentName)
-            ? "Development"
+            ? DeploymentDefaults.DevelopmentEnvironmentName
             : Config.EnvironmentName;
         _selectedEnvironment = Config.EnvironmentName;
 
@@ -375,7 +376,7 @@ public partial class ConfigurationForm : ComponentBase
             DbType = "PostgreSQL",
             DbName = $"appdb{dbCount}",
             DbUser = "automateadmin",
-            DbPassword = "AdminPwd123",
+            DbPassword = DeploymentDefaults.DatabasePassword,
             ConnectionStringName = $"Database{dbCount}Connection",
             ContainerNameSuffix = $"db{dbCount}"
         });

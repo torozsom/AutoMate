@@ -8,7 +8,7 @@ namespace Services.Data.Users;
 ///     Implementation of <see cref="IUserService" /> for managing users using Entity Framework Core.
 /// </summary>
 /// <param name="dbContext">The database context used for data access.</param>
-public class UserService(AutoMateDbContext dbContext) : IUserService
+public sealed class UserService(AutoMateDbContext dbContext) : IUserService
 {
     /// <inheritdoc />
     public async Task<Guid> GetUserIdByGithubAccountIdAsync(string githubAccountId,
@@ -33,35 +33,9 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
             return (Guid.Empty, null, false);
 
         if (Guid.TryParse(identifier, out var localUserId))
-        {
-            var remoteUser = await dbContext.Users
-                .OfType<RemoteUser>()
-                .AsNoTracking()
-                .Where(u => u.Id == localUserId)
-                .Select(u => new { u.Id, u.GitHubAccessToken })
-                .FirstOrDefaultAsync(cancellationToken);
+            return await GetUserDetailsBySystemIdAsync(localUserId, cancellationToken);
 
-            if (remoteUser is not null)
-                return (remoteUser.Id, remoteUser.GitHubAccessToken, true);
-
-            var localUserExists = await dbContext.Users
-                .OfType<LocalUser>()
-                .AsNoTracking()
-                .AnyAsync(u => u.Id == localUserId, cancellationToken);
-
-            return localUserExists ? (localUserId, null, false) : (Guid.Empty, null, false);
-        }
-
-        var githubUser = await dbContext.Users
-            .OfType<RemoteUser>()
-            .AsNoTracking()
-            .Where(u => u.AccountId == identifier)
-            .Select(u => new { u.Id, u.GitHubAccessToken })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return githubUser is not null
-            ? (githubUser.Id, AccessToken: githubUser.GitHubAccessToken, true)
-            : (Guid.Empty, null, false);
+        return await GetUserDetailsByGithubAccountIdAsync(identifier, cancellationToken);
     }
 
 
@@ -105,4 +79,65 @@ public class UserService(AutoMateDbContext dbContext) : IUserService
 
         return credentials;
     }
+
+    /// <summary>
+    ///     Resolves user details when the caller supplies AutoMate's persisted user ID.
+    /// </summary>
+    private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetUserDetailsBySystemIdAsync(
+        Guid userId, CancellationToken cancellationToken)
+    {
+        var remoteUser = await QueryRemoteUsers()
+            .Where(u => u.Id == userId)
+            .Select(u => new RemoteUserDetails(u.Id, u.AccountId, u.GitHubAccessToken))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (remoteUser is not null)
+            return (remoteUser.Id, remoteUser.GitHubAccessToken, true);
+
+        return await LocalUserExistsAsync(userId, cancellationToken)
+            ? (userId, null, false)
+            : (Guid.Empty, null, false);
+    }
+
+    /// <summary>
+    ///     Resolves remote user details when the caller supplies the GitHub account ID claim.
+    /// </summary>
+    private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetUserDetailsByGithubAccountIdAsync(
+        string accountId, CancellationToken cancellationToken)
+    {
+        var githubUser = await QueryRemoteUsers()
+            .Where(u => u.AccountId == accountId)
+            .Select(u => new RemoteUserDetails(u.Id, u.AccountId, u.GitHubAccessToken))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return githubUser is not null
+            ? (githubUser.Id, githubUser.GitHubAccessToken, true)
+            : (Guid.Empty, null, false);
+    }
+
+    /// <summary>
+    ///     Checks whether a persisted local user exists for the supplied AutoMate user ID.
+    /// </summary>
+    private async Task<bool> LocalUserExistsAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await dbContext.Users
+            .OfType<LocalUser>()
+            .AsNoTracking()
+            .AnyAsync(u => u.Id == userId, cancellationToken);
+    }
+
+    /// <summary>
+    ///     Builds the common no-tracking remote-user query used before projecting lookup results.
+    /// </summary>
+    private IQueryable<RemoteUser> QueryRemoteUsers()
+    {
+        return dbContext.Users
+            .OfType<RemoteUser>()
+            .AsNoTracking();
+    }
+
+    /// <summary>
+    ///     Minimal remote user projection used to avoid loading full entity graphs for identity lookups.
+    /// </summary>
+    private sealed record RemoteUserDetails(Guid Id, string AccountId, string? GitHubAccessToken);
 }

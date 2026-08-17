@@ -6,17 +6,17 @@ namespace Core.DTO;
 public record CsProjectDto
 {
     /// <summary>
-    ///     Gets or sets the name of the csproject.
+    ///     The C# project name without the .csproj extension.
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Gets or sets the path to the csproject.
+    ///     The full path to the .csproj file.
     /// </summary>
-    public string Path { get; set; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Gets or sets a value indicating whether the csproject is a web application.
+    ///     Indicates whether the project is an ASP.NET Core web application.
     /// </summary>
-    public bool IsWebProject { get; set; }
+    public bool IsWebProject { get; init; }
 }

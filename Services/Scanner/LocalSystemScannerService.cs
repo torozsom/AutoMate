@@ -1,23 +1,13 @@
-using System.Xml.Linq;
 using Core.DTO;
 using Microsoft.Extensions.Logging;
 
 namespace Services.Scanner;
 
 /// <summary>
-///     The LocalScannerService class is responsible for scanning the local file system
-///     to identify Git repositories and determine if they are .NET projects. It implements
-///     the ILocalScannerService interface, providing a method to scan a specified root directory
-///     and its subdirectories for Git repositories.
+///     Scans local directories for Git repositories that contain .NET solution or project files.
 /// </summary>
-public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger) : ILocalSystemScannerService
+public sealed class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger) : ILocalSystemScannerService
 {
-    /// A set of directory names that should be ignored during the scanning process.
-    private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".git", "bin", "obj", "node_modules", "testresults", ".vs", ".idea"
-    };
-
     /// <inheritdoc />
     public async Task<List<LocalProjectDto>> ScanForProjectsAsync(string rootPath,
         CancellationToken cancellationToken = default)
@@ -51,17 +41,12 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
             throw new FileNotFoundException($"The project file '{projectFilePath}' does not exist.");
         }
 
-        // Start from the directory of the project file
         var currentDir = new DirectoryInfo(Path.GetDirectoryName(projectFilePath) ?? string.Empty);
-
-        // Traverse up the directory hierarchy to find a solution root
         while (currentDir != null)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (Directory.Exists(Path.Combine(currentDir.FullName, ".git")) ||
-                currentDir.EnumerateFiles("*.sln").Any() ||
-                currentDir.EnumerateFiles("*.slnx").Any())
+            if (LocalScannerDirectoryRules.IsSolutionRoot(currentDir))
             {
                 logger.LogDebug("[LocalSystemScannerService] Solution root found at: {SolutionRoot}",
                     currentDir.FullName);
@@ -97,22 +82,16 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         {
             var dirInfo = new DirectoryInfo(currentPath);
 
-            if (IsExcludedDirectory(dirInfo))
+            if (LocalScannerDirectoryRules.IsExcludedDirectory(dirInfo))
                 return;
 
-            // Check if the current directory is a Git repository by looking for a .git folder
             var directories = Directory.GetDirectories(currentPath);
-            var isGitRepo =
-                directories.Any(d => Path.GetFileName(d).Equals(".git", StringComparison.OrdinalIgnoreCase));
-
-            // If it's a Git repository, process it to determine if it's a .NET project and add it to the result list
-            if (isGitRepo)
+            if (LocalScannerDirectoryRules.ContainsGitDirectory(directories))
             {
                 await ProcessGitRepositoryAsync(currentPath, dirInfo.Name, result, cancellationToken);
                 return;
             }
 
-            // If it's not a Git repository, continue scanning subdirectories
             foreach (var dir in directories)
                 await ScanDirectorySafeAsync(dir, result, cancellationToken);
         }
@@ -149,18 +128,12 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         try
         {
             var csprojFiles = FindCsprojFilesSafe(repoPath, cancellationToken);
-
-            // Determine if this repository is a .NET project by checking for the presence of .sln files or .csproj files
-            var isDotNet = Directory.EnumerateFiles(repoPath, "*", SearchOption.TopDirectoryOnly).Any(f =>
-                               Path.GetExtension(f).Equals(".sln", StringComparison.OrdinalIgnoreCase) ||
-                               Path.GetExtension(f).Equals(".slnx", StringComparison.OrdinalIgnoreCase))
-                           || csprojFiles.Count > 0;
+            var isDotNet = LocalScannerDirectoryRules.HasSolutionFile(repoPath) || csprojFiles.Count > 0;
 
             var subProjects = new List<CsProjectDto>();
             foreach (var csprojFile in csprojFiles)
-                subProjects.Add(await ParseCsProjectAsync(csprojFile, cancellationToken));
+                subProjects.Add(await LocalCsProjectParser.ParseAsync(csprojFile, logger, cancellationToken));
 
-            // If it's a .NET project, add it to the result list with its name, path, and sub-projects
             result.Add(new LocalProjectDto
             {
                 Name = dirName,
@@ -180,52 +153,6 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         {
             logger.LogError(ex, "[LocalSystemScannerService] Error processing git repository at {RepoPath}", repoPath);
         }
-    }
-
-
-    /// <summary>
-    ///     Parses a .csproj file to determine if it is a web project by checking
-    ///     for the presence of the "Microsoft.NET.Sdk.Web" SDK attribute.
-    /// </summary>
-    /// <param name="csprojPath">The path to .csproj file.</param>
-    /// <returns>A CsProjectDto representing the parsed project.</returns>
-    private async Task<CsProjectDto> ParseCsProjectAsync(string csprojPath, CancellationToken cancellationToken)
-    {
-        var isWeb = false;
-        try
-        {
-            // Use a FileStream with asynchronous reading to load the .csproj file, which allows for cancellation support
-            await using var stream =
-                new FileStream(csprojPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-            var doc = await XDocument.LoadAsync(stream, LoadOptions.None, cancellationToken);
-
-            var sdkAttribute = doc.Root?.Attribute("Sdk")?.Value;
-            isWeb = sdkAttribute != null &&
-                    sdkAttribute.Contains("Microsoft.NET.Sdk.Web", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (OperationCanceledException ex)
-        {
-            logger.LogDebug(
-                "[LocalSystemScannerService] Parsing cancelled for .csproj file: {CsProjPath}, Exception: {Exception}",
-                csprojPath, ex.Message);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex,
-                "[LocalSystemScannerService] Failed to parse .csproj file to determine project type: {CsProjPath}",
-                csprojPath);
-        }
-
-        // Create and return a CsProjectDto with the project name, path, and whether it's a web project
-        return new CsProjectDto
-        {
-            Name = Path.GetFileNameWithoutExtension(csprojPath),
-            Path = csprojPath,
-            IsWebProject = isWeb
-        };
     }
 
 
@@ -250,7 +177,8 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
             var currentPath = queue.Dequeue();
             try
             {
-                if (currentPath != rootDir && IsExcludedDirectory(new DirectoryInfo(currentPath)))
+                if (currentPath != rootDir &&
+                    LocalScannerDirectoryRules.IsExcludedDirectory(new DirectoryInfo(currentPath)))
                     continue;
 
                 result.AddRange(Directory.GetFiles(currentPath, "*.csproj"));
@@ -272,29 +200,5 @@ public class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger
         }
 
         return result;
-    }
-
-
-    /// <summary>
-    ///     Determines if a directory should be excluded from scanning based on its attributes and name.
-    ///     It excludes directories that are reparse points (like symbolic links), hidden directories
-    ///     that start with a dot (except for ".git"), and directories that are commonly used for build outputs.
-    /// </summary>
-    /// <param name="dirInfo">
-    ///     The DirectoryInfo object representing the directory to be evaluated for exclusion.
-    /// </param>
-    /// <returns>
-    ///     True if the directory should be excluded from scanning, otherwise, false.
-    /// </returns>
-    private static bool IsExcludedDirectory(DirectoryInfo dirInfo)
-    {
-        if (dirInfo.Attributes.HasFlag(FileAttributes.ReparsePoint))
-            return true;
-
-        var name = dirInfo.Name;
-        if (name.StartsWith('.') && !name.Equals(".git", StringComparison.OrdinalIgnoreCase))
-            return true;
-
-        return IgnoredDirectories.Contains(name);
     }
 }

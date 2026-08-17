@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.RateLimiting;
@@ -40,7 +39,6 @@ public static class ServiceConfiguration
     private const string AutoMateUserIdAuthProperty = "automate_user_id";
     private const string AzureConnectionRedirectUri = "/dashboard";
     private const string AzureManagementScope = "https://management.azure.com/.default";
-    private const string AzureSubscriptionsApiVersion = "2022-12-01";
     private const string DefaultMicrosoftAuthorityTenant = "organizations";
 
 
@@ -103,26 +101,26 @@ public static class ServiceConfiguration
 
         var azureAccountId = GetString(context.User, "sub")
                              ?? GetString(context.User, "oid")
-                             ?? GetJwtPayloadValue(idToken, "sub")
-                             ?? GetJwtPayloadValue(idToken, "oid")
+                             ?? JwtPayloadReader.GetStringValue(idToken, "sub")
+                             ?? JwtPayloadReader.GetStringValue(idToken, "oid")
                              ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(azureAccountId))
             return;
 
         var displayName = GetString(context.User, "name")
-                          ?? GetJwtPayloadValue(idToken, "name")
+                          ?? JwtPayloadReader.GetStringValue(idToken, "name")
                           ?? "Azure user";
 
         var email = GetString(context.User, "email")
                     ?? GetString(context.User, "preferred_username")
-                    ?? GetJwtPayloadValue(idToken, "email")
-                    ?? GetJwtPayloadValue(idToken, "preferred_username")
+                    ?? JwtPayloadReader.GetStringValue(idToken, "email")
+                    ?? JwtPayloadReader.GetStringValue(idToken, "preferred_username")
                     ?? "no-email@microsoft.com";
 
-        var tenantId = GetJwtPayloadValue(idToken, "tid");
+        var tenantId = JwtPayloadReader.GetStringValue(idToken, "tid");
         var azureManagementToken = await ResolveAzureManagementTokenAsync(context);
-        var subscriptionId = await GetDefaultSubscriptionIdAsync(
+        var subscriptionId = await AzureSubscriptionResolver.GetDefaultSubscriptionIdAsync(
             azureManagementToken,
             context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>(),
             context.HttpContext.RequestAborted);
@@ -166,36 +164,6 @@ public static class ServiceConfiguration
     private static string? GetString(JsonElement source, string propertyName)
     {
         return source.TryGetProperty(propertyName, out var property) ? property.GetString() : null;
-    }
-
-
-    /// <summary>
-    ///     Extracts a value from a JWT payload without validating the token.
-    /// </summary>
-    private static string? GetJwtPayloadValue(string? jwt, string propertyName)
-    {
-        var parts = jwt?.Split('.');
-        if (parts is not { Length: >= 2 })
-            return null;
-
-        try
-        {
-            var payload = parts[1]
-                .Replace('-', '+')
-                .Replace('_', '/');
-            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
-
-            using var json = JsonDocument.Parse(Convert.FromBase64String(payload));
-            return GetString(json.RootElement, propertyName);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-        catch (FormatException)
-        {
-            return null;
-        }
     }
 
 
@@ -263,58 +231,6 @@ public static class ServiceConfiguration
         return payload.RootElement.TryGetProperty("access_token", out var tokenElement)
             ? tokenElement.GetString()
             : null;
-    }
-
-
-    /// <summary>
-    ///     Loads the first available Azure subscription ID for the connected account.
-    /// </summary>
-    private static async Task<string?> GetDefaultSubscriptionIdAsync(string? accessToken,
-        IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(accessToken))
-            return null;
-
-        using var httpClient = httpClientFactory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get,
-            $"https://management.azure.com/subscriptions?api-version={AzureSubscriptionsApiVersion}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            return null;
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-
-        using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-        if (!payload.RootElement.TryGetProperty("value", out var subscriptionsElement) ||
-            subscriptionsElement.ValueKind != JsonValueKind.Array)
-            return null;
-
-        string? firstFallback = null;
-
-        foreach (var subscription in subscriptionsElement.EnumerateArray())
-        {
-            if (!subscription.TryGetProperty("subscriptionId", out var idElement))
-                continue;
-
-            var id = idElement.GetString();
-            if (string.IsNullOrWhiteSpace(id))
-                continue;
-
-            if (firstFallback == null)
-                firstFallback = id;
-
-            var state = subscription.TryGetProperty("state", out var stateElement)
-                ? stateElement.GetString()
-                : null;
-
-            if (string.Equals(state, "Enabled", StringComparison.OrdinalIgnoreCase))
-                return id;
-        }
-
-        return firstFallback;
     }
 
 
@@ -542,6 +458,8 @@ public static class ServiceConfiguration
             services.AddScoped<IDockerService, DockerService>();
             services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
+            services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
+            services.AddHostedService<DeploymentJobWorker>();
             services.AddScoped<IAzureDeploymentOrchestrator, AzureDeploymentOrchestrator>();
             services.AddScoped<IAzureContainerAppRuntimeStreamer, AzureContainerAppRuntimeStreamer>();
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();

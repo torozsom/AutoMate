@@ -6,7 +6,7 @@ namespace Web.Routes.Endpoints.Auth;
 /// <summary>
 ///     Endpoint for logging out the user. Clears the authentication cookie.
 /// </summary>
-public class LogoutEndpoint : IEndpoint
+public sealed class LogoutEndpoint : IEndpoint
 {
     /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)

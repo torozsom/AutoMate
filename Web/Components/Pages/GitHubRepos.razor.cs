@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Core.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -15,7 +14,8 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class GitHubRepos : ComponentBase, IDisposable
 {
-    /// A cancellation token source to manage asynchronous operations and ensure they are cancelled when the component is disposed.
+    /// A cancellation token source to manage asynchronous operations and ensure they are cancelled when the component is
+    /// disposed.
     private readonly CancellationTokenSource _componentCancellation = new();
 
     /// A set to keep track of the URLs of repositories that are currently being saved.
@@ -79,27 +79,17 @@ public partial class GitHubRepos : ComponentBase, IDisposable
     {
         try
         {
-            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-            var userClaims = authState.User;
+            var userDetails = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(
+                AuthStateProvider,
+                UserService,
+                _componentCancellation.Token);
 
-            if (userClaims.Identity is not null && userClaims.Identity.IsAuthenticated)
-            {
-                var nameIdentifier = userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            _currentUserId = userDetails.UserId;
+            _isGitHubUser = userDetails.IsGitHubUser;
 
-                if (!string.IsNullOrEmpty(nameIdentifier))
-                {
-                    var (userId, accessToken, isGitHubUser) =
-                        await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier,
-                            _componentCancellation.Token);
-
-                    _currentUserId = userId;
-                    _isGitHubUser = isGitHubUser;
-
-                    if (_isGitHubUser && !string.IsNullOrEmpty(accessToken))
-                        _githubRepos = await GitHubService.GetUserRepositoriesAsync(accessToken,
-                            cancellationToken: _componentCancellation.Token);
-                }
-            }
+            if (_isGitHubUser && !string.IsNullOrEmpty(userDetails.AccessToken))
+                _githubRepos = await GitHubService.GetUserRepositoriesAsync(userDetails.AccessToken,
+                    cancellationToken: _componentCancellation.Token);
         }
         catch (OperationCanceledException)
         {
@@ -161,6 +151,11 @@ public partial class GitHubRepos : ComponentBase, IDisposable
     }
 
 
+    /// <summary>
+    ///     Indicates whether the repository is currently being saved.
+    /// </summary>
+    /// <param name="repo">The repository to inspect.</param>
+    /// <returns><see langword="true" /> when a save operation is already active for the repository.</returns>
     private bool IsSaving(GitHubRepositoryDto repo)
     {
         return _savingRepositoryUrls.Contains(repo.HtmlUrl);

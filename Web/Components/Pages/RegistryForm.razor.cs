@@ -107,18 +107,30 @@ public partial class RegistryForm : ComponentBase
     /// </summary>
     public class RegisterModel
     {
+        /// <summary>
+        ///     The user's email address used for login and email verification.
+        /// </summary>
         [Required(ErrorMessage = "Email address required.")]
         [EmailAddress(ErrorMessage = "Invalid email format.")]
         public string Email { get; set; } = string.Empty;
 
+        /// <summary>
+        ///     The display username associated with the local account.
+        /// </summary>
         [Required(ErrorMessage = "Username required.")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3-50 characters.")]
         public string Username { get; set; } = string.Empty;
 
+        /// <summary>
+        ///     The password submitted for the new local account.
+        /// </summary>
         [Required(ErrorMessage = "Password required.")]
         [MinLength(6, ErrorMessage = "Password must be at least 6 characters.")]
         public string Password { get; set; } = string.Empty;
 
+        /// <summary>
+        ///     The repeated password value used to confirm the submitted password.
+        /// </summary>
         [Required(ErrorMessage = "Password confirmation required.")]
         [Compare(nameof(Password), ErrorMessage = "Passwords do not match.")]
         public string ConfirmPassword { get; set; } = string.Empty;

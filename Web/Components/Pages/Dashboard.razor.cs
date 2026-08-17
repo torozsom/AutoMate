@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Security.Claims;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
@@ -10,6 +9,7 @@ using Services.Data.Apps;
 using Services.Data.Users;
 using Services.Orchestration;
 using Services.Scanner;
+using Web.Components.Shared;
 
 namespace Web.Components.Pages;
 
@@ -26,6 +26,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// The list of apps associated with the authenticated user, fetched from the database.
     private List<Application>? _apps;
 
+    /// The Azure tenant ID entered for personal Microsoft account connections.
+    private string _azureTenantId = string.Empty;
+
     /// The current deployment configuration being edited by the user, if any.
     private DeploymentConfigDto? _currentDeployConfig;
 
@@ -40,9 +43,6 @@ public partial class Dashboard : ComponentBase, IDisposable
 
     /// A flag indicating whether the current user has connected an Azure account.
     private bool _isAzureConnected;
-
-    /// The Azure tenant ID entered for personal Microsoft account connections.
-    private string _azureTenantId = string.Empty;
 
     /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
     private bool _isLoading = true;
@@ -65,9 +65,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IApplicationService ApplicationService { get; set; } = null!;
 
-    /// Factory for creating service scopes, allowing for proper dependency injection and lifetime management.
+    /// Queue that hands deployment work to the hosted background worker.
     [Inject]
-    private IServiceScopeFactory ScopeFactory { get; set; } = null!;
+    private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
     /// Service for managing user accounts.
     [Inject]
@@ -153,6 +153,9 @@ public partial class Dashboard : ComponentBase, IDisposable
             latestDeployment.Status = status;
         else
             _ = RefreshAppsAsync();
+
+        if (status is DeploymentStatus.Running or DeploymentStatus.Failed or DeploymentStatus.Stopped)
+            SetDeployingState(appId, false);
 
         InvokeAsync(StateHasChanged);
     }
@@ -276,7 +279,7 @@ public partial class Dashboard : ComponentBase, IDisposable
                 return;
             }
 
-            if (!TryParseGitHubRepository(cloudApp.SourcePathOrUrl, out var repoOwner, out var repoName))
+            if (!GitHubRepositoryUrlParser.TryParse(cloudApp.SourcePathOrUrl, out var repository))
             {
                 _globalErrorMessage = "AutoMate could not determine the GitHub repository owner/name for this project.";
                 return;
@@ -298,46 +301,30 @@ public partial class Dashboard : ComponentBase, IDisposable
 
             SetDeployingState(finalConfig.ProjectId, true);
 
-            _ = Task.Run((Func<Task>)(async () =>
+            try
             {
-                using var scope = ScopeFactory.CreateScope();
-                var orchestrator = scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>();
-
-                try
+                await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
                 {
-                    await orchestrator.DeployCloudProjectAsync(new CloudDeploymentRequestDto
-                    {
-                        Config = finalConfig,
-                        Metadata = CreateRemoteProjectMetadata(),
-                        CsProjectName = cloudApp.Name,
-                        RepositoryRoot = ".",
-                        GitHubAccessToken = userDetails.AccessToken,
-                        GitHubContainerRegistryToken = userDetails.AccessToken,
-                        AzureCredentials = azureCredentials,
-                        RepositoryOwner = repoOwner,
-                        RepositoryName = repoName
-                    });
+                    Config = finalConfig,
+                    Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                    CsProjectName = cloudApp.Name,
+                    RepositoryRoot = ".",
+                    GitHubAccessToken = userDetails.AccessToken,
+                    GitHubContainerRegistryToken = userDetails.AccessToken,
+                    AzureCredentials = azureCredentials,
+                    RepositoryOwner = repository.Owner,
+                    RepositoryName = repository.Name
+                }));
 
-                    await InvokeAsync(async () =>
-                    {
-                        _globalSuccessMessage =
-                            $"Cloud deployment workflow for '{finalConfig.ProjectName}' has been started in GitHub Actions.";
-                        SetDeployingState(finalConfig.ProjectId, false);
-                        await RefreshAppsAsync();
-                        StateHasChanged();
-                    });
-                }
-                catch (Exception ex)
-                {
-                    await InvokeAsync(() =>
-                    {
-                        _globalErrorMessage =
-                            $"Failed to start cloud deployment for '{finalConfig.ProjectName}': {ex.Message}";
-                        SetDeployingState(finalConfig.ProjectId, false);
-                        StateHasChanged();
-                    });
-                }
-            }));
+                _globalSuccessMessage =
+                    $"Cloud deployment workflow for '{finalConfig.ProjectName}' has been queued.";
+            }
+            catch (Exception ex)
+            {
+                _globalErrorMessage = $"Failed to queue cloud deployment for '{finalConfig.ProjectName}': {ex.Message}";
+                SetDeployingState(finalConfig.ProjectId, false);
+                return;
+            }
 
             await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
             return;
@@ -345,59 +332,28 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         SetDeployingState(finalConfig.ProjectId, true);
 
-        // Fire-and-forget pattern to run the deployment in the background without blocking the UI.
-        _ = Task.Run(async () =>
+        try
         {
-            using var scope = ScopeFactory.CreateScope();
-            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
-
-            try
-            {
-                await orchestrator.DeployLocalProjectAsync(finalConfig);
-
-                await InvokeAsync(() =>
-                {
-                    _globalSuccessMessage = $"The '{finalConfig.ProjectName}' project has been successfully deployed!";
-                    SetDeployingState(finalConfig.ProjectId, false);
-                    StateHasChanged();
-                });
-            }
-            catch (Exception ex)
-            {
-                await InvokeAsync(() =>
-                {
-                    _globalErrorMessage = $"Failed to deploy '{finalConfig.ProjectName}': {ex.Message}";
-                    SetDeployingState(finalConfig.ProjectId, false);
-                    StateHasChanged();
-                });
-            }
-        });
+            await DeploymentJobQueue.EnqueueAsync(new LocalDeploymentJob(finalConfig));
+            _globalSuccessMessage = $"The '{finalConfig.ProjectName}' deployment has been queued.";
+        }
+        catch (Exception ex)
+        {
+            _globalErrorMessage = $"Failed to queue deployment for '{finalConfig.ProjectName}': {ex.Message}";
+            SetDeployingState(finalConfig.ProjectId, false);
+            return;
+        }
 
         await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
     }
 
 
     /// <summary>
-    ///     Helper method to safely extract the current user's ID from claims.
+    ///     Resolves the current user's internal AutoMate ID from authentication claims.
     /// </summary>
     private async Task<Guid> GetCurrentUserIdAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-
-        if (user.Identity is null || !user.Identity.IsAuthenticated)
-            return Guid.Empty;
-
-        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (Guid.TryParse(userIdString, out var parsedId))
-            return parsedId;
-
-        // Fallback for GitHub users (AccountId is a string)
-        if (!string.IsNullOrEmpty(userIdString))
-            return await UserService.GetUserIdByGithubAccountIdAsync(userIdString);
-
-        return Guid.Empty;
+        return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider, UserService);
     }
 
 
@@ -406,14 +362,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (string.IsNullOrWhiteSpace(userIdString))
-            return (Guid.Empty, null, false);
-
-        return await UserService.GetUserDetailsFromIdentifierAsync(userIdString);
+        var details = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(AuthStateProvider, UserService);
+        return (details.UserId, details.AccessToken, details.IsGitHubUser);
     }
 
 
@@ -451,21 +401,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private static DeploymentConfigDto CreateCloudDeploymentConfig(Application app)
     {
-        var resourceName = ToAzureResourceName(app.Name);
-
-        return new DeploymentConfigDto
-        {
-            ProjectId = app.Id,
-            CsProjectId = Guid.Empty,
-            ProjectName = app.Name,
-            EnvironmentName = "Production",
-            IsCloudDeployment = true,
-            CloudAzureRegion = "eastus",
-            CloudResourceGroupName = $"{resourceName}-prod-rg",
-            CloudContainerAppName = $"{resourceName}-prod-app",
-            CloudRegistryName = "ghcr.io",
-            Databases = []
-        };
+        return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }
 
 
@@ -486,81 +422,6 @@ public partial class Dashboard : ComponentBase, IDisposable
         NavigationManager.NavigateTo(
             $"/api/auth/azure-login?tenantId={Uri.EscapeDataString(tenantId)}",
             true);
-    }
-
-
-    /// <summary>
-    ///     Normalizes a project name into an Azure-friendly resource name.
-    /// </summary>
-    private static string ToAzureResourceName(string value)
-    {
-        var normalized = new string(value
-            .Trim()
-            .ToLowerInvariant()
-            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
-            .ToArray());
-
-        normalized = string.Join('-', normalized
-            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
-        if (string.IsNullOrWhiteSpace(normalized))
-            normalized = "automate-app";
-
-        return normalized.Length <= 32 ? normalized : normalized[..32].TrimEnd('-');
-    }
-
-
-    /// <summary>
-    ///     Creates a minimal metadata model for remote repositories that are deployed without a local checkout scan.
-    /// </summary>
-    private static ProjectMetadataDto CreateRemoteProjectMetadata()
-    {
-        return new ProjectMetadataDto
-        {
-            TargetFramework = "net10.0",
-            DotNetVersion = "10.0",
-            IsWebProject = true
-        };
-    }
-
-
-    /// <summary>
-    ///     Attempts to extract the owner and repository name from a GitHub repository URL.
-    /// </summary>
-    private static bool TryParseGitHubRepository(string repositoryUrl, out string owner, out string name)
-    {
-        owner = string.Empty;
-        name = string.Empty;
-
-        if (string.IsNullOrWhiteSpace(repositoryUrl))
-            return false;
-
-        var normalized = repositoryUrl.Trim().TrimEnd('/');
-        if (normalized.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
-            normalized = normalized[..^4];
-
-        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
-        {
-            var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (segments.Length >= 2)
-            {
-                owner = segments[0];
-                name = segments[1];
-                return true;
-            }
-        }
-
-        var sshPrefixIndex = normalized.IndexOf(':', StringComparison.Ordinal);
-        if (normalized.StartsWith("git@github.com", StringComparison.OrdinalIgnoreCase) && sshPrefixIndex >= 0)
-            normalized = normalized[(sshPrefixIndex + 1)..];
-
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length < 2)
-            return false;
-
-        owner = parts[^2];
-        name = parts[^1];
-        return true;
     }
 
 

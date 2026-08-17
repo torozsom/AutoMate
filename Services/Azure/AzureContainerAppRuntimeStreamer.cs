@@ -1,7 +1,4 @@
 using System.Collections.Concurrent;
-using System.Globalization;
-using System.Net.Http.Headers;
-using System.Text.Json;
 using Core.DTO;
 using Microsoft.Extensions.Logging;
 using Services.LogStreaming;
@@ -11,13 +8,30 @@ namespace Services.Azure;
 /// <summary>
 ///     Polls Azure Container Apps runtime state and metrics and publishes updates through SignalR.
 /// </summary>
-public class AzureContainerAppRuntimeStreamer(
+public sealed class AzureContainerAppRuntimeStreamer(
     ILogStreamer logStreamer,
     IHttpClientFactory httpClientFactory,
     ILogger<AzureContainerAppRuntimeStreamer> logger) : IAzureContainerAppRuntimeStreamer
 {
-    private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> ActiveStreams = new();
+    /// <summary>
+    ///     Container name used when publishing cloud runtime updates to the existing log stream UI.
+    /// </summary>
+    private const string CloudWebContainerName = "cloud-web";
+
+    /// <summary>
+    ///     Delay between runtime state and metrics polling attempts.
+    /// </summary>
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    ///     Active per-project stream cancellation sources, keyed by project ID.
+    /// </summary>
+    private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> ActiveStreams = new();
+
+    /// <summary>
+    ///     Lightweight ARM client used by the background polling loop.
+    /// </summary>
+    private readonly AzureContainerAppClient _containerAppClient = new(httpClientFactory);
 
     /// <inheritdoc />
     public void StartStreaming(AzureCloudCredentialsDto credentials, DeploymentConfigDto config)
@@ -25,10 +39,7 @@ public class AzureContainerAppRuntimeStreamer(
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(config);
 
-        if (string.IsNullOrWhiteSpace(credentials.AccessToken) ||
-            string.IsNullOrWhiteSpace(credentials.SubscriptionId) ||
-            string.IsNullOrWhiteSpace(config.CloudResourceGroupName) ||
-            string.IsNullOrWhiteSpace(config.CloudContainerAppName))
+        if (!TryCreateStreamTarget(credentials, config, out var target))
             return;
 
         var cts = new CancellationTokenSource();
@@ -38,21 +49,15 @@ public class AzureContainerAppRuntimeStreamer(
             return cts;
         });
 
-        var projectId = config.ProjectId;
-        var resourceId = BuildContainerAppResourceId(credentials.SubscriptionId, config.CloudResourceGroupName,
-            config.CloudContainerAppName);
-        var accessToken = credentials.AccessToken;
-
         _ = Task.Run(async () =>
         {
             try
             {
-                await StreamRuntimeAsync(projectId, resourceId, accessToken, cts.Token);
+                await StreamRuntimeAsync(target, cts.Token);
             }
             finally
             {
-                if (ActiveStreams.TryGetValue(projectId, out var activeCts) && ReferenceEquals(activeCts, cts))
-                    ActiveStreams.TryRemove(projectId, out _);
+                RemoveActiveStream(target.ProjectId, cts);
 
                 cts.Dispose();
             }
@@ -64,12 +69,9 @@ public class AzureContainerAppRuntimeStreamer(
     ///     Continuously polls the Azure Container App for its latest revision, FQDN, and resource metrics,
     ///     and streams updates to clients via SignalR.
     /// </summary>
-    /// <param name="projectId">The ID of the project associated with the container app.</param>
-    /// <param name="resourceId">The Azure resource ID of the container app.</param>
-    /// <param name="accessToken">The access token for authenticating with the Azure API.</param>
+    /// <param name="target">The Container App stream target.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    private async Task StreamRuntimeAsync(Guid projectId, string resourceId, string accessToken,
-        CancellationToken cancellationToken)
+    private async Task StreamRuntimeAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
     {
         var lastRevision = string.Empty;
         var lastFqdn = string.Empty;
@@ -78,19 +80,22 @@ public class AzureContainerAppRuntimeStreamer(
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var state = await GetContainerAppStateAsync(resourceId, accessToken, cancellationToken);
+                var state = await _containerAppClient.GetStateAsync(target.ResourceId, target.AccessToken,
+                    cancellationToken);
                 if (state != null && (state.LatestRevision != lastRevision || state.Fqdn != lastFqdn))
                 {
                     lastRevision = state.LatestRevision;
                     lastFqdn = state.Fqdn;
 
-                    await logStreamer.StreamContainerLogsAsync(projectId, "cloud-web",
-                        $"Azure Container App is available{(string.IsNullOrWhiteSpace(state.Fqdn) ? string.Empty : $" at https://{state.Fqdn}")}. Latest ready revision: {state.LatestRevision}.");
+                    await logStreamer.StreamContainerLogsAsync(target.ProjectId, CloudWebContainerName,
+                        CreateAvailabilityMessage(state));
                 }
 
-                var metrics = await GetContainerAppMetricsAsync(resourceId, accessToken, cancellationToken);
+                var metrics = await _containerAppClient.GetMetricsAsync(target.ResourceId, target.AccessToken,
+                    cancellationToken);
                 if (metrics != null)
-                    await logStreamer.StreamContainerMetricsAsync(projectId, "cloud-web", metrics.Cpu, metrics.Memory);
+                    await logStreamer.StreamContainerMetricsAsync(target.ProjectId, CloudWebContainerName, metrics.Cpu,
+                        metrics.Memory);
 
                 await Task.Delay(PollInterval, cancellationToken);
             }
@@ -98,161 +103,14 @@ public class AzureContainerAppRuntimeStreamer(
         catch (OperationCanceledException)
         {
             logger.LogInformation("[AzureContainerAppRuntimeStreamer] Runtime streaming cancelled for Project ID {Id}.",
-                projectId);
+                target.ProjectId);
         }
         catch (Exception ex)
         {
             logger.LogError(ex,
                 "[AzureContainerAppRuntimeStreamer] Error while streaming Azure Container Apps runtime data for Project ID {Id}.",
-                projectId);
+                target.ProjectId);
         }
-    }
-
-
-    /// <summary>
-    ///     Retrieves the current state of the Azure Container App, including the latest ready revision and FQDN.
-    /// </summary>
-    /// <param name="resourceId">The Azure resource ID of the container app.</param>
-    /// <param name="accessToken">The access token for authenticating with the Azure API.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>The current state of the container app, or null if an error occurred.</returns>
-    private async Task<ContainerAppState?> GetContainerAppStateAsync(string resourceId, string accessToken,
-        CancellationToken cancellationToken)
-    {
-        var requestUri = $"https://management.azure.com{resourceId}?api-version=2024-03-01";
-        using var document = await SendAzureRequestAsync(requestUri, accessToken, cancellationToken);
-        if (document == null)
-            return null;
-
-        if (!document.RootElement.TryGetProperty("properties", out var properties))
-            return null;
-
-        var latestRevision = GetString(properties, "latestReadyRevisionName");
-        var fqdn = string.Empty;
-
-        if (properties.TryGetProperty("configuration", out var configuration) &&
-            configuration.TryGetProperty("ingress", out var ingress))
-            fqdn = GetString(ingress, "fqdn");
-
-        return new ContainerAppState(latestRevision, fqdn);
-    }
-
-
-    /// <summary>
-    ///     Retrieves the current resource metrics for the Azure Container App.
-    /// </summary>
-    /// <param name="resourceId">The Azure resource ID of the container app.</param>
-    /// <param name="accessToken">The access token for authenticating with the Azure API.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>The current metrics of the container app, or null if an error occurred.</returns>
-    private async Task<ContainerAppMetrics?> GetContainerAppMetricsAsync(string resourceId, string accessToken,
-        CancellationToken cancellationToken)
-    {
-        var endTime = DateTimeOffset.UtcNow;
-        var startTime = endTime.AddMinutes(-5);
-        var requestUri = "https://management.azure.com" + resourceId +
-                         "/providers/microsoft.insights/metrics?api-version=2023-10-01" +
-                         "&metricnames=CpuUsage,MemoryWorkingSet" +
-                         $"&timespan={Uri.EscapeDataString($"{startTime:O}/{endTime:O}")}&interval=PT1M&aggregation=Average";
-
-        using var document = await SendAzureRequestAsync(requestUri, accessToken, cancellationToken);
-        if (document == null)
-            return null;
-
-        var cpu = "n/a";
-        var memory = "n/a";
-
-        if (!document.RootElement.TryGetProperty("value", out var values) || values.ValueKind != JsonValueKind.Array)
-            return null;
-
-        foreach (var metric in values.EnumerateArray())
-        {
-            var name = metric.GetProperty("name").GetProperty("value").GetString();
-            var latestAverage = GetLatestAverage(metric);
-            if (latestAverage == null)
-                continue;
-
-            if (string.Equals(name, "CpuUsage", StringComparison.OrdinalIgnoreCase))
-                cpu = $"{latestAverage.Value:0.##} cores";
-            else if (string.Equals(name, "MemoryWorkingSet", StringComparison.OrdinalIgnoreCase))
-                memory = FormatBytes(latestAverage.Value);
-        }
-
-        return new ContainerAppMetrics(cpu, memory);
-    }
-
-
-    /// <summary>
-    ///     Sends a GET request to the Azure Management API and parses the JSON response.
-    /// </summary>
-    /// <param name="requestUri">The URI of the API endpoint.</param>
-    /// <param name="accessToken">The access token for authenticating with the Azure API.</param>
-    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
-    /// <returns>The parsed JSON document, or null if an error occurred.</returns>
-    private async Task<JsonDocument?> SendAzureRequestAsync(string requestUri, string accessToken,
-        CancellationToken cancellationToken)
-    {
-        var httpClient = httpClientFactory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            return null;
-
-        await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken);
-    }
-
-
-    /// <summary>
-    ///     Extracts the latest average value from the metric timeseries data.
-    /// </summary>
-    /// <param name="metric">The metric element containing timeseries data.</param>
-    /// <returns>The latest average value, or null if not found.</returns>
-    private static double? GetLatestAverage(JsonElement metric)
-    {
-        if (!metric.TryGetProperty("timeseries", out var timeSeries) || timeSeries.ValueKind != JsonValueKind.Array)
-            return null;
-
-        foreach (var series in timeSeries.EnumerateArray())
-        {
-            if (!series.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-                continue;
-
-            foreach (var point in data.EnumerateArray().Reverse())
-                if (point.TryGetProperty("average", out var average) && average.TryGetDouble(out var value))
-                    return value;
-        }
-
-        return null;
-    }
-
-
-    /// <summary>
-    ///     Safely retrieves a string property from a JSON element, returning an
-    ///     empty string if the property is not found or is null.
-    /// </summary>
-    /// <param name="element">The JSON element to retrieve the property from.</param>
-    /// <param name="propertyName">The name of the property to retrieve.</param>
-    /// <returns>The value of the property, or an empty string if not found or null.</returns>
-    private static string GetString(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var property)
-            ? property.GetString() ?? string.Empty
-            : string.Empty;
-    }
-
-
-    /// <summary>
-    ///     Formats a byte value into a human-readable string in MiB with two decimal places.
-    /// </summary>
-    /// <param name="bytes">The byte value to format.</param>
-    /// <returns>The formatted string.</returns>
-    private static string FormatBytes(double bytes)
-    {
-        const double mebibyte = 1024 * 1024;
-        return string.Create(CultureInfo.InvariantCulture, $"{bytes / mebibyte:0.##} MiB");
     }
 
 
@@ -271,11 +129,49 @@ public class AzureContainerAppRuntimeStreamer(
             $"/subscriptions/{Uri.EscapeDataString(subscriptionId)}/resourceGroups/{Uri.EscapeDataString(resourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(containerAppName)}";
     }
 
+    /// <summary>
+    ///     Validates cloud runtime configuration and creates an immutable stream target.
+    /// </summary>
+    private static bool TryCreateStreamTarget(AzureCloudCredentialsDto credentials, DeploymentConfigDto config,
+        out ContainerAppStreamTarget target)
+    {
+        target = default;
 
-    /// Represents the state of an Azure Container App, including the latest ready revision and FQDN.
-    private sealed record ContainerAppState(string LatestRevision, string Fqdn);
+        if (string.IsNullOrWhiteSpace(credentials.AccessToken) ||
+            string.IsNullOrWhiteSpace(credentials.SubscriptionId) ||
+            string.IsNullOrWhiteSpace(config.CloudResourceGroupName) ||
+            string.IsNullOrWhiteSpace(config.CloudContainerAppName))
+            return false;
 
+        target = new ContainerAppStreamTarget(
+            config.ProjectId,
+            BuildContainerAppResourceId(credentials.SubscriptionId, config.CloudResourceGroupName,
+                config.CloudContainerAppName),
+            credentials.AccessToken);
 
-    /// Represents the current resource metrics of an Azure Container App.
-    private sealed record ContainerAppMetrics(string Cpu, string Memory);
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes a stream registration only when it still belongs to the completing worker.
+    /// </summary>
+    private static void RemoveActiveStream(Guid projectId, CancellationTokenSource streamCancellation)
+    {
+        if (ActiveStreams.TryGetValue(projectId, out var activeCts) && ReferenceEquals(activeCts, streamCancellation))
+            ActiveStreams.TryRemove(projectId, out _);
+    }
+
+    /// <summary>
+    ///     Creates a human-readable availability line for the terminal-style deployment log.
+    /// </summary>
+    private static string CreateAvailabilityMessage(AzureContainerAppState state)
+    {
+        return
+            $"Azure Container App is available{(string.IsNullOrWhiteSpace(state.Fqdn) ? string.Empty : $" at https://{state.Fqdn}")}. Latest ready revision: {state.LatestRevision}.";
+    }
+
+    /// <summary>
+    ///     Immutable target data needed by one Azure runtime polling worker.
+    /// </summary>
+    private readonly record struct ContainerAppStreamTarget(Guid ProjectId, string ResourceId, string AccessToken);
 }

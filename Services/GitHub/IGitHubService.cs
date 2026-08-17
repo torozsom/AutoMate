@@ -1,3 +1,4 @@
+using Core.Defaults;
 using Core.DTO;
 
 namespace Services.GitHub;
@@ -29,7 +30,7 @@ public interface IGitHubService
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>The pushed commit SHA.</returns>
     Task<string> CommitCloudDeploymentFilesAsync(string accessToken, string repoOwner, string repoName,
-        List<TemplateFile> files, string branchName = "automate/azure-deployment",
+        List<TemplateFile> files, string branchName = DeploymentDefaults.CloudDeploymentBranchName,
         string commitMessage = "Add AutoMate Azure deployment workflow", CancellationToken cancellationToken = default);
 
     /// <summary>

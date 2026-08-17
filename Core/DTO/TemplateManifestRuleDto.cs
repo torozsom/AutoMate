@@ -1,31 +1,28 @@
 namespace Core.DTO;
 
 /// <summary>
-///     Represents a rule for generating a file based on a template, including the template file name,
-///     the output file name, and whether the rule is active. This class is used to define how templates
-///     should be processed and what output files should be generated during the templating process.
+///     Represents one template manifest rule used to decide which deployment artifact should be rendered.
 /// </summary>
 public record TemplateManifestRuleDto
 {
     /// <summary>
-    ///     The name of the template rule, used for identification and reference within the application.
+    ///     The template file name to load from the template catalog.
     /// </summary>
-    public string TemplateFile { get; set; } = string.Empty;
+    public string TemplateFile { get; init; } = string.Empty;
 
     /// <summary>
-    ///     The output file name that should be generated based on the template, indicating
-    ///     the target file name for the generated content when the template is processed.
+    ///     The relative output path where the rendered template should be written.
     /// </summary>
-    public string OutputFile { get; set; } = string.Empty;
+    public string OutputFile { get; init; } = string.Empty;
 
     /// <summary>
     ///     Indicates which deployment target should render this template.
     ///     Supported values are "All", "Local", and "Cloud".
     /// </summary>
-    public string DeploymentTarget { get; set; } = "All";
+    public string DeploymentTarget { get; init; } = "All";
 
     /// <summary>
-    ///     A boolean flag indicating whether this template rule is active and should be applied during the templating process.
+    ///     Indicates whether this template rule should be applied.
     /// </summary>
-    public bool IsActive { get; set; } = true;
+    public bool IsActive { get; init; } = true;
 }

@@ -122,11 +122,13 @@
                                 </div>
                                 <div>
                                     <dt>Image</dt>
-                                    <dd class="text-truncate" title="@latestDeployment?.ImageTag">@(latestDeployment?.ImageTag ?? "None")</dd>
+                                    <dd class="text-truncate"
+                                        title="@latestDeployment?.ImageTag">@(latestDeployment?.ImageTag ?? "None")</dd>
                                 </div>
                                 <div>
                                     <dt>Revision</dt>
-                                    <dd class="text-truncate" title="@GetRevisionLabel(latestDeployment)">@GetRevisionLabel(latestDeployment)</dd>
+                                    <dd class="text-truncate"
+                                        title="@GetRevisionLabel(latestDeployment)">@GetRevisionLabel(latestDeployment)</dd>
                                 </div>
                             </dl>
                         </article>
@@ -190,7 +192,9 @@
                             <h2 id="deployments-title">Deployment history</h2>
                         </div>
                         <div class="monitoring-state">
-                            <span class="state-dot @(latestStatus == DeploymentStatus.Running ? "state-dot-running" : "")" aria-hidden="true"></span>
+                            <span
+                                class="state-dot @(latestStatus == DeploymentStatus.Running ? "state-dot-running" : "")"
+                                aria-hidden="true"></span>
                             <span>@(latestStatus?.ToString() ?? "Not deployed")</span>
                         </div>
                     </div>
@@ -220,7 +224,8 @@
                                         <div class="deployment-name text-truncate" title="@deployment.CsProject?.Name">
                                             @(deployment.CsProject?.Name ?? _app.Name)
                                         </div>
-                                        <div class="deployment-meta text-truncate" title="@GetDeploymentMeta(deployment)">
+                                        <div class="deployment-meta text-truncate"
+                                             title="@GetDeploymentMeta(deployment)">
                                             @GetDeploymentMeta(deployment)
                                         </div>
                                     </div>
@@ -349,7 +354,8 @@
                                 </div>
                             </div>
 
-                            <button class="btn metric-nav-button" @onclick="NextMetric" aria-label="Next container metrics">
+                            <button class="btn metric-nav-button" @onclick="NextMetric"
+                                    aria-label="Next container metrics">
                                 <i class="bi bi-chevron-right" aria-hidden="true"></i>
                             </button>
                         </div>
@@ -379,7 +385,8 @@
                     <div class="configuration-grid">
                         <div class="config-item">
                             <span>Project</span>
-                            <strong class="text-truncate" title="@(primaryWebProject?.Name ?? _app.Name)">@(primaryWebProject?.Name ?? _app.Name)</strong>
+                            <strong class="text-truncate"
+                                    title="@(primaryWebProject?.Name ?? _app.Name)">@(primaryWebProject?.Name ?? _app.Name)</strong>
                         </div>
                         <div class="config-item">
                             <span>.NET</span>
@@ -401,6 +408,7 @@
 </div>
 
 @code {
+
     private static string GetProjectSourceClass(SourceType sourceType)
     {
         return sourceType == SourceType.Remote ? "project-console-remote" : "project-console-local";
@@ -473,4 +481,5 @@
 
         return "No deployment artifact recorded";
     }
+
 }
