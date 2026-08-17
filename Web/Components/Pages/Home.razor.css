@@ -1,106 +1,111 @@
 .hero-section {
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    color: white;
-    padding: 60px 0;
-    border-radius: 8px;
-    margin-bottom: 40px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    align-items: center;
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-left: 4px solid var(--am-primary);
+    border-radius: var(--am-radius);
+    box-shadow: var(--am-shadow-sm);
+    color: var(--am-text);
+    display: flex;
+    margin-bottom: 2rem;
+    min-height: 16rem;
+    padding: clamp(1.5rem, 4vw, 2.5rem);
 }
 
 .hero-content {
-    max-width: 800px;
-    margin: 0 auto;
-    text-align: center;
+    max-width: 48rem;
+}
+
+.hero-section .page-eyebrow {
+    color: var(--am-primary);
 }
 
 .hero-title {
-    font-size: 3rem;
-    font-weight: 700;
-    margin-bottom: 20px;
+    color: var(--am-text);
+    font-size: clamp(1.75rem, 2vw, 2.1rem);
+    line-height: 1.08;
+    margin-bottom: 1rem;
 }
 
 .hero-subtitle {
-    font-size: 1.25rem;
-    margin-bottom: 30px;
-    opacity: 0.9;
+    color: var(--am-text-muted);
+    font-size: 1rem;
+    line-height: 1.5;
+    margin-bottom: 1.25rem;
+    max-width: 42rem;
 }
 
-.feature-card {
-    background: #ececec;
-    border-radius: 10px;
-    padding: 30px;
-    text-align: center;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+.hero-section .btn-light {
+    background: var(--am-primary);
+    border-color: var(--am-primary);
+    color: #fff;
+    min-height: 2.75rem;
+    padding-inline: 1rem !important;
+}
+
+.hero-section .btn-lg {
+    font-size: 1rem;
+}
+
+.hero-section .btn-light:hover,
+.hero-section .btn-light:focus {
+    background: var(--am-primary-hover);
+    border-color: var(--am-primary-hover);
+    color: #fff;
+}
+
+.feature-card,
+.action-card,
+.dashboard-welcome {
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    box-shadow: var(--am-shadow-sm);
+}
+
+.feature-card,
+.action-card {
+    display: grid;
+    gap: 1rem;
     height: 100%;
-    border: 1px solid #505050;
+    padding: 1.5rem;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
-.feature-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+.feature-card:hover,
+.action-card:hover {
+    border-color: color-mix(in srgb, var(--am-primary) 42%, var(--am-border));
+    box-shadow: var(--am-shadow);
+    transform: translateY(-1px);
 }
 
 .feature-icon {
-    font-size: 2.5rem;
-    color: #2a5298;
-    margin-bottom: 20px;
+    align-items: center;
+    background: var(--am-primary-soft);
+    border: 1px solid color-mix(in srgb, var(--am-primary) 24%, var(--am-border));
+    border-radius: var(--am-radius);
+    color: var(--am-primary);
+    display: inline-flex;
+    font-size: 1.4rem;
+    height: 3rem;
+    justify-content: center;
+    width: 3rem;
 }
 
-.feature-title {
-    font-weight: 600;
-    margin-bottom: 15px;
-    color: #333;
+.feature-title,
+.action-card h2 {
+    font-size: 1.1rem;
+    margin: 0;
 }
 
 .dashboard-welcome {
-    background-color: #f8f9fa;
-    border-left: 5px solid #2a5298;
-    padding: 20px;
-    border-radius: 4px;
-    margin-bottom: 30px;
+    border-left: 4px solid var(--am-primary);
+    display: grid;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    padding: 1.25rem;
 }
 
-.action-card {
-    background: #ececec;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-    text-align: center;
-    border: 1px solid #505050;
-    height: 100%;
-    transition: all 0.2s;
-}
-
-.action-card:hover {
-    border-color: #2a5298;
-    cursor: pointer;
-}
-
-[data-bs-theme="dark"] .hero-section {
-    color: #e0e0e0;
-}
-
-[data-bs-theme="dark"] .feature-card {
-    background: #2b3035;
-    border-color: #495057;
-    color: #e0e0e0;
-}
-
-[data-bs-theme="dark"] .feature-icon {
-    color: #6ea8fe;
-}
-
-[data-bs-theme="dark"] .feature-title {
-    color: #e0e0e0;
-}
-
-[data-bs-theme="dark"] .dashboard-welcome {
-    background-color: #2b3035;
-    color: #e0e0e0;
-}
-
-[data-bs-theme="dark"] .action-card {
-    background: #2b3035;
-    border-color: #495057;
-    color: #e0e0e0;
+.dashboard-welcome h1 {
+    margin: 0;
 }

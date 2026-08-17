@@ -1,14 +1,20 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">AutoMate</a>
+<div class="nav-brand-row">
+    <div class="brand-lockup">
+        <a class="navbar-brand" href="">
+            <span class="brand-mark" aria-hidden="true">A</span>
+            <span>AutoMate</span>
+        </a>
+        <span class="brand-caption">Deployment console</span>
     </div>
 </div>
 
 <input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column h-100">
-        <div class="nav-item px-3">
+    <nav class="nav flex-column h-100" aria-label="Primary">
+        <div class="nav-section-label">Workspace</div>
+
+        <div class="nav-item">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
             </NavLink>
@@ -16,7 +22,7 @@
 
         <AuthorizeView>
             <NotAuthorized>
-                <div class="nav-item px-3">
+                <div class="nav-item">
                     <NavLink class="nav-link" href="/login">
                         <span class="bi bi-person-fill-left-nav-menu" aria-hidden="true"></span> Login | Register
                     </NavLink>
@@ -24,36 +30,39 @@
             </NotAuthorized>
 
             <Authorized>
-                <div class="nav-item px-3">
+                <div class="nav-item">
                     <NavLink class="nav-link" href="/dashboard">
                         <span class="bi bi-grid-3x3-nav-menu" aria-hidden="true"></span> Dashboard
                     </NavLink>
                 </div>
 
-                <div class="nav-item px-3">
+                <div class="nav-section-label">Sources</div>
+
+                <div class="nav-item">
                     <NavLink class="nav-link" href="/github-repos">
                         <span class="bi bi-github-repos-nav-menu" aria-hidden="true"></span> GitHub Repos
                     </NavLink>
                 </div>
 
-                <div class="nav-item px-3">
+                <div class="nav-item">
                     <NavLink class="nav-link" href="local-repos">
                         <span class="bi bi-folder2-open-nav-menu" aria-hidden="true"></span> Local Repos
                     </NavLink>
                 </div>
 
-                <div class="nav-item px-3">
+                <div class="nav-section-label">Session</div>
+
+                <div class="nav-item">
                     <form action="/api/auth/logout" method="post">
                         <AntiforgeryToken/>
-                        <button type="submit" class="nav-link btn btn-link" style="width: 100%; text-align: left;">
+                        <button type="submit" class="nav-link btn btn-link nav-action">
                             <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Logout
                         </button>
                     </form>
                 </div>
 
-                <!-- mt-auto pushes this to the bottom of the flex column -->
-                <div class="nav-item px-3 mt-auto mb-3">
-                    <button class="nav-link btn btn-link w-100 text-start" @onclick="ToggleTheme">
+                <div class="nav-item mt-auto">
+                    <button class="nav-link btn btn-link nav-action" @onclick="ToggleTheme">
                         <span class="bi @(_isDarkMode ? "bi-moon-fill-nav-menu" : "bi-sun-fill-nav-menu")"
                               aria-hidden="true"></span>
                         @(_isDarkMode ? "Dark Mode" : "Light Mode")

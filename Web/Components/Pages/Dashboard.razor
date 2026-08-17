@@ -3,50 +3,92 @@
 
 <PageTitle>Dashboard</PageTitle>
 
-<div class="container mt-4">
-    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-        <div>
-            <h1 class="mb-1">Dashboard</h1>
-            <div class="text-muted small">Manage local containers and cloud-ready GitHub projects.</div>
+<div class="container page-shell dashboard-page">
+    <section class="dashboard-hero">
+        <div class="dashboard-hero-copy">
+            <div class="page-eyebrow">Operations</div>
+            <h1>Deployment dashboard</h1>
+            <p class="page-description">Monitor project readiness, source type, and latest deployment state from one operational workspace.</p>
         </div>
 
-        <div class="azure-connect-actions">
-            <div class="d-flex align-items-center justify-content-lg-end gap-2">
+        <div class="cloud-connect-panel @(_isAzureConnected ? "cloud-connect-panel-connected" : null)">
+            <div class="cloud-connect-header">
+                <div class="cloud-connect-title">
+                    <div class="panel-label">Cloud account</div>
+                    <h2>Azure connection</h2>
+                    <p>Connect Azure to deploy GitHub projects to Container Apps.</p>
+                </div>
+
                 @if (_isAzureConnected)
                 {
-                    <span class="badge rounded-pill text-bg-success px-3 py-2">
-                        <i class="bi bi-check-circle-fill me-1"></i> Azure connected
+                    <span class="badge deployment-badge deployment-badge-success">
+                        <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                        Connected
                     </span>
                 }
-
-                <a href="/api/auth/azure-login" class="btn azure-connect-button">
-                    <i class="bi bi-microsoft me-2"></i>
-                    <span>Connect work/school Azure</span>
-                </a>
+                else
+                {
+                    <span class="badge deployment-badge deployment-badge-neutral">
+                        <i class="bi bi-circle" aria-hidden="true"></i>
+                        Not connected
+                    </span>
+                }
             </div>
 
-            <div class="input-group input-group-sm azure-tenant-connect">
-                <span class="input-group-text">
-                    <i class="bi bi-key-fill me-1"></i> Tenant ID
-                </span>
-                <input class="form-control"
-                       placeholder="00000000-0000-0000-0000-000000000000"
-                       @bind="_azureTenantId"
-                       @bind:event="oninput"/>
-                <button type="button"
-                        class="btn btn-outline-primary"
-                        @onclick="ConnectPersonalAzureAccount">
-                    <i class="bi bi-person-circle me-1"></i>
-                    <span>Connect personal Azure</span>
-                </button>
+            <div class="azure-connect-options">
+                <div class="azure-connect-option azure-connect-option-primary">
+                    <div class="azure-option-copy">
+                        <span class="azure-option-icon">
+                            <i class="bi bi-microsoft" aria-hidden="true"></i>
+                        </span>
+                        <div>
+                            <div class="azure-option-title">Work or school account</div>
+                            <div class="azure-option-description">Use the standard organization sign-in flow.</div>
+                        </div>
+                    </div>
+                    <a href="/api/auth/azure-login" class="btn azure-connect-button @(_isAzureConnected ? "azure-connect-button-connected" : null)">
+                        <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
+                        <span>Connect</span>
+                    </a>
+                </div>
+
+                <div class="azure-connect-option">
+                    <div class="azure-option-copy">
+                        <span class="azure-option-icon azure-option-icon-muted">
+                            <i class="bi bi-person-circle" aria-hidden="true"></i>
+                        </span>
+                        <div>
+                            <label class="azure-option-title" for="azure-tenant-id">Personal account tenant</label>
+                            <div class="azure-option-description">Enter the tenant ID for personal Azure accounts.</div>
+                        </div>
+                    </div>
+                    <div class="azure-tenant-connect">
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-key-fill" aria-hidden="true"></i>
+                            </span>
+                            <input id="azure-tenant-id"
+                                   class="form-control"
+                                   placeholder="00000000-0000-0000-0000-000000000000"
+                                   @bind="_azureTenantId"
+                                   @bind:event="oninput"/>
+                        </div>
+                        <button type="button"
+                                class="btn btn-outline-primary azure-personal-button"
+                                @onclick="ConnectPersonalAzureAccount">
+                            <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                            <span>Connect</span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+    </section>
 
     @if (!string.IsNullOrEmpty(_globalErrorMessage))
     {
         <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i> @_globalErrorMessage
+            <i class="bi bi-exclamation-triangle-fill me-2" aria-hidden="true"></i> @_globalErrorMessage
             <button type="button" class="btn-close" @onclick="ClearMessages" aria-label="Close"></button>
         </div>
     }
@@ -54,7 +96,7 @@
     @if (!string.IsNullOrEmpty(_globalSuccessMessage))
     {
         <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            <i class="bi bi-check-circle-fill me-2"></i> @_globalSuccessMessage
+            <i class="bi bi-check-circle-fill me-2" aria-hidden="true"></i> @_globalSuccessMessage
             <button type="button" class="btn-close" @onclick="ClearMessages" aria-label="Close"></button>
         </div>
     }
@@ -63,112 +105,241 @@
         <Authorized>
             @if (_isLoading)
             {
-                <div class="d-flex flex-column align-items-center justify-content-center mt-5">
-                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
-                    <p class="mt-3 text-muted">Loading your workspace...</p>
+                <div class="dashboard-loading">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="page-description">Loading your workspace...</p>
                 </div>
             }
             else if (_apps is null || _apps.Count == 0)
             {
-                <div class="text-center mt-5 text-muted bg-light p-5 rounded-3 border border-dashed shadow-sm">
-                    <i class="bi bi-rocket-takeoff display-1 text-secondary opacity-50"></i>
-                    <h3 class="mt-4">No projects saved yet.</h3>
-                    <p class="lead">Start building your own DevOps environment!</p>
-                    <div class="mt-4 d-flex justify-content-center gap-3">
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <i class="bi bi-rocket-takeoff" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <h2>No projects saved yet</h2>
+                        <p class="page-description">Start by importing a local workspace or saving a supported GitHub repository.</p>
+                    </div>
+                    <div class="empty-state-actions">
                         <a href="/local-repos" class="btn btn-outline-primary">
-                            <i class="bi bi-folder2-open me-1"></i> Search Locally
+                            <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                            Search locally
                         </a>
                         <a href="/github-repos" class="btn btn-outline-dark">
-                            <i class="bi bi-github me-1"></i> Get GitHub Repositories
+                            <i class="bi bi-github" aria-hidden="true"></i>
+                            Get GitHub repositories
                         </a>
                     </div>
                 </div>
             }
             else
             {
-                <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-                    @foreach (var project in _apps)
-                    {
-                        var isDeploying = IsDeploying(project.Id);
-                        var isDeployDisabled = IsDeployDisabled(project);
+                var totalProjects = _apps.Count;
+                var localProjects = _apps.Count(project => project.SourceType == SourceType.Local);
+                var remoteProjects = _apps.Count(project => project.SourceType == SourceType.Remote);
+                var runningProjects = _apps.Count(project => GetLatestStatus(project) == DeploymentStatus.Running);
+                var failedProjects = _apps.Count(project => GetLatestStatus(project) == DeploymentStatus.Failed);
 
-                        <div class="col">
-                            <div class="card h-100 shadow border-2 project-card"
-                                 style="cursor: pointer; transition: transform 0.2s;"
-                                 @onclick="() => NavigateToProject(project.Id)">
-                                <div class="card-body d-flex flex-column">
-                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                        <h5 class="card-title fw-bold text-truncate mb-0" title="@project.Name">
+                <section class="dashboard-summary-grid" aria-label="Project summary">
+                    <div class="summary-tile">
+                        <div class="summary-icon summary-icon-primary">
+                            <i class="bi bi-boxes" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <div class="summary-value">@totalProjects</div>
+                            <div class="summary-label">Saved projects</div>
+                        </div>
+                    </div>
+
+                    <div class="summary-tile">
+                        <div class="summary-icon summary-icon-success">
+                            <i class="bi bi-play-circle" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <div class="summary-value">@runningProjects</div>
+                            <div class="summary-label">Running</div>
+                        </div>
+                    </div>
+
+                    <div class="summary-tile">
+                        <div class="summary-icon summary-icon-info">
+                            <i class="bi bi-cloud" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <div class="summary-value">@remoteProjects</div>
+                            <div class="summary-label">GitHub sources</div>
+                        </div>
+                    </div>
+
+                    <div class="summary-tile">
+                        <div class="summary-icon summary-icon-warning">
+                            <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <div class="summary-value">@localProjects</div>
+                            <div class="summary-label">Local sources</div>
+                        </div>
+                    </div>
+
+                    <div class="summary-tile summary-tile-critical">
+                        <div class="summary-icon summary-icon-danger">
+                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                        </div>
+                        <div>
+                            <div class="summary-value">@failedProjects</div>
+                            <div class="summary-label">Failed latest deploys</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="projects-section">
+                    <div class="section-heading">
+                        <div>
+                            <div class="panel-label">Saved workspace</div>
+                            <h2>Projects</h2>
+                        </div>
+                        <div class="project-source-actions">
+                            <a href="/local-repos" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                                Local
+                            </a>
+                            <a href="/github-repos" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-github" aria-hidden="true"></i>
+                                GitHub
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="project-grid">
+                        @foreach (var project in _apps)
+                        {
+                            var isDeploying = IsDeploying(project.Id);
+                            var isDeployDisabled = IsDeployDisabled(project);
+                            var latestStatus = GetLatestStatus(project);
+                            var webProjectCount = project.CsProjects.Count(csp => csp.IsWebProject);
+                            var totalSubProjects = project.CsProjects.Count;
+
+                            <article class="card dashboard-project-card resource-card @GetProjectCardClass(project.SourceType)"
+                                     @onclick="() => NavigateToProject(project.Id)">
+                                <div class="project-card-header">
+                                    <div class="project-title-group">
+                                        <div class="project-source-mark @GetSourceMarkClass(project.SourceType)">
                                             @if (project.SourceType == SourceType.Remote)
                                             {
-                                                <i class="bi bi-github me-2"></i>
+                                                <i class="bi bi-github" aria-hidden="true"></i>
                                             }
                                             else
                                             {
-                                                <i class="bi bi-folder2-open me-2 text-warning"></i>
+                                                <i class="bi bi-folder2-open" aria-hidden="true"></i>
                                             }
-                                            @project.Name
-                                        </h5>
+                                        </div>
 
-                                        <DeploymentBadge Status="GetLatestStatus(project)"/>
+                                        <div class="min-w-0">
+                                            <h3 class="project-title text-truncate" title="@project.Name">@project.Name</h3>
+                                            <div class="project-source-label">
+                                                @(project.SourceType == SourceType.Remote ? "GitHub repository" : "Local workspace")
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <p class="text-muted small text-truncate mt-3 mb-4"
-                                       title="@project.SourcePathOrUrl">
-                                        <i class="bi bi-link-45deg me-1"></i> @project.SourcePathOrUrl
-                                    </p>
-
-                                    <div class="mt-auto d-flex gap-2">
-                                        <button class="btn btn-success flex-grow-1"
-                                                @onclick:stopPropagation="true"
-                                                @onclick="() => DeployAppAsync(project)"
-                                                disabled="@isDeployDisabled"
-                                                title="@GetDeployButtonTitle(project)">
-                                            @if (isDeploying)
-                                            {
-                                                <span class="spinner-border spinner-border-sm me-2" role="status"
-                                                      aria-hidden="true"></span>
-                                                <span>Deploying...</span>
-                                            }
-                                            else
-                                            {
-                                                <i class="bi bi-play-fill me-1"></i>
-                                                <span>Deploy</span>
-                                            }
-                                        </button>
-
-                                        <button class="btn btn-outline-danger"
-                                                @onclick:stopPropagation="true"
-                                                @onclick="() => DeleteAppAsync(project.Id)"
-                                                title="Remove project"
-                                                disabled="@isDeploying">
-                                            <i class="bi bi-trash3"></i> Remove
-                                        </button>
-                                    </div>
+                                    <DeploymentBadge Status="latestStatus"/>
                                 </div>
-                            </div>
-                        </div>
-                    }
 
-                    @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
-                    {
-                        <ConfigurationForm
-                            Config="@_currentDeployConfig"
-                            ProjectPath="@_selectedProjectPath"
-                            IsCloudDeployment="@_currentDeployConfig.IsCloudDeployment"
-                            OnCancel="@HideConfigModal"
-                            OnDeployConfirmed="@ExecuteDeploymentAsync"/>
-                    }
-                </div>
+                                <div class="project-path" title="@project.SourcePathOrUrl">
+                                    <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                                    <span class="text-truncate">@project.SourcePathOrUrl</span>
+                                </div>
+
+                                <div class="project-card-meta">
+                                    <span class="project-fact">
+                                        <i class="bi bi-diagram-3" aria-hidden="true"></i>
+                                        <strong>@totalSubProjects</strong> subprojects
+                                    </span>
+                                    <span class="project-fact">
+                                        <i class="bi bi-window" aria-hidden="true"></i>
+                                        <strong>@webProjectCount</strong> web apps
+                                    </span>
+                                    <span class="project-fact">
+                                        <i class="bi bi-activity" aria-hidden="true"></i>
+                                        @(latestStatus?.ToString() ?? "No deployments")
+                                    </span>
+                                </div>
+
+                                @if (project.SourceType == SourceType.Remote && !_isAzureConnected)
+                                {
+                                    <div class="project-requirement">
+                                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                        Connect Azure before cloud deployment.
+                                    </div>
+                                }
+
+                                <div class="project-card-actions">
+                                    <button class="btn btn-success"
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => DeployAppAsync(project)"
+                                            disabled="@isDeployDisabled"
+                                            title="@GetDeployButtonTitle(project)">
+                                        @if (isDeploying)
+                                        {
+                                            <span class="spinner-border spinner-border-sm" role="status"
+                                                  aria-hidden="true"></span>
+                                            <span>Deploying...</span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-play-fill" aria-hidden="true"></i>
+                                            <span>Deploy</span>
+                                        }
+                                    </button>
+
+                                    <button class="btn btn-outline-danger"
+                                            @onclick:stopPropagation="true"
+                                            @onclick="() => DeleteAppAsync(project.Id)"
+                                            title="Remove project"
+                                            disabled="@isDeploying">
+                                        <i class="bi bi-trash3" aria-hidden="true"></i>
+                                        <span>Remove</span>
+                                    </button>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </section>
+
+                @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
+                {
+                    <ConfigurationForm
+                        Config="@_currentDeployConfig"
+                        ProjectPath="@_selectedProjectPath"
+                        IsCloudDeployment="@_currentDeployConfig.IsCloudDeployment"
+                        OnCancel="@HideConfigModal"
+                        OnDeployConfirmed="@ExecuteDeploymentAsync"/>
+                }
             }
         </Authorized>
         <NotAuthorized>
-            <div class="text-center mt-5">
-                <i class="bi bi-lock-fill display-1 text-muted mb-3"></i>
-                <h3>Authentication Required</h3>
-                <p class="text-muted">Please log in to view your dashboard.</p>
+            <div class="auth-state">
+                <div class="auth-state-icon">
+                    <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                </div>
+                <h2>Authentication required</h2>
+                <p class="page-description">Please log in to view your deployment dashboard.</p>
                 <a href="/login" class="btn btn-primary mt-2">Login</a>
             </div>
         </NotAuthorized>
     </AuthorizeView>
 </div>
+
+@code {
+    private static string GetSourceMarkClass(SourceType sourceType)
+    {
+        return sourceType == SourceType.Remote ? "project-source-remote" : "project-source-local";
+    }
+
+    private static string GetProjectCardClass(SourceType sourceType)
+    {
+        return sourceType == SourceType.Remote ? "dashboard-project-remote" : "dashboard-project-local";
+    }
+}

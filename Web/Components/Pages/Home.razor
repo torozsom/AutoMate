@@ -6,33 +6,34 @@
     <Authorized>
         <div class="container mt-4">
             <div class="dashboard-welcome">
-                <h2>Welcome, <strong>@context.User.Identity?.Name</strong>!</h2>
-                <p class="mb-0 text-muted">Here's what's happening with your deployments today.</p>
+                <div class="page-eyebrow">Workspace</div>
+                <h1>Welcome, <strong>@context.User.Identity?.Name</strong></h1>
+                <p class="mb-0 page-description">Jump back into deployments, projects, and system status.</p>
             </div>
 
             <div class="row g-4">
                 <div class="col-md-4">
                     <div class="action-card">
-                        <div class="feature-icon">🚀</div>
-                        <h4>New Deployment</h4>
-                        <p class="text-muted">Launch a new project deployment pipeline.</p>
+                        <div class="feature-icon"><i class="bi bi-rocket-takeoff" aria-hidden="true"></i></div>
+                        <h2>New deployment</h2>
+                        <p class="page-description">Launch a project deployment pipeline.</p>
                         <a href="/dashboard" class="btn btn-primary mt-2">Start</a>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="action-card">
-                        <div class="feature-icon">📊</div>
-                        <h4>View Projects</h4>
-                        <p class="text-muted">Manage your existing projects and configurations.</p>
+                        <div class="feature-icon"><i class="bi bi-kanban" aria-hidden="true"></i></div>
+                        <h2>View projects</h2>
+                        <p class="page-description">Manage existing projects and configurations.</p>
                         <a href="/dashboard" class="btn btn-outline-primary mt-2">View All</a>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="action-card">
-                        <div class="feature-icon">⚡</div>
-                        <h4>System Status</h4>
-                        <p class="text-muted">All systems operational. No active incidents.</p>
-                        <span class="badge bg-success mt-2">Healthy</span>
+                        <div class="feature-icon"><i class="bi bi-activity" aria-hidden="true"></i></div>
+                        <h2>System status</h2>
+                        <p class="page-description">All systems operational. No active incidents.</p>
+                        <span class="badge deployment-badge deployment-badge-success mt-2">Healthy</span>
                     </div>
                 </div>
             </div>
@@ -42,11 +43,12 @@
     <NotAuthorized>
         <div class="hero-section">
             <div class="hero-content">
+                <div class="page-eyebrow">Developer deployment automation</div>
                 <h1 class="hero-title">Welcome to AutoMate</h1>
                 <p class="hero-subtitle">
-                    Your favorite tool for deployment automation. Write the code, we handle the rest.
+                    Connect source repositories, configure runtime services, and monitor deployments from one focused console.
                 </p>
-                <a href="/register" class="btn btn-light btn-lg px-4 fw-bold">Get Started</a>
+                <a href="/register" class="btn btn-light btn-lg px-4 fw-bold">Get started</a>
             </div>
         </div>
 
@@ -54,30 +56,30 @@
             <div class="row g-4">
                 <div class="col-md-3 col-sm-6">
                     <div class="feature-card">
-                        <div class="feature-icon">⚙️</div>
-                        <h4 class="feature-title">Pipelines</h4>
-                        <p class="text-muted">Set up robust deployment pipelines with ease.</p>
+                        <div class="feature-icon"><i class="bi bi-diagram-3" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">Pipelines</h2>
+                        <p class="page-description">Set up deployment pipelines with clear runtime configuration.</p>
                     </div>
                 </div>
                 <div class="col-md-3 col-sm-6">
                     <div class="feature-card">
-                        <div class="feature-icon">🤖</div>
-                        <h4 class="feature-title">Automation</h4>
-                        <p class="text-muted">Automate repetitive tasks and save valuable time.</p>
+                        <div class="feature-icon"><i class="bi bi-cpu" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">Automation</h2>
+                        <p class="page-description">Reduce manual deployment steps across local and cloud targets.</p>
                     </div>
                 </div>
                 <div class="col-md-3 col-sm-6">
                     <div class="feature-card">
-                        <div class="feature-icon">📦</div>
-                        <h4 class="feature-title">Builds</h4>
-                        <p class="text-muted">Manage your builds efficiently from a central dashboard.</p>
+                        <div class="feature-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">Builds</h2>
+                        <p class="page-description">Track project builds and deployment state from one place.</p>
                     </div>
                 </div>
                 <div class="col-md-3 col-sm-6">
                     <div class="feature-card">
-                        <div class="feature-icon">🔄</div>
-                        <h4 class="feature-title">CI/CD</h4>
-                        <p class="text-muted">Seamless Continuous Integration and Delivery.</p>
+                        <div class="feature-icon"><i class="bi bi-arrow-repeat" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">CI/CD</h2>
+                        <p class="page-description">Bridge repository workflows with deployment monitoring.</p>
                     </div>
                 </div>
             </div>

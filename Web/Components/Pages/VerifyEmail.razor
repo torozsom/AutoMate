@@ -4,14 +4,16 @@
 
 <PageTitle>@_pageTitle</PageTitle>
 
-<div class="container mt-5">
+<div class="container page-shell">
     <div class="row justify-content-center">
         <div class="col-md-6 text-center">
             @if (CheckEmail)
             {
-                <div class="verification-card p-5 shadow-sm border rounded bg-white">
-                    <i class="bi bi-envelope-check text-primary display-1 mb-3"></i>
-                    <h2 class="mb-3">Check your email!</h2>
+                <div class="auth-state">
+                    <div class="auth-state-icon">
+                        <i class="bi bi-envelope-check" aria-hidden="true"></i>
+                    </div>
+                    <h1>Check your email</h1>
                     <div class="alert alert-info shadow-sm">
                         <i class="bi bi-info-circle-fill me-2"></i>
                         We have sent a confirmation link to your email address.
@@ -23,11 +25,13 @@
             }
             else
             {
-                <div class="verification-card p-5 shadow-sm border rounded bg-white">
+                <div class="auth-state">
                     @if (!string.IsNullOrEmpty(ErrorMessage))
                     {
-                        <i class="bi bi-exclamation-triangle-fill text-danger display-1 mb-3"></i>
-                        <h2 class="text-danger mb-3">Verification Failed</h2>
+                        <div class="auth-state-icon">
+                            <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                        </div>
+                        <h1>Verification failed</h1>
                         <div class="alert alert-danger shadow-sm">
                             @ErrorMessage
                         </div>
@@ -37,7 +41,7 @@
                     }
                     else
                     {
-                        <h2 class="mb-4">Email confirmation in progress...</h2>
+                        <h1>Email confirmation in progress...</h1>
                         <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
                             <span class="visually-hidden">Loading...</span>
                         </div>
