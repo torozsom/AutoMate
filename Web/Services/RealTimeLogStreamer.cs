@@ -5,19 +5,12 @@ using Web.Hubs;
 namespace Web.Services;
 
 /// <summary>
-///     A service that implements the ILogStreamer interface to stream build logs in real-time to
-///     connected clients using SignalR. This service sends log messages to a specific group associated
-///     with the project ID, allowing clients that have joined the group to receive the log updates as they occur.
+///     Streams deployment logs and container metrics to project-specific SignalR groups.
 /// </summary>
 /// <param name="hubContext">The SignalR hub context.</param>
-public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : ILogStreamer
+public sealed class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : ILogStreamer
 {
-    /// <summary>
-    ///     Streams build logs for a specific project to connected clients in real-time.
-    /// </summary>
-    /// <param name="projectId">The unique identifier of the project for which logs are being streamed.</param>
-    /// <param name="message">The log message to stream to clients.</param>
-    /// <returns>A task representing the asynchronous operation of streaming the log message.</returns>
+    /// <inheritdoc />
     public async Task StreamBuildLogsAsync(Guid projectId, string message)
     {
         ValidateProjectId(projectId);
@@ -27,14 +20,7 @@ public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : I
             .ReceiveBuildLog(message);
     }
 
-
-    /// <summary>
-    ///     Streams container logs for a specific project and container to connected clients in real-time.
-    /// </summary>
-    /// <param name="projectId">The unique identifier of the project for which logs are being streamed.</param>
-    /// <param name="containerName">The name of the container for which logs are being streamed.</param>
-    /// <param name="message">The log message to stream to clients.</param>
-    /// <returns>A task representing the asynchronous operation of streaming the log message.</returns>
+    /// <inheritdoc />
     public async Task StreamContainerLogsAsync(Guid projectId, string containerName, string message)
     {
         ValidateProjectId(projectId);
@@ -45,10 +31,7 @@ public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : I
             .ReceiveContainerLog(containerName, message);
     }
 
-
-    /// <summary>
-    ///     Streams container metrics for a specific project and container to connected clients in real-time.
-    /// </summary>
+    /// <inheritdoc />
     public async Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage,
         string memoryUsage)
     {
@@ -62,7 +45,7 @@ public class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : I
 
 
     /// <summary>
-    ///     Validates the project ID to ensure it is not empty. This is important to prevent invalid group names.
+    ///     Validates the project ID to prevent publishing to malformed SignalR group names.
     /// </summary>
     /// <param name="projectId">The project ID to validate.</param>
     /// <exception cref="ArgumentException">Thrown if the project ID is empty.</exception>

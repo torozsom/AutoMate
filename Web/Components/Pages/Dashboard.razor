@@ -8,7 +8,8 @@
         <div class="dashboard-hero-copy">
             <div class="page-eyebrow">Operations</div>
             <h1>Deployment dashboard</h1>
-            <p class="page-description">Monitor project readiness, source type, and latest deployment state from one operational workspace.</p>
+            <p class="page-description">Monitor project readiness, source type, and latest deployment state from one
+                operational workspace.</p>
         </div>
 
         <div class="cloud-connect-panel @(_isAzureConnected ? "cloud-connect-panel-connected" : null)">
@@ -46,7 +47,8 @@
                             <div class="azure-option-description">Use the standard organization sign-in flow.</div>
                         </div>
                     </div>
-                    <a href="/api/auth/azure-login" class="btn azure-connect-button @(_isAzureConnected ? "azure-connect-button-connected" : null)">
+                    <a href="/api/auth/azure-login"
+                       class="btn azure-connect-button @(_isAzureConnected ? "azure-connect-button-connected" : null)">
                         <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
                         <span>Connect</span>
                     </a>
@@ -120,7 +122,8 @@
                     </div>
                     <div>
                         <h2>No projects saved yet</h2>
-                        <p class="page-description">Start by importing a local workspace or saving a supported GitHub repository.</p>
+                        <p class="page-description">Start by importing a local workspace or saving a supported GitHub
+                            repository.</p>
                     </div>
                     <div class="empty-state-actions">
                         <a href="/local-repos" class="btn btn-outline-primary">
@@ -221,8 +224,9 @@
                             var webProjectCount = project.CsProjects.Count(csp => csp.IsWebProject);
                             var totalSubProjects = project.CsProjects.Count;
 
-                            <article class="card dashboard-project-card resource-card @GetProjectCardClass(project.SourceType)"
-                                     @onclick="() => NavigateToProject(project.Id)">
+                            <article
+                                class="card dashboard-project-card resource-card @GetProjectCardClass(project.SourceType)"
+                                @onclick="() => NavigateToProject(project.Id)">
                                 <div class="project-card-header">
                                     <div class="project-title-group">
                                         <div class="project-source-mark @GetSourceMarkClass(project.SourceType)">
@@ -237,7 +241,8 @@
                                         </div>
 
                                         <div class="min-w-0">
-                                            <h3 class="project-title text-truncate" title="@project.Name">@project.Name</h3>
+                                            <h3 class="project-title text-truncate"
+                                                title="@project.Name">@project.Name</h3>
                                             <div class="project-source-label">
                                                 @(project.SourceType == SourceType.Remote ? "GitHub repository" : "Local workspace")
                                             </div>
@@ -333,6 +338,7 @@
 </div>
 
 @code {
+
     private static string GetSourceMarkClass(SourceType sourceType)
     {
         return sourceType == SourceType.Remote ? "project-source-remote" : "project-source-local";
@@ -342,4 +348,5 @@
     {
         return sourceType == SourceType.Remote ? "dashboard-project-remote" : "dashboard-project-local";
     }
+
 }

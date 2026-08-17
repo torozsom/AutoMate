@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Security.Claims;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
@@ -13,6 +12,7 @@ using Services.Docker;
 using Services.Orchestration;
 using Services.Scanner;
 using Web.Components.Shared;
+using Web.Hubs;
 
 namespace Web.Components.Pages;
 
@@ -48,6 +48,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The index of the currently displayed container's metrics in the list of container names.
     private int _currentMetricIndex;
+
+    /// The internal AutoMate user ID resolved once during component initialization.
+    private Guid _currentUserId;
 
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
@@ -96,9 +99,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject]
     private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    /// The service scope factory used to create scopes for resolving scoped services during asynchronous operations.
+    /// Queue that hands deployment work to the hosted background worker.
     [Inject]
-    private IServiceScopeFactory ScopeFactory { get; set; } = null!;
+    private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
     /// The user service used to retrieve user details and manage user-related operations.
     [Inject]
@@ -198,35 +201,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _isStopping = true;
         StateHasChanged();
 
-        _ = Task.Run(async () =>
+        try
         {
-            using var scope = ScopeFactory.CreateScope();
-            var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
-
-            try
-            {
-                await orchestrator.StopDeploymentAsync(ProjectId, _app.Name, csProject.Path);
-
-                await InvokeAsync(() =>
-                {
-                    _webHostPort = 0;
-                    _isStopping = false;
-                    StateHasChanged();
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to stop deployment for project {ProjectId}", ProjectId);
-            }
-            finally
-            {
-                await InvokeAsync(() =>
-                {
-                    _isStopping = false;
-                    StateHasChanged();
-                });
-            }
-        });
+            await DeploymentJobQueue.EnqueueAsync(new StopLocalDeploymentJob(ProjectId, _app.Name, csProject.Path));
+            _isStopping = false;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to queue stop deployment for project {ProjectId}", ProjectId);
+            _isStopping = false;
+            StateHasChanged();
+        }
     }
 
 
@@ -288,28 +274,16 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             return;
         }
 
-        _ = Task.Run((Func<Task>)(async () =>
+        try
         {
-            try
-            {
-                using var scope = ScopeFactory.CreateScope();
-                var orchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
-                await orchestrator.DeployLocalProjectAsync(finalConfig);
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to execute deployment for project {ProjectId}", finalConfig.ProjectId);
-            }
-            finally
-            {
-                await InvokeAsync(async () =>
-                {
-                    _isDeploying = false;
-                    await RefreshProjectAsync(true);
-                    StateHasChanged();
-                });
-            }
-        }));
+            await DeploymentJobQueue.EnqueueAsync(new LocalDeploymentJob(finalConfig));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to queue deployment for project {ProjectId}", finalConfig.ProjectId);
+            _isDeploying = false;
+            StateHasChanged();
+        }
     }
 
     private async Task ExecuteCloudDeploymentAsync(DeploymentConfigDto finalConfig)
@@ -317,15 +291,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_app == null)
             return;
 
-        if (!TryParseGitHubRepository(_app.SourcePathOrUrl, out var repoOwner, out var repoName))
+        if (!GitHubRepositoryUrlParser.TryParse(_app.SourcePathOrUrl, out var repository))
         {
             _workflowStatusMessage = "AutoMate could not determine the GitHub repository owner/name.";
             _isDeploying = false;
             return;
         }
 
-        var currentUserId = await GetCurrentUserIdAsync();
-        var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(currentUserId);
+        var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(_currentUserId);
         var userDetails = await GetCurrentUserDetailsAsync();
 
         if (azureCredentials == null || string.IsNullOrWhiteSpace(userDetails.AccessToken))
@@ -338,48 +311,32 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _workflowStatusMessage = "Configuring Azure OIDC and starting GitHub Actions workflow...";
         StateHasChanged();
 
-        _ = Task.Run((Func<Task>)(async () =>
+        try
         {
-            try
+            await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
             {
-                using var scope = ScopeFactory.CreateScope();
-                var orchestrator = scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>();
-                var deployment = await orchestrator.DeployCloudProjectAsync(new CloudDeploymentRequestDto
-                {
-                    Config = finalConfig,
-                    Metadata = CreateRemoteProjectMetadata(),
-                    CsProjectName = _app.Name,
-                    RepositoryRoot = ".",
-                    GitHubAccessToken = userDetails.AccessToken,
-                    GitHubContainerRegistryToken = userDetails.AccessToken,
-                    AzureCredentials = azureCredentials,
-                    RepositoryOwner = repoOwner,
-                    RepositoryName = repoName
-                });
+                Config = finalConfig,
+                Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                CsProjectName = _app.Name,
+                RepositoryRoot = ".",
+                GitHubAccessToken = userDetails.AccessToken,
+                GitHubContainerRegistryToken = userDetails.AccessToken,
+                AzureCredentials = azureCredentials,
+                RepositoryOwner = repository.Owner,
+                RepositoryName = repository.Name
+            }));
 
-                await InvokeAsync((Func<Task>)(async () =>
-                {
-                    _workflowStatusMessage = deployment.Status == DeploymentStatus.Failed
-                        ? "GitHub Actions workflow completed with a failure."
-                        : "GitHub Actions workflow has been started.";
-                    _workflowUrl = $"https://github.com/{repoOwner}/{repoName}/actions/workflows/deploy.yml";
-                    _isDeploying = false;
-                    await RefreshProjectAsync();
-                    StateHasChanged();
-                }));
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Failed to execute cloud deployment for project {ProjectId}",
-                    finalConfig.ProjectId);
-                await InvokeAsync(() =>
-                {
-                    _workflowStatusMessage = $"Cloud deployment failed to start: {ex.Message}";
-                    _isDeploying = false;
-                    StateHasChanged();
-                });
-            }
-        }));
+            _workflowStatusMessage = "GitHub Actions workflow has been queued.";
+            _workflowUrl = $"https://github.com/{repository.Owner}/{repository.Name}/actions/workflows/deploy.yml";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to queue cloud deployment for project {ProjectId}", finalConfig.ProjectId);
+            _workflowStatusMessage = $"Cloud deployment failed to queue: {ex.Message}";
+            _isDeploying = false;
+            StateHasChanged();
+        }
     }
 
 
@@ -391,11 +348,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     protected override async Task OnInitializedAsync()
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
-        var currentUserId = await GetCurrentUserIdAsync();
+        _currentUserId = await GetCurrentUserIdAsync();
 
-        if (currentUserId != Guid.Empty)
+        if (_currentUserId != Guid.Empty)
         {
-            _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
+            _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
 
             if (_app is { SourceType: SourceType.Local })
             {
@@ -447,6 +404,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (latestDeployment != null)
             {
                 latestDeployment.Status = status;
+                if (status is DeploymentStatus.Running or DeploymentStatus.Failed or DeploymentStatus.Stopped)
+                    _isDeploying = false;
+                if (status == DeploymentStatus.Stopped)
+                    _isStopping = false;
                 await UpdateWebHostPortAsync(status == DeploymentStatus.Running ? 6 : 1);
                 await InvokeAsync(StateHasChanged);
             }
@@ -503,10 +464,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task RefreshProjectAsync(bool resolveWebPortWithRetry = false)
     {
-        var currentUserId = await GetCurrentUserIdAsync();
-        if (currentUserId != Guid.Empty)
+        if (_currentUserId != Guid.Empty)
         {
-            _app = await ApplicationService.GetAppByIdAsync(ProjectId, currentUserId);
+            _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
             await UpdateWebHostPortAsync(resolveWebPortWithRetry ? 6 : 1);
             await InvokeAsync(StateHasChanged);
         }
@@ -531,42 +491,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private static DeploymentConfigDto CreateCloudDeploymentConfig(Application app)
     {
-        var resourceName = ToAzureResourceName(app.Name);
-
-        return new DeploymentConfigDto
-        {
-            ProjectId = app.Id,
-            CsProjectId = Guid.Empty,
-            ProjectName = app.Name,
-            EnvironmentName = "Production",
-            IsCloudDeployment = true,
-            CloudAzureRegion = "eastus",
-            CloudResourceGroupName = $"{resourceName}-prod-rg",
-            CloudContainerAppName = $"{resourceName}-prod-app",
-            CloudRegistryName = "ghcr.io",
-            Databases = []
-        };
-    }
-
-
-    /// <summary>
-    ///     Normalizes a project name into an Azure-friendly resource name.
-    /// </summary>
-    private static string ToAzureResourceName(string value)
-    {
-        var normalized = new string(value
-            .Trim()
-            .ToLowerInvariant()
-            .Select(c => char.IsLetterOrDigit(c) ? c : '-')
-            .ToArray());
-
-        normalized = string.Join('-', normalized
-            .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
-        if (string.IsNullOrWhiteSpace(normalized))
-            normalized = "automate-app";
-
-        return normalized.Length <= 32 ? normalized : normalized[..32].TrimEnd('-');
+        return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }
 
 
@@ -602,60 +527,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             .Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
         return string.IsNullOrWhiteSpace(normalized) ? "automate-project" : normalized;
-    }
-
-
-    /// <summary>
-    ///     Creates a minimal metadata model for remote repositories that are deployed without a local checkout scan.
-    /// </summary>
-    private static ProjectMetadataDto CreateRemoteProjectMetadata()
-    {
-        return new ProjectMetadataDto
-        {
-            TargetFramework = "net10.0",
-            DotNetVersion = "10.0",
-            IsWebProject = true
-        };
-    }
-
-
-    /// <summary>
-    ///     Attempts to extract the owner and repository name from a GitHub repository URL.
-    /// </summary>
-    private static bool TryParseGitHubRepository(string repositoryUrl, out string owner, out string name)
-    {
-        owner = string.Empty;
-        name = string.Empty;
-
-        if (string.IsNullOrWhiteSpace(repositoryUrl))
-            return false;
-
-        var normalized = repositoryUrl.Trim().TrimEnd('/');
-        if (normalized.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
-            normalized = normalized[..^4];
-
-        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
-        {
-            var segments = uri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
-            if (segments.Length >= 2)
-            {
-                owner = segments[0];
-                name = segments[1];
-                return true;
-            }
-        }
-
-        var sshPrefixIndex = normalized.IndexOf(':', StringComparison.Ordinal);
-        if (normalized.StartsWith("git@github.com", StringComparison.OrdinalIgnoreCase) && sshPrefixIndex >= 0)
-            normalized = normalized[(sshPrefixIndex + 1)..];
-
-        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length < 2)
-            return false;
-
-        owner = parts[^2];
-        name = parts[^1];
-        return true;
     }
 
 
@@ -832,9 +703,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (firstRender)
         {
-            var userId = await GetCurrentUserIdAsync();
-            var protector = DataProtectionProvider.CreateProtector("LogHub").ToTimeLimitedDataProtector();
-            var secureToken = protector.Protect($"{ProjectId}:{userId}", TimeSpan.FromMinutes(5));
+            if (_currentUserId == Guid.Empty)
+            {
+                Logger.LogWarning(
+                    "Skipping log hub connection for project {ProjectId} because no user ID was resolved.",
+                    ProjectId);
+                return;
+            }
+
+            var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose)
+                .ToTimeLimitedDataProtector();
+            var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
 
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
@@ -932,26 +811,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <returns>The user ID if authenticated, otherwise Guid.Empty.</returns>
     private async Task<Guid> GetCurrentUserIdAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-
-        if (!user.Identity?.IsAuthenticated ?? true)
-            return Guid.Empty;
-
-        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (Guid.TryParse(userIdString, out var parsedId))
-            return parsedId;
-
-        // Fallback for GitHub users
-        if (!string.IsNullOrEmpty(userIdString))
-        {
-            using var scope = ScopeFactory.CreateScope();
-            var userService = scope.ServiceProvider.GetRequiredService<IUserService>();
-            return await userService.GetUserIdByGithubAccountIdAsync(userIdString);
-        }
-
-        return Guid.Empty;
+        return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider, UserService);
     }
 
 
@@ -960,14 +820,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        var userIdString = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (string.IsNullOrWhiteSpace(userIdString))
-            return (Guid.Empty, null, false);
-
-        return await UserService.GetUserDetailsFromIdentifierAsync(userIdString);
+        var details = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(AuthStateProvider, UserService);
+        return (details.UserId, details.AccessToken, details.IsGitHubUser);
     }
 
 

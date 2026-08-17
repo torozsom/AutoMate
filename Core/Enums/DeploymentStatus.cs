@@ -1,7 +1,7 @@
 ﻿namespace Core.Enums;
 
 /// <summary>
-///     Defines the possible statuses of a deploymen.
+///     Defines the possible statuses of a deployment.
 /// </summary>
 public enum DeploymentStatus
 {

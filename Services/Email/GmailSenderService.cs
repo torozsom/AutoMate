@@ -7,13 +7,15 @@ using MimeKit;
 namespace Services.Email;
 
 /// <summary>
-///     An implementation of the IEmailSender interface that uses Gmail's SMTP server to send emails.
-///     The sender's email, app password, and sender name are retrieved from the configuration settings.
+///     Sends transactional email through an SMTP provider configured with Gmail-compatible settings.
 /// </summary>
-public class GmailSenderService(
+public sealed class GmailSenderService(
     IOptions<EmailOptions> options,
     ILogger<GmailSenderService> logger) : IEmailSenderService
 {
+    /// <summary>
+    ///     Runtime SMTP options bound from configuration.
+    /// </summary>
     private readonly EmailOptions _options = options.Value;
 
     /// <inheritdoc />
@@ -26,25 +28,13 @@ public class GmailSenderService(
         if (string.IsNullOrWhiteSpace(subject))
             throw new ArgumentException("Email subject is required.", nameof(subject));
 
-        if (string.IsNullOrWhiteSpace(_options.SenderEmail) || string.IsNullOrWhiteSpace(_options.AppPassword))
-        {
-            logger.LogCritical("[GmailSenderService] Email sender credentials are not configured.");
-            throw new InvalidOperationException("Email sender credentials are not configured.");
-        }
+        EnsureCredentialsConfigured();
 
         logger.LogInformation(
             "[GmailSenderService] Attempting to send email with subject '{Subject}'...", subject);
 
-        // Create a new MIME message and set the sender, recipient, subject, and body
-        var mimeMessage = new MimeMessage();
-        mimeMessage.From.Add(new MailboxAddress(_options.SenderName, _options.SenderEmail));
-        mimeMessage.To.Add(MailboxAddress.Parse(toEmail));
-        mimeMessage.Subject = subject;
+        var mimeMessage = CreateMessage(toEmail, subject, message);
 
-        var bodyBuilder = new BodyBuilder { TextBody = message };
-        mimeMessage.Body = bodyBuilder.ToMessageBody();
-
-        // Send the email using Gmail's SMTP server
         using var smtpClient = new SmtpClient();
 
         try
@@ -61,5 +51,33 @@ public class GmailSenderService(
         }
 
         logger.LogInformation("[GmailSenderService] Email successfully sent.");
+    }
+
+    /// <summary>
+    ///     Verifies that configured sender credentials are present before connecting to SMTP.
+    /// </summary>
+    private void EnsureCredentialsConfigured()
+    {
+        if (!string.IsNullOrWhiteSpace(_options.SenderEmail) && !string.IsNullOrWhiteSpace(_options.AppPassword))
+            return;
+
+        logger.LogCritical("[GmailSenderService] Email sender credentials are not configured.");
+        throw new InvalidOperationException("Email sender credentials are not configured.");
+    }
+
+    /// <summary>
+    ///     Creates the MIME message sent through SMTP.
+    /// </summary>
+    private MimeMessage CreateMessage(string toEmail, string subject, string message)
+    {
+        var mimeMessage = new MimeMessage();
+        mimeMessage.From.Add(new MailboxAddress(_options.SenderName, _options.SenderEmail));
+        mimeMessage.To.Add(MailboxAddress.Parse(toEmail));
+        mimeMessage.Subject = subject;
+
+        var bodyBuilder = new BodyBuilder { TextBody = message };
+        mimeMessage.Body = bodyBuilder.ToMessageBody();
+
+        return mimeMessage;
     }
 }

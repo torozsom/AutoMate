@@ -13,7 +13,7 @@ namespace Services.Orchestration;
 ///     any deployments that are stuck in "Building" or "Starting" status,
 ///     and synchronize the status of "Running" or "Stopped" deployments with the actual Docker daemon state.
 /// </summary>
-public class DeploymentCleanupHostedService(
+public sealed class DeploymentCleanupHostedService(
     IServiceProvider serviceProvider,
     ILogger<DeploymentCleanupHostedService> logger)
     : IHostedService
@@ -85,7 +85,7 @@ public class DeploymentCleanupHostedService(
                 {
                     if (deployment.CsProject == null) continue;
 
-                    var expectedProjectName = NormalizeComposeProjectName(
+                    var expectedProjectName = OrchestrationNameNormalizer.NormalizeComposeProjectName(
                         deployment.CsProject.Application?.Name ?? deployment.CsProject.Name);
                     var isActuallyRunning =
                         runningProjectsInDocker.Contains(expectedProjectName, StringComparer.OrdinalIgnoreCase);
@@ -121,26 +121,5 @@ public class DeploymentCleanupHostedService(
             logger.LogCritical(ex, "[DeploymentCleanupHostedService] CRITICAL: Error occurred while " +
                                    "executing bulk update to clean up and sync deployments.");
         }
-    }
-
-
-    /// <summary>
-    ///     Normalizes a string to be used as a Docker Compose project name by converting to lowercase,
-    ///     replacing invalid characters with hyphens, and collapsing multiple hyphens into a single one.
-    /// </summary>
-    /// <param name="value">The string to normalize.</param>
-    /// <returns>The normalized Docker Compose project name.</returns>
-    private static string NormalizeComposeProjectName(string value)
-    {
-        var normalized = new string(value
-            .Trim()
-            .ToLowerInvariant()
-            .Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-')
-            .ToArray());
-
-        normalized = string.Join('-', normalized.Split('-',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
-        return string.IsNullOrWhiteSpace(normalized) ? "automate-project" : normalized;
     }
 }

@@ -2,7 +2,8 @@
 
 `Services` is AutoMate's application and infrastructure layer.
 
-It implements business workflows, persistence, scanning, templating, external integrations, and deployment orchestration on top of the domain contracts from `Core`.
+It implements business workflows, persistence, scanning, templating, external integrations, and deployment orchestration
+on top of the domain contracts from `Core`.
 
 ---
 
@@ -81,8 +82,8 @@ Capabilities:
 - create or update Azure resource groups
 - create or update user-assigned managed identities
 - register required Azure resource providers:
-  - `Microsoft.App`
-  - `Microsoft.OperationalInsights`
+    - `Microsoft.App`
+    - `Microsoft.OperationalInsights`
 - configure GitHub Actions OIDC federated credentials
 - assign Contributor to the workflow identity at resource group scope
 - stream Azure Container Apps runtime logs/metadata after successful deployment
@@ -223,7 +224,8 @@ Main types:
 - **Resilient HTTP:** GitHub HTTP client is registered with standard resilience handling.
 - **Encrypted token persistence:** OAuth tokens are protected with ASP.NET Core Data Protection.
 - **Hosted lifecycle work:** cleanup/reconciliation uses `IHostedService`.
-- **Real-time event bridge:** deployment status changes are broadcast through an in-process notifier and streamed through SignalR.
+- **Real-time event bridge:** deployment status changes are broadcast through an in-process notifier and streamed
+  through SignalR.
 
 ---
 

@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text;
 using Core.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -11,13 +12,36 @@ namespace Services.Auth;
 /// <summary>
 ///     Service implementation for handling user authentication, registration, and email verification.
 /// </summary>
-public class AuthService(
+public sealed class AuthService(
     AutoMateDbContext dbContext,
     IEmailSenderService emailSenderService,
     IPasswordHasher<LocalUser> passwordHasher,
     ILogger<AuthService> logger) : IAuthService
 {
+    /// <summary>
+    ///     The verification token lifetime used for local email registrations.
+    /// </summary>
     private const int VerificationTokenLifetimeHours = 24;
+
+    /// <summary>
+    ///     Generic login failure text that avoids revealing which credential failed.
+    /// </summary>
+    private const string InvalidCredentialsMessage = "Invalid credentials";
+
+    /// <summary>
+    ///     Login failure text returned when a local account has not confirmed its email address.
+    /// </summary>
+    private const string EmailNotVerifiedMessage = "Email not verified";
+
+    /// <summary>
+    ///     Fallback display name for remote profiles with no usable username.
+    /// </summary>
+    private const string UnknownRemoteUsername = "Unknown";
+
+    /// <summary>
+    ///     Subject line used for local registration verification emails.
+    /// </summary>
+    private const string VerificationEmailSubject = "Confirm your registration to AutoMate!";
 
     /// <inheritdoc />
     public async Task<bool> RegisterAsync(string username, string email, string password,
@@ -25,25 +49,20 @@ public class AuthService(
     {
         ArgumentNullException.ThrowIfNull(verificationLinkFactory);
 
-        var normalizedEmail = NormalizeEmail(email);
-        var normalizedUsername = username.Trim();
-
-        if (string.IsNullOrWhiteSpace(normalizedUsername) ||
-            string.IsNullOrWhiteSpace(normalizedEmail) ||
-            string.IsNullOrWhiteSpace(password))
+        if (!TryCreateRegistrationInput(username, email, password, out var registration))
         {
             logger.LogWarning("[AuthService] Registration failed because required fields were empty.");
             return false;
         }
 
-        if (await IsEmailInUseAsync(normalizedEmail, cancellationToken))
+        if (await IsEmailInUseAsync(registration.Email, cancellationToken))
         {
             logger.LogWarning("[AuthService] Registration failed: email is already in use for username '{Username}'.",
-                normalizedUsername);
+                registration.Username);
             return false;
         }
 
-        var newUser = CreateLocalUserEntity(normalizedUsername, normalizedEmail, password);
+        var newUser = CreateLocalUserEntity(registration);
 
         try
         {
@@ -53,7 +72,7 @@ public class AuthService(
         catch (DbUpdateException ex)
         {
             logger.LogWarning(ex, "[AuthService] Registration failed while saving user '{Username}'.",
-                normalizedUsername);
+                registration.Username);
             return false;
         }
 
@@ -64,7 +83,7 @@ public class AuthService(
             return false;
         }
 
-        logger.LogInformation("[AuthService] Successfully registered new user '{Username}'.", normalizedUsername);
+        logger.LogInformation("[AuthService] Successfully registered new user '{Username}'.", registration.Username);
         return true;
     }
 
@@ -81,14 +100,12 @@ public class AuthService(
 
         if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < DateTimeOffset.UtcNow)
         {
-            var sanitizedTokenForLog = token.Replace("\r", string.Empty).Replace("\n", string.Empty);
-            logger.LogWarning("[AuthService] Email verification failed for token '{Token}'.", sanitizedTokenForLog);
+            logger.LogWarning("[AuthService] Email verification failed for token fingerprint '{TokenFingerprint}'.",
+                CreateTokenFingerprint(token));
             return false;
         }
 
-        user.IsEmailVerified = true;
-        user.EmailVerificationToken = null;
-        user.VerificationTokenExpiry = null;
+        MarkEmailVerified(user);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -103,26 +120,26 @@ public class AuthService(
     {
         var normalizedEmail = NormalizeEmail(email);
         if (string.IsNullOrWhiteSpace(normalizedEmail) || string.IsNullOrWhiteSpace(password))
-            return (null, "Invalid credentials");
+            return (null, InvalidCredentialsMessage);
 
         var user = await dbContext.Users
             .OfType<LocalUser>()
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
 
         if (user?.PasswordHash == null)
-            return (null, "Invalid credentials");
+            return (null, InvalidCredentialsMessage);
 
         var verificationResult = passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
 
         if (verificationResult == PasswordVerificationResult.Failed)
-            return (null, "Invalid credentials");
+            return (null, InvalidCredentialsMessage);
 
         if (!user.IsEmailVerified)
-            return (null, "Email not verified");
+            return (null, EmailNotVerifiedMessage);
 
         if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
         {
-            user.PasswordHash = passwordHasher.HashPassword(user, password);
+            RehashPassword(user, password);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -134,35 +151,21 @@ public class AuthService(
     public async Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
         string? accessToken, CancellationToken cancellationToken = default)
     {
-        var normalizedEmail = NormalizeEmail(email);
-        var normalizedUsername = string.IsNullOrWhiteSpace(username) ? "Unknown" : username.Trim();
+        var profile = NormalizeGitHubProfile(githubId, username, email, avatarUrl, accessToken);
 
         var existingUser = await dbContext.Users
             .OfType<RemoteUser>()
-            .FirstOrDefaultAsync(u => u.AccountId == githubId, cancellationToken);
+            .FirstOrDefaultAsync(u => u.AccountId == profile.AccountId, cancellationToken);
 
         if (existingUser == null)
         {
-            var newUser = new RemoteUser
-            {
-                AccountId = githubId,
-                Username = normalizedUsername,
-                Email = normalizedEmail,
-                AvatarUrl = avatarUrl,
-                GitHubAccessToken = accessToken
-            };
-
-            dbContext.Users.Add(newUser);
-            logger.LogInformation("[AuthService] Created new GitHub user: {Username}", normalizedUsername);
+            dbContext.Users.Add(CreateRemoteUser(profile));
+            logger.LogInformation("[AuthService] Created new GitHub user: {Username}", profile.Username);
         }
         else
         {
-            existingUser.Username = normalizedUsername;
-            existingUser.Email = normalizedEmail;
-            existingUser.AvatarUrl = avatarUrl;
-            existingUser.GitHubAccessToken = accessToken;
-
-            logger.LogInformation("[AuthService] Updated existing GitHub user: {Username}", normalizedUsername);
+            ApplyGitHubProfile(existingUser, profile);
+            logger.LogInformation("[AuthService] Updated existing GitHub user: {Username}", profile.Username);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -182,6 +185,14 @@ public class AuthService(
         DateTimeOffset? expiresAt,
         CancellationToken cancellationToken = default)
     {
+        var azureConnection = new AzureAccountConnection(
+            azureAccountId,
+            tenantId,
+            subscriptionId,
+            accessToken,
+            refreshToken,
+            expiresAt);
+
         var user = await FindCurrentUserAsync(currentUserIdentifier, cancellationToken);
 
         if (user == null)
@@ -192,26 +203,18 @@ public class AuthService(
             return;
         }
 
-        user.AzureAccountId = azureAccountId;
-        user.AzureTenantId = tenantId;
-        user.AzureSubscriptionId = subscriptionId;
-        user.AzureAccessToken = accessToken;
-        user.AzureRefreshToken = refreshToken;
-        user.AzureTokenExpiresAt = expiresAt;
+        ApplyAzureConnection(user, azureConnection);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("[AuthService] Linked Azure account '{AzureAccountId}' to user '{UserId}'.",
-            azureAccountId, user.Id);
+            azureConnection.AccountId, user.Id);
     }
 
 
     /// <summary>
-    ///     Resolves the current user from either the local user ID claim or the GitHub account ID claim.
+    ///     Resolves the current remote user from either the persisted user ID or the GitHub account ID claim.
     /// </summary>
-    /// <param name="identifier">The current authenticated user identifier.</param>
-    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns>The current user entity, or null when no matching user is found.</returns>
     private async Task<RemoteUser?> FindCurrentUserAsync(string identifier, CancellationToken cancellationToken)
     {
         if (Guid.TryParse(identifier, out var userId))
@@ -226,50 +229,34 @@ public class AuthService(
 
 
     /// <summary>
-    ///     Checks if the provided email address is already associated with an existing user account in the database.
+    ///     Checks whether any account already owns the normalized email address.
     /// </summary>
-    /// <param name="email">The email to be checked if it is used already.</param>
-    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns></returns>
     private async Task<bool> IsEmailInUseAsync(string email, CancellationToken cancellationToken)
     {
         return await dbContext.Users.AnyAsync(u => u.Email == email, cancellationToken);
     }
 
-
     /// <summary>
-    ///     Creates a new instance of the <see cref="LocalUser" /> entity with the provided username, email, and password.
-    ///     The method also generates a secure email verification token and sets the token's expiry time.
+    ///     Creates a local user with a hashed password and verification token ready for persistence.
     /// </summary>
-    /// <param name="username">The username of the local user.</param>
-    /// <param name="email">The email of the local user.</param>
-    /// <param name="password">The password of the local user.</param>
-    /// <returns></returns>
-    private LocalUser CreateLocalUserEntity(string username, string email, string password)
+    private LocalUser CreateLocalUserEntity(RegistrationInput registration)
     {
         var user = new LocalUser
         {
-            Email = email,
-            Username = username,
+            Email = registration.Email,
+            Username = registration.Username,
             IsEmailVerified = false,
             EmailVerificationToken = GenerateSecureToken(),
             VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(VerificationTokenLifetimeHours)
         };
 
-        user.PasswordHash = passwordHasher.HashPassword(user, password);
+        user.PasswordHash = passwordHasher.HashPassword(user, registration.Password);
         return user;
     }
 
-
     /// <summary>
-    ///     Attempts to send a verification email to the user with the provided email verification token.
-    ///     If the email fails to send, the method logs the error and returns false, allowing the caller
-    ///     to handle the failure appropriately.
+    ///     Sends the registration verification email and converts email delivery failures into a false result.
     /// </summary>
-    /// <param name="user">The user to be verified.</param>
-    /// <param name="verificationLinkFactory">The functor that handles the link creation.</param>
-    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns></returns>
     private async Task<bool> TrySendVerificationEmailAsync(LocalUser user, Func<string, string> verificationLinkFactory,
         CancellationToken cancellationToken = default)
     {
@@ -279,15 +266,15 @@ public class AuthService(
         {
             await emailSenderService.SendEmailAsync(
                 user.Email,
-                "Confirm your registration to AutoMate!",
-                $"Welcome to AutoMate!\n\nPlease follow this link for verification:\n{verificationLink}",
+                VerificationEmailSubject,
+                CreateVerificationEmailBody(verificationLink),
                 cancellationToken);
 
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "[AuthService] Failed to send verification email'.");
+            logger.LogError(ex, "[AuthService] Failed to send verification email.");
             return false;
         }
     }
@@ -303,12 +290,12 @@ public class AuthService(
     private static string GenerateSecureToken()
     {
         var tokenBytes = RandomNumberGenerator.GetBytes(32);
-        return Convert.ToBase64String(tokenBytes)
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .TrimEnd('=');
+        return Base64UrlEncode(tokenBytes);
     }
 
+    /// <summary>
+    ///     Removes a newly created unverified user after verification email delivery fails.
+    /// </summary>
     private async Task RemoveUnverifiedUserAsync(LocalUser user, CancellationToken cancellationToken)
     {
         try
@@ -323,8 +310,152 @@ public class AuthService(
         }
     }
 
+    /// <summary>
+    ///     Normalizes email addresses before persistence and comparison.
+    /// </summary>
     private static string NormalizeEmail(string email)
     {
         return email.Trim().ToLowerInvariant();
     }
+
+    /// <summary>
+    ///     Validates and normalizes local registration input without throwing for normal user mistakes.
+    /// </summary>
+    private static bool TryCreateRegistrationInput(string username, string email, string password,
+        out RegistrationInput registration)
+    {
+        var normalizedUsername = username.Trim();
+        var normalizedEmail = NormalizeEmail(email);
+
+        registration = new RegistrationInput(normalizedUsername, normalizedEmail, password);
+
+        return !string.IsNullOrWhiteSpace(registration.Username) &&
+               !string.IsNullOrWhiteSpace(registration.Email) &&
+               !string.IsNullOrWhiteSpace(registration.Password);
+    }
+
+    /// <summary>
+    ///     Normalizes GitHub OAuth profile values before they are applied to a remote user.
+    /// </summary>
+    private static GitHubProfile NormalizeGitHubProfile(string githubId, string username, string email,
+        string? avatarUrl, string? accessToken)
+    {
+        return new GitHubProfile(
+            githubId,
+            string.IsNullOrWhiteSpace(username) ? UnknownRemoteUsername : username.Trim(),
+            NormalizeEmail(email),
+            avatarUrl,
+            accessToken);
+    }
+
+    /// <summary>
+    ///     Creates a new remote user entity from a normalized GitHub profile.
+    /// </summary>
+    private static RemoteUser CreateRemoteUser(GitHubProfile profile)
+    {
+        return new RemoteUser
+        {
+            AccountId = profile.AccountId,
+            Username = profile.Username,
+            Email = profile.Email,
+            AvatarUrl = profile.AvatarUrl,
+            GitHubAccessToken = profile.AccessToken
+        };
+    }
+
+    /// <summary>
+    ///     Updates GitHub-owned profile fields on an existing remote user.
+    /// </summary>
+    private static void ApplyGitHubProfile(RemoteUser user, GitHubProfile profile)
+    {
+        user.Username = profile.Username;
+        user.Email = profile.Email;
+        user.AvatarUrl = profile.AvatarUrl;
+        user.GitHubAccessToken = profile.AccessToken;
+    }
+
+    /// <summary>
+    ///     Applies the latest Azure OAuth connection data to a remote user.
+    /// </summary>
+    private static void ApplyAzureConnection(RemoteUser user, AzureAccountConnection connection)
+    {
+        user.AzureAccountId = connection.AccountId;
+        user.AzureTenantId = connection.TenantId;
+        user.AzureSubscriptionId = connection.SubscriptionId;
+        user.AzureAccessToken = connection.AccessToken;
+        user.AzureRefreshToken = connection.RefreshToken;
+        user.AzureTokenExpiresAt = connection.ExpiresAt;
+    }
+
+    /// <summary>
+    ///     Marks a local user as verified and clears single-use verification token data.
+    /// </summary>
+    private static void MarkEmailVerified(LocalUser user)
+    {
+        user.IsEmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.VerificationTokenExpiry = null;
+    }
+
+    /// <summary>
+    ///     Refreshes a password hash when the configured hasher reports that rehashing is needed.
+    /// </summary>
+    private void RehashPassword(LocalUser user, string password)
+    {
+        user.PasswordHash = passwordHasher.HashPassword(user, password);
+    }
+
+    /// <summary>
+    ///     Builds the plain-text registration verification email body.
+    /// </summary>
+    private static string CreateVerificationEmailBody(string verificationLink)
+    {
+        return $"Welcome to AutoMate!\n\nPlease follow this link for verification:\n{verificationLink}";
+    }
+
+    /// <summary>
+    ///     Creates a short non-reversible token fingerprint for logging failed verification attempts.
+    /// </summary>
+    private static string CreateTokenFingerprint(string token)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Base64UrlEncode(hash[..8]);
+    }
+
+    /// <summary>
+    ///     Encodes binary data using URL-safe Base64 without padding.
+    /// </summary>
+    private static string Base64UrlEncode(ReadOnlySpan<byte> bytes)
+    {
+        return Convert.ToBase64String(bytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .TrimEnd('=');
+    }
+
+    /// <summary>
+    ///     Normalized local registration values used after input validation succeeds.
+    /// </summary>
+    private readonly record struct RegistrationInput(string Username, string Email, string Password);
+
+    /// <summary>
+    ///     Normalized GitHub profile values used when creating or updating remote users.
+    /// </summary>
+    private readonly record struct GitHubProfile(
+        string AccountId,
+        string Username,
+        string Email,
+        string? AvatarUrl,
+        string? AccessToken);
+
+    /// <summary>
+    ///     Azure account connection values persisted for a remote user.
+    /// </summary>
+    private readonly record struct AzureAccountConnection(
+        string AccountId,
+        string? TenantId,
+        string? SubscriptionId,
+        string? AccessToken,
+        string? RefreshToken,
+        DateTimeOffset? ExpiresAt);
 }

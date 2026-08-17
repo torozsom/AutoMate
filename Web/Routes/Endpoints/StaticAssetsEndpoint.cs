@@ -4,7 +4,7 @@ namespace Web.Routes.Endpoints;
 ///     Endpoint for serving static assets. Registered before other endpoints
 ///     to ensure static files are served correctly and performantly.
 /// </summary>
-public class StaticAssetsEndpoint : IEndpoint
+public sealed class StaticAssetsEndpoint : IEndpoint
 {
     /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)

@@ -6,7 +6,7 @@ namespace Web.Routes.Endpoints;
 ///     Endpoint for Razor Components. Maps the root path to the App component
 ///     and enables interactive server render mode.
 /// </summary>
-public class RazorComponentsEndpoint : IEndpoint
+public sealed class RazorComponentsEndpoint : IEndpoint
 {
     /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)

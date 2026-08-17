@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Core.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -16,7 +15,8 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class LocalGitRepos : ComponentBase, IDisposable
 {
-    /// A cancellation token source to manage asynchronous operations and ensure they are cancelled when the component is disposed.
+    /// A cancellation token source to manage asynchronous operations and ensure they are cancelled when the component is
+    /// disposed.
     private readonly CancellationTokenSource _componentCancellation = new();
 
     /// A set to keep track of the paths of projects that are currently being saved, to prevent duplicate save operations.
@@ -87,20 +87,10 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var userClaims = authState.User;
-
-        if (userClaims.Identity is not null && userClaims.Identity.IsAuthenticated)
-        {
-            var nameIdentifier = userClaims.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-            if (!string.IsNullOrEmpty(nameIdentifier))
-            {
-                var (userId, _, _) = await UserService.GetUserDetailsFromIdentifierAsync(nameIdentifier,
-                    _componentCancellation.Token);
-                _currentUserId = userId;
-            }
-        }
+        _currentUserId = await AuthenticatedUserResolver.GetCurrentUserIdAsync(
+            AuthStateProvider,
+            UserService,
+            _componentCancellation.Token);
     }
 
 
@@ -201,6 +191,11 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     }
 
 
+    /// <summary>
+    ///     Indicates whether the local project is currently being saved.
+    /// </summary>
+    /// <param name="project">The C# project to inspect.</param>
+    /// <returns><see langword="true" /> when a save operation is already active for the project.</returns>
     private bool IsSaving(CsProjectDto project)
     {
         return _savingProjectPaths.Contains(project.Path);
@@ -211,8 +206,8 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     ///     Sets the status message to be displayed to the user, along with an indication
     ///     of whether it's an error message or not.
     /// </summary>
-    /// <param name="message"></param>
-    /// <param name="isError"></param>
+    /// <param name="message">The message to display.</param>
+    /// <param name="isError">Indicates whether the message represents an error.</param>
     private void SetStatusMessage(string message, bool isError)
     {
         _statusMessage = message;

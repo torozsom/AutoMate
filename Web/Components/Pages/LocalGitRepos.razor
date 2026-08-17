@@ -7,7 +7,8 @@
         <div class="page-header-copy">
             <div class="page-eyebrow">Local sources</div>
             <h1>Local Git repositories</h1>
-            <p class="page-description">Scan a filesystem workspace for Git repositories and deployable C# web projects.</p>
+            <p class="page-description">Scan a filesystem workspace for Git repositories and deployable C# web
+                projects.</p>
         </div>
     </div>
 
@@ -18,7 +19,8 @@
             </div>
             <div>
                 <h2 id="scan-panel-title">Scan workspace</h2>
-                <p class="page-description">Choose a parent folder. AutoMate will inspect Git repositories below it and surface supported .NET web apps.</p>
+                <p class="page-description">Choose a parent folder. AutoMate will inspect Git repositories below it and
+                    surface supported .NET web apps.</p>
             </div>
         </div>
 
@@ -55,8 +57,9 @@
 
     @if (!string.IsNullOrEmpty(_statusMessage))
     {
-        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm local-status-alert"
-             role="alert">
+        <div
+            class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm local-status-alert"
+            role="alert">
             <i class="bi @(_isErrorStatus ? "bi-exclamation-triangle" : "bi-check-circle")" aria-hidden="true"></i>
             <span>@_statusMessage</span>
             <button type="button" class="btn-close" @onclick="ClearStatusMessage" aria-label="Close"></button>
@@ -73,7 +76,8 @@
                     </div>
                     <div>
                         <h2>Scanning local workspace</h2>
-                        <p class="page-description">Inspecting Git repositories and C# project files under <strong>@_lastSearchedPath</strong>.</p>
+                        <p class="page-description">Inspecting Git repositories and C# project files under
+                            <strong>@_lastSearchedPath</strong>.</p>
                     </div>
                 </div>
             }
@@ -86,7 +90,8 @@
                             <i class="bi bi-search" aria-hidden="true"></i>
                         </div>
                         <h2>No deployable local projects found</h2>
-                        <p class="page-description">AutoMate did not find Git repositories with C# projects under <strong>@_lastSearchedPath</strong>.</p>
+                        <p class="page-description">AutoMate did not find Git repositories with C# projects under
+                            <strong>@_lastSearchedPath</strong>.</p>
                     </div>
                 }
                 else
@@ -128,13 +133,16 @@
                                                 <i class="bi bi-folder-fill" aria-hidden="true"></i>
                                             </div>
                                             <div class="min-w-0">
-                                                <h3 class="local-project-title text-truncate" title="@project.Name">@project.Name</h3>
+                                                <h3 class="local-project-title text-truncate"
+                                                    title="@project.Name">@project.Name</h3>
                                                 <div class="local-source-label">Local workspace</div>
                                             </div>
                                         </div>
 
-                                        <span class="badge deployment-badge @(webProjects > 0 ? "deployment-badge-success" : "deployment-badge-neutral")">
-                                            <i class="bi @(webProjects > 0 ? "bi-check-circle-fill" : "bi-circle")" aria-hidden="true"></i>
+                                        <span
+                                            class="badge deployment-badge @(webProjects > 0 ? "deployment-badge-success" : "deployment-badge-neutral")">
+                                            <i class="bi @(webProjects > 0 ? "bi-check-circle-fill" : "bi-circle")"
+                                               aria-hidden="true"></i>
                                             @webProjects web
                                         </span>
                                     </div>
@@ -169,17 +177,21 @@
                                             {
                                                 var isSaving = IsSaving(subProj);
 
-                                                <div class="local-subproject-row @(subProj.IsWebProject ? "local-subproject-web" : "local-subproject-library")">
+                                                <div
+                                                    class="local-subproject-row @(subProj.IsWebProject ? "local-subproject-web" : "local-subproject-library")">
                                                     <div class="local-subproject-main">
                                                         <i class="bi bi-filetype-cs" aria-hidden="true"></i>
                                                         <div class="min-w-0">
-                                                            <div class="local-subproject-name text-truncate" title="@subProj.Name">@subProj.Name</div>
-                                                            <div class="local-subproject-path text-truncate" title="@subProj.Path">@subProj.Path</div>
+                                                            <div class="local-subproject-name text-truncate"
+                                                                 title="@subProj.Name">@subProj.Name</div>
+                                                            <div class="local-subproject-path text-truncate"
+                                                                 title="@subProj.Path">@subProj.Path</div>
                                                         </div>
                                                     </div>
 
                                                     <div class="local-subproject-actions">
-                                                        <span class="badge deployment-badge @(subProj.IsWebProject ? "deployment-badge-success" : "deployment-badge-neutral")">
+                                                        <span
+                                                            class="badge deployment-badge @(subProj.IsWebProject ? "deployment-badge-success" : "deployment-badge-neutral")">
                                                             @(subProj.IsWebProject ? "Web app" : "Library")
                                                         </span>
 
@@ -196,7 +208,8 @@
                                                                 }
                                                                 else
                                                                 {
-                                                                    <i class="bi bi-cloud-download" aria-hidden="true"></i>
+                                                                    <i class="bi bi-cloud-download"
+                                                                       aria-hidden="true"></i>
                                                                     <span>Save</span>
                                                                 }
                                                             </button>
@@ -219,7 +232,8 @@
                         <i class="bi bi-folder2-open" aria-hidden="true"></i>
                     </div>
                     <h2>Choose a folder to scan</h2>
-                    <p class="page-description">AutoMate will look for Git repositories and supported C# web projects.</p>
+                    <p class="page-description">AutoMate will look for Git repositories and supported C# web
+                        projects.</p>
                 </div>
             }
         </Authorized>

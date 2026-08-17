@@ -2,7 +2,8 @@
 
 `Web` is AutoMate's Blazor Server UI and HTTP entrypoint.
 
-It hosts the interactive application shell, Minimal API endpoints, SignalR hub, authentication pipeline, and startup configuration while delegating business logic to `Services`.
+It hosts the interactive application shell, Minimal API endpoints, SignalR hub, authentication pipeline, and startup
+configuration while delegating business logic to `Services`.
 
 ---
 
@@ -65,29 +66,29 @@ Configures runtime middleware:
 
 ## UI Pages
 
-| Page | Route | Purpose |
-|---|---|---|
-| `Home` | `/` | Landing and authenticated quick actions |
-| `LoginForm` | `/login` | Local login plus OAuth entrypoints |
-| `RegistryForm` | `/register` | Local registration |
-| `VerifyEmail` | `/verify-email` | Email verification callback |
-| `Dashboard` | `/dashboard` | Saved projects, deployment actions, Azure connection state |
-| `GitHubRepos` | `/github-repos` | GitHub repository import |
-| `LocalGitRepos` | `/local-repos` | Local repository scan/import |
-| `ProjectDetails` | `/project/{ProjectId:guid}` | Deployment controls, live logs, metrics, workflow status |
-| `Error` | `/Error` | Error fallback |
-| `NotFound` | `/not-found` | 404 fallback |
+| Page             | Route                       | Purpose                                                    |
+|------------------|-----------------------------|------------------------------------------------------------|
+| `Home`           | `/`                         | Landing and authenticated quick actions                    |
+| `LoginForm`      | `/login`                    | Local login plus OAuth entrypoints                         |
+| `RegistryForm`   | `/register`                 | Local registration                                         |
+| `VerifyEmail`    | `/verify-email`             | Email verification callback                                |
+| `Dashboard`      | `/dashboard`                | Saved projects, deployment actions, Azure connection state |
+| `GitHubRepos`    | `/github-repos`             | GitHub repository import                                   |
+| `LocalGitRepos`  | `/local-repos`              | Local repository scan/import                               |
+| `ProjectDetails` | `/project/{ProjectId:guid}` | Deployment controls, live logs, metrics, workflow status   |
+| `Error`          | `/Error`                    | Error fallback                                             |
+| `NotFound`       | `/not-found`                | 404 fallback                                               |
 
 ---
 
 ## Shared Components
 
-| Component | Purpose |
-|---|---|
-| `ConfigurationForm` | Local/cloud deployment configuration modal |
-| `DeploymentBadge` | Compact deployment status display |
-| `WorkflowBadge` | GitHub Actions/cloud workflow status display |
-| `Terminal` | xterm.js-backed live terminal panel |
+| Component           | Purpose                                      |
+|---------------------|----------------------------------------------|
+| `ConfigurationForm` | Local/cloud deployment configuration modal   |
+| `DeploymentBadge`   | Compact deployment status display            |
+| `WorkflowBadge`     | GitHub Actions/cloud workflow status display |
+| `Terminal`          | xterm.js-backed live terminal panel          |
 
 `ConfigurationForm` supports:
 
@@ -102,11 +103,11 @@ Configures runtime middleware:
 
 ## Layout Components
 
-| Component | Purpose |
-|---|---|
-| `MainLayout` | Application shell and common layout concerns |
-| `NavMenu` | Auth-aware navigation and theme control |
-| `ReconnectModal` | Blazor circuit reconnect UX |
+| Component        | Purpose                                      |
+|------------------|----------------------------------------------|
+| `MainLayout`     | Application shell and common layout concerns |
+| `NavMenu`        | Auth-aware navigation and theme control      |
+| `ReconnectModal` | Blazor circuit reconnect UX                  |
 
 ---
 
@@ -118,14 +119,14 @@ Endpoint classes implement `Routes/IEndpoint` and are mapped through endpoint di
 
 Current endpoints:
 
-| Endpoint | Route | Purpose |
-|---|---|---|
-| `StaticAssetsEndpoint` | framework static assets | static file asset mapping |
-| `RazorComponentsEndpoint` | root app | Blazor app mapping |
-| `Auth/LoginEndpoint` | `POST /api/auth/login` | local login |
-| `Auth/LogoutEndpoint` | `POST /api/auth/logout` | logout |
-| `Auth/GitHubLoginEndpoint` | `GET /api/auth/github-login` | GitHub OAuth challenge |
-| `Auth/AzureLoginEndpoint` | `GET /api/auth/azure-login` | Microsoft OAuth challenge for Azure connection |
+| Endpoint                   | Route                        | Purpose                                        |
+|----------------------------|------------------------------|------------------------------------------------|
+| `StaticAssetsEndpoint`     | framework static assets      | static file asset mapping                      |
+| `RazorComponentsEndpoint`  | root app                     | Blazor app mapping                             |
+| `Auth/LoginEndpoint`       | `POST /api/auth/login`       | local login                                    |
+| `Auth/LogoutEndpoint`      | `POST /api/auth/logout`      | logout                                         |
+| `Auth/GitHubLoginEndpoint` | `GET /api/auth/github-login` | GitHub OAuth challenge                         |
+| `Auth/AzureLoginEndpoint`  | `GET /api/auth/azure-login`  | Microsoft OAuth challenge for Azure connection |
 
 This keeps routing modular and consistent with the Clean Architecture boundary.
 
@@ -180,9 +181,9 @@ projectId:userId
 
 ## Frontend Assets
 
-| Asset | Purpose |
-|---|---|
-| `wwwroot/js/theme.js` | Bootstrap theme persistence |
+| Asset                         | Purpose                                            |
+|-------------------------------|----------------------------------------------------|
+| `wwwroot/js/theme.js`         | Bootstrap theme persistence                        |
 | `wwwroot/js/xterm-wrapper.js` | xterm.js setup, fit handling, writes, and disposal |
 
 The frontend uses Bootstrap 5 and Bootstrap Icons to keep the UI compact and operational rather than marketing-heavy.

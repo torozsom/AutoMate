@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
 using Core.DTO;
 using Core.Entities;
 using Core.Enums;
@@ -17,7 +15,7 @@ namespace Services.Orchestration;
 ///     Orchestrates the process of deploying .NET projects locally by managing interactions with
 ///     various services, including database, system scanning, project scanning, templating, and Docker.
 /// </summary>
-public partial class LocalDeploymentOrchestrator(
+public sealed class LocalDeploymentOrchestrator(
     AutoMateDbContext dbContext,
     ILocalSystemScannerService systemScanner,
     IProjectScannerService projectScanner,
@@ -28,7 +26,16 @@ public partial class LocalDeploymentOrchestrator(
     IDeploymentStatusNotifier statusNotifier)
     : ILocalDeploymentOrchestrator
 {
-    private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> ActiveLogStreams = new();
+    /// <summary>
+    ///     Manages background Docker log and metric streaming workers.
+    /// </summary>
+    private readonly LocalDeploymentLogStreamManager _logStreamManager = new(serviceScopeFactory, logger);
+
+    /// <summary>
+    ///     Handles deployment status persistence and UI notifications.
+    /// </summary>
+    private readonly DeploymentStatusUpdater _statusUpdater =
+        new(dbContext, statusNotifier, logger, nameof(LocalDeploymentOrchestrator));
 
     /// <summary>
     ///     Deploys a local .NET project by orchestrating the entire process.
@@ -69,7 +76,7 @@ public partial class LocalDeploymentOrchestrator(
         var deployment = new Deployment
         {
             CsProjectId = csProject.Id,
-            ImageTag = GenerateImageTag(csProject.Name, csProject.Id)
+            ImageTag = OrchestrationNameNormalizer.GenerateImageTag(csProject.Name, csProject.Id)
         };
 
         // Save the deployment to the database
@@ -87,7 +94,7 @@ public partial class LocalDeploymentOrchestrator(
             logger.LogError(ex,
                 "[LocalDeploymentOrchestrator] Deployment failed during execution for project '{ProjectName}'.",
                 config.ProjectName);
-            await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
+            await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
                 cancellationToken);
             throw;
         }
@@ -122,13 +129,7 @@ public partial class LocalDeploymentOrchestrator(
 
         if (isStopped)
         {
-            if (ActiveLogStreams.TryRemove(projectId, out var cts))
-            {
-                logger.LogInformation(
-                    "[LocalDeploymentOrchestrator] Cancelling active log streams for Project ID {Id}...", projectId);
-                await cts.CancelAsync();
-                cts.Dispose();
-            }
+            await _logStreamManager.StopAsync(projectId);
 
             var latestDeployment = await dbContext.Deployments
                 .Where(d => d.CsProject!.AppId == projectId)
@@ -137,7 +138,7 @@ public partial class LocalDeploymentOrchestrator(
 
             if (latestDeployment != null && latestDeployment.Status != DeploymentStatus.Stopped)
             {
-                await SafeUpdateDeploymentStatusAsync(projectId, latestDeployment, DeploymentStatus.Stopped,
+                await _statusUpdater.SafeUpdateAsync(projectId, latestDeployment, DeploymentStatus.Stopped,
                     cancellationToken);
                 logger.LogInformation(
                     "[LocalDeploymentOrchestrator] Deployment stopped successfully for Project ID {Id}.", projectId);
@@ -179,7 +180,7 @@ public partial class LocalDeploymentOrchestrator(
             cancellationToken);
 
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 4/4: Starting Docker Compose deployment...");
-        await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Starting,
+        await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Starting,
             cancellationToken);
 
         var isDockerSuccess =
@@ -193,158 +194,9 @@ public partial class LocalDeploymentOrchestrator(
         var systemUrl = $"http://localhost:{config.ExposedPort}";
         logger.LogInformation("--- Deployment Finished Successfully! System live at {Url} ---", systemUrl);
 
-        await SafeUpdateDeploymentStatusAsync(config.ProjectId, deployment, DeploymentStatus.Running,
+        await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
             cancellationToken);
 
-        var cts = new CancellationTokenSource();
-        ActiveLogStreams.AddOrUpdate(config.ProjectId, cts, (_, oldCts) =>
-        {
-            oldCts.Cancel();
-            return cts;
-        });
-
-        var token = cts.Token;
-
-        // Start streaming container logs in the background using a new scope so it outlives this request scope
-        _ = Task.Run(async () =>
-        {
-            using var scope = serviceScopeFactory.CreateScope();
-            var scopedDockerService = scope.ServiceProvider.GetRequiredService<IDockerService>();
-
-            var appName = NormalizeContainerName(config.ProjectName);
-            var streamingTasks = new List<Task>();
-
-            // Web container
-            var webContainerName = $"{NormalizeContainerName(csProject.Name)}-web";
-
-            streamingTasks.Add(scopedDockerService.StreamContainerLogsAsync(
-                webContainerName,
-                config.ProjectId,
-                "web",
-                token)
-            );
-
-            streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
-                webContainerName,
-                config.ProjectId,
-                "web",
-                token)
-            );
-
-            // Database containers
-            if (config.Databases != null)
-                foreach (var db in config.Databases)
-                {
-                    var dbContainerName = $"{appName}-{db.ContainerNameSuffix}";
-                    streamingTasks.Add(scopedDockerService.StreamContainerLogsAsync(
-                        dbContainerName,
-                        config.ProjectId,
-                        db.ContainerNameSuffix,
-                        token)
-                    );
-
-                    streamingTasks.Add(scopedDockerService.StreamContainerMetricsAsync(
-                        dbContainerName,
-                        config.ProjectId,
-                        db.ContainerNameSuffix,
-                        token)
-                    );
-                }
-
-            try
-            {
-                await Task.WhenAll(streamingTasks);
-            }
-            catch (OperationCanceledException ex)
-            {
-                logger.LogInformation("[LocalDeploymentOrchestrator] Log streaming cancelled for Project ID {Id}." +
-                                      "Exception: {Ex}", config.ProjectId, ex);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "[LocalDeploymentOrchestrator] Error streaming logs for Project ID {Id}.",
-                    config.ProjectId);
-            }
-            finally
-            {
-                if (ActiveLogStreams.TryGetValue(config.ProjectId, out var activeCts) &&
-                    ReferenceEquals(activeCts, cts))
-                    ActiveLogStreams.TryRemove(config.ProjectId, out _);
-
-                cts.Dispose();
-            }
-        }, token);
+        _logStreamManager.Start(config, csProject);
     }
-
-
-    /// <summary>
-    ///     Safely updates the deployment status in the database, handling any
-    ///     potential exceptions that may occur during the update process.
-    /// </summary>
-    /// <param name="projectId">
-    ///     The unique identifier of the project.
-    /// </param>
-    /// <param name="deployment">
-    ///     The <see cref="Deployment" /> entity whose status is to be updated.
-    /// </param>
-    /// <param name="status">
-    ///     The new <see cref="DeploymentStatus" /> value to set for the deployment.
-    /// </param>
-    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation if needed.</param>
-    private async Task SafeUpdateDeploymentStatusAsync(Guid projectId, Deployment deployment, DeploymentStatus status,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            deployment.Status = status;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            statusNotifier.NotifyStatusChanged(projectId, status);
-        }
-        catch (DbUpdateException ex)
-        {
-            logger.LogCritical(ex, "[LocalDeploymentOrchestrator] CRITICAL: Failed to update " +
-                                   "deployment status to '{Status}' for Deployment ID {Id}.", status, deployment.Id);
-        }
-    }
-
-
-    /// <summary>
-    ///     Generates a unique and descriptive Docker image tag based on the project name and ID.
-    /// </summary>
-    /// <param name="projectName">
-    ///     The name of the project, which will be sanitized and included in the image tag for readability.
-    /// </param>
-    /// <param name="projectId">
-    ///     The unique identifier of the project, which will be included in the image tag
-    ///     to ensure uniqueness and avoid conflicts with other images.
-    /// </param>
-    /// <returns>
-    ///     A string representing the generated Docker image tag.
-    /// </returns>
-    private static string GenerateImageTag(string projectName, Guid projectId)
-    {
-        var safeProjectName = NormalizeContainerName(projectName);
-        return $"automate-{safeProjectName}:{projectId.ToString()[..8]}";
-    }
-
-
-    /// <summary>
-    ///     Normalizes a string to be used as a Docker container name by converting it to lowercase,
-    ///     replacing invalid characters with hyphens, and ensuring it starts with a letter or number.
-    /// </summary>
-    /// <param name="value">The string to normalize.</param>
-    /// <returns>The normalized container name.</returns>
-    private static string NormalizeContainerName(string value)
-    {
-        var normalized = ContainerNameRegex().Replace(value.Trim().ToLowerInvariant(), "-");
-        normalized = string.Join('-', normalized.Split('-',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-
-        return string.IsNullOrWhiteSpace(normalized) ? "automate-project" : normalized;
-    }
-
-
-    /// A regular expression to match any characters that are not lowercase letters or numbers, used for sanitizing container names.
-    [GeneratedRegex("[^a-z0-9]+")]
-    private static partial Regex ContainerNameRegex();
 }

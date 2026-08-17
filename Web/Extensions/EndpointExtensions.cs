@@ -37,6 +37,7 @@ public static class EndpointExtensions
     {
         return endpointType.Name switch
         {
+            // Static assets must be mapped before the Razor component fallback endpoint.
             "StaticAssetsEndpoint" => 0,
             "RazorComponentsEndpoint" => 200,
             _ => 100

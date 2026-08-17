@@ -8,14 +8,16 @@
         <div class="page-header-copy">
             <div class="page-eyebrow">Remote sources</div>
             <h1>GitHub repositories</h1>
-            <p class="page-description">Review cloud repositories and save supported projects into your AutoMate deployment workspace.</p>
+            <p class="page-description">Review cloud repositories and save supported projects into your AutoMate
+                deployment workspace.</p>
         </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_statusMessage))
     {
-        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm github-status-alert"
-             role="alert">
+        <div
+            class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm github-status-alert"
+            role="alert">
             <i class="bi @(_isErrorStatus ? "bi-exclamation-triangle" : "bi-check-circle")" aria-hidden="true"></i>
             <span>@_statusMessage</span>
             <button type="button" class="btn-close" @onclick="ClearStatusMessage" aria-label="Close"></button>
@@ -61,7 +63,8 @@
                     </div>
                     <div>
                         <h2>Fetching repositories</h2>
-                        <p class="page-description">Loading your GitHub repositories and checking deployable language support.</p>
+                        <p class="page-description">Loading your GitHub repositories and checking deployable language
+                            support.</p>
                     </div>
                 </div>
             }
@@ -98,20 +101,25 @@
                             var isSaving = IsSaving(repo);
                             var language = string.IsNullOrWhiteSpace(repo.Language) ? "Unknown" : repo.Language;
 
-                            <article class="card resource-card github-repo-card @(isSupported ? "github-repo-supported" : "github-repo-unsupported")">
+                            <article
+                                class="card resource-card github-repo-card @(isSupported ? "github-repo-supported" : "github-repo-unsupported")">
                                 <div class="github-repo-header">
                                     <div class="github-repo-title-group">
                                         <div class="github-repo-mark">
                                             <i class="bi bi-github" aria-hidden="true"></i>
                                         </div>
                                         <div class="min-w-0">
-                                            <h3 class="github-repo-title text-truncate" title="@repo.Name">@repo.Name</h3>
-                                            <div class="github-repo-full-name text-truncate" title="@repo.FullName">@repo.FullName</div>
+                                            <h3 class="github-repo-title text-truncate"
+                                                title="@repo.Name">@repo.Name</h3>
+                                            <div class="github-repo-full-name text-truncate"
+                                                 title="@repo.FullName">@repo.FullName</div>
                                         </div>
                                     </div>
 
-                                    <span class="badge deployment-badge @(isSupported ? "deployment-badge-success" : "deployment-badge-neutral")">
-                                        <i class="bi @(isSupported ? "bi-check-circle-fill" : "bi-slash-circle")" aria-hidden="true"></i>
+                                    <span
+                                        class="badge deployment-badge @(isSupported ? "deployment-badge-success" : "deployment-badge-neutral")">
+                                        <i class="bi @(isSupported ? "bi-check-circle-fill" : "bi-slash-circle")"
+                                           aria-hidden="true"></i>
                                         @(isSupported ? "Supported" : "Unsupported")
                                     </span>
                                 </div>
@@ -122,7 +130,8 @@
                                         @language
                                     </span>
                                     <span class="github-fact">
-                                        <i class="bi @(repo.IsPrivate ? "bi-lock-fill" : "bi-globe")" aria-hidden="true"></i>
+                                        <i class="bi @(repo.IsPrivate ? "bi-lock-fill" : "bi-globe")"
+                                           aria-hidden="true"></i>
                                         @(repo.IsPrivate ? "Private" : "Public")
                                     </span>
                                     <span class="github-fact">
@@ -184,7 +193,8 @@
                         <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
                     </div>
                     <h2>No repositories available</h2>
-                    <p class="page-description">AutoMate could not find repositories, or your GitHub access has expired.</p>
+                    <p class="page-description">AutoMate could not find repositories, or your GitHub access has
+                        expired.</p>
                 </div>
             }
             else
@@ -194,7 +204,8 @@
                         <i class="bi bi-github" aria-hidden="true"></i>
                     </div>
                     <h2>Link GitHub to continue</h2>
-                    <p class="page-description">You need to link a GitHub account before AutoMate can access remote repositories.</p>
+                    <p class="page-description">You need to link a GitHub account before AutoMate can access remote
+                        repositories.</p>
                 </div>
             }
         </Authorized>
@@ -212,8 +223,10 @@
 </div>
 
 @code {
+
     private static bool IsSupportedRepository(GitHubRepositoryDto repo)
     {
         return repo.Language is "C#" or "JavaScript" or "TypeScript";
     }
+
 }

@@ -2,6 +2,7 @@ using Core.Entities;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Services.Data;
@@ -16,6 +17,51 @@ public class AutoMateDbContext(
     DbContextOptions<AutoMateDbContext> options,
     IDataProtectionProvider dataProtectionProvider) : DbContext(options), IDataProtectionKeyContext
 {
+    /// <summary>
+    ///     EF discriminator column used for the local and remote user hierarchy.
+    /// </summary>
+    private const string UserTypeDiscriminatorColumn = "user_type";
+
+    /// <summary>
+    ///     Discriminator value stored for GitHub-backed remote users.
+    /// </summary>
+    private const string RemoteUserDiscriminatorValue = "github";
+
+    /// <summary>
+    ///     Discriminator value stored for email/password local users.
+    /// </summary>
+    private const string LocalUserDiscriminatorValue = "local";
+
+    /// <summary>
+    ///     Data Protection purpose string for encrypted GitHub access tokens.
+    /// </summary>
+    private const string GitHubTokenProtectorPurpose = "AutoMate.GitHubTokenProtector";
+
+    /// <summary>
+    ///     Data Protection purpose string for encrypted Azure OAuth tokens.
+    /// </summary>
+    private const string AzureTokenProtectorPurpose = "AutoMate.AzureTokenProtector";
+
+    /// <summary>
+    ///     Maximum persisted length for user email addresses.
+    /// </summary>
+    private const int EmailMaxLength = 255;
+
+    /// <summary>
+    ///     Maximum persisted length for user display names.
+    /// </summary>
+    private const int UsernameMaxLength = 100;
+
+    /// <summary>
+    ///     Maximum persisted length for application names.
+    /// </summary>
+    private const int ApplicationNameMaxLength = 200;
+
+    /// <summary>
+    ///     Maximum persisted length for Azure account, tenant, and subscription identifiers.
+    /// </summary>
+    private const int AzureIdentifierMaxLength = 100;
+
     /// <summary>
     ///     Gets or sets the collection of User entities in the database.
     /// </summary>
@@ -56,72 +102,10 @@ public class AutoMateDbContext(
     {
         base.OnModelCreating(modelBuilder);
 
-        // Setup encryption for sensitive OAuth token data.
-        var githubTokenProtector = dataProtectionProvider.CreateProtector("AutoMate.GitHubTokenProtector");
-        var githubTokenConverter = new ValueConverter<string?, string?>(
-            plainText => plainText != null ? githubTokenProtector.Protect(plainText) : null,
-            encryptedText => encryptedText != null ? githubTokenProtector.Unprotect(encryptedText) : null
-        );
-
-        var azureTokenProtector = dataProtectionProvider.CreateProtector("AutoMate.AzureTokenProtector");
-        var azureTokenConverter = new ValueConverter<string?, string?>(
-            plainText => plainText != null ? azureTokenProtector.Protect(plainText) : null,
-            encryptedText => encryptedText != null ? azureTokenProtector.Unprotect(encryptedText) : null
-        );
-
-        // Configure the User entity hierarchy (TPH)
-        modelBuilder.Entity<User>(entity =>
-        {
-            entity.HasDiscriminator<string>("user_type")
-                .HasValue<RemoteUser>("github")
-                .HasValue<LocalUser>("local");
-
-            entity.HasIndex(u => u.Email).IsUnique();
-
-            entity.Property(u => u.Email).HasMaxLength(255).IsRequired();
-            entity.Property(u => u.Username).HasMaxLength(100).IsRequired();
-
-            entity.HasMany(u => u.Applications)
-                .WithOne(p => p.User)
-                .HasForeignKey(p => p.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // Configure the RemoteUser entity to encrypt provider OAuth tokens.
-        modelBuilder.Entity<RemoteUser>(entity =>
-        {
-            entity.Property(ru => ru.GitHubAccessToken).HasConversion(githubTokenConverter);
-            entity.Property(ru => ru.AzureAccountId).HasMaxLength(100);
-            entity.Property(ru => ru.AzureTenantId).HasMaxLength(100);
-            entity.Property(ru => ru.AzureSubscriptionId).HasMaxLength(100);
-            entity.Property(ru => ru.AzureAccessToken).HasConversion(azureTokenConverter);
-            entity.Property(ru => ru.AzureRefreshToken).HasConversion(azureTokenConverter);
-        });
-
-        // Configure the Application entity
-        modelBuilder.Entity<Application>(entity =>
-        {
-            entity.Property(a => a.Name).HasMaxLength(200).IsRequired();
-
-            entity.HasMany(a => a.CsProjects)
-                .WithOne(csp => csp.Application)
-                .HasForeignKey(csp => csp.AppId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // Configure the CsProject entity
-        modelBuilder.Entity<CsProject>(entity =>
-        {
-            entity.HasOne(csp => csp.Configuration)
-                .WithOne(c => c.CsProject)
-                .HasForeignKey<Configuration>(c => c.CsProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(csp => csp.Deployments)
-                .WithOne(d => d.CsProject)
-                .HasForeignKey(d => d.CsProjectId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
+        ConfigureUserHierarchy(modelBuilder.Entity<User>());
+        ConfigureRemoteUser(modelBuilder.Entity<RemoteUser>());
+        ConfigureApplication(modelBuilder.Entity<Application>());
+        ConfigureCsProject(modelBuilder.Entity<CsProject>());
     }
 
 
@@ -180,5 +164,82 @@ public class AutoMateDbContext(
             entry.Entity.UpdatedAt = now;
             if (entry.State == EntityState.Added) entry.Entity.CreatedAt = now;
         }
+    }
+
+    /// <summary>
+    ///     Configures the shared user table, discriminator, indexes, and application relationship.
+    /// </summary>
+    private static void ConfigureUserHierarchy(EntityTypeBuilder<User> entity)
+    {
+        entity.HasDiscriminator<string>(UserTypeDiscriminatorColumn)
+            .HasValue<RemoteUser>(RemoteUserDiscriminatorValue)
+            .HasValue<LocalUser>(LocalUserDiscriminatorValue);
+
+        entity.HasIndex(u => u.Email).IsUnique();
+
+        entity.Property(u => u.Email).HasMaxLength(EmailMaxLength).IsRequired();
+        entity.Property(u => u.Username).HasMaxLength(UsernameMaxLength).IsRequired();
+
+        entity.HasMany(u => u.Applications)
+            .WithOne(p => p.User)
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>
+    ///     Configures remote-user token encryption and Azure identifier constraints.
+    /// </summary>
+    private void ConfigureRemoteUser(EntityTypeBuilder<RemoteUser> entity)
+    {
+        var githubTokenConverter = CreateProtectedStringConverter(GitHubTokenProtectorPurpose);
+        var azureTokenConverter = CreateProtectedStringConverter(AzureTokenProtectorPurpose);
+
+        entity.Property(ru => ru.GitHubAccessToken).HasConversion(githubTokenConverter);
+        entity.Property(ru => ru.AzureAccountId).HasMaxLength(AzureIdentifierMaxLength);
+        entity.Property(ru => ru.AzureTenantId).HasMaxLength(AzureIdentifierMaxLength);
+        entity.Property(ru => ru.AzureSubscriptionId).HasMaxLength(AzureIdentifierMaxLength);
+        entity.Property(ru => ru.AzureAccessToken).HasConversion(azureTokenConverter);
+        entity.Property(ru => ru.AzureRefreshToken).HasConversion(azureTokenConverter);
+    }
+
+    /// <summary>
+    ///     Configures application naming constraints and child C# project ownership.
+    /// </summary>
+    private static void ConfigureApplication(EntityTypeBuilder<Application> entity)
+    {
+        entity.Property(a => a.Name).HasMaxLength(ApplicationNameMaxLength).IsRequired();
+
+        entity.HasMany(a => a.CsProjects)
+            .WithOne(csp => csp.Application)
+            .HasForeignKey(csp => csp.AppId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>
+    ///     Configures C# project configuration and deployment relationships.
+    /// </summary>
+    private static void ConfigureCsProject(EntityTypeBuilder<CsProject> entity)
+    {
+        entity.HasOne(csp => csp.Configuration)
+            .WithOne(c => c.CsProject)
+            .HasForeignKey<Configuration>(c => c.CsProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasMany(csp => csp.Deployments)
+            .WithOne(d => d.CsProject)
+            .HasForeignKey(d => d.CsProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>
+    ///     Creates an EF value converter that protects token values before persistence.
+    /// </summary>
+    private ValueConverter<string?, string?> CreateProtectedStringConverter(string purpose)
+    {
+        var protector = dataProtectionProvider.CreateProtector(purpose);
+
+        return new ValueConverter<string?, string?>(
+            plainText => plainText != null ? protector.Protect(plainText) : null,
+            protectedText => protectedText != null ? protector.Unprotect(protectedText) : null);
     }
 }

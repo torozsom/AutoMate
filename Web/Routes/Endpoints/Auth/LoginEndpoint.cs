@@ -13,7 +13,7 @@ namespace Web.Routes.Endpoints.Auth;
 ///     IMPORTANT: Requires a valid Antiforgery Token from the frontend.
 ///     In Blazor, ensure your login form includes the <AntiforgeryToken /> component.
 /// </remarks>
-public class LoginEndpoint : IEndpoint
+public sealed class LoginEndpoint : IEndpoint
 {
     /// <inheritdoc />
     public void Map(IEndpointRouteBuilder app)

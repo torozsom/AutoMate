@@ -1,35 +1,57 @@
-using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using Core.Defaults;
 using Core.DTO;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Octokit;
-using Sodium;
 using ProductHeaderValue = Octokit.ProductHeaderValue;
 
 namespace Services.GitHub;
 
 /// <summary>
-///     Service class responsible for interacting with the GitHub API
-///     to retrieve user repositories and other related data.
+///     Coordinates GitHub repository, secret, workflow, and log operations for AutoMate deployments.
 /// </summary>
-public class GitHubService : IGitHubService
+public sealed class GitHubService : IGitHubService
 {
-    private static readonly TimeSpan RepositoryCacheTtl = TimeSpan.FromMinutes(10);
+    /// <summary>
+    ///     Product name sent in GitHub user-agent headers.
+    /// </summary>
+    private const string ProductName = "AutoMate";
 
+    /// <summary>
+    ///     Product version sent in GitHub user-agent headers.
+    /// </summary>
+    private const string ProductVersion = "1.0";
+
+    /// <summary>
+    ///     GitHub REST API base address.
+    /// </summary>
+    private static readonly Uri GitHubApiBaseAddress = new("https://api.github.com/");
+
+    /// <summary>
+    ///     JSON options used for GitHub REST API DTO serialization.
+    /// </summary>
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    private readonly IDistributedCache _cache;
+    /// <summary>
+    ///     Typed HTTP client configured for GitHub REST API calls.
+    /// </summary>
     private readonly HttpClient _httpClient;
+
+    /// <summary>
+    ///     Logger for GitHub integration operations.
+    /// </summary>
     private readonly ILogger<GitHubService> _logger;
+
+    /// <summary>
+    ///     Distributed cache helper for user repository lists.
+    /// </summary>
+    private readonly GitHubRepositoryCache _repositoryCache;
 
 
     /// <summary>
@@ -42,13 +64,13 @@ public class GitHubService : IGitHubService
     public GitHubService(HttpClient httpClient, IDistributedCache cache, ILogger<GitHubService> logger)
     {
         _httpClient = httpClient;
-        _cache = cache;
         _logger = logger;
+        _repositoryCache = new GitHubRepositoryCache(cache, logger);
 
-        if (!(_httpClient.DefaultRequestHeaders.UserAgent.Count > 0))
-            _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("AutoMate", "1.0"));
+        if (_httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
+            _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(ProductName, ProductVersion));
 
-        _httpClient.BaseAddress ??= new Uri("https://api.github.com/");
+        _httpClient.BaseAddress ??= GitHubApiBaseAddress;
     }
 
 
@@ -62,47 +84,18 @@ public class GitHubService : IGitHubService
             return [];
         }
 
-        // Generate a cache key based on the access token to ensure that cached data is user-specific and secure.
-        var cacheKey = GenerateCacheKey(accessToken);
-
-        if (!forceRefresh)
-            try
-            {
-                // Attempt to retrieve the repository list from the distributed cache using the generated cache key.
-                var cachedJson = await _cache.GetStringAsync(cacheKey, cancellationToken);
-                if (!string.IsNullOrEmpty(cachedJson))
-                {
-                    var cachedRepos = JsonSerializer.Deserialize<List<GitHubRepositoryDto>>(cachedJson, JsonOptions);
-                    if (cachedRepos != null)
-                    {
-                        _logger.LogInformation(
-                            "[GitHubService] Successfully retrieved {Count} GitHub repositories from cache.",
-                            cachedRepos.Count);
-                        return cachedRepos;
-                    }
-                }
-            }
-            catch (OperationCanceledException ex)
-            {
-                _logger.LogWarning(
-                    "[GitHubService] Fetching repositories from cache was cancelled. Exception: {Message}", ex.Message);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "[GitHubService] Failed to read or deserialize repositories from cache. Falling back to API call.");
-            }
+        var cachedRepositories = await _repositoryCache.TryGetAsync(accessToken, forceRefresh, JsonOptions,
+            cancellationToken);
+        if (cachedRepositories != null)
+            return cachedRepositories;
 
         try
         {
             _logger.LogInformation("[GitHubService] Fetching repositories from GitHub API...");
 
-            // Create an HTTP GET request to the GitHub API endpoint for user repositories.
-            using var requestMessage = new HttpRequestMessage(HttpMethod.Get, "user/repos?sort=updated&per_page=100");
-            requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            using var requestMessage = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
+                "user/repos?sort=updated&per_page=100");
 
-            // Send the HTTP request and await the response.
             using var response = await _httpClient.SendAsync(requestMessage, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -113,32 +106,11 @@ public class GitHubService : IGitHubService
                 return [];
             }
 
-            // Read and deserialize the response content into a list of GitHubRepositoryDto objects.
             var repositories =
                 await response.Content.ReadFromJsonAsync<List<GitHubRepositoryDto>>(JsonOptions, cancellationToken) ??
                 [];
 
-            try
-            {
-                // Cache the retrieved repository list in the distributed cache for 10 minutes.
-                var cacheOptions = new DistributedCacheEntryOptions
-                    { AbsoluteExpirationRelativeToNow = RepositoryCacheTtl };
-                var serializedRepos = JsonSerializer.Serialize(repositories, JsonOptions);
-
-                // Store the serialized repository list in the distributed cache using the generated cache key and cache options.
-                await _cache.SetStringAsync(cacheKey, serializedRepos, cacheOptions, cancellationToken);
-            }
-            catch (OperationCanceledException ex)
-            {
-                _logger.LogWarning(
-                    "[GitHubService] Failed to save repositories to distributed cache. Exception: {Message}",
-                    ex.Message);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "[GitHubService] Failed to save repositories to distributed cache.");
-            }
+            await _repositoryCache.TrySetAsync(accessToken, repositories, JsonOptions, cancellationToken);
 
             _logger.LogInformation(
                 "[GitHubService] Successfully retrieved and cached {Count} repositories from GitHub API.",
@@ -160,7 +132,7 @@ public class GitHubService : IGitHubService
 
     /// <inheritdoc />
     public async Task<string> CommitCloudDeploymentFilesAsync(string accessToken, string repoOwner, string repoName,
-        List<TemplateFile> files, string branchName = "automate/azure-deployment",
+        List<TemplateFile> files, string branchName = DeploymentDefaults.CloudDeploymentBranchName,
         string commitMessage = "Add AutoMate Azure deployment workflow", CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(accessToken))
@@ -183,10 +155,7 @@ public class GitHubService : IGitHubService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var gitHubClient = new GitHubClient(new ProductHeaderValue("AutoMate"))
-        {
-            Credentials = new Credentials(accessToken)
-        };
+        var gitHubClient = CreateGitHubClient(accessToken);
 
         try
         {
@@ -264,7 +233,7 @@ public class GitHubService : IGitHubService
         if (secrets.Count == 0)
             return;
 
-        using var publicKeyRequest = CreateGitHubRequest(accessToken, HttpMethod.Get,
+        using var publicKeyRequest = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/secrets/public-key");
         using var publicKeyResponse = await _httpClient.SendAsync(publicKeyRequest, cancellationToken);
         publicKeyResponse.EnsureSuccessStatusCode();
@@ -281,9 +250,9 @@ public class GitHubService : IGitHubService
             if (string.IsNullOrWhiteSpace(secretName))
                 throw new ArgumentException("GitHub repository secret names cannot be empty.", nameof(secrets));
 
-            var encryptedValue = EncryptSecret(secretValue, publicKey.Key);
+            var encryptedValue = GitHubSecretEncryptor.EncryptSecret(secretValue, publicKey.Key);
 
-            using var request = CreateGitHubRequest(accessToken, HttpMethod.Put,
+            using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Put,
                 $"repos/{repoOwner}/{repoName}/actions/secrets/{secretName}");
 
             request.Content = JsonContent.Create(new GitHubRepositorySecretRequest(encryptedValue, publicKey.KeyId),
@@ -317,7 +286,7 @@ public class GitHubService : IGitHubService
         if (string.IsNullOrWhiteSpace(branchName))
             throw new ArgumentException("Branch name is required.", nameof(branchName));
 
-        using var request = CreateGitHubRequest(accessToken, HttpMethod.Post,
+        using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Post,
             $"repos/{repoOwner}/{repoName}/actions/workflows/{workflowFileName}/dispatches");
 
         request.Content = JsonContent.Create(new GitHubWorkflowDispatchRequest(branchName), options: JsonOptions);
@@ -350,7 +319,7 @@ public class GitHubService : IGitHubService
         if (string.IsNullOrWhiteSpace(branchName))
             throw new ArgumentException("Branch name is required.", nameof(branchName));
 
-        using var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
+        using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/runs?branch={Uri.EscapeDataString(branchName)}&per_page=20");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -359,34 +328,8 @@ public class GitHubService : IGitHubService
         var runsResponse = await response.Content.ReadFromJsonAsync<GitHubWorkflowRunsResponse>(JsonOptions,
             cancellationToken);
 
-        var workflowRuns = runsResponse?.WorkflowRuns ?? [];
-        var matchingRuns = workflowRuns
-            .Where(r => string.IsNullOrWhiteSpace(headSha) ||
-                        string.Equals(r.HeadSha, headSha, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        var workflowFilePathSuffix = $"/{workflowFileName}";
-        var preferredRuns = matchingRuns
-            .Where(r => string.IsNullOrWhiteSpace(workflowFileName) ||
-                        r.Path?.EndsWith(workflowFilePathSuffix, StringComparison.OrdinalIgnoreCase) == true ||
-                        string.Equals(r.Path, workflowFileName, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (preferredRuns.Count == 0)
-            preferredRuns = matchingRuns;
-
-        return preferredRuns
-            .OrderByDescending(r => r.CreatedAt)
-            .Select(r => new GitHubWorkflowRunDto
-            {
-                Id = r.Id,
-                Status = r.Status,
-                Conclusion = r.Conclusion,
-                HtmlUrl = r.HtmlUrl,
-                HeadSha = r.HeadSha,
-                HeadBranch = r.HeadBranch
-            })
-            .FirstOrDefault();
+        return GitHubWorkflowRunMapper.SelectLatestMatchingRun(runsResponse?.WorkflowRuns ?? [], workflowFileName,
+            headSha);
     }
 
 
@@ -397,7 +340,7 @@ public class GitHubService : IGitHubService
         if (runId <= 0)
             throw new ArgumentOutOfRangeException(nameof(runId), "Workflow run ID must be a positive number.");
 
-        using var request = CreateGitHubRequest(accessToken, HttpMethod.Get,
+        using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/logs");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
@@ -410,25 +353,7 @@ public class GitHubService : IGitHubService
         }
 
         await using var zipStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
-        var builder = new StringBuilder();
-
-        foreach (var entry in archive.Entries
-                     .Where(e => !string.IsNullOrWhiteSpace(e.Name))
-                     .OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            builder.AppendLine();
-            builder.AppendLine($"===== {entry.FullName} =====");
-
-            await using var entryStream = await entry.OpenAsync(cancellationToken);
-            using var reader = new StreamReader(entryStream, Encoding.UTF8, true);
-            var content = await reader.ReadToEndAsync(cancellationToken);
-            builder.AppendLine(content);
-        }
-
-        return builder.Length == 0 ? null : builder.ToString();
+        return await GitHubWorkflowLogReader.ReadFlattenedLogsAsync(zipStream, cancellationToken);
     }
 
 
@@ -450,118 +375,14 @@ public class GitHubService : IGitHubService
         }
     }
 
-
     /// <summary>
-    ///     Creates an HttpRequestMessage for GitHub API calls, setting the
-    ///     appropriate headers for authentication and content type.
+    ///     Creates an Octokit client authenticated as the connected GitHub user.
     /// </summary>
-    /// <param name="accessToken">GitHub access token for authentication.</param>
-    /// <param name="method">HTTP method for the request.</param>
-    /// <param name="requestUri">The URI for the GitHub API endpoint.</param>
-    /// <returns>An HttpRequestMessage configured for the GitHub API call.</returns>
-    /// <exception cref="ArgumentException">Thrown if the accessToken is null or whitespace.</exception>
-    private static HttpRequestMessage CreateGitHubRequest(string accessToken, HttpMethod method, string requestUri)
+    private static GitHubClient CreateGitHubClient(string accessToken)
     {
-        if (string.IsNullOrWhiteSpace(accessToken))
-            throw new ArgumentException("GitHub access token is required.", nameof(accessToken));
-
-        var escapedRequestUri = EscapeGitHubRequestUri(requestUri);
-        var request = new HttpRequestMessage(method, escapedRequestUri);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
-        return request;
+        return new GitHubClient(new ProductHeaderValue(ProductName))
+        {
+            Credentials = new Credentials(accessToken)
+        };
     }
-
-
-    /// <summary>
-    ///     Escapes the path segments of a GitHub API request URI while preserving query parameters.
-    /// </summary>
-    /// <param name="requestUri">The URI to escape.</param>
-    /// <returns>The escaped URI.</returns>
-    private static string EscapeGitHubRequestUri(string requestUri)
-    {
-        var queryStart = requestUri.IndexOf('?');
-        var path = queryStart >= 0 ? requestUri[..queryStart] : requestUri;
-        var query = queryStart >= 0 ? requestUri[queryStart..] : string.Empty;
-
-        var escapedPath = string.Join('/',
-            path.Split('/', StringSplitOptions.RemoveEmptyEntries)
-                .Select(Uri.EscapeDataString));
-
-        return $"{escapedPath}{query}";
-    }
-
-
-    /// <summary>
-    ///     Encrypts a secret value using the repository's public key with the NaCl sealed box algorithm.
-    /// </summary>
-    /// <param name="secretValue">The secret value to encrypt.</param>
-    /// <param name="base64PublicKey">The base64-encoded public key.</param>
-    /// <returns>The encrypted secret value.</returns>
-    private static string EncryptSecret(string secretValue, string base64PublicKey)
-    {
-        var secretBytes = Encoding.UTF8.GetBytes(secretValue);
-        var publicKeyBytes = Convert.FromBase64String(base64PublicKey);
-        var encryptedBytes = SealedPublicKeyBox.Create(secretBytes, publicKeyBytes);
-        return Convert.ToBase64String(encryptedBytes);
-    }
-
-
-    /// <summary>
-    ///     Generates a cache key based on the provided access token by
-    ///     hashing it using SHA256 and encoding it in a URL-safe format.
-    /// </summary>
-    /// <param name="token">The token to be hashed.</param>
-    /// <returns>The safe cache key.</returns>
-    private static string GenerateCacheKey(string token)
-    {
-        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
-        var safeHash = Convert.ToBase64String(hashBytes)
-            .Replace("+", "-")
-            .Replace("/", "_")
-            .TrimEnd('=');
-
-        return $"github_repos_{safeHash}";
-    }
-
-
-    /// Record class for representing a GitHub repository public key.
-    private sealed record GitHubRepositoryPublicKey(
-        [property: JsonPropertyName("key_id")] string KeyId,
-        [property: JsonPropertyName("key")] string Key);
-
-
-    /// Record class for representing a request to create or update a GitHub repository secret.
-    private sealed record GitHubRepositorySecretRequest(
-        [property: JsonPropertyName("encrypted_value")]
-        string EncryptedValue,
-        [property: JsonPropertyName("key_id")] string KeyId);
-
-
-    /// Record class for representing a request to dispatch a GitHub workflow.
-    private sealed record GitHubWorkflowDispatchRequest([property: JsonPropertyName("ref")] string Ref);
-
-
-    /// Record classes for representing the response from GitHub API when fetching workflow runs.
-    private sealed record GitHubWorkflowRunsResponse(
-        [property: JsonPropertyName("workflow_runs")]
-        List<GitHubWorkflowRunItem> WorkflowRuns);
-
-
-    /// Record class for representing a GitHub workflow run item in the response.
-    private sealed record GitHubWorkflowRunItem(
-        [property: JsonPropertyName("id")] long Id,
-        [property: JsonPropertyName("status")] string Status,
-        [property: JsonPropertyName("conclusion")]
-        string? Conclusion,
-        [property: JsonPropertyName("html_url")]
-        string HtmlUrl,
-        [property: JsonPropertyName("head_sha")]
-        string HeadSha,
-        [property: JsonPropertyName("head_branch")]
-        string HeadBranch,
-        [property: JsonPropertyName("path")] string? Path,
-        [property: JsonPropertyName("created_at")]
-        DateTimeOffset CreatedAt);
 }

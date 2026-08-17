@@ -1,3 +1,5 @@
+using Core.Defaults;
+
 namespace Core.DTO;
 
 /// <summary>
@@ -53,10 +55,10 @@ public record CloudDeploymentRequestDto
     /// <summary>
     ///     The branch where AutoMate should commit generated cloud deployment files.
     /// </summary>
-    public string BranchName { get; init; } = "automate/azure-deployment";
+    public string BranchName { get; init; } = DeploymentDefaults.CloudDeploymentBranchName;
 
     /// <summary>
     ///     The generated workflow file name to dispatch and poll after committing templates.
     /// </summary>
-    public string WorkflowFileName { get; init; } = "deploy.yml";
+    public string WorkflowFileName { get; init; } = DeploymentDefaults.CloudWorkflowFileName;
 }
