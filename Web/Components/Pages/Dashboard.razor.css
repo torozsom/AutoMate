@@ -1,64 +1,552 @@
+.dashboard-page {
+    gap: 1.5rem;
+    max-width: 1320px;
+}
+
+.dashboard-hero {
+    align-items: stretch;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 0.62fr);
+}
+
+.dashboard-hero-copy,
+.cloud-connect-panel,
+.summary-tile,
+.projects-section {
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    box-shadow: var(--am-shadow-sm);
+}
+
+.dashboard-hero-copy {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 8.5rem;
+    padding: clamp(1.25rem, 2vw, 1.5rem);
+}
+
+.dashboard-hero-copy h1 {
+    font-size: clamp(1.75rem, 2vw, 2rem);
+    margin: 0.35rem 0 0.75rem;
+}
+
+.cloud-connect-panel {
+    align-content: start;
+    display: grid;
+    gap: 1.1rem;
+    padding: 1.15rem;
+}
+
+.cloud-connect-panel-connected {
+    border-color: color-mix(in srgb, var(--am-success) 34%, var(--am-border));
+}
+
+.cloud-connect-header,
+.section-heading {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+}
+
+.cloud-connect-header {
+    align-items: flex-start;
+}
+
+.cloud-connect-title {
+    display: grid;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.cloud-connect-header h2,
+.section-heading h2 {
+    font-size: 1.125rem;
+    margin: 0.15rem 0 0;
+}
+
+.cloud-connect-title p {
+    color: var(--am-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
+    margin: 0;
+    max-width: 26rem;
+}
+
+.panel-label,
+.tenant-label,
+.summary-label,
+.project-source-label {
+    color: var(--am-text-muted);
+    font-size: 0.76rem;
+    font-weight: 850;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.azure-connect-options {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.azure-connect-option {
+    align-items: center;
+    background: var(--am-surface-muted);
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0.9rem;
+}
+
+.azure-connect-option-primary {
+    grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.azure-option-copy {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.azure-option-icon {
+    align-items: center;
+    background: color-mix(in srgb, #0078d4 12%, var(--am-surface-muted));
+    border: 1px solid color-mix(in srgb, #0078d4 28%, var(--am-border));
+    border-radius: var(--am-radius);
+    color: #0078d4;
+    display: inline-flex;
+    flex: 0 0 2.45rem;
+    font-size: 1.1rem;
+    height: 2.45rem;
+    justify-content: center;
+    width: 2.45rem;
+}
+
+.azure-option-icon-muted {
+    background: var(--am-surface-muted);
+    border-color: var(--am-border);
+    color: var(--am-text-muted);
+}
+
+.azure-option-title {
+    color: var(--am-text);
+    display: block;
+    font-size: 0.94rem;
+    font-weight: 850;
+    line-height: 1.2;
+}
+
+.azure-option-description {
+    color: var(--am-text-muted);
+    font-size: 0.84rem;
+    line-height: 1.35;
+    margin-top: 0.2rem;
+}
+
 .azure-connect-button {
     --azure-primary: #0078d4;
     --azure-secondary: #00a4ef;
     align-items: center;
-    background: linear-gradient(135deg, var(--azure-primary), var(--azure-secondary));
-    border: 0;
-    border-radius: 9px;
-    box-shadow: 0 10px 22px rgba(0, 120, 212, 0.25);
+    background: var(--azure-primary);
+    border: 1px solid var(--azure-primary);
+    box-shadow: none;
     color: #fff;
     display: inline-flex;
-    font-weight: 700;
-    gap: 0.15rem;
-    min-height: 2.75rem;
-    padding: 0.7rem 1.15rem;
+    gap: 0.45rem;
+    justify-content: center;
+    justify-self: start;
+    min-width: 7rem;
     transition: box-shadow 0.18s ease, transform 0.18s ease;
+    white-space: nowrap;
+}
+
+.azure-connect-button-connected {
+    background: color-mix(in srgb, var(--azure-primary) 14%, var(--am-surface-muted));
+    border: 1px solid color-mix(in srgb, var(--azure-primary) 42%, var(--am-border));
+    box-shadow: none;
+    color: var(--am-primary);
 }
 
 .azure-connect-button:hover,
 .azure-connect-button:focus {
-    box-shadow: 0 14px 28px rgba(0, 120, 212, 0.34);
+    box-shadow: none;
     color: #fff;
-    transform: translateY(-1px);
+    transform: none;
 }
 
-.azure-connect-button:active {
-    transform: translateY(0);
-}
-
-.azure-connect-actions {
-    align-items: stretch;
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-    min-width: min(100%, 34rem);
+.azure-connect-button-connected:hover,
+.azure-connect-button-connected:focus {
+    box-shadow: none;
+    color: var(--am-primary-hover);
 }
 
 .azure-tenant-connect {
-    max-width: 34rem;
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: minmax(0, 1fr) max-content;
 }
 
 .azure-tenant-connect .input-group-text {
-    background: var(--bs-tertiary-bg);
-    font-weight: 700;
+    background: var(--am-surface-muted);
+    color: var(--am-text-muted);
+    font-weight: 800;
 }
 
 .azure-tenant-connect .form-control {
     min-width: 13rem;
 }
 
-[data-bs-theme="dark"] .azure-connect-button {
-    box-shadow: 0 10px 24px rgba(0, 164, 239, 0.22);
+.azure-personal-button {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.45rem;
+    justify-content: center;
+    min-width: 7rem;
+    white-space: nowrap;
+}
+
+.dashboard-loading {
+    align-items: center;
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    display: grid;
+    gap: 1rem;
+    justify-items: center;
+    min-height: 16rem;
+    padding: 2rem;
+}
+
+.empty-state-actions,
+.project-source-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.dashboard-summary-grid {
+    display: grid;
+    gap: 0.85rem;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.summary-tile {
+    align-items: center;
+    background: var(--am-surface);
+    display: flex;
+    gap: 0.75rem;
+    min-width: 0;
+    padding: 0.85rem;
+}
+
+.summary-tile-critical {
+    border-color: color-mix(in srgb, var(--am-danger) 26%, var(--am-border));
+}
+
+.summary-icon {
+    align-items: center;
+    border: 1px solid;
+    border-radius: var(--am-radius);
+    display: inline-flex;
+    flex: 0 0 2.35rem;
+    font-size: 1.05rem;
+    height: 2.35rem;
+    justify-content: center;
+    width: 2.35rem;
+}
+
+.summary-icon-primary {
+    background: var(--am-primary-soft);
+    border-color: color-mix(in srgb, var(--am-primary) 28%, var(--am-border));
+    color: var(--am-primary);
+}
+
+.summary-icon-success {
+    background: var(--am-success-soft);
+    border-color: color-mix(in srgb, var(--am-success) 28%, var(--am-border));
+    color: var(--am-success);
+}
+
+.summary-icon-info {
+    background: var(--am-info-soft);
+    border-color: color-mix(in srgb, var(--am-info) 28%, var(--am-border));
+    color: var(--am-info);
+}
+
+.summary-icon-warning {
+    background: var(--am-warning-soft);
+    border-color: color-mix(in srgb, var(--am-warning) 28%, var(--am-border));
+    color: var(--am-warning);
+}
+
+.summary-icon-danger {
+    background: var(--am-danger-soft);
+    border-color: color-mix(in srgb, var(--am-danger) 28%, var(--am-border));
+    color: var(--am-danger);
+}
+
+.summary-value {
+    color: var(--am-text);
+    font-size: 1.25rem;
+    font-weight: 850;
+    line-height: 1;
+}
+
+.projects-section {
+    background: var(--am-surface);
+    display: grid;
+    gap: 1.25rem;
+    padding: 1.25rem;
+}
+
+.project-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-project-card {
+    background: var(--am-surface);
+    border-left: 4px solid var(--am-border);
+    border-width: 2px;
+    border-left-width: 6px;
+    box-shadow: var(--am-shadow-sm);
+    cursor: pointer;
+    display: grid;
+    gap: 1rem;
+    padding: 1.1rem;
+}
+
+.dashboard-project-card.resource-card:hover {
+    border-color: color-mix(in srgb, var(--am-primary) 42%, var(--am-border));
+    box-shadow: var(--am-shadow);
+    transform: translateY(-1px);
+}
+
+.dashboard-project-local {
+    border-left-color: var(--am-warning);
+}
+
+.dashboard-project-remote {
+    border-left-color: var(--am-info);
+}
+
+.dashboard-project-card.resource-card.dashboard-project-local:hover {
+    border-left-color: var(--am-warning);
+}
+
+.dashboard-project-card.resource-card.dashboard-project-remote:hover {
+    border-left-color: var(--am-info);
+}
+
+.project-card-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-width: 0;
+}
+
+.project-title-group {
+    align-items: center;
+    display: flex;
+    gap: 0.8rem;
+    min-width: 0;
+}
+
+.project-source-mark {
+    align-items: center;
+    border: 1px solid;
+    border-radius: var(--am-radius);
+    display: inline-flex;
+    flex: 0 0 2.75rem;
+    font-size: 1.2rem;
+    height: 2.75rem;
+    justify-content: center;
+    width: 2.75rem;
+}
+
+.project-source-remote {
+    background: var(--am-info-soft);
+    border-color: color-mix(in srgb, var(--am-info) 28%, var(--am-border));
+    color: var(--am-info);
+}
+
+.project-source-local {
+    background: var(--am-warning-soft);
+    border-color: color-mix(in srgb, var(--am-warning) 24%, var(--am-border));
+    color: var(--am-warning);
+}
+
+.project-title {
+    font-size: 1.08rem;
+    margin: 0;
+}
+
+.project-path {
+    align-items: center;
+    background: var(--am-surface-muted);
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    color: var(--am-text-muted);
+    display: flex;
+    font-family: var(--am-font-mono);
+    font-size: 0.875rem;
+    gap: 0.5rem;
+    min-width: 0;
+    padding: 0.7rem 0.8rem;
+}
+
+.project-card-meta {
+    align-items: center;
+    color: var(--am-text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.project-fact {
+    align-items: center;
+    background: var(--am-surface-muted);
+    border: 1px solid var(--am-border);
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: 0.875rem;
+    font-weight: 700;
+    gap: 0.35rem;
+    min-height: 2rem;
+    padding: 0.35rem 0.65rem;
+}
+
+.project-fact strong {
+    color: var(--am-text);
+}
+
+.project-requirement {
+    align-items: center;
+    background: var(--am-info-soft);
+    border: 1px solid color-mix(in srgb, var(--am-info) 28%, var(--am-border));
+    border-radius: var(--am-radius);
+    color: var(--am-info);
+    display: flex;
+    font-size: 0.9rem;
+    font-weight: 750;
+    gap: 0.5rem;
+    padding: 0.65rem 0.75rem;
+}
+
+.project-card-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+}
+
+.project-card-actions .btn-success {
+    background: var(--am-success);
+    border-color: var(--am-success);
+    color: #fff;
+    min-width: 8.5rem;
+}
+
+.project-card-actions .btn-outline-danger {
+    min-width: 7.5rem;
+}
+
+.min-w-0 {
+    min-width: 0;
+}
+
+[data-bs-theme="dark"] .dashboard-hero-copy,
+[data-bs-theme="dark"] .cloud-connect-panel,
+[data-bs-theme="dark"] .summary-tile,
+[data-bs-theme="dark"] .projects-section,
+[data-bs-theme="dark"] .dashboard-project-card {
+    background: var(--am-surface);
+}
+
+[data-bs-theme="dark"] .azure-connect-option {
+    background: var(--am-surface-muted);
+}
+
+[data-bs-theme="dark"] .dashboard-project-card {
+    box-shadow: var(--am-shadow-sm);
+}
+
+[data-bs-theme="dark"] .dashboard-project-card.resource-card:hover {
+    box-shadow: var(--am-shadow);
+}
+
+[data-bs-theme="dark"] .projects-section {
+    background: var(--am-surface);
+}
+
+[data-bs-theme="dark"] .azure-connect-button-connected {
+    background: color-mix(in srgb, var(--azure-primary) 18%, var(--am-surface-muted));
+    color: var(--am-primary);
+}
+
+[data-bs-theme="dark"] .project-card-actions .btn-success {
+    color: #07111f;
+}
+
+@media (max-width: 1199.98px) {
+    .dashboard-summary-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 991.98px) {
+    .dashboard-hero,
+    .project-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 767.98px) {
-    .azure-tenant-connect {
-        display: grid;
-        gap: 0.5rem;
+    .dashboard-summary-grid {
+        grid-template-columns: 1fr;
     }
 
-    .azure-tenant-connect > * {
+    .cloud-connect-header,
+    .section-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .azure-connect-option-primary,
+    .azure-tenant-connect {
+        grid-template-columns: 1fr;
+    }
+
+    .azure-tenant-connect .input-group > *,
+    .azure-personal-button {
         border-radius: var(--bs-border-radius-sm) !important;
         width: 100%;
+    }
+
+    .azure-connect-button,
+    .azure-personal-button,
+    .project-card-actions .btn {
+        width: 100%;
+    }
+
+    .project-card-actions {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .project-card-header,
+    .project-title-group {
+        align-items: stretch;
+        flex-direction: column;
     }
 }

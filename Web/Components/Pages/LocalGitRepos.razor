@@ -2,134 +2,235 @@
 
 <PageTitle>Local Git Repositories</PageTitle>
 
-<div class="container mt-4">
-    <div class="row mb-4 align-items-center">
-        <div class="col-md-5">
-            <h1>Local Git Repositories</h1>
+<div class="container page-shell local-repos-page">
+    <div class="page-header">
+        <div class="page-header-copy">
+            <div class="page-eyebrow">Local sources</div>
+            <h1>Local Git repositories</h1>
+            <p class="page-description">Scan a filesystem workspace for Git repositories and deployable C# web projects.</p>
+        </div>
+    </div>
+
+    <section class="scan-panel" aria-labelledby="scan-panel-title">
+        <div class="scan-panel-copy">
+            <div class="scan-panel-icon">
+                <i class="bi bi-folder2-open" aria-hidden="true"></i>
+            </div>
+            <div>
+                <h2 id="scan-panel-title">Scan workspace</h2>
+                <p class="page-description">Choose a parent folder. AutoMate will inspect Git repositories below it and surface supported .NET web apps.</p>
+            </div>
         </div>
 
-        @if (!string.IsNullOrEmpty(_statusMessage))
-        {
-            <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show mt-3"
-                 role="alert">
-                @_statusMessage
-                <button type="button" class="btn-close" @onclick="ClearStatusMessage" aria-label="Close"></button>
-            </div>
-        }
-
-        <div class="col-md-7">
-            <div class="input-group">
-                <span class="input-group-text"><i class="bi bi-folder2"></i></span>
-                <input type="text" class="form-control" placeholder="E.g.: C:\Dev or /home/user/projects"
-                       @bind="_searchPath" @bind:event="oninput" @onkeyup="HandleKeyUp"/>
+        <div class="scan-form">
+            <label class="scan-label" for="local-scan-path">Folder path</label>
+            <div class="input-group scan-input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-folder2" aria-hidden="true"></i>
+                </span>
+                <input id="local-scan-path"
+                       type="text"
+                       class="form-control"
+                       placeholder="E.g.: C:\Dev or /home/user/projects"
+                       @bind="_searchPath"
+                       @bind:event="oninput"
+                       @onkeyup="HandleKeyUp"/>
 
                 <button class="btn btn-primary" @onclick="StartScanAsync" disabled="@IsScanButtonDisabled">
                     @if (_isScanning)
                     {
-                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                         <span>Scanning...</span>
                     }
                     else
                     {
-                        <i class="bi bi-search me-1"></i>
+                        <i class="bi bi-search" aria-hidden="true"></i>
                         <span>Start scan</span>
                     }
                 </button>
             </div>
+            <div class="scan-hint">Press Enter to scan after entering a path.</div>
         </div>
-    </div>
+    </section>
+
+    @if (!string.IsNullOrEmpty(_statusMessage))
+    {
+        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm local-status-alert"
+             role="alert">
+            <i class="bi @(_isErrorStatus ? "bi-exclamation-triangle" : "bi-check-circle")" aria-hidden="true"></i>
+            <span>@_statusMessage</span>
+            <button type="button" class="btn-close" @onclick="ClearStatusMessage" aria-label="Close"></button>
+        </div>
+    }
 
     <AuthorizeView>
         <Authorized>
-            @if (_hasScanned && !_isScanning)
+            @if (_isScanning)
+            {
+                <div class="scan-state" role="status" aria-live="polite">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Scanning...</span>
+                    </div>
+                    <div>
+                        <h2>Scanning local workspace</h2>
+                        <p class="page-description">Inspecting Git repositories and C# project files under <strong>@_lastSearchedPath</strong>.</p>
+                    </div>
+                </div>
+            }
+            else if (_hasScanned)
             {
                 if (_localProjects is null || _localProjects.Count == 0)
                 {
-                    <div class="alert alert-warning text-center mt-4">
-                        <i class="bi bi-exclamation-triangle display-4"></i>
-                        <p class="mt-3 lead">We could not find any Git projects within the given folder. <br/>
-                            <strong>@_lastSearchedPath</strong></p>
+                    <div class="empty-state local-empty-state">
+                        <div class="empty-state-icon">
+                            <i class="bi bi-search" aria-hidden="true"></i>
+                        </div>
+                        <h2>No deployable local projects found</h2>
+                        <p class="page-description">AutoMate did not find Git repositories with C# projects under <strong>@_lastSearchedPath</strong>.</p>
                     </div>
                 }
                 else
                 {
-                    <h3 class="mt-4 mb-3">Projects found: @_localProjects.Count</h3>
+                    var totalProjects = _localProjects.Count;
+                    var totalSubProjects = _localProjects.Sum(project => project.CsProjects.Count());
+                    var totalWebProjects = _localProjects.Sum(project => project.CsProjects.Count(subProject => subProject.IsWebProject));
 
-                    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-                        @foreach (var project in _localProjects)
-                        {
-                            <div class="col">
-                                <div class="card mb-3 shadow border-2">
-                                    <div class="card-header">
-                                        <h5 class="mb-0"><i
-                                                class="bi bi-folder-fill text-warning me-2"></i> @project.Name
-                                        </h5>
-                                        <small class="text-muted">@project.Path</small>
+                    <section class="local-results-section" aria-labelledby="local-results-title">
+                        <div class="section-heading">
+                            <div>
+                                <div class="panel-label">Scan results</div>
+                                <h2 id="local-results-title">Projects found</h2>
+                            </div>
+
+                            <div class="local-result-summary" aria-label="Local scan summary">
+                                <span class="local-summary-pill">
+                                    <strong>@totalProjects</strong> repositories
+                                </span>
+                                <span class="local-summary-pill">
+                                    <strong>@totalWebProjects</strong> web apps
+                                </span>
+                                <span class="local-summary-pill">
+                                    <strong>@totalSubProjects</strong> subprojects
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="local-project-grid">
+                            @foreach (var project in _localProjects)
+                            {
+                                var csProjects = project.CsProjects.ToList();
+                                var webProjects = csProjects.Count(subProject => subProject.IsWebProject);
+
+                                <article class="card resource-card local-project-card">
+                                    <div class="local-project-header">
+                                        <div class="local-project-title-group">
+                                            <div class="local-project-mark">
+                                                <i class="bi bi-folder-fill" aria-hidden="true"></i>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <h3 class="local-project-title text-truncate" title="@project.Name">@project.Name</h3>
+                                                <div class="local-source-label">Local workspace</div>
+                                            </div>
+                                        </div>
+
+                                        <span class="badge deployment-badge @(webProjects > 0 ? "deployment-badge-success" : "deployment-badge-neutral")">
+                                            <i class="bi @(webProjects > 0 ? "bi-check-circle-fill" : "bi-circle")" aria-hidden="true"></i>
+                                            @webProjects web
+                                        </span>
                                     </div>
-                                    <div class="card-body p-0">
-                                        <ul class="list-group list-group-flush">
-                                            @if (!project.CsProjects.Any())
+
+                                    <div class="local-project-path" title="@project.Path">
+                                        <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                                        <span class="text-truncate">@project.Path</span>
+                                    </div>
+
+                                    <div class="local-project-facts">
+                                        <span class="local-fact">
+                                            <i class="bi bi-diagram-3" aria-hidden="true"></i>
+                                            <strong>@csProjects.Count</strong> subprojects
+                                        </span>
+                                        <span class="local-fact">
+                                            <i class="bi bi-window" aria-hidden="true"></i>
+                                            <strong>@webProjects</strong> web apps
+                                        </span>
+                                    </div>
+
+                                    <div class="local-subproject-list">
+                                        @if (csProjects.Count == 0)
+                                        {
+                                            <div class="local-subproject-empty">
+                                                <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                                No C# subprojects found in this repository.
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var subProj in csProjects)
                                             {
-                                                <li class="list-group-item bg-transparent text-center">
-                                                    <p class="mt-3 text-muted">No C# subprojects found in this
-                                                        directory.</p>
-                                                </li>
-                                            }
-                                            @foreach (var subProj in project.CsProjects)
-                                            {
-                                                <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent">
-                                                    <div>
-                                                        <i class="bi bi-filetype-cs me-2 text-primary"></i> @subProj.Name
+                                                var isSaving = IsSaving(subProj);
+
+                                                <div class="local-subproject-row @(subProj.IsWebProject ? "local-subproject-web" : "local-subproject-library")">
+                                                    <div class="local-subproject-main">
+                                                        <i class="bi bi-filetype-cs" aria-hidden="true"></i>
+                                                        <div class="min-w-0">
+                                                            <div class="local-subproject-name text-truncate" title="@subProj.Name">@subProj.Name</div>
+                                                            <div class="local-subproject-path text-truncate" title="@subProj.Path">@subProj.Path</div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="local-subproject-actions">
+                                                        <span class="badge deployment-badge @(subProj.IsWebProject ? "deployment-badge-success" : "deployment-badge-neutral")">
+                                                            @(subProj.IsWebProject ? "Web app" : "Library")
+                                                        </span>
+
                                                         @if (subProj.IsWebProject)
                                                         {
-                                                            <span
-                                                                class="badge bg-success bg-opacity-10 text-success border border-success ms-2">Web App</span>
-                                                        }
-                                                        else
-                                                        {
-                                                            <span
-                                                                class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary ms-2">Library</span>
+                                                            <button class="btn btn-sm btn-primary local-save-button"
+                                                                    @onclick="() => SaveProjectAsync(project, subProj)"
+                                                                    disabled="@isSaving">
+                                                                @if (isSaving)
+                                                                {
+                                                                    <span class="spinner-border spinner-border-sm"
+                                                                          role="status" aria-hidden="true"></span>
+                                                                    <span>Saving...</span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <i class="bi bi-cloud-download" aria-hidden="true"></i>
+                                                                    <span>Save</span>
+                                                                }
+                                                            </button>
                                                         }
                                                     </div>
-                                                    @if (subProj.IsWebProject)
-                                                    {
-                                                        <button class="btn btn-sm btn-primary w-25"
-                                                                @onclick="() => SaveProjectAsync(project, subProj)"
-                                                                disabled="@IsSaving(subProj)">
-                                                            @if (IsSaving(subProj))
-                                                            {
-                                                                <span class="spinner-border spinner-border-sm me-1"
-                                                                      role="status" aria-hidden="true"></span>
-                                                                <span>Saving...</span>
-                                                            }
-                                                            else
-                                                            {
-                                                                <i class="bi bi-cloud-download me-1"></i>
-                                                                <span>Save</span>
-                                                            }
-                                                        </button>
-                                                    }
-                                                </li>
+                                                </div>
                                             }
-                                        </ul>
+                                        }
                                     </div>
-                                </div>
-                            </div>
-                        }
-                    </div>
+                                </article>
+                            }
+                        </div>
+                    </section>
                 }
             }
-            else if (!_isScanning)
+            else
             {
-                <div class="text-center mt-5 text-muted">
-                    <i class="bi bi-folder2-open display-1"></i>
-                    <p class="mt-3 lead">Choose a folder and click on the button above!</p>
+                <div class="empty-state local-empty-state">
+                    <div class="empty-state-icon">
+                        <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                    </div>
+                    <h2>Choose a folder to scan</h2>
+                    <p class="page-description">AutoMate will look for Git repositories and supported C# web projects.</p>
                 </div>
             }
         </Authorized>
         <NotAuthorized>
-            <div class="alert alert-warning mt-4">
-                <i class="bi bi-lock-fill me-2"></i> Please log in to scan your local folders for Git projects.
+            <div class="auth-state">
+                <div class="auth-state-icon">
+                    <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                </div>
+                <h2>Authentication required</h2>
+                <p class="page-description">Please log in to scan your local folders for Git projects.</p>
+                <a href="/login" class="btn btn-primary mt-2">Login</a>
             </div>
         </NotAuthorized>
     </AuthorizeView>

@@ -1,5 +1,5 @@
 @using Core.Enums
-<span class="badge @BadgeClass @AdditionalClasses">
+<span class="badge deployment-badge @BadgeClass @AdditionalClasses">
     <i class="bi @IconClass small me-1"></i> @StatusText
 </span>
 
@@ -10,11 +10,11 @@
 
     private string BadgeClass => Status switch
     {
-        DeploymentStatus.Starting => "bg-info text-dark border",
-        DeploymentStatus.Running => "bg-success text-white border border-success",
-        DeploymentStatus.Failed => "bg-danger text-white border border-danger",
-        DeploymentStatus.Stopped => "bg-secondary text-white border border-secondary",
-        _ => "bg-light text-dark border"
+        DeploymentStatus.Starting => "deployment-badge-info",
+        DeploymentStatus.Running => "deployment-badge-success",
+        DeploymentStatus.Failed => "deployment-badge-danger",
+        DeploymentStatus.Stopped => "deployment-badge-muted",
+        _ => "deployment-badge-neutral"
     };
 
     private string IconClass => Status switch

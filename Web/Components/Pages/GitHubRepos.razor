@@ -1,111 +1,219 @@
 @page "/github-repos"
+@using Core.DTO
 
 <PageTitle>GitHub Repositories</PageTitle>
 
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1>GitHub Repositories</h1>
+<div class="container page-shell github-repos-page">
+    <div class="page-header">
+        <div class="page-header-copy">
+            <div class="page-eyebrow">Remote sources</div>
+            <h1>GitHub repositories</h1>
+            <p class="page-description">Review cloud repositories and save supported projects into your AutoMate deployment workspace.</p>
+        </div>
     </div>
 
     @if (!string.IsNullOrEmpty(_statusMessage))
     {
-        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm"
+        <div class="alert @(_isErrorStatus ? "alert-warning" : "alert-success") alert-dismissible fade show shadow-sm github-status-alert"
              role="alert">
-            @_statusMessage
+            <i class="bi @(_isErrorStatus ? "bi-exclamation-triangle" : "bi-check-circle")" aria-hidden="true"></i>
+            <span>@_statusMessage</span>
             <button type="button" class="btn-close" @onclick="ClearStatusMessage" aria-label="Close"></button>
         </div>
     }
 
     <AuthorizeView Context="authContext">
         <Authorized>
-            <p class="lead">Welcome, <strong>@authContext.User.Identity?.Name</strong>!</p>
+            <section class="github-source-panel" aria-labelledby="github-source-title">
+                <div class="github-source-copy">
+                    <div class="github-source-mark">
+                        <i class="bi bi-github" aria-hidden="true"></i>
+                    </div>
+                    <div>
+                        <h2 id="github-source-title">Remote workspace</h2>
+                        <p class="page-description">Signed in as <strong>@authContext.User.Identity?.Name</strong>.</p>
+                    </div>
+                </div>
+
+                <div class="github-source-state">
+                    @if (_isGitHubUser)
+                    {
+                        <span class="badge deployment-badge deployment-badge-success">
+                            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                            GitHub linked
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="badge deployment-badge deployment-badge-neutral">
+                            <i class="bi bi-circle" aria-hidden="true"></i>
+                            Not linked
+                        </span>
+                    }
+                </div>
+            </section>
 
             @if (_isLoading)
             {
-                <div class="text-center mt-5">
-                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <div class="github-loading" role="status" aria-live="polite">
+                    <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <p class="mt-3 text-muted">Fetching your repositories from GitHub...</p>
+                    <div>
+                        <h2>Fetching repositories</h2>
+                        <p class="page-description">Loading your GitHub repositories and checking deployable language support.</p>
+                    </div>
                 </div>
             }
             else if (_githubRepos is not null && _githubRepos.Count > 0)
             {
-                <h3 class="mt-4 mb-3">Here are your GitHub repositories:</h3>
+                var totalRepos = _githubRepos.Count;
+                var supportedRepos = _githubRepos.Count(IsSupportedRepository);
+                var privateRepos = _githubRepos.Count(repo => repo.IsPrivate);
 
-                <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-                    @foreach (var repo in _githubRepos)
-                    {
-                        <div class="col">
-                            <div class="card h-100 shadow border-2">
-                                <div class="card-body d-flex flex-column">
-                                    <h5 class="card-title d-flex align-items-center">
-                                        <i class="bi @(repo.IsPrivate ? "bi-lock-fill text-danger" : "bi-globe text-success") me-2"></i>
-                                        @repo.Name
-                                    </h5>
-
-                                    <h6 class="card-subtitle mb-3 text-muted">
-                                        <i class="bi bi-code-slash me-1"></i> @(string.IsNullOrEmpty(repo.Language) ? "Unknown" : repo.Language)
-                                    </h6>
-
-                                    <p class="card-text small text-muted mb-4">
-                                        <i class="bi bi-clock-history me-1"></i> Updated
-                                        at: @repo.UpdatedAt.ToString("yyyy. MM. dd.")
-                                    </p>
-
-                                    <div class="mt-auto d-flex gap-2">
-                                        <a href="@repo.HtmlUrl" target="_blank"
-                                           class="btn btn-sm btn-outline-dark w-100">
-                                            <i class="bi bi-github me-1"></i> Show
-                                        </a>
-
-                                        @if (repo.Language is "C#" or "JavaScript" or "TypeScript")
-                                        {
-                                            <button class="btn btn-sm btn-primary w-100"
-                                                    @onclick="() => SaveProjectAsync(repo)"
-                                                    disabled="@IsSaving(repo)">
-                                                @if (IsSaving(repo))
-                                                {
-                                                    <span class="spinner-border spinner-border-sm me-1" role="status"
-                                                          aria-hidden="true"></span>
-                                                    <span>Saving...</span>
-                                                }
-                                                else
-                                                {
-                                                    <i class="bi bi-cloud-download me-1"></i>
-                                                    <span>Save</span>
-                                                }
-                                            </button>
-                                        }
-                                    </div>
-                                </div>
-                            </div>
+                <section class="github-results-section" aria-labelledby="github-results-title">
+                    <div class="section-heading">
+                        <div>
+                            <div class="panel-label">Repository inventory</div>
+                            <h2 id="github-results-title">Repositories</h2>
                         </div>
-                    }
-                </div>
+
+                        <div class="github-result-summary" aria-label="GitHub repository summary">
+                            <span class="github-summary-pill">
+                                <strong>@totalRepos</strong> total
+                            </span>
+                            <span class="github-summary-pill">
+                                <strong>@supportedRepos</strong> supported
+                            </span>
+                            <span class="github-summary-pill">
+                                <strong>@privateRepos</strong> private
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="github-repo-grid">
+                        @foreach (var repo in _githubRepos)
+                        {
+                            var isSupported = IsSupportedRepository(repo);
+                            var isSaving = IsSaving(repo);
+                            var language = string.IsNullOrWhiteSpace(repo.Language) ? "Unknown" : repo.Language;
+
+                            <article class="card resource-card github-repo-card @(isSupported ? "github-repo-supported" : "github-repo-unsupported")">
+                                <div class="github-repo-header">
+                                    <div class="github-repo-title-group">
+                                        <div class="github-repo-mark">
+                                            <i class="bi bi-github" aria-hidden="true"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <h3 class="github-repo-title text-truncate" title="@repo.Name">@repo.Name</h3>
+                                            <div class="github-repo-full-name text-truncate" title="@repo.FullName">@repo.FullName</div>
+                                        </div>
+                                    </div>
+
+                                    <span class="badge deployment-badge @(isSupported ? "deployment-badge-success" : "deployment-badge-neutral")">
+                                        <i class="bi @(isSupported ? "bi-check-circle-fill" : "bi-slash-circle")" aria-hidden="true"></i>
+                                        @(isSupported ? "Supported" : "Unsupported")
+                                    </span>
+                                </div>
+
+                                <div class="github-repo-meta">
+                                    <span class="github-fact">
+                                        <i class="bi bi-code-slash" aria-hidden="true"></i>
+                                        @language
+                                    </span>
+                                    <span class="github-fact">
+                                        <i class="bi @(repo.IsPrivate ? "bi-lock-fill" : "bi-globe")" aria-hidden="true"></i>
+                                        @(repo.IsPrivate ? "Private" : "Public")
+                                    </span>
+                                    <span class="github-fact">
+                                        <i class="bi bi-clock-history" aria-hidden="true"></i>
+                                        @repo.UpdatedAt.ToString("yyyy. MM. dd.")
+                                    </span>
+                                </div>
+
+                                <div class="github-repo-url" title="@repo.HtmlUrl">
+                                    <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                                    <span class="text-truncate">@repo.HtmlUrl</span>
+                                </div>
+
+                                @if (!isSupported)
+                                {
+                                    <div class="github-support-note">
+                                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                                        AutoMate can save C#, JavaScript, and TypeScript repositories.
+                                    </div>
+                                }
+
+                                <div class="github-repo-actions">
+                                    <a href="@repo.HtmlUrl"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="btn btn-outline-secondary">
+                                        <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                                        <span>Open GitHub</span>
+                                    </a>
+
+                                    @if (isSupported)
+                                    {
+                                        <button class="btn btn-primary github-save-button"
+                                                @onclick="() => SaveProjectAsync(repo)"
+                                                disabled="@isSaving">
+                                            @if (isSaving)
+                                            {
+                                                <span class="spinner-border spinner-border-sm" role="status"
+                                                      aria-hidden="true"></span>
+                                                <span>Saving...</span>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-cloud-download" aria-hidden="true"></i>
+                                                <span>Save</span>
+                                            }
+                                        </button>
+                                    }
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </section>
             }
             else if (_isGitHubUser)
             {
-                <div class="alert alert-warning mt-4 shadow-sm">
-                    <i class="bi bi-exclamation-triangle me-2"></i> Could not find repositories or your access has
-                    expired.
+                <div class="empty-state github-empty-state">
+                    <div class="empty-state-icon">
+                        <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                    </div>
+                    <h2>No repositories available</h2>
+                    <p class="page-description">AutoMate could not find repositories, or your GitHub access has expired.</p>
                 </div>
             }
             else
             {
-                <div class="alert alert-info mt-4 shadow-sm">
-                    <i class="bi bi-info-circle me-2"></i> You need to link a GitHub account to access remote
-                    repositories.
+                <div class="empty-state github-empty-state">
+                    <div class="empty-state-icon">
+                        <i class="bi bi-github" aria-hidden="true"></i>
+                    </div>
+                    <h2>Link GitHub to continue</h2>
+                    <p class="page-description">You need to link a GitHub account before AutoMate can access remote repositories.</p>
                 </div>
             }
         </Authorized>
         <NotAuthorized>
-            <div class="text-center mt-5">
-                <i class="bi bi-github display-1 text-muted mb-3"></i>
-                <h3>Authentication Required</h3>
-                <p class="text-muted">Please log in to access your remote repositories!</p>
+            <div class="auth-state">
+                <div class="auth-state-icon">
+                    <i class="bi bi-github" aria-hidden="true"></i>
+                </div>
+                <h2>Authentication required</h2>
+                <p class="page-description">Please log in to access your remote repositories.</p>
                 <a href="/login" class="btn btn-primary mt-2">Login</a>
             </div>
         </NotAuthorized>
     </AuthorizeView>
 </div>
+
+@code {
+    private static bool IsSupportedRepository(GitHubRepositoryDto repo)
+    {
+        return repo.Language is "C#" or "JavaScript" or "TypeScript";
+    }
+}

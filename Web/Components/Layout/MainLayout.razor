@@ -1,69 +1,69 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @rendermode InteractiveServer
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu/>
-    </div>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
-    <main>
-        <div class="top-row px-4 d-flex justify-content-between align-items-center shadow-sm">
+<div class="page">
+    <aside class="sidebar" aria-label="Primary navigation">
+        <NavMenu/>
+    </aside>
+
+    <main class="app-main" id="main-content" tabindex="-1">
+        <header class="top-row">
             <AuthorizeView>
                 <Authorized>
-                    <div>
+                    <div class="top-row-status">
                         @switch (_isDockerRunning)
                         {
                             case null:
-                                <div
-                                    class="docker-status-pill text-muted border border-secondary border-opacity-25 bg-light"
-                                    title="Checking Docker status...">
+                                <div class="docker-status-pill docker-status-checking"
+                                     title="Checking Docker status...">
                                     <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                    <span class="small fw-semibold">Connecting to Docker...</span>
+                                    <span>Connecting to Docker...</span>
                                 </div>
                                 break;
                             case true:
-                                <div
-                                    class="docker-status-pill bg-success bg-opacity-10 border border-success border-opacity-25 text-success"
-                                    title="Docker Engine Online">
-                                    <div class="blob green"></div>
-                                    <i class="bi bi-docker me-1"></i> <span
-                                        class="fw-semibold">Docker Engine Online</span>
+                                <div class="docker-status-pill docker-status-online"
+                                     title="Docker Engine Online">
+                                    <div class="blob green" aria-hidden="true"></div>
+                                    <i class="bi bi-docker me-1" aria-hidden="true"></i>
+                                    <span>Docker Engine Online</span>
                                 </div>
                                 break;
                             case false:
-                                <div
-                                    class="docker-status-pill bg-danger bg-opacity-10 border border-danger border-opacity-25 text-danger"
-                                    title="Docker Engine Offline">
-                                    <div class="blob red"></div>
-                                    <i class="bi bi-exclamation-triangle-fill me-1"></i> <span class="fw-semibold">Docker Engine Offline</span>
+                                <div class="docker-status-pill docker-status-offline"
+                                     title="Docker Engine Offline">
+                                    <div class="blob red" aria-hidden="true"></div>
+                                    <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                    <span>Docker Engine Offline</span>
                                 </div>
                                 break;
                         }
                     </div>
 
-                    <div class="d-flex align-items-center gap-3">
+                    <div class="top-row-actions">
                         <a href="/swagger" target="_blank"
-                           class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1">
-                            <i class="bi bi-braces"></i> OpenAPI (Swagger)
+                           class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-braces" aria-hidden="true"></i>
+                            <span>OpenAPI</span>
                         </a>
                     </div>
                 </Authorized>
             </AuthorizeView>
-        </div>
+        </header>
 
-
-        <article class="content px-4 py-4">
+        <article class="content">
             @Body
         </article>
     </main>
 </div>
 
-<div id="blazor-error-ui" class="bg-danger text-white px-4 py-2" data-nosnippet>
-    <div class="d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-exclamation-octagon-fill me-2"></i> An unhandled error has occurred.</span>
+<div id="blazor-error-ui" data-nosnippet>
+    <div class="error-ui-inner">
+        <span><i class="bi bi-exclamation-octagon-fill me-2" aria-hidden="true"></i> An unhandled error has occurred.</span>
         <div>
-            <a href="." class="reload text-white text-decoration-underline me-3">Reload</a>
-            <span class="dismiss cursor-pointer" style="cursor: pointer;">🗙</span>
+            <a href="." class="reload">Reload</a>
+            <span class="dismiss" role="button" tabindex="0" aria-label="Dismiss">&times;</span>
         </div>
     </div>
 </div>

@@ -1,10 +1,9 @@
-<div class="modal fade show d-block" tabindex="-1"
-     style="background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px);">
+<div class="modal fade show d-block deployment-config-modal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content bg-dark text-light border-secondary shadow-lg">
-            <div class="modal-header border-secondary">
+        <div class="modal-content">
+            <div class="modal-header">
                 <h5 class="modal-title">Configure Deployment: @Config.ProjectName</h5>
-                <button type="button" class="btn-close btn-close-white" aria-label="Close" @onclick="OnCancel"></button>
+                <button type="button" class="btn-close" aria-label="Close" @onclick="OnCancel"></button>
             </div>
 
             <div class="modal-body p-4">
@@ -20,7 +19,7 @@
                 <div class="row g-3 mb-4">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Environment</label>
-                        <select class="form-select bg-dark text-light border-secondary" @bind="SelectedEnvironment">
+                        <select class="form-select" @bind="SelectedEnvironment">
                             <option value="Development">Development</option>
                             <option value="Staging">Staging</option>
                             <option value="Production">Production</option>
@@ -30,7 +29,7 @@
                     {
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Azure Region</label>
-                            <select class="form-select bg-dark text-light border-secondary"
+                            <select class="form-select"
                                     @bind="Config.CloudAzureRegion">
                                 <option value="eastus">East US</option>
                                 <option value="eastus2">East US 2</option>
@@ -45,7 +44,7 @@
                     {
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Exposed Port (Host)</label>
-                            <input type="number" class="form-control bg-dark text-light border-secondary"
+                            <input type="number" class="form-control"
                                    @bind="Config.ExposedPort" placeholder="e.g., 8080" min="1" max="65535"/>
                         </div>
                     }
@@ -57,17 +56,17 @@
                     <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Resource Group</label>
-                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                            <input type="text" class="form-control"
                                    @bind="Config.CloudResourceGroupName" placeholder="rg-my-app" autocomplete="off"/>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Container App Name</label>
-                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                            <input type="text" class="form-control"
                                    @bind="Config.CloudContainerAppName" placeholder="my-app" autocomplete="off"/>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Registry Server</label>
-                            <input type="text" class="form-control bg-dark text-light border-secondary"
+                            <input type="text" class="form-control"
                                    @bind="Config.CloudRegistryName" placeholder="ghcr.io" autocomplete="off"/>
                         </div>
                     </div>
@@ -82,14 +81,14 @@
 
                 @if (Config.Databases is null || Config.Databases.Count == 0)
                 {
-                    <p class="text-light small text-center my-3 opacity-75">No databases defined.</p>
+                    <p class="text-muted small text-center my-3">No databases defined.</p>
                 }
                 else
                 {
                     @foreach (var db in Config.Databases)
                     {
                         <div
-                            class="bg-secondary bg-opacity-10 border border-secondary p-3 rounded-3 mb-3 position-relative">
+                            class="config-nested-panel p-3 mb-3 position-relative">
                             <button type="button"
                                     class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2"
                                     @onclick="@(() => RemoveDatabase(db))" title="Remove database">
@@ -99,7 +98,7 @@
                             <div class="row g-3 mb-3 mt-1">
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Database Engine</label>
-                                    <select class="form-select bg-dark text-light border-secondary" @bind="db.DbType">
+                                    <select class="form-select" @bind="db.DbType">
                                         <option value="PostgreSQL">PostgreSQL</option>
                                         <option value="MySQL">MySQL</option>
                                         <option value="SQLServer">Microsoft SQL Server</option>
@@ -109,7 +108,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Connection String Name</label>
-                                    <input type="text" class="form-control bg-dark text-light border-secondary"
+                                    <input type="text" class="form-control"
                                            @bind="db.ConnectionStringName" placeholder="e.g. DefaultConnection"
                                            autocomplete="off"/>
                                 </div>
@@ -117,17 +116,17 @@
                             <div class="row g-3">
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Database Name</label>
-                                    <input type="text" class="form-control bg-dark text-light border-secondary"
+                                    <input type="text" class="form-control"
                                            @bind="db.DbName" placeholder="mydb" autocomplete="off"/>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Username</label>
-                                    <input type="text" class="form-control bg-dark text-light border-secondary"
+                                    <input type="text" class="form-control"
                                            @bind="db.DbUser" placeholder="admin" autocomplete="off"/>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label fw-semibold">Password</label>
-                                    <input type="text" class="form-control bg-dark text-light border-secondary"
+                                    <input type="text" class="form-control"
                                            @bind="db.DbPassword" placeholder="secret" autocomplete="off"/>
                                 </div>
                             </div>
@@ -153,7 +152,7 @@
 
                 @if (_envVars.Count == 0)
                 {
-                    <p class="text-light small text-center my-3 opacity-75">No custom environment variables defined.</p>
+                    <p class="text-muted small text-center my-3">No custom environment variables defined.</p>
                 }
                 else
                 {
@@ -162,12 +161,12 @@
                         <div class="row g-2 mb-2 align-items-center">
                             <div class="col-5">
                                 <input type="text"
-                                       class="form-control font-monospace bg-dark text-light border-secondary"
+                                       class="form-control font-monospace"
                                        placeholder="KEY (e.g. API_TOKEN)" @bind="item.Key" autocomplete="off"/>
                             </div>
                             <div class="col-6">
                                 <input type="text"
-                                       class="form-control font-monospace bg-dark text-light border-secondary"
+                                       class="form-control font-monospace"
                                        placeholder="Value" @bind="item.Value" autocomplete="off"/>
                             </div>
                             <div class="col-1 text-end">
