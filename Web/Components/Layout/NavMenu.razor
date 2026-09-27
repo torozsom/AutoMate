@@ -44,11 +44,14 @@
                     </NavLink>
                 </div>
 
-                <div class="nav-item">
-                    <NavLink class="nav-link" href="local-repos">
-                        <span class="bi bi-folder2-open-nav-menu" aria-hidden="true"></span> Local Repos
-                    </NavLink>
-                </div>
+                @if (DeploymentCapabilities.LocalDeploymentsEnabled)
+                {
+                    <div class="nav-item">
+                        <NavLink class="nav-link" href="local-repos">
+                            <span class="bi bi-folder2-open-nav-menu" aria-hidden="true"></span> Local Repos
+                        </NavLink>
+                    </div>
+                }
 
                 <div class="nav-section-label">Session</div>
 

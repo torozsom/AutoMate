@@ -5,6 +5,7 @@ using Application.Abstractions.Azure;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Email;
 using Application.Abstractions.GitHub;
+using Application.Abstractions.Hosting;
 using Application.Abstractions.Logging;
 using Application.Abstractions.Scanning;
 using Application.Abstractions.Templating;
@@ -259,7 +260,7 @@ public static class ServiceConfiguration
             builder.Services.AddHealthChecks();
 
             // Bind Strongly-Typed Configurations
-            builder.AddConfigurations();
+            var deploymentCapabilities = builder.AddConfigurations();
 
             // Add Infrastructure (DB, Redis, Clients)
             builder.AddInfrastructure();
@@ -271,7 +272,7 @@ public static class ServiceConfiguration
             builder.AddPresentation();
 
             // Add Business Logic Services
-            builder.Services.RegisterDomainServices();
+            builder.Services.RegisterDomainServices(deploymentCapabilities);
 
             // Register Minimal API Endpoints
             builder.Services.AddEndpoints();
@@ -283,10 +284,17 @@ public static class ServiceConfiguration
         /// <summary>
         ///     Binds application settings to strongly-typed option classes using the Options Pattern.
         /// </summary>
-        private void AddConfigurations()
+        private IDeploymentCapabilities AddConfigurations()
         {
             builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
             builder.Services.Configure<DockerOptions>(builder.Configuration.GetSection(DockerOptions.SectionName));
+
+            var hostingProfile = builder.Configuration.GetSection(HostingProfileOptions.SectionName)
+                .Get<HostingProfileOptions>() ?? new HostingProfileOptions();
+            var capabilities = hostingProfile.ToCapabilities();
+            builder.Services.AddSingleton(capabilities);
+            builder.Services.AddSingleton<IDeploymentCapabilities>(capabilities);
+            return capabilities;
         }
 
 
@@ -454,15 +462,22 @@ public static class ServiceConfiguration
         /// <summary>
         ///     Registers core domain and application services into the DI container.
         /// </summary>
-        private void RegisterDomainServices()
+        private void RegisterDomainServices(IDeploymentCapabilities capabilities)
         {
             // Core/Auth Services
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<IPasswordHasher<LocalUser>, PasswordHasher<LocalUser>>();
 
-            // Orchestration & Docker
-            services.AddScoped<IDockerService, DockerService>();
-            services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+            // Orchestration & Docker. Local services are intentionally absent from SaaS instances.
+            if (capabilities.LocalDeploymentsEnabled)
+            {
+                services.AddScoped<IDockerService, DockerService>();
+                services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+            }
+            else
+            {
+                services.AddScoped<IDockerService, DisabledDockerService>();
+            }
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
             services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
             services.AddHostedService<DeploymentJobWorker>();

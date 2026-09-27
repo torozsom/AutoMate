@@ -1,3 +1,4 @@
+using Application.Abstractions.Hosting;
 using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -12,6 +13,7 @@ public sealed class DeploymentJobWorker(
     IDeploymentJobQueue queue,
     IServiceScopeFactory scopeFactory,
     IDeploymentStatusNotifier statusNotifier,
+    IDeploymentCapabilities capabilities,
     ILogger<DeploymentJobWorker> logger)
     : BackgroundService
 {
@@ -88,16 +90,19 @@ public sealed class DeploymentJobWorker(
         switch (job)
         {
             case LocalDeploymentJob localJob:
+                EnsureLocalDeploymentEnabled();
                 var localOrchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
                 await localOrchestrator.DeployLocalProjectAsync(localJob.Config, cancellationToken);
                 break;
 
             case CloudDeploymentJob cloudJob:
+                EnsureCloudDeploymentEnabled();
                 var cloudOrchestrator = scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>();
                 await cloudOrchestrator.DeployCloudProjectAsync(cloudJob.Request, cancellationToken);
                 break;
 
             case StopLocalDeploymentJob stopJob:
+                EnsureLocalDeploymentEnabled();
                 var stopOrchestrator = scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>();
                 await stopOrchestrator.StopDeploymentAsync(stopJob.ProjectId, stopJob.ProjectName,
                     stopJob.CsProjectPath, cancellationToken);
@@ -107,5 +112,17 @@ public sealed class DeploymentJobWorker(
                 logger.LogWarning("Ignoring unsupported deployment job type {JobType}.", job.GetType().FullName);
                 break;
         }
+    }
+
+    private void EnsureLocalDeploymentEnabled()
+    {
+        if (!capabilities.LocalDeploymentsEnabled)
+            throw new InvalidOperationException("Local Docker deployments are disabled for this AutoMate instance.");
+    }
+
+    private void EnsureCloudDeploymentEnabled()
+    {
+        if (!capabilities.CloudDeploymentsEnabled)
+            throw new InvalidOperationException("Cloud deployments are disabled for this AutoMate instance.");
     }
 }

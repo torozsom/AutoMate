@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Application.Abstractions.Scanning;
+using Application.Abstractions.Hosting;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Application.Orchestration;
@@ -75,6 +76,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// Service responsible for scanning project files to extract metadata and analyze dependencies.
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
+
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
     /// Navigation manager for handling navigation within the application.
     [Inject]
@@ -202,6 +206,12 @@ public partial class Dashboard : ComponentBase, IDisposable
     private async Task DeployAppAsync(Domain.Entities.Application app)
     {
         ClearMessages();
+
+        if (app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            _globalErrorMessage = "Local Docker deployments are available only in a self-hosted AutoMate installation.";
+            return;
+        }
 
         if (app.SourceType == SourceType.Remote)
         {
@@ -380,7 +390,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private bool IsDeployDisabled(Domain.Entities.Application app)
     {
-        return IsDeploying(app.Id) || (app.SourceType == SourceType.Remote && !_isAzureConnected);
+        return IsDeploying(app.Id) ||
+               (app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled) ||
+               (app.SourceType == SourceType.Remote && !_isAzureConnected);
     }
 
 

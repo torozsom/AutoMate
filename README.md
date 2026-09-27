@@ -68,6 +68,15 @@ The application is built with a strict Clean Architecture split:
 
 ## Deployment Workflows
 
+### Hosting Profiles
+
+The same AutoMate image supports two server-enforced profiles:
+
+- **SelfHosted** enables local filesystem discovery and local Docker Compose deployments, as well as GitHub-to-Azure deployments. Use [`deploy/self-hosted`](./deploy/self-hosted) and mount only a developer-controlled project directory.
+- **SaaS** is for `automate.com`: it disables local filesystem and Docker deployment paths, and supports only GitHub-to-Azure deployments into the connected customer's Azure subscription. See [`deploy/saas`](./deploy/saas).
+
+These profiles are selected with `HostingProfile__Mode`; they are enforced in the background worker and deployment orchestrators, rather than only hidden in the UI.
+
 ### Local Docker Workflow
 
 1. The user selects a local project from the dashboard.

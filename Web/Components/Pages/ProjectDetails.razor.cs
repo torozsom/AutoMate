@@ -1,5 +1,6 @@
 using System.Globalization;
 using Application.Abstractions.Docker;
+using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
@@ -126,6 +127,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject]
     private IDockerService DockerService { get; set; } = null!;
 
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+
     /// The logger used to log information and errors related to the project details component.
     [Inject]
     private ILogger<ProjectDetails> Logger { get; set; } = null!;
@@ -170,6 +174,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (_app == null) return;
 
+        if (_app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            _workflowStatusMessage = "Local Docker deployments are available only in a self-hosted AutoMate installation.";
+            return;
+        }
+
         if (_app.SourceType == SourceType.Remote)
         {
             _selectedProjectPath = string.Empty;
@@ -194,6 +204,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private async Task StopDeploymentAsync()
     {
         if (_app == null) return;
+        if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            _workflowStatusMessage = "Local Docker deployments are disabled for this AutoMate instance.";
+            return;
+        }
         var csProject = _app.CsProjects.FirstOrDefault(p => p.IsWebProject);
         if (csProject == null) return;
 
