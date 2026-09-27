@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
+using Application.Data.Apps;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR;
-using Services.Data.Apps;
 
 namespace Web.Hubs;
 

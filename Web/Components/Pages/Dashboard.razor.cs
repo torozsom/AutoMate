@@ -1,14 +1,13 @@
 using System.Collections.Concurrent;
-using Core.DTO;
-using Core.Entities;
-using Core.Enums;
+using Application.Abstractions.Scanning;
+using Application.Data.Apps;
+using Application.Data.Users;
+using Application.Orchestration;
+using Domain.DTO;
+using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
-using Services.Data.Apps;
-using Services.Data.Users;
-using Services.Orchestration;
-using Services.Scanner;
 using Web.Components.Shared;
 
 namespace Web.Components.Pages;
@@ -24,7 +23,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     private readonly ConcurrentDictionary<Guid, bool> _deployingStates = new();
 
     /// The list of apps associated with the authenticated user, fetched from the database.
-    private List<Application>? _apps;
+    private List<Domain.Entities.Application>? _apps;
 
     /// The Azure tenant ID entered for personal Microsoft account connections.
     private string _azureTenantId = string.Empty;
@@ -48,7 +47,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     private bool _isLoading = true;
 
     /// The remote application currently selected for cloud deployment.
-    private Application? _selectedCloudApp;
+    private Domain.Entities.Application? _selectedCloudApp;
 
     /// The file system path of the project currently selected for deployment configuration.
     private string? _selectedProjectPath;
@@ -200,7 +199,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     ///     the app's dependencies to prepare the deployment configuration.
     /// </summary>
     /// <param name="app"></param>
-    private async Task DeployAppAsync(Application app)
+    private async Task DeployAppAsync(Domain.Entities.Application app)
     {
         ClearMessages();
 
@@ -379,7 +378,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Determines whether a project card's deploy action should be disabled.
     /// </summary>
-    private bool IsDeployDisabled(Application app)
+    private bool IsDeployDisabled(Domain.Entities.Application app)
     {
         return IsDeploying(app.Id) || (app.SourceType == SourceType.Remote && !_isAzureConnected);
     }
@@ -388,7 +387,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Gets a short tooltip explaining why a remote deploy action is disabled.
     /// </summary>
-    private string GetDeployButtonTitle(Application app)
+    private string GetDeployButtonTitle(Domain.Entities.Application app)
     {
         return app.SourceType == SourceType.Remote && !_isAzureConnected
             ? "Connect to Azure to deploy GitHub projects."
@@ -399,7 +398,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Creates a cloud deployment configuration for a saved remote repository.
     /// </summary>
-    private static DeploymentConfigDto CreateCloudDeploymentConfig(Application app)
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }
@@ -428,7 +427,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Gets the latest deployment status of an app.
     /// </summary>
-    private static DeploymentStatus? GetLatestStatus(Application app)
+    private static DeploymentStatus? GetLatestStatus(Domain.Entities.Application app)
     {
         return app.CsProjects
             .SelectMany(c => c.Deployments)

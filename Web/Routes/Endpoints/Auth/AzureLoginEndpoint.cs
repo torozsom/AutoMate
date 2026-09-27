@@ -2,10 +2,10 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Application.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Caching.Distributed;
-using Services.Auth;
 using Web.Configs;
 
 namespace Web.Routes.Endpoints.Auth;

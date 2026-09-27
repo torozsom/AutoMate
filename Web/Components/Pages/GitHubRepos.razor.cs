@@ -1,9 +1,9 @@
-using Core.DTO;
+using Application.Abstractions.GitHub;
+using Application.Data.Apps;
+using Application.Data.Users;
+using Domain.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Services.Data.Apps;
-using Services.Data.Users;
-using Services.GitHub;
 
 namespace Web.Components.Pages;
 

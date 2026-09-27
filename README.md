@@ -22,9 +22,10 @@ The application is built with a strict Clean Architecture split:
 
 | Project | Responsibility |
 |---|---|
-| [`Core`](./Core/README.md) | Framework-neutral entities, DTOs, enums, and shared contracts |
-| [`Services`](./Services/README.md) | Business workflows, scanning, templating, Docker, GitHub, Azure, EF Core, orchestration |
-| [`Web`](./Web/README.md) | Blazor Server UI, Minimal API endpoints, SignalR hubs, startup and HTTP pipeline |
+| [`Domain`](./Domain/README.md) | Framework-neutral entities, DTOs, enums, defaults, and shared contracts |
+| [`Application`](./Application/README.md) | Application contracts, orchestration interfaces, queues, and outbound ports |
+| [`Infrastructure`](./Infrastructure/README.md) | EF Core, migrations, scanning, templating, Docker, GitHub, Azure, and email adapters |
+| [`Web`](./Web/README.md) | Blazor Server UI, Minimal API endpoints, SignalR hubs, startup, and HTTP pipeline |
 
 ---
 
@@ -102,8 +103,8 @@ Generated cloud artifacts include:
 
 AutoMate intentionally keeps infrastructure and UI concerns out of the domain model.
 
-- **Clean Architecture:** `Core` has no dependency on `Services` or `Web`.
-- **Dependency Injection:** all orchestration and adapter services are registered behind interfaces.
+- **Clean Architecture:** `Domain` has no dependency on `Application`, `Infrastructure`, or `Web`.
+- **Dependency Injection:** all orchestration and adapter Application are registered behind interfaces.
 - **Minimal API endpoint modules:** endpoint classes implement `IEndpoint`; raw route definitions stay out of `Program.cs`.
 - **Thin startup:** `Program.cs` delegates service registration and pipeline setup to configuration extensions.
 - **Template-driven deployment:** deployment files are rendered from Scriban templates and a manifest.
@@ -193,11 +194,11 @@ dotnet user-secrets set "Authentication:Microsoft:ClientSecret" "<microsoft-clie
 
 ### 3. Apply Database Migrations
 
-Migrations live in `Services`, but the startup project is `Web`.
+Migrations live in `Infrastructure`, but the startup project is `Web`.
 
 ```bash
 cd Web
-dotnet ef database update --project ../Services
+dotnet ef database update --project ../Infrastructure
 ```
 
 ### 4. Run the Application
@@ -254,8 +255,8 @@ In practice, `Owner` on the target subscription/resource group is the simplest d
 
 ```bash
 cd Web
-dotnet ef migrations add <MigrationName> --project ../Services
-dotnet ef database update --project ../Services
+dotnet ef migrations add <MigrationName> --project ../Infrastructure
+dotnet ef database update --project ../Infrastructure
 ```
 
 ### Build the Solution
@@ -284,8 +285,8 @@ docker compose down
 
 - `Program.cs` is intentionally minimal.
 - Add Minimal API routes through `Web/Routes/Endpoints/` and register with endpoint discovery.
-- Add deployment templates through `Services/Templating/Templates/` and `template-manifest.json`.
-- Keep domain contracts in `Core` independent from infrastructure and UI.
+- Add deployment templates through `Infrastructure/Templating/Templates/` and `template-manifest.json`.
+- Keep domain contracts in `Domain` independent from infrastructure and UI.
 - Prefer hosted services for lifecycle/background work.
 - Never commit OAuth secrets, app passwords, PATs, or connection-string passwords.
 
