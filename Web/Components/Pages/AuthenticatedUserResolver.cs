@@ -1,6 +1,6 @@
 using System.Security.Claims;
+using Application.Data.Users;
 using Microsoft.AspNetCore.Components.Authorization;
-using Services.Data.Users;
 
 namespace Web.Components.Pages;
 

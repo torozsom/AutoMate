@@ -1,5 +1,5 @@
+using Application.Abstractions.Logging;
 using Microsoft.AspNetCore.SignalR;
-using Services.LogStreaming;
 using Web.Hubs;
 
 namespace Web.Services;

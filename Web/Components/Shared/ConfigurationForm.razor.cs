@@ -1,7 +1,7 @@
-using Core.Defaults;
-using Core.DTO;
+using Application.Abstractions.Scanning;
+using Domain.Defaults;
+using Domain.DTO;
 using Microsoft.AspNetCore.Components;
-using Services.Scanner;
 
 namespace Web.Components.Shared;
 

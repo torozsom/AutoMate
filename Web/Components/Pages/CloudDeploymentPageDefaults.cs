@@ -1,6 +1,5 @@
-using Core.Defaults;
-using Core.DTO;
-using Core.Entities;
+using Domain.Defaults;
+using Domain.DTO;
 
 namespace Web.Components.Pages;
 
@@ -14,7 +13,7 @@ internal static class CloudDeploymentPageDefaults
     /// </summary>
     /// <param name="app">The saved AutoMate application representing the remote repository.</param>
     /// <returns>A deployment configuration with the same defaults used by the dashboard and project detail pages.</returns>
-    internal static DeploymentConfigDto CreateConfiguration(Application app)
+    internal static DeploymentConfigDto CreateConfiguration(Domain.Entities.Application app)
     {
         var resourceName = ToAzureResourceName(app.Name);
 

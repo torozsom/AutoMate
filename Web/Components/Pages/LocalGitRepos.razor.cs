@@ -1,10 +1,10 @@
-using Core.DTO;
+using Application.Abstractions.Scanning;
+using Application.Data.Apps;
+using Application.Data.Users;
+using Domain.DTO;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
-using Services.Data.Apps;
-using Services.Data.Users;
-using Services.Scanner;
 
 namespace Web.Components.Pages;
 

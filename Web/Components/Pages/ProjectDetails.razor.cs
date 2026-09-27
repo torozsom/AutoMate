@@ -1,16 +1,15 @@
 using System.Globalization;
-using Core.DTO;
-using Core.Entities;
-using Core.Enums;
+using Application.Abstractions.Docker;
+using Application.Abstractions.Scanning;
+using Application.Data.Apps;
+using Application.Data.Users;
+using Application.Orchestration;
+using Domain.DTO;
+using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
-using Services.Data.Apps;
-using Services.Data.Users;
-using Services.Docker;
-using Services.Orchestration;
-using Services.Scanner;
 using Web.Components.Shared;
 using Web.Hubs;
 
@@ -38,7 +37,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// A nullable variable to hold the app details fetched from the database.
-    private Application? _app;
+    private Domain.Entities.Application? _app;
 
     /// A terminal instance for displaying build logs.
     private Terminal? _buildTerminal;
@@ -489,7 +488,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Creates a cloud deployment configuration for a saved remote repository.
     /// </summary>
-    private static DeploymentConfigDto CreateCloudDeploymentConfig(Application app)
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }

@@ -1,5 +1,5 @@
+using Application.Auth;
 using Microsoft.AspNetCore.Components;
-using Services.Auth;
 
 namespace Web.Components.Pages;
 
