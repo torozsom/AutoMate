@@ -1,4 +1,5 @@
 using Application.Abstractions.Scanning;
+using Application.Abstractions.Hosting;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Domain.DTO;
@@ -55,6 +56,9 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     [Inject]
     private ILocalSystemScannerService SystemScannerService { get; set; } = null!;
 
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+
     /// Service for managing apps, including fetching, creating, and deleting apps associated with users.
     [Inject]
     private IApplicationService ApplicationService { get; set; } = null!;
@@ -87,6 +91,13 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            _statusMessage = "Local filesystem access is available only in a self-hosted AutoMate installation.";
+            _isErrorStatus = true;
+            return;
+        }
+
         _currentUserId = await AuthenticatedUserResolver.GetCurrentUserIdAsync(
             AuthStateProvider,
             UserService,
@@ -100,6 +111,12 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     /// </summary>
     private async Task StartScanAsync()
     {
+        if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            SetStatusMessage("Local filesystem access is disabled for this AutoMate instance.", true);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(_searchPath)) return;
 
         _isScanning = true;
@@ -156,6 +173,11 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     /// <param name="csproject">The DTO of the CsProject to be saved</param>
     private async Task SaveProjectAsync(LocalProjectDto project, CsProjectDto csproject)
     {
+        if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            SetStatusMessage("Local projects cannot be saved in this AutoMate instance.", true);
+            return;
+        }
         if (_currentUserId == Guid.Empty)
         {
             SetStatusMessage("You need to be logged in to save projects.", true);

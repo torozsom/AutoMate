@@ -1,5 +1,6 @@
 using Application.Abstractions.Azure;
 using Application.Abstractions.GitHub;
+using Application.Abstractions.Hosting;
 using Application.Abstractions.Logging;
 using Application.Abstractions.Templating;
 using Domain.DTO;
@@ -19,6 +20,7 @@ public sealed class CloudDeploymentOrchestrator(
     IGitHubService gitHubService,
     IAzureDeploymentOrchestrator azureDeploymentOrchestrator,
     IAzureContainerAppRuntimeStreamer azureContainerAppRuntimeStreamer,
+    IDeploymentCapabilities capabilities,
     ILogStreamer logStreamer,
     ILogger<CloudDeploymentOrchestrator> logger,
     IDeploymentStatusNotifier statusNotifier)
@@ -44,6 +46,9 @@ public sealed class CloudDeploymentOrchestrator(
     public async Task<Deployment> DeployCloudProjectAsync(CloudDeploymentRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        if (!capabilities.CloudDeploymentsEnabled)
+            throw new InvalidOperationException("Cloud deployments are disabled for this AutoMate instance.");
+
         CloudDeploymentRequestValidator.Validate(request);
 
         var config = request.Config;
