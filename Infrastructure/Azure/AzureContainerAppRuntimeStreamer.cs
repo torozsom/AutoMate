@@ -45,13 +45,14 @@ public sealed class AzureContainerAppRuntimeStreamer(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await PollAllAsync(stoppingToken);
+        await PollOnceAsync(stoppingToken);
         using var timer = new PeriodicTimer(PollInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken))
-            await PollAllAsync(stoppingToken);
+            await PollOnceAsync(stoppingToken);
     }
 
-    private async Task PollAllAsync(CancellationToken cancellationToken)
+    /// <summary>Processes each registered target once. Internal for deterministic collector verification.</summary>
+    internal async Task PollOnceAsync(CancellationToken cancellationToken)
     {
         foreach (var target in _targets.Values)
         {
