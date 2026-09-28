@@ -1,10 +1,14 @@
 # Logging Port
 
-The Application logging port used by deployment producers and implemented by Web.
+The Application UI-streaming port implemented by Web. It accepts only redacted, normalized terminal data from the
+deployment diagnostic dispatcher; it is not a persistence, telemetry, or AI-analysis API.
 
 ## Source inventory
 
 - `ILogStreamer.cs`
+
+Structured deployment events and their redaction/publishing ports live in the sibling
+[`Diagnostics`](../Diagnostics/README.md) module.
 
 ## Boundary
 

@@ -1,5 +1,5 @@
 using Application.Abstractions.GitHub;
-using Application.Abstractions.Logging;
+using Application.Abstractions.Diagnostics;
 using Domain.DTO;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +10,7 @@ namespace Application.Orchestration;
 /// </summary>
 internal sealed class GitHubWorkflowMonitor(
     IGitHubService gitHubService,
-    ILogStreamer logStreamer,
+    IDeploymentDiagnosticPublisher diagnostics,
     ILogger logger)
 {
     /// <summary>
@@ -52,8 +52,13 @@ internal sealed class GitHubWorkflowMonitor(
             var statusMessage = $"{run.Status}/{run.Conclusion ?? "pending"}";
             if (!string.Equals(statusMessage, lastStatusMessage, StringComparison.OrdinalIgnoreCase))
             {
-                await StreamBuildLogAsync(request.Config.ProjectId,
-                    $"GitHub Actions run {run.Id}: {statusMessage}. {run.HtmlUrl}");
+                await PublishAsync(request.Config.ProjectId, $"GitHub Actions run {run.Id}: {statusMessage}. {run.HtmlUrl}",
+                    DeploymentDiagnosticKind.WorkflowState, new Dictionary<string, string>
+                    {
+                        ["workflow.run_id"] = run.Id.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        ["workflow.status"] = run.Status,
+                        ["workflow.conclusion"] = run.Conclusion ?? "pending"
+                    }, cancellationToken);
                 lastStatusMessage = statusMessage;
             }
 
@@ -78,7 +83,9 @@ internal sealed class GitHubWorkflowMonitor(
                 request.RepositoryOwner, request.RepositoryName, runId, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(logs))
-                await logStreamer.StreamBuildLogsAsync(projectId, logs);
+                await PublishAsync(projectId, logs, DeploymentDiagnosticKind.Log,
+                    new Dictionary<string, string> { ["workflow.run_id"] = runId.ToString(System.Globalization.CultureInfo.InvariantCulture) },
+                    cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -92,6 +99,16 @@ internal sealed class GitHubWorkflowMonitor(
     /// </summary>
     public async Task StreamBuildLogAsync(Guid projectId, string message)
     {
-        await logStreamer.StreamBuildLogsAsync(projectId, $"[cloud] {message}\r\n");
+        await PublishAsync(projectId, $"[cloud] {message}\r\n", DeploymentDiagnosticKind.BuildProgress, null,
+            CancellationToken.None);
+    }
+
+    private ValueTask PublishAsync(Guid projectId, string message, DeploymentDiagnosticKind kind,
+        IReadOnlyDictionary<string, string>? attributes, CancellationToken cancellationToken)
+    {
+        return diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, null,
+            DeploymentDiagnosticSource.GitHubActions, kind, DeploymentDiagnosticSeverity.Information,
+            DateTimeOffset.UtcNow, message, new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build), attributes),
+            cancellationToken);
     }
 }

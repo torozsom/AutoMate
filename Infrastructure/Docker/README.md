@@ -2,6 +2,9 @@
 
 Docker and Docker Compose infrastructure adapter implementation.
 
+Docker CLI output, container output, and metrics are normalized into Application deployment diagnostics before the
+redacted event pipeline forwards safe terminal data.
+
 ## Source inventory
 
 - `DockerBuildContextArchive.cs`

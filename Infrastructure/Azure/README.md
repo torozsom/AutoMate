@@ -2,6 +2,9 @@
 
 Azure Container Apps and OIDC infrastructure adapters.
 
+Container Apps availability state and metrics are normalized into deployment diagnostics before terminal delivery.
+Console and system Log Analytics tailing remain a subsequent ingestion milestone.
+
 ## Source inventory
 
 - `AzureConstants.cs`

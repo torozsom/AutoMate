@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Application.Abstractions.Logging;
+using Application.Abstractions.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Docker;
@@ -7,7 +7,7 @@ namespace Infrastructure.Docker;
 /// <summary>
 ///     Executes Docker CLI commands needed for Compose, metrics, port discovery, and project listing.
 /// </summary>
-internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer, ILogger logger)
+internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPublisher diagnostics, ILogger logger)
 {
     /// <summary>
     ///     Timeout used while listing running Docker Compose projects.
@@ -86,7 +86,11 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
     /// </summary>
     public async Task StreamContainerLogAsync(Guid projectId, string containerSuffixOrTabId, string logLine)
     {
-        await logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
+        await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, null,
+            DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Log,
+            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, logLine,
+            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, containerSuffixOrTabId),
+            new Dictionary<string, string> { ["stream"] = "combined" }));
     }
 
     /// <summary>
@@ -120,8 +124,13 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
                     break;
 
                 if (DockerMetricsLine.TryParse(line, out var metrics))
-                    await logStreamer.StreamContainerMetricsAsync(projectId, containerSuffixOrTabId, metrics.Cpu,
-                        metrics.Memory);
+                    await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, null,
+                        DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Metric,
+                        DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
+                        $"Container metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
+                        new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, containerSuffixOrTabId),
+                        new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory }),
+                        cancellationToken);
             }
         }
         catch (OperationCanceledException ex)
@@ -228,7 +237,10 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
     private void StreamBuildLogLine(Guid projectId, string? line)
     {
         if (!string.IsNullOrWhiteSpace(line))
-            logStreamer.StreamBuildLogsAsync(projectId, line + "\r\n");
+            _ = diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, null,
+                DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.BuildProgress,
+                DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, line + "\r\n",
+                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)));
     }
 
     /// <summary>
