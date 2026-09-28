@@ -53,6 +53,7 @@ public static class ServiceConfiguration
     private const string AutoMateUserIdAuthProperty = "automate_user_id";
     private const string AzureConnectionRedirectUri = "/dashboard";
     private const string AzureManagementScope = "https://management.azure.com/.default";
+    private const string AzureMonitorLogsScope = "https://api.loganalytics.io/.default";
     private const string DefaultMicrosoftAuthorityTenant = "organizations";
 
 
@@ -304,6 +305,14 @@ public static class ServiceConfiguration
                 builder.Configuration.GetSection(GitHubWorkflowMonitoringOptions.SectionName));
             builder.Services.Configure<OpenTelemetryOptions>(
                 builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
+            builder.Services.Configure<AzureMonitorLogsOptions>(options =>
+            {
+                var tenant = GetMicrosoftAuthorityTenant(builder.Configuration["Authentication:Microsoft:TenantId"]);
+                options.TokenEndpoint = $"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token";
+                options.ClientId = builder.Configuration["Authentication:Microsoft:ClientId"] ?? string.Empty;
+                options.ClientSecret = builder.Configuration["Authentication:Microsoft:ClientSecret"] ?? string.Empty;
+                options.Scope = AzureMonitorLogsScope;
+            });
 
             var hostingProfile = builder.Configuration.GetSection(HostingProfileOptions.SectionName)
                 .Get<HostingProfileOptions>() ?? new HostingProfileOptions();
@@ -543,7 +552,14 @@ public static class ServiceConfiguration
             services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
             services.AddHostedService<DeploymentJobWorker>();
             services.AddScoped<IAzureDeploymentOrchestrator, AzureDeploymentOrchestrator>();
-            services.AddScoped<IAzureContainerAppRuntimeStreamer, AzureContainerAppRuntimeStreamer>();
+            services.AddSingleton<AzureMonitorLogsTokenProvider>();
+            services.AddSingleton<IAzureMonitorLogsTokenProvider>(serviceProvider =>
+                serviceProvider.GetRequiredService<AzureMonitorLogsTokenProvider>());
+            services.AddSingleton<AzureContainerAppRuntimeStreamer>();
+            services.AddSingleton<IAzureContainerAppRuntimeStreamer>(serviceProvider =>
+                serviceProvider.GetRequiredService<AzureContainerAppRuntimeStreamer>());
+            services.AddHostedService(serviceProvider =>
+                serviceProvider.GetRequiredService<AzureContainerAppRuntimeStreamer>());
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
             services.AddHostedService<DeploymentCleanupHostedService>();
             services.AddSingleton<ILogStreamer, RealTimeLogStreamer>();

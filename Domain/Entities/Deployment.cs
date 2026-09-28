@@ -53,4 +53,7 @@ public class Deployment : BaseEntity
 
     /// <summary>Durable non-sensitive checkpoints for GitHub Actions diagnostic streaming.</summary>
     public ICollection<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints { get; set; } = [];
+
+    /// <summary>Durable non-sensitive cursors for Azure Container Apps runtime log streaming.</summary>
+    public ICollection<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints { get; set; } = [];
 }

@@ -314,6 +314,7 @@ public partial class Dashboard : ComponentBase, IDisposable
             {
                 await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
                 {
+                    RequestingUserId = _currentUserId,
                     Config = finalConfig,
                     Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
                     CsProjectName = cloudApp.Name,

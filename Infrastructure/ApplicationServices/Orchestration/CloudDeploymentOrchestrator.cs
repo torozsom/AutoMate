@@ -141,7 +141,14 @@ public sealed class CloudDeploymentOrchestrator(
             {
                 await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
                     $"GitHub Actions workflow completed successfully. Details: {workflowRun.HtmlUrl}");
-                azureContainerAppRuntimeStreamer.StartStreaming(request.AzureCredentials, config);
+                azureContainerAppRuntimeStreamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
+                {
+                    ProjectId = config.ProjectId,
+                    DeploymentId = deployment.Id,
+                    UserId = request.RequestingUserId,
+                    Config = config,
+                    AzureCredentials = request.AzureCredentials
+                });
             }
             else
             {

@@ -329,6 +329,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
             {
+                RequestingUserId = _currentUserId,
                 Config = finalConfig,
                 Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
                 CsProjectName = _app.Name,
@@ -743,7 +744,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
             _hubConnection.On<string, string>("ReceiveContainerLog", async (containerIdentifier, message) =>
             {
-                if (containerIdentifier == "web" && _webTerminal != null)
+                if ((containerIdentifier is "web" or "cloud-web") && _webTerminal != null)
                     await _webTerminal.WriteAsync(message);
                 else if (_dbTerminals.TryGetValue(containerIdentifier, out var dbTerminal))
                     await dbTerminal.WriteAsync(message);
