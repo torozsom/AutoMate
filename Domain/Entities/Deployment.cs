@@ -50,4 +50,7 @@ public class Deployment : BaseEntity
     ///     Gets or sets the revision of the deployed application in the cloud.
     /// </summary>
     public string? CloudContainerRevision { get; set; }
+
+    /// <summary>Durable non-sensitive checkpoints for GitHub Actions diagnostic streaming.</summary>
+    public ICollection<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints { get; set; } = [];
 }

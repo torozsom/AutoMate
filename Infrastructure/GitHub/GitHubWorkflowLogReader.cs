@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using Domain.DTO;
 
 namespace Infrastructure.GitHub;
 
@@ -13,24 +14,34 @@ internal static class GitHubWorkflowLogReader
     /// </summary>
     public static async Task<string?> ReadFlattenedLogsAsync(Stream zipStream, CancellationToken cancellationToken)
     {
-        await using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
         var builder = new StringBuilder();
 
-        foreach (var entry in archive.Entries
-                     .Where(e => !string.IsNullOrWhiteSpace(e.Name))
-                     .OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
+        foreach (var entry in await ReadEntriesAsync(zipStream, cancellationToken))
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
             builder.AppendLine();
-            builder.AppendLine($"===== {entry.FullName} =====");
-
-            await using var entryStream = await entry.OpenAsync(cancellationToken);
-            using var reader = new StreamReader(entryStream, Encoding.UTF8, true);
-            var content = await reader.ReadToEndAsync(cancellationToken);
-            builder.AppendLine(content);
+            builder.AppendLine($"===== {entry.Path} =====");
+            builder.AppendLine(entry.Content);
         }
 
         return builder.Length == 0 ? null : builder.ToString();
+    }
+
+    /// <summary>Reads stable archive entry names alongside their log content for selective reconciliation.</summary>
+    public static async Task<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>> ReadEntriesAsync(Stream zipStream,
+        CancellationToken cancellationToken)
+    {
+        await using var archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+        var entries = new List<GitHubWorkflowLogArchiveEntryDto>();
+        foreach (var entry in archive.Entries.Where(item => !string.IsNullOrWhiteSpace(item.Name))
+                     .OrderBy(item => item.FullName, StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var entryStream = await entry.OpenAsync(cancellationToken);
+            using var reader = new StreamReader(entryStream, Encoding.UTF8, true);
+            entries.Add(new GitHubWorkflowLogArchiveEntryDto(entry.FullName,
+                await reader.ReadToEndAsync(cancellationToken)));
+        }
+
+        return entries;
     }
 }
