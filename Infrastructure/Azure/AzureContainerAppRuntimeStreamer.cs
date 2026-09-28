@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using Application.Abstractions.Azure;
-using Application.Abstractions.Logging;
+using Application.Abstractions.Diagnostics;
 using Domain.DTO;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +10,7 @@ namespace Infrastructure.Azure;
 ///     Polls Azure Container Apps runtime state and metrics and publishes updates through SignalR.
 /// </summary>
 public sealed class AzureContainerAppRuntimeStreamer(
-    ILogStreamer logStreamer,
+    IDeploymentDiagnosticPublisher diagnostics,
     IHttpClientFactory httpClientFactory,
     ILogger<AzureContainerAppRuntimeStreamer> logger) : IAzureContainerAppRuntimeStreamer
 {
@@ -88,15 +88,23 @@ public sealed class AzureContainerAppRuntimeStreamer(
                     lastRevision = state.LatestRevision;
                     lastFqdn = state.Fqdn;
 
-                    await logStreamer.StreamContainerLogsAsync(target.ProjectId, CloudWebContainerName,
-                        CreateAvailabilityMessage(state));
+                    await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, null,
+                        DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Lifecycle,
+                        DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, CreateAvailabilityMessage(state),
+                        new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, CloudWebContainerName),
+                        new Dictionary<string, string> { ["revision"] = state.LatestRevision } ), cancellationToken);
                 }
 
                 var metrics = await _containerAppClient.GetMetricsAsync(target.ResourceId, target.AccessToken,
                     cancellationToken);
                 if (metrics != null)
-                    await logStreamer.StreamContainerMetricsAsync(target.ProjectId, CloudWebContainerName, metrics.Cpu,
-                        metrics.Memory);
+                    await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, null,
+                        DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
+                        DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
+                        $"Azure Container Apps metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
+                        new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, CloudWebContainerName),
+                        new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory }),
+                        cancellationToken);
 
                 await Task.Delay(PollInterval, cancellationToken);
             }

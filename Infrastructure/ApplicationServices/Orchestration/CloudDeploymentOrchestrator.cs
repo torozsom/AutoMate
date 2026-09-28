@@ -1,7 +1,7 @@
 using Application.Abstractions.Azure;
 using Application.Abstractions.GitHub;
 using Application.Abstractions.Hosting;
-using Application.Abstractions.Logging;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Templating;
 using Domain.DTO;
 using Domain.Entities;
@@ -21,7 +21,7 @@ public sealed class CloudDeploymentOrchestrator(
     IAzureDeploymentOrchestrator azureDeploymentOrchestrator,
     IAzureContainerAppRuntimeStreamer azureContainerAppRuntimeStreamer,
     IDeploymentCapabilities capabilities,
-    ILogStreamer logStreamer,
+    IDeploymentDiagnosticPublisher diagnostics,
     ILogger<CloudDeploymentOrchestrator> logger,
     IDeploymentStatusNotifier statusNotifier)
     : ICloudDeploymentOrchestrator
@@ -40,7 +40,7 @@ public sealed class CloudDeploymentOrchestrator(
     /// <summary>
     ///     Polls GitHub Actions and streams cloud deployment logs.
     /// </summary>
-    private readonly GitHubWorkflowMonitor _workflowMonitor = new(gitHubService, logStreamer, logger);
+    private readonly GitHubWorkflowMonitor _workflowMonitor = new(gitHubService, diagnostics, logger);
 
     /// <inheritdoc />
     public async Task<Deployment> DeployCloudProjectAsync(CloudDeploymentRequestDto request,

@@ -2,6 +2,9 @@
 
 GitHub API infrastructure adapter implementation.
 
+GitHub workflow state and completed-run archive output are normalized into deployment diagnostics before terminal
+delivery. Incremental job-log checkpoints remain a subsequent ingestion milestone.
+
 ## Source inventory
 
 - `GitHubApiRequestFactory.cs`

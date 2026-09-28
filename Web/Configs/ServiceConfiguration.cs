@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using Application.Abstractions.Azure;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Email;
 using Application.Abstractions.GitHub;
@@ -13,9 +14,11 @@ using Application.Auth;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Application.Orchestration;
+using Application.Diagnostics;
 using Domain.Entities;
 using Infrastructure.Azure;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics;
 using Infrastructure.Docker;
 using Infrastructure.Email;
 using Infrastructure.GitHub;
@@ -29,6 +32,10 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Web.Extensions;
 using Web.Services;
 
@@ -262,6 +269,9 @@ public static class ServiceConfiguration
             // Bind Strongly-Typed Configurations
             var deploymentCapabilities = builder.AddConfigurations();
 
+            // Add operational telemetry before registering deployment adapters.
+            builder.AddObservability();
+
             // Add Infrastructure (DB, Redis, Clients)
             builder.AddInfrastructure();
 
@@ -288,6 +298,10 @@ public static class ServiceConfiguration
         {
             builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
             builder.Services.Configure<DockerOptions>(builder.Configuration.GetSection(DockerOptions.SectionName));
+            builder.Services.Configure<DeploymentDiagnosticOptions>(
+                builder.Configuration.GetSection(DeploymentDiagnosticOptions.SectionName));
+            builder.Services.Configure<OpenTelemetryOptions>(
+                builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
 
             var hostingProfile = builder.Configuration.GetSection(HostingProfileOptions.SectionName)
                 .Get<HostingProfileOptions>() ?? new HostingProfileOptions();
@@ -295,6 +309,51 @@ public static class ServiceConfiguration
             builder.Services.AddSingleton(capabilities);
             builder.Services.AddSingleton<IDeploymentCapabilities>(capabilities);
             return capabilities;
+        }
+
+
+        /// <summary>Registers OpenTelemetry for AutoMate's own requests, providers, and deployment diagnostics.</summary>
+        private void AddObservability()
+        {
+            var options = builder.Configuration.GetSection(OpenTelemetryOptions.SectionName)
+                .Get<OpenTelemetryOptions>() ?? new OpenTelemetryOptions();
+            var exportConsole = options.ExportConsole || builder.Environment.IsDevelopment();
+            var hasOtlpEndpoint = Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out var otlpEndpoint);
+            var serviceVersion = typeof(ServiceConfiguration).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+            builder.Logging.AddOpenTelemetry(logging =>
+            {
+                logging.IncludeFormattedMessage = true;
+                logging.IncludeScopes = true;
+                if (exportConsole) logging.AddConsoleExporter();
+                if (hasOtlpEndpoint) logging.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint);
+            });
+
+            builder.Services.AddOpenTelemetry()
+                .ConfigureResource(resource => resource
+                    .AddService(options.ServiceName, serviceVersion: serviceVersion)
+                    .AddAttributes([
+                        new KeyValuePair<string, object>("deployment.environment",
+                            options.Environment ?? builder.Environment.EnvironmentName)
+                    ]))
+                .WithTracing(tracing =>
+                {
+                    tracing.AddAspNetCoreInstrumentation();
+                    tracing.AddHttpClientInstrumentation();
+                    tracing.AddEntityFrameworkCoreInstrumentation();
+                    tracing.AddSource(AutoMateTelemetry.Deployments.Name);
+                    if (exportConsole) tracing.AddConsoleExporter();
+                    if (hasOtlpEndpoint) tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint);
+                })
+                .WithMetrics(metrics =>
+                {
+                    metrics.AddAspNetCoreInstrumentation();
+                    metrics.AddHttpClientInstrumentation();
+                    metrics.AddRuntimeInstrumentation();
+                    metrics.AddMeter(AutoMateTelemetry.Meter.Name);
+                    if (exportConsole) metrics.AddConsoleExporter();
+                    if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint);
+                });
         }
 
 
@@ -485,7 +544,12 @@ public static class ServiceConfiguration
             services.AddScoped<IAzureContainerAppRuntimeStreamer, AzureContainerAppRuntimeStreamer>();
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
             services.AddHostedService<DeploymentCleanupHostedService>();
-            services.AddScoped<ILogStreamer, RealTimeLogStreamer>();
+            services.AddSingleton<ILogStreamer, RealTimeLogStreamer>();
+            services.AddSingleton<IDiagnosticRedactor, DiagnosticRedactor>();
+            services.AddSingleton<DeploymentDiagnosticPublisher>();
+            services.AddSingleton<IDeploymentDiagnosticPublisher>(serviceProvider =>
+                serviceProvider.GetRequiredService<DeploymentDiagnosticPublisher>());
+            services.AddHostedService<DeploymentDiagnosticDispatcher>();
 
             // Business & Utilities
             services.AddScoped<IApplicationService, ApplicationService>();

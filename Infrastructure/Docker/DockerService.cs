@@ -1,8 +1,8 @@
 using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Text;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
-using Application.Abstractions.Logging;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
@@ -48,7 +48,8 @@ public sealed class DockerService : IDockerService, IDisposable
     /// <summary>
     ///     Initializes Docker daemon and CLI helpers using platform-specific Docker connection settings.
     /// </summary>
-    public DockerService(ILogger<DockerService> logger, ILogStreamer logStreamer, IOptions<DockerOptions> options)
+    public DockerService(ILogger<DockerService> logger, IDeploymentDiagnosticPublisher diagnostics,
+        IOptions<DockerOptions> options)
     {
         _logger = logger;
         _options = options.Value;
@@ -59,7 +60,7 @@ public sealed class DockerService : IDockerService, IDisposable
 
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
         _buildContextArchive = new DockerBuildContextArchive(_options, _logger);
-        _dockerCli = new DockerCli(_options, logStreamer, _logger);
+        _dockerCli = new DockerCli(_options, diagnostics, _logger);
     }
 
     /// <inheritdoc />
