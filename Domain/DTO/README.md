@@ -13,6 +13,7 @@ Shared data-transfer records used by application workflows and adapters.
 - `DeploymentConfigDto.cs`
 - `GitHubRepositoryDto.cs`
 - `GitHubWorkflowRunDto.cs`
+- `GitHubWorkflowJobDto.cs`
 - `LocalProjectDto.cs`
 - `ProjectMetadataDto.cs`
 - `TemplateFile.cs`

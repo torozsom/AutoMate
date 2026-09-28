@@ -10,6 +10,9 @@ public record GitHubWorkflowRunDto
     /// </summary>
     public long Id { get; init; }
 
+    /// <summary>The GitHub run attempt number, incremented when the workflow is re-run.</summary>
+    public int Attempt { get; init; } = 1;
+
     /// <summary>
     ///     The workflow status reported by GitHub, such as queued, in_progress, or completed.
     /// </summary>

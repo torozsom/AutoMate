@@ -2,8 +2,10 @@
 
 GitHub API infrastructure adapter implementation.
 
-GitHub workflow state and completed-run archive output are normalized into deployment diagnostics before terminal
-delivery. Incremental job-log checkpoints remain a subsequent ingestion milestone.
+GitHub workflow, job, and step state are normalized into deployment diagnostics while the run is active. Completed job
+logs are fetched through GitHub's supported job-log endpoint, normalized and redacted before terminal delivery, and
+deduplicated across restarts with non-sensitive persisted checkpoints. The final run archive is used only to reconcile
+jobs whose individual log was unavailable.
 
 ## Source inventory
 
@@ -13,6 +15,10 @@ delivery. Incremental job-log checkpoints remain a subsequent ingestion mileston
 - `GitHubSecretEncryptor.cs`
 - `GitHubService.cs`
 - `GitHubWorkflowLogReader.cs`
+- `GitHubWorkflowLogNormalizer.cs`
+- `GitHubWorkflowJobMapper.cs`
+- `GitHubWorkflowJobModels.cs`
+- `GitHubWorkflowCheckpointStore.cs`
 - `GitHubWorkflowRunMapper.cs`
 - `GitHubWorkflowRunModels.cs`
 

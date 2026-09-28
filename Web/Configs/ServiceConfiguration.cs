@@ -300,6 +300,8 @@ public static class ServiceConfiguration
             builder.Services.Configure<DockerOptions>(builder.Configuration.GetSection(DockerOptions.SectionName));
             builder.Services.Configure<DeploymentDiagnosticOptions>(
                 builder.Configuration.GetSection(DeploymentDiagnosticOptions.SectionName));
+            builder.Services.Configure<GitHubWorkflowMonitoringOptions>(
+                builder.Configuration.GetSection(GitHubWorkflowMonitoringOptions.SectionName));
             builder.Services.Configure<OpenTelemetryOptions>(
                 builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
 
@@ -326,7 +328,7 @@ public static class ServiceConfiguration
                 logging.IncludeFormattedMessage = true;
                 logging.IncludeScopes = true;
                 if (exportConsole) logging.AddConsoleExporter();
-                if (hasOtlpEndpoint) logging.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint);
+                if (hasOtlpEndpoint) logging.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
             });
 
             builder.Services.AddOpenTelemetry()
@@ -343,7 +345,7 @@ public static class ServiceConfiguration
                     tracing.AddEntityFrameworkCoreInstrumentation();
                     tracing.AddSource(AutoMateTelemetry.Deployments.Name);
                     if (exportConsole) tracing.AddConsoleExporter();
-                    if (hasOtlpEndpoint) tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint);
+                    if (hasOtlpEndpoint) tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
                 })
                 .WithMetrics(metrics =>
                 {
@@ -352,7 +354,7 @@ public static class ServiceConfiguration
                     metrics.AddRuntimeInstrumentation();
                     metrics.AddMeter(AutoMateTelemetry.Meter.Name);
                     if (exportConsole) metrics.AddConsoleExporter();
-                    if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint);
+                    if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
                 });
         }
 

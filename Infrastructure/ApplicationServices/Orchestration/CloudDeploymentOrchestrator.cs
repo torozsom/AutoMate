@@ -8,6 +8,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Application.Orchestration;
 
@@ -22,6 +23,8 @@ public sealed class CloudDeploymentOrchestrator(
     IAzureContainerAppRuntimeStreamer azureContainerAppRuntimeStreamer,
     IDeploymentCapabilities capabilities,
     IDeploymentDiagnosticPublisher diagnostics,
+    IDiagnosticRedactor redactor,
+    IOptions<GitHubWorkflowMonitoringOptions> workflowMonitoringOptions,
     ILogger<CloudDeploymentOrchestrator> logger,
     IDeploymentStatusNotifier statusNotifier)
     : ICloudDeploymentOrchestrator
@@ -40,7 +43,8 @@ public sealed class CloudDeploymentOrchestrator(
     /// <summary>
     ///     Polls GitHub Actions and streams cloud deployment logs.
     /// </summary>
-    private readonly GitHubWorkflowMonitor _workflowMonitor = new(gitHubService, diagnostics, logger);
+    private readonly GitHubWorkflowMonitor _workflowMonitor = new(dbContext, gitHubService, diagnostics, redactor,
+        workflowMonitoringOptions.Value);
 
     /// <inheritdoc />
     public async Task<Deployment> DeployCloudProjectAsync(CloudDeploymentRequestDto request,
@@ -116,7 +120,8 @@ public sealed class CloudDeploymentOrchestrator(
             await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
                 cancellationToken);
 
-            var workflowRun = await _workflowMonitor.PollWorkflowRunAsync(request, commitSha, cancellationToken);
+            var workflowRun = await _workflowMonitor.PollWorkflowRunAsync(request, deployment, commitSha,
+                cancellationToken);
             if (workflowRun != null)
             {
                 deployment.CloudGitHubActionRunId = workflowRun.Id;
@@ -130,16 +135,12 @@ public sealed class CloudDeploymentOrchestrator(
                     cancellationToken);
                 await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
                     $"GitHub Actions workflow failed. Details: {workflowRun.HtmlUrl}");
-                await _workflowMonitor.StreamWorkflowLogsAsync(request, workflowRun.Id, config.ProjectId,
-                    cancellationToken);
             }
             else if (workflowRun is { Status: "completed" } &&
                      string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
             {
                 await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
                     $"GitHub Actions workflow completed successfully. Details: {workflowRun.HtmlUrl}");
-                await _workflowMonitor.StreamWorkflowLogsAsync(request, workflowRun.Id, config.ProjectId,
-                    cancellationToken);
                 azureContainerAppRuntimeStreamer.StartStreaming(request.AzureCredentials, config);
             }
             else

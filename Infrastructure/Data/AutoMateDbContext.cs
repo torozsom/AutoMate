@@ -87,6 +87,12 @@ public class AutoMateDbContext(
     /// </summary>
     public DbSet<Deployment> Deployments => Set<Deployment>();
 
+    /// <summary>Durable checkpoints for GitHub Actions diagnostic streaming.</summary>
+    public DbSet<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints => Set<GitHubWorkflowCheckpoint>();
+
+    /// <summary>Per-job diagnostic checkpoints belonging to GitHub Actions workflow runs.</summary>
+    public DbSet<GitHubWorkflowJobCheckpoint> GitHubWorkflowJobCheckpoints => Set<GitHubWorkflowJobCheckpoint>();
+
     /// <summary>
     ///     Gets or sets the collection of DataProtectionKey entities in the database.
     ///     Required for distributed data protection (e.g., across Docker containers).
@@ -106,6 +112,7 @@ public class AutoMateDbContext(
         ConfigureRemoteUser(modelBuilder.Entity<RemoteUser>());
         ConfigureApplication(modelBuilder.Entity<Domain.Entities.Application>());
         ConfigureCsProject(modelBuilder.Entity<CsProject>());
+        ConfigureGitHubWorkflowCheckpoints(modelBuilder);
     }
 
 
@@ -228,6 +235,35 @@ public class AutoMateDbContext(
         entity.HasMany(csp => csp.Deployments)
             .WithOne(d => d.CsProject)
             .HasForeignKey(d => d.CsProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>Configures durable GitHub workflow/job stream checkpoints without retaining raw diagnostic text.</summary>
+    private static void ConfigureGitHubWorkflowCheckpoints(ModelBuilder modelBuilder)
+    {
+        var workflow = modelBuilder.Entity<GitHubWorkflowCheckpoint>();
+        workflow.HasIndex(checkpoint => new
+        {
+            checkpoint.DeploymentId,
+            checkpoint.WorkflowRunId,
+            checkpoint.WorkflowAttempt
+        }).IsUnique();
+        workflow.Property(checkpoint => checkpoint.LastWorkflowStateFingerprint).HasMaxLength(128);
+        workflow.HasOne(checkpoint => checkpoint.Deployment)
+            .WithMany(deployment => deployment.GitHubWorkflowCheckpoints)
+            .HasForeignKey(checkpoint => checkpoint.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var job = modelBuilder.Entity<GitHubWorkflowJobCheckpoint>();
+        job.HasIndex(checkpoint => new { checkpoint.GitHubWorkflowCheckpointId, checkpoint.JobId }).IsUnique();
+        job.Property(checkpoint => checkpoint.JobName).HasMaxLength(512).IsRequired();
+        job.Property(checkpoint => checkpoint.LastStateFingerprint).HasMaxLength(128);
+        job.Property(checkpoint => checkpoint.LastLogPrefixHash).HasMaxLength(128);
+        job.Property(checkpoint => checkpoint.LastLogContentHash).HasMaxLength(128);
+        job.Property(checkpoint => checkpoint.FinalArchiveContentHash).HasMaxLength(128);
+        job.HasOne(checkpoint => checkpoint.WorkflowCheckpoint)
+            .WithMany(checkpoint => checkpoint.JobCheckpoints)
+            .HasForeignKey(checkpoint => checkpoint.GitHubWorkflowCheckpointId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 

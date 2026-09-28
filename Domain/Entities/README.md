@@ -9,6 +9,8 @@ Persisted business entities with no EF Core or transport dependencies.
 - `Configuration.cs`
 - `CsProject.cs`
 - `Deployment.cs`
+- `GitHubWorkflowCheckpoint.cs`
+- `GitHubWorkflowJobCheckpoint.cs`
 - `LocalUser.cs`
 - `RemoteUser.cs`
 - `User.cs`

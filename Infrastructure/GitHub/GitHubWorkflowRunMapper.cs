@@ -44,6 +44,7 @@ internal static class GitHubWorkflowRunMapper
         return new GitHubWorkflowRunDto
         {
             Id = run.Id,
+            Attempt = Math.Max(1, run.Attempt),
             Status = run.Status,
             Conclusion = run.Conclusion,
             HtmlUrl = run.HtmlUrl,
