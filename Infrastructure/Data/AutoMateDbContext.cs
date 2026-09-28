@@ -93,6 +93,9 @@ public class AutoMateDbContext(
     /// <summary>Per-job diagnostic checkpoints belonging to GitHub Actions workflow runs.</summary>
     public DbSet<GitHubWorkflowJobCheckpoint> GitHubWorkflowJobCheckpoints => Set<GitHubWorkflowJobCheckpoint>();
 
+    /// <summary>Durable checkpoints for Azure Container Apps console and system log streaming.</summary>
+    public DbSet<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints => Set<AzureContainerAppLogCheckpoint>();
+
     /// <summary>
     ///     Gets or sets the collection of DataProtectionKey entities in the database.
     ///     Required for distributed data protection (e.g., across Docker containers).
@@ -113,6 +116,7 @@ public class AutoMateDbContext(
         ConfigureApplication(modelBuilder.Entity<Domain.Entities.Application>());
         ConfigureCsProject(modelBuilder.Entity<CsProject>());
         ConfigureGitHubWorkflowCheckpoints(modelBuilder);
+        ConfigureAzureContainerAppLogCheckpoints(modelBuilder);
     }
 
 
@@ -264,6 +268,19 @@ public class AutoMateDbContext(
         job.HasOne(checkpoint => checkpoint.WorkflowCheckpoint)
             .WithMany(checkpoint => checkpoint.JobCheckpoints)
             .HasForeignKey(checkpoint => checkpoint.GitHubWorkflowCheckpointId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>Configures durable, non-sensitive Azure Container Apps log-tail cursors.</summary>
+    private static void ConfigureAzureContainerAppLogCheckpoints(ModelBuilder modelBuilder)
+    {
+        var checkpoint = modelBuilder.Entity<AzureContainerAppLogCheckpoint>();
+        checkpoint.HasIndex(item => new { item.DeploymentId, item.Source }).IsUnique();
+        checkpoint.Property(item => item.Source).HasMaxLength(32).IsRequired();
+        checkpoint.Property(item => item.LastTieBreaker).HasMaxLength(128);
+        checkpoint.HasOne(item => item.Deployment)
+            .WithMany(deployment => deployment.AzureContainerAppLogCheckpoints)
+            .HasForeignKey(item => item.DeploymentId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 

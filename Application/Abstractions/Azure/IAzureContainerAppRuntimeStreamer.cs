@@ -10,5 +10,5 @@ public interface IAzureContainerAppRuntimeStreamer
     /// <summary>
     ///     Starts background streaming for a cloud deployment's Container App.
     /// </summary>
-    void StartStreaming(AzureCloudCredentialsDto credentials, DeploymentConfigDto config);
+    void StartStreaming(AzureContainerAppRuntimeStreamRequest request);
 }

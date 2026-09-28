@@ -5,6 +5,7 @@ Shared data-transfer records used by application workflows and adapters.
 ## Source inventory
 
 - `AzureCloudCredentialsDto.cs`
+- `AzureContainerAppRuntimeStreamRequest.cs`
 - `AzureOidcSetupResultDto.cs`
 - `CloudDeploymentRequestDto.cs`
 - `CsProjectDto.cs`

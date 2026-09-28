@@ -5,6 +5,7 @@ Persisted business entities with no EF Core or transport dependencies.
 ## Source inventory
 
 - `Application.cs`
+- `AzureContainerAppLogCheckpoint.cs`
 - `BaseEntity.cs`
 - `Configuration.cs`
 - `CsProject.cs`
