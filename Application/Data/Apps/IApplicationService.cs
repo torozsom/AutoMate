@@ -65,4 +65,7 @@ public interface IApplicationService
     /// <returns>A task that returns the project if found, or null if not found.</returns>
     Task<Domain.Entities.Application?> GetAppByIdAsync(Guid projectId, Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<bool> SetAiDiagnosticEgressConsentAsync(Guid projectId, Guid userId, bool consented,
+        CancellationToken cancellationToken = default);
 }

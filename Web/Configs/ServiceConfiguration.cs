@@ -2,6 +2,8 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using Application.Abstractions.Azure;
+using Application.Abstractions.Ai;
+using Application.Ai;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Email;
@@ -17,6 +19,7 @@ using Application.Orchestration;
 using Application.Diagnostics;
 using Domain.Entities;
 using Infrastructure.Azure;
+using Infrastructure.Ai;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
 using Infrastructure.Docker;
@@ -305,6 +308,8 @@ public static class ServiceConfiguration
                 builder.Configuration.GetSection(GitHubWorkflowMonitoringOptions.SectionName));
             builder.Services.Configure<OpenTelemetryOptions>(
                 builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
+            builder.Services.Configure<AiAnalysisOptions>(
+                builder.Configuration.GetSection(AiAnalysisOptions.SectionName));
             builder.Services.Configure<AzureMonitorLogsOptions>(options =>
             {
                 var tenant = GetMicrosoftAuthorityTenant(builder.Configuration["Authentication:Microsoft:TenantId"]);
@@ -391,6 +396,12 @@ public static class ServiceConfiguration
             // External API Clients with Resilience
             services.AddHttpClient<IGitHubService, GitHubService>()
                 .AddStandardResilienceHandler();
+            services.AddHttpClient<ILlmAnalysisProvider, OpenAiAnalysisProvider>()
+                .AddStandardResilienceHandler();
+            services.AddScoped<IDeploymentDiagnosticStore, DeploymentDiagnosticStore>();
+            services.AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>();
+            services.AddScoped<IDeploymentAnalysisQueue, DeploymentAnalysisQueue>();
+            services.AddHostedService<DeploymentAnalysisWorker>();
         }
 
 

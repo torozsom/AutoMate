@@ -9,8 +9,14 @@ public sealed class AiDeploymentAnalysis : BaseEntity
     public Deployment Deployment { get; set; } = null!;
     public AiAnalysisTrigger Trigger { get; set; }
     public AiAnalysisStatus Status { get; set; }
-    public string? Result { get; set; }
-    public string? FailureReason { get; set; }
+    public string Provider { get; set; } = string.Empty;
+    public string Model { get; set; } = string.Empty;
+    public string IdempotencyKey { get; set; } = string.Empty;
+    public int RetryCount { get; set; }
+    public string? Summary { get; set; }
+    public string? RecommendedStepsJson { get; set; }
+    public string? EvidenceReferencesJson { get; set; }
+    public string? FailureCode { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }

@@ -87,6 +87,12 @@ public class AutoMateDbContext(
     /// </summary>
     public DbSet<Deployment> Deployments => Set<Deployment>();
 
+    public DbSet<DeploymentDiagnosticRecord> DeploymentDiagnosticRecords => Set<DeploymentDiagnosticRecord>();
+
+    public DbSet<AiDeploymentAnalysis> AiDeploymentAnalyses => Set<AiDeploymentAnalysis>();
+
+    public DbSet<DeploymentAnalysisWorkItem> DeploymentAnalysisWorkItems => Set<DeploymentAnalysisWorkItem>();
+
     /// <summary>Durable checkpoints for GitHub Actions diagnostic streaming.</summary>
     public DbSet<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints => Set<GitHubWorkflowCheckpoint>();
 
@@ -117,6 +123,7 @@ public class AutoMateDbContext(
         ConfigureCsProject(modelBuilder.Entity<CsProject>());
         ConfigureGitHubWorkflowCheckpoints(modelBuilder);
         ConfigureAzureContainerAppLogCheckpoints(modelBuilder);
+        ConfigureDeploymentDiagnosticsAndAnalyses(modelBuilder);
     }
 
 
@@ -281,6 +288,36 @@ public class AutoMateDbContext(
         checkpoint.HasOne(item => item.Deployment)
             .WithMany(deployment => deployment.AzureContainerAppLogCheckpoints)
             .HasForeignKey(item => item.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureDeploymentDiagnosticsAndAnalyses(ModelBuilder modelBuilder)
+    {
+        var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
+        diagnostic.HasIndex(item => new { item.DeploymentId, item.TimestampUtc, item.Sequence });
+        diagnostic.HasIndex(item => item.ExpiresAt);
+        diagnostic.Property(item => item.Source).HasMaxLength(64).IsRequired();
+        diagnostic.Property(item => item.Kind).HasMaxLength(64).IsRequired();
+        diagnostic.Property(item => item.Severity).HasMaxLength(32).IsRequired();
+        diagnostic.Property(item => item.Message).IsRequired();
+        diagnostic.HasOne(item => item.Deployment).WithMany(deployment => deployment.DiagnosticRecords)
+            .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+
+        var analysis = modelBuilder.Entity<AiDeploymentAnalysis>();
+        analysis.HasIndex(item => item.IdempotencyKey).IsUnique();
+        analysis.HasIndex(item => new { item.DeploymentId, item.CreatedAt });
+        analysis.HasIndex(item => item.ExpiresAt);
+        analysis.Property(item => item.Provider).HasMaxLength(100).IsRequired();
+        analysis.Property(item => item.Model).HasMaxLength(100).IsRequired();
+        analysis.Property(item => item.IdempotencyKey).HasMaxLength(128).IsRequired();
+        analysis.Property(item => item.FailureCode).HasMaxLength(100);
+        analysis.HasOne(item => item.Deployment).WithMany(deployment => deployment.AiAnalyses)
+            .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+
+        var work = modelBuilder.Entity<DeploymentAnalysisWorkItem>();
+        work.HasIndex(item => item.AnalysisId).IsUnique();
+        work.HasIndex(item => new { item.CompletedAt, item.ClaimedAt });
+        work.HasOne(item => item.Analysis).WithOne().HasForeignKey<DeploymentAnalysisWorkItem>(item => item.AnalysisId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 

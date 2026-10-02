@@ -1,5 +1,6 @@
 using System.Globalization;
 using Application.Abstractions.Docker;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
@@ -85,6 +86,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
     private string? _workflowUrl;
+    private DeploymentAnalysisView? _latestAnalysis;
+    private string? _analysisMessage;
+    private bool _isRequestingAnalysis;
 
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
@@ -133,6 +137,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// The logger used to log information and errors related to the project details component.
     [Inject]
     private ILogger<ProjectDetails> Logger { get; set; } = null!;
+
+    [Inject]
+    private IDeploymentAnalysisService DeploymentAnalysisService { get; set; } = null!;
 
 
     /// <summary>
@@ -368,6 +375,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_currentUserId != Guid.Empty)
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
+            await RefreshLatestAnalysisAsync();
 
             if (_app is { SourceType: SourceType.Local })
             {
@@ -482,9 +490,38 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_currentUserId != Guid.Empty)
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
+            await RefreshLatestAnalysisAsync();
             await UpdateWebHostPortAsync(resolveWebPortWithRetry ? 6 : 1);
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private async Task RequestAnalysisAsync()
+    {
+        var deployment = GetLatestDeployment();
+        if (deployment is null) return;
+        _isRequestingAnalysis = true;
+        var result = await DeploymentAnalysisService.RequestManualAsync(_currentUserId, deployment.Id);
+        _analysisMessage = result.Message;
+        _latestAnalysis = result.Analysis ?? await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
+        _isRequestingAnalysis = false;
+    }
+
+    private async Task SetAiConsentAsync(ChangeEventArgs args)
+    {
+        var consented = args.Value is bool value && value;
+        if (await ApplicationService.SetAiDiagnosticEgressConsentAsync(ProjectId, _currentUserId, consented))
+        {
+            var configuration = GetPrimaryWebProject()?.Configuration;
+            if (configuration is not null) configuration.AiDiagnosticEgressConsented = consented;
+            _analysisMessage = consented ? "AI diagnostic egress enabled for this project." : "AI diagnostic egress disabled.";
+        }
+    }
+
+    private async Task RefreshLatestAnalysisAsync()
+    {
+        var deployment = GetLatestDeployment();
+        _latestAnalysis = deployment is null ? null : await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
     }
 
 

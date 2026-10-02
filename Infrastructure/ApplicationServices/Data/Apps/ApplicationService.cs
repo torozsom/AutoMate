@@ -170,6 +170,18 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
             .FirstOrDefaultAsync(a => a.Id == appId && a.UserId == userId, cancellationToken);
     }
 
+    public async Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, bool consented,
+        CancellationToken cancellationToken = default)
+    {
+        var configuration = await context.Applications.Where(item => item.Id == appId && item.UserId == userId)
+            .SelectMany(item => item.CsProjects).Select(item => item.Configuration)
+            .FirstOrDefaultAsync(item => item != null, cancellationToken);
+        if (configuration is null) return false;
+        configuration.AiDiagnosticEgressConsented = consented;
+        await context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
 
     /// <summary>
     ///     Builds the reusable read query for applications with projects and deployment history.
@@ -178,6 +190,8 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     {
         return context.Applications
             .AsNoTracking()
+            .Include(a => a.CsProjects)
+            .ThenInclude(csp => csp.Configuration)
             .Include(a => a.CsProjects)
             .ThenInclude(csp => csp.Deployments)
             .AsSingleQuery();

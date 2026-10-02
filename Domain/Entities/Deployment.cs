@@ -56,4 +56,7 @@ public class Deployment : BaseEntity
 
     /// <summary>Durable non-sensitive cursors for Azure Container Apps runtime log streaming.</summary>
     public ICollection<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints { get; set; } = [];
+
+    public ICollection<AiDeploymentAnalysis> AiAnalyses { get; set; } = [];
+    public ICollection<DeploymentDiagnosticRecord> DiagnosticRecords { get; set; } = [];
 }

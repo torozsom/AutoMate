@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.Threading.Channels;
 using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -75,6 +77,7 @@ public sealed class DeploymentDiagnosticPublisher(
 public sealed class DeploymentDiagnosticDispatcher(
     DeploymentDiagnosticPublisher publisher,
     ILogStreamer logStreamer,
+    IServiceScopeFactory scopeFactory,
     ILogger<DeploymentDiagnosticDispatcher> logger) : BackgroundService
 {
     /// <inheritdoc />
@@ -84,6 +87,9 @@ public sealed class DeploymentDiagnosticDispatcher(
         {
             try
             {
+                await using var persistenceScope = scopeFactory.CreateAsyncScope();
+                await persistenceScope.ServiceProvider.GetRequiredService<IDeploymentDiagnosticStore>()
+                    .PersistAsync(diagnosticEvent, stoppingToken);
                 using var activity = StartDeliveryActivity(diagnosticEvent);
                 using var scope = logger.BeginScope(new Dictionary<string, object?>
                 {
