@@ -34,6 +34,12 @@ window.xtermWrapper = {
         }
     },
 
+    clear: function (elementId) {
+        if (this.terminals[elementId]) {
+            this.terminals[elementId].term.reset();
+        }
+    },
+
     dispose: function (elementId) {
         if (this.terminals[elementId]) {
             this.terminals[elementId].resizeObserver.disconnect();

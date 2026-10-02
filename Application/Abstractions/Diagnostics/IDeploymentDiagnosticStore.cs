@@ -3,7 +3,13 @@ namespace Application.Abstractions.Diagnostics;
 /// <summary>Persists redacted deployment diagnostics and builds bounded, safe diagnostic context.</summary>
 public interface IDeploymentDiagnosticStore
 {
-    Task PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken cancellationToken = default);
+    Task<long> PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, string? terminalChannel,
+        CancellationToken cancellationToken = default);
+
+    Task<DeploymentTerminalHistory> ReadRecentAsync(Guid projectId, Guid deploymentId, int limit,
+        CancellationToken cancellationToken = default);
+
+    Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default);
 
     Task<string> BuildContextAsync(Guid deploymentId, int maximumCharacters,
         CancellationToken cancellationToken = default);

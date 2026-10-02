@@ -57,6 +57,9 @@ public sealed class GitHubWorkflowMonitorTests
             RepositoryName = "sample"
         };
 
+        await monitor.StreamBuildLogAsync(deployment.Id, request.Config.ProjectId, "preparation");
+        publisher.Events.Single().DeploymentId.Should().Be(deployment.Id);
+
         var run = await monitor.PollWorkflowRunAsync(request, deployment, "commit", CancellationToken.None);
 
         run!.Status.Should().Be("completed");

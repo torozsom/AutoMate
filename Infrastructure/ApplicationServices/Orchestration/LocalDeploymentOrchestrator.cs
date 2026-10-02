@@ -195,6 +195,7 @@ public sealed class LocalDeploymentOrchestrator(
 
         var isDockerSuccess =
             await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName, config.ProjectId,
+                deployment.Id,
                 cancellationToken);
 
         if (!isDockerSuccess)
@@ -207,6 +208,6 @@ public sealed class LocalDeploymentOrchestrator(
         await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
             cancellationToken);
 
-        _logStreamManager.Start(config, csProject);
+        _logStreamManager.Start(config, csProject, deployment.Id);
     }
 }

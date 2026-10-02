@@ -1,3 +1,4 @@
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Logging;
 using Microsoft.AspNetCore.SignalR;
 using Web.Hubs;
@@ -11,14 +12,20 @@ namespace Web.Services;
 public sealed class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : ILogStreamer
 {
     /// <inheritdoc />
-    public async Task StreamTerminalLogAsync(Guid projectId, string terminalChannel, string message)
+    public async Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog)
     {
-        ValidateProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(terminalChannel);
+        ValidateProjectId(terminalLog.ProjectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(terminalLog.TerminalChannel);
 
         await hubContext.Clients
-            .Group(LogHub.GetProjectGroupName(projectId))
-            .ReceiveTerminalLog(terminalChannel, message);
+            .Group(LogHub.GetProjectGroupName(terminalLog.ProjectId))
+            .ReceiveTerminalLog(terminalLog);
+    }
+
+    public Task StreamTerminalNoticeAsync(Guid projectId, string message)
+    {
+        ValidateProjectId(projectId);
+        return hubContext.Clients.Group(LogHub.GetProjectGroupName(projectId)).ReceiveTerminalNotice(message);
     }
 
     /// <inheritdoc />

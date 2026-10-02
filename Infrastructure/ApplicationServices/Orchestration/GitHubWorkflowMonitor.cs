@@ -111,11 +111,11 @@ internal sealed class GitHubWorkflowMonitor(
     }
 
     /// <summary>Streams one cloud deployment preparation line through the diagnostic pipeline.</summary>
-    public async ValueTask StreamBuildLogAsync(Guid projectId, string message)
+    public async ValueTask StreamBuildLogAsync(Guid deploymentId, Guid projectId, string message)
     {
         try
         {
-            await PublishAsync(null, projectId,
+            await PublishAsync(deploymentId, projectId,
                 $"[cloud] {message}\r\n", DeploymentDiagnosticKind.BuildProgress,
                 DeploymentDiagnosticSeverity.Information, null, CancellationToken.None);
         }

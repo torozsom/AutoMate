@@ -1,3 +1,5 @@
+using Application.Abstractions.Diagnostics;
+
 namespace Web.Hubs;
 
 /// <summary>
@@ -11,7 +13,9 @@ public interface ILogClient
     /// <param name="terminalChannel">The stable channel used to route output to the correct terminal.</param>
     /// <param name="message">The terminal message received from the server.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task ReceiveTerminalLog(string terminalChannel, string message);
+    Task ReceiveTerminalLog(DeploymentTerminalLog terminalLog);
+
+    Task ReceiveTerminalNotice(string message);
 
     /// <summary>
     ///     Receives container metrics from the server and processes them on the client side.

@@ -9,6 +9,9 @@ EF Core DbContext, mappings, token protection conversion, and migrations.
 
 GitHub workflow checkpoints retain only state fingerprints, line counts, and redacted-content hashes needed to resume
 diagnostic streaming; they never store raw GitHub Actions log content.
+Deployment diagnostic records retain a PostgreSQL identity ordering cursor and terminal channel for authorized replay.
+The retention service removes expired records; operators must review backup lifecycle against the 30-day data policy,
+encrypt backups, restrict restore access, and purge expired diagnostics before a restored database is exposed.
 
 ## Boundary
 

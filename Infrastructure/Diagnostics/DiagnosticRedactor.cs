@@ -13,7 +13,7 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
     {
         ArgumentNullException.ThrowIfNull(diagnosticEvent);
 
-        var redactedMessage = RedactText(diagnosticEvent.Message);
+        var redactedMessage = SanitizeControls(RedactText(diagnosticEvent.Message));
         var redactedCount = redactedMessage == diagnosticEvent.Message ? 0 : 1;
         Dictionary<string, string>? attributes = null;
 
@@ -23,7 +23,7 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
                 new Dictionary<string, string>(diagnosticEvent.Attributes.Count, StringComparer.OrdinalIgnoreCase);
             foreach (var (key, value) in diagnosticEvent.Attributes)
             {
-                var redactedValue = IsSensitiveKey(key) ? RedactedMarker : RedactText(value);
+                var redactedValue = IsSensitiveKey(key) ? RedactedMarker : SanitizeControls(RedactText(value));
                 if (!string.Equals(redactedValue, value, StringComparison.Ordinal)) redactedCount++;
                 attributes[key] = redactedValue;
             }
@@ -57,6 +57,20 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
         redacted = JwtPattern().Replace(redacted, RedactedMarker);
         return GitHubTokenPattern().Replace(redacted, RedactedMarker);
     }
+
+    private static string SanitizeControls(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        var withoutSequences = TerminalEscapePattern().Replace(value, string.Empty);
+        return UnsafeControlPattern().Replace(withoutSequences, string.Empty);
+    }
+
+    [GeneratedRegex("\\x1B(?:\\[[0-?]*[ -/]*[@-~]|\\][^\\x07\\x1B]*(?:\\x07|\\x1B\\\\)|[@-_])",
+        RegexOptions.CultureInvariant)]
+    private static partial Regex TerminalEscapePattern();
+
+    [GeneratedRegex("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", RegexOptions.CultureInvariant)]
+    private static partial Regex UnsafeControlPattern();
 
     [GeneratedRegex(
         "(?<name>password|pwd|client_secret|access_token|refresh_token|api[_-]?key|token)\\s*[=:]\\s*(?:\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;]+)",

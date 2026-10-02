@@ -599,6 +599,7 @@ public static class ServiceConfiguration
             services.AddSingleton<IDeploymentDiagnosticPublisher>(serviceProvider =>
                 serviceProvider.GetRequiredService<DeploymentDiagnosticPublisher>());
             services.AddHostedService<DeploymentDiagnosticDispatcher>();
+            services.AddHostedService<DeploymentDiagnosticRetentionService>();
 
             // Business & Utilities
             services.AddScoped<IApplicationService, ApplicationService>();

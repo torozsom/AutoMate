@@ -1,5 +1,6 @@
 using System.Globalization;
 using Application.Abstractions.Ai;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
@@ -33,6 +34,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// A list of container names for which metrics are currently being displayed.
     private readonly List<string> _metricContainerNames = [];
+
+    private readonly List<DeploymentTerminalLog> _pendingTerminalLogs = [];
 
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
@@ -70,6 +73,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
     private HubConnection? _hubConnection;
 
+    private bool _hubInitializationStarted;
+
 
     /// A boolean flag to indicate whether the project is currently being deployed.
     private bool _isDeploying;
@@ -80,6 +85,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A boolean flag to indicate whether the deployment process is currently being stopped.
     private bool _isStopping;
 
+    private long _lastTerminalOrderId;
+
     private DeploymentAnalysisView? _latestAnalysis;
 
     /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
@@ -87,6 +94,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// A boolean flag to control the visibility of the deployment configuration modal.
     private bool _showConfigModal;
+
+    private bool _terminalBufferOverflow;
+    private Guid? _terminalDeploymentId;
+    private bool _terminalReplayPending = true;
 
     /// The actual host port currently bound to the web container.
     private int _webHostPort;
@@ -385,6 +396,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_currentUserId != Guid.Empty)
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
+            _terminalDeploymentId = GetLatestDeployment()?.Id;
             if (_app?.SourceType == SourceType.Remote)
                 _activeTab = "github-actions";
             await RefreshLatestAnalysisAsync();
@@ -418,7 +430,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <param name="status">The new deployment status.</param>
     private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
     {
-        _ = HandleDeploymentStatusChangedAsync(projectId, status);
+        _ = InvokeAsync(() => HandleDeploymentStatusChangedAsync(projectId, status));
     }
 
 
@@ -432,24 +444,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (_app != null && _app.Id == projectId)
         {
-            var latestDeployment = _app.CsProjects
-                .SelectMany(c => c.Deployments)
-                .MaxBy(d => d.CreatedAt);
-
-            if (latestDeployment != null)
-            {
-                latestDeployment.Status = status;
-                if (status is DeploymentStatus.Running or DeploymentStatus.Failed or DeploymentStatus.Stopped)
-                    _isDeploying = false;
-                if (status == DeploymentStatus.Stopped)
-                    _isStopping = false;
-                await UpdateWebHostPortAsync(status == DeploymentStatus.Running ? 6 : 1);
-                await InvokeAsync(StateHasChanged);
-            }
-            else
-            {
-                await RefreshProjectAsync(status == DeploymentStatus.Running);
-            }
+            if (status is DeploymentStatus.Running or DeploymentStatus.Failed or DeploymentStatus.Stopped)
+                _isDeploying = false;
+            if (status == DeploymentStatus.Stopped)
+                _isStopping = false;
+            await RefreshProjectAsync(status == DeploymentStatus.Running);
         }
     }
 
@@ -502,6 +501,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_currentUserId != Guid.Empty)
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
+            var latestDeploymentId = GetLatestDeployment()?.Id;
+            if (latestDeploymentId != _terminalDeploymentId)
+            {
+                _terminalDeploymentId = latestDeploymentId;
+                _lastTerminalOrderId = 0;
+                _pendingTerminalLogs.Clear();
+                _terminalReplayPending = true;
+                await ClearTerminalsAsync();
+                if (_hubConnection?.State == HubConnectionState.Connected)
+                    await JoinLogHubGroupAsync();
+            }
+
             await RefreshLatestAnalysisAsync();
             await UpdateWebHostPortAsync(resolveWebPortWithRetry ? 6 : 1);
             await InvokeAsync(StateHasChanged);
@@ -768,8 +779,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <param name="firstRender">Indicates whether this is the first time the component is being rendered.</param>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        // OnInitializedAsync may yield while the loading view is rendered. The first render
+        // therefore does not guarantee that any Terminal component exists yet.
+        if (!_isLoading && _app is not null && !_hubInitializationStarted)
         {
+            _hubInitializationStarted = true;
             if (_currentUserId == Guid.Empty)
             {
                 Logger.LogWarning(
@@ -804,25 +818,32 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     Logger.LogWarning(exception,
                         "Log hub connection could not rejoin the project group for project {ProjectId}.",
                         ProjectId);
+                    await InvokeAsync(async () =>
+                    {
+                        _terminalReplayPending = false;
+                        await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
+                    });
                 }
             };
 
-            _hubConnection.On<string, string>("ReceiveTerminalLog", async (terminalChannel, message) =>
+            _hubConnection.On<DeploymentTerminalLog>("ReceiveTerminalLog", async terminalLog =>
             {
-                var terminal = terminalChannel switch
+                await InvokeAsync(async () =>
                 {
-                    "build" => _buildTerminal,
-                    "web" => _webTerminal,
-                    "github-actions" => _githubActionsTerminal,
-                    "azure-web" => _azureWebTerminal,
-                    "azure-system" => _azureSystemTerminal,
-                    _ when _dbTerminals.TryGetValue(terminalChannel, out var databaseTerminal) => databaseTerminal,
-                    _ => null
-                };
+                    if (terminalLog.DeploymentId != _terminalDeploymentId) return;
+                    if (_terminalReplayPending)
+                    {
+                        if (_pendingTerminalLogs.Count < 512) _pendingTerminalLogs.Add(terminalLog);
+                        else _terminalBufferOverflow = true;
+                        return;
+                    }
 
-                if (terminal != null)
-                    await terminal.WriteAsync(message);
+                    await WriteTerminalLogAsync(terminalLog);
+                });
             });
+
+            _hubConnection.On<string>("ReceiveTerminalNotice", message =>
+                InvokeAsync(() => WriteTerminalNoticeAsync(message)));
 
             _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
                 (containerName, cpuUsage, memoryUsage) =>
@@ -844,6 +865,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Failed to start SignalR connection for project {ProjectId}", ProjectId);
+                _terminalReplayPending = false;
+                await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
             }
         }
     }
@@ -856,7 +879,62 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose).ToTimeLimitedDataProtector();
         var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
-        await _hubConnection.SendAsync("JoinProjectGroup", ProjectId, secureToken);
+        _terminalReplayPending = true;
+        var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
+            ProjectId, _terminalDeploymentId, secureToken);
+        await InvokeAsync(async () =>
+        {
+            if (_terminalDeploymentId.HasValue && _lastTerminalOrderId == 0 &&
+                history.Events.Count == 0 && _pendingTerminalLogs.Count == 0)
+                await WriteTerminalNoticeAsync("No saved terminal output is available for this deployment.");
+            if (history.EarlierOmitted)
+                await WriteTerminalNoticeAsync("Earlier output omitted; showing the most recent 500 events.");
+            foreach (var terminalLog in history.Events)
+                await WriteTerminalLogAsync(terminalLog);
+            foreach (var terminalLog in _pendingTerminalLogs.OrderBy(item => item.OrderId))
+                await WriteTerminalLogAsync(terminalLog);
+            _pendingTerminalLogs.Clear();
+            _terminalReplayPending = false;
+            if (_terminalBufferOverflow)
+            {
+                await WriteTerminalNoticeAsync("Some live output was omitted. Reload to recover available history.");
+                _terminalBufferOverflow = false;
+            }
+        });
+    }
+
+    private async Task ClearTerminalsAsync()
+    {
+        foreach (var terminal in new[]
+                 {
+                     _buildTerminal, _webTerminal, _githubActionsTerminal,
+                     _azureWebTerminal, _azureSystemTerminal
+                 }.Concat(_dbTerminals.Values))
+            if (terminal is not null)
+                await terminal.ClearAsync();
+    }
+
+    private async Task WriteTerminalLogAsync(DeploymentTerminalLog terminalLog)
+    {
+        if (terminalLog.OrderId <= _lastTerminalOrderId) return;
+        _lastTerminalOrderId = terminalLog.OrderId;
+        var terminal = terminalLog.TerminalChannel switch
+        {
+            "build" => _buildTerminal,
+            "web" => _webTerminal,
+            "github-actions" => _githubActionsTerminal,
+            "azure-web" => _azureWebTerminal,
+            "azure-system" => _azureSystemTerminal,
+            _ when _dbTerminals.TryGetValue(terminalLog.TerminalChannel, out var databaseTerminal) => databaseTerminal,
+            _ => null
+        };
+        if (terminal is not null) await terminal.WriteAsync(terminalLog.Message);
+    }
+
+    private Task WriteTerminalNoticeAsync(string message)
+    {
+        var terminal = _app?.SourceType == SourceType.Remote ? _githubActionsTerminal : _buildTerminal;
+        return terminal?.WriteLineAsync(message) ?? Task.CompletedTask;
     }
 
 
@@ -864,9 +942,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     ///     This method is called when the terminal component is ready. It writes an initial message to the terminal
     ///     indicating that the AutoMate Terminal has been initialized and is waiting for deployment logs.
     /// </summary>
-    private static async Task OnTerminalReady(Terminal? terminal, string componentName)
+    private async Task OnTerminalReady(Terminal? terminal, string componentName)
     {
-        if (terminal != null)
+        if (terminal != null && _lastTerminalOrderId == 0)
         {
             await terminal.WriteLineAsync($"\x1b[1;32mAutoMate {componentName} Terminal Initialized...\x1b[0m");
             await terminal.WriteLineAsync("Waiting for logs...");

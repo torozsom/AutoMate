@@ -76,7 +76,7 @@ public sealed class CloudDeploymentOrchestrator(
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync(cancellationToken);
         statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
-        await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+        await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
             $"Starting cloud deployment preparation for {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}.");
 
         try
@@ -84,7 +84,7 @@ public sealed class CloudDeploymentOrchestrator(
             var oidcSetup = await azureDeploymentOrchestrator.EnsureFederatedIdentityAsync(request.AzureCredentials,
                 config, request.RepositoryOwner, request.RepositoryName, request.BranchName, cancellationToken);
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Azure OIDC trust configured for GitHub Actions. Identity: {oidcSetup.IdentityResourceId}. Federated credential: {oidcSetup.FederatedCredentialName}. Subject: {oidcSetup.Subject}. Audience: {oidcSetup.Audience}.");
 
             if (string.IsNullOrWhiteSpace(oidcSetup.ClientId) ||
@@ -97,7 +97,8 @@ public sealed class CloudDeploymentOrchestrator(
             await gitHubService.UpsertRepositorySecretsAsync(request.GitHubAccessToken, request.RepositoryOwner,
                 request.RepositoryName, repositorySecrets, cancellationToken);
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId, "GitHub Actions repository secrets upserted.");
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
+                "GitHub Actions repository secrets upserted.");
 
             var files = await templateService.GenerateAllTemplatesAsync(config, request.Metadata, request.CsProjectName,
                 request.RepositoryRoot, cancellationToken);
@@ -105,16 +106,16 @@ public sealed class CloudDeploymentOrchestrator(
             if (files.Count == 0)
                 throw new InvalidOperationException("No cloud deployment templates were generated.");
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Generated {files.Count} cloud deployment file(s): {string.Join(", ", files.Select(f => f.Path))}.");
 
             var commitSha = await gitHubService.CommitCloudDeploymentFilesAsync(request.GitHubAccessToken,
                 request.RepositoryOwner, request.RepositoryName, files, request.BranchName,
                 cancellationToken: cancellationToken);
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Committed cloud deployment files to {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}. Commit: {commitSha}");
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 "GitHub Actions workflow will start from the deployment branch push trigger.");
 
             deployment.ImageTag = commitSha;
@@ -134,13 +135,13 @@ public sealed class CloudDeploymentOrchestrator(
             {
                 await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
                     cancellationToken);
-                await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                     $"GitHub Actions workflow failed. Details: {workflowRun.HtmlUrl}");
             }
             else if (workflowRun is { Status: "completed" } &&
                      string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
             {
-                await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                     $"GitHub Actions workflow completed successfully. Details: {workflowRun.HtmlUrl}");
                 azureContainerAppRuntimeStreamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
                 {
@@ -153,7 +154,7 @@ public sealed class CloudDeploymentOrchestrator(
             }
             else
             {
-                await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                     "GitHub Actions workflow is still queued or running. Refresh the project details page for the latest persisted status.");
             }
 

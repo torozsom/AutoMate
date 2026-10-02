@@ -186,6 +186,7 @@ public sealed class DockerService : IDockerService, IDisposable
 
     /// <inheritdoc />
     public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
+        Guid deploymentId,
         CancellationToken cancellationToken = default)
     {
         var safeProjectName = DockerNameNormalizer.NormalizeProjectName(projectName);
@@ -193,7 +194,7 @@ public sealed class DockerService : IDockerService, IDisposable
             "[DockerService] Starting 'docker compose up -d' for project '{ProjectName}' in {Directory}",
             safeProjectName, workingDir);
 
-        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, cancellationToken,
+        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, deploymentId, cancellationToken,
             "up", "-d", "--build");
     }
 
@@ -206,7 +207,8 @@ public sealed class DockerService : IDockerService, IDisposable
             "[DockerService] Starting 'docker compose down' for project '{ProjectName}' in {Directory}",
             safeProjectName, workingDir);
 
-        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, cancellationToken, "down");
+        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, null, cancellationToken,
+            "down");
     }
 
     /// <inheritdoc />
@@ -216,7 +218,8 @@ public sealed class DockerService : IDockerService, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken)
     {
         try
@@ -249,7 +252,8 @@ public sealed class DockerService : IDockerService, IDisposable
                     if (readResult.Count > 0)
                     {
                         var logLine = Encoding.UTF8.GetString(buffer, 0, readResult.Count);
-                        await _dockerCli.StreamContainerLogAsync(projectId, containerSuffixOrTabId, logLine);
+                        await _dockerCli.StreamContainerLogAsync(projectId, deploymentId, containerSuffixOrTabId,
+                            logLine);
                     }
                 }
             }
@@ -272,10 +276,11 @@ public sealed class DockerService : IDockerService, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken)
     {
-        await _dockerCli.StreamContainerMetricsAsync(containerName, projectId, containerSuffixOrTabId,
+        await _dockerCli.StreamContainerMetricsAsync(containerName, projectId, deploymentId, containerSuffixOrTabId,
             cancellationToken);
     }
 

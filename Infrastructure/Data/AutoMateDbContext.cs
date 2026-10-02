@@ -295,12 +295,16 @@ public class AutoMateDbContext(
     private static void ConfigureDeploymentDiagnosticsAndAnalyses(ModelBuilder modelBuilder)
     {
         var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
+        diagnostic.Property(item => item.OrderId).UseIdentityByDefaultColumn();
+        diagnostic.HasIndex(item => item.OrderId).IsUnique();
         diagnostic.HasIndex(item => new { item.DeploymentId, item.TimestampUtc, item.Sequence });
+        diagnostic.HasIndex(item => new { item.ProjectId, item.DeploymentId, item.OrderId });
         diagnostic.HasIndex(item => item.ExpiresAt);
         diagnostic.Property(item => item.Source).HasMaxLength(64).IsRequired();
         diagnostic.Property(item => item.Kind).HasMaxLength(64).IsRequired();
         diagnostic.Property(item => item.Severity).HasMaxLength(32).IsRequired();
         diagnostic.Property(item => item.Message).IsRequired();
+        diagnostic.Property(item => item.TerminalChannel).HasMaxLength(128);
         diagnostic.HasOne(item => item.Deployment).WithMany(deployment => deployment.DiagnosticRecords)
             .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
 

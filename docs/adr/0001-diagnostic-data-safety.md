@@ -7,6 +7,9 @@ Accepted on 2026-10-02.
 ## Decisions
 
 - Diagnostics are retained only after central redaction, for 30 days.
+- Backups containing diagnostics must be encrypted and access restricted. Operators must verify that backup lifecycle
+  and restore-time expiry cleanup satisfy the 30-day data policy; any longer-lived recoverable copy needs an approved
+  retention exception. The repository does not configure the backup provider.
 - LLM provider egress is disabled during the diagnostics and streaming milestones. No provider or processing region is
   approved until a later ADR records the provider contract, region, tenant consent, and data-processing terms.
 - Automatic failed-deployment analysis is disabled by default. A future design may allow an explicitly authorized

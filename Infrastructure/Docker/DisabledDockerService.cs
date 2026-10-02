@@ -25,7 +25,7 @@ public sealed class DisabledDockerService : IDockerService
         return Task.FromException<string?>(Disabled());
     }
 
-    public Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
+    public Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId, Guid deploymentId,
         CancellationToken cancellationToken = default)
     {
         return Task.FromException<bool>(Disabled());
@@ -42,13 +42,15 @@ public sealed class DisabledDockerService : IDockerService
         return Task.FromResult(new List<string>());
     }
 
-    public Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    public Task StreamContainerLogsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken)
     {
         return Task.FromException(Disabled());
     }
 
-    public Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    public Task StreamContainerMetricsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken)
     {
         return Task.FromException(Disabled());

@@ -45,6 +45,40 @@ public sealed class DiagnosticRedactorTests
     }
 
     [Fact]
+    public async Task Publisher_reports_bounded_queue_overflow_for_a_durable_gap_marker()
+    {
+        var publisher = new DeploymentDiagnosticPublisher(new DiagnosticRedactor(),
+            Options.Create(new DeploymentDiagnosticOptions { BufferCapacity = 16 }),
+            NullLogger<DeploymentDiagnosticPublisher>.Instance);
+        var projectId = Guid.NewGuid();
+        for (var index = 0; index < 17; index++)
+            await publisher.PublishAsync(new DeploymentDiagnosticEvent(projectId, Guid.NewGuid(),
+                DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Log,
+                DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, $"line {index}",
+                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)));
+
+        publisher.DrainDropped(projectId).Should().Be(1);
+        publisher.DrainDropped(projectId).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Publisher_bounds_long_redacted_output_with_an_explicit_marker()
+    {
+        var publisher = new DeploymentDiagnosticPublisher(new DiagnosticRedactor(),
+            Options.Create(new DeploymentDiagnosticOptions { BufferCapacity = 16 }),
+            NullLogger<DeploymentDiagnosticPublisher>.Instance);
+        await publisher.PublishAsync(new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(),
+            DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Log,
+            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
+            new string('a', 5_000) + " password=secret",
+            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)));
+
+        var queued = await publisher.Reader.ReadAsync();
+        queued.Message.Should().Contain("[output truncated]").And.NotContain("secret");
+        queued.Message.Length.Should().BeLessThan(4_200);
+    }
+
+    [Fact]
     public void Redact_masks_secrets_in_messages_and_attributes_before_delivery()
     {
         var diagnosticEvent = new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(),
@@ -61,6 +95,18 @@ public sealed class DiagnosticRedactorTests
         result.Event.Attributes!["refresh_token"].Should().Be("[REDACTED]");
         result.Event.Attributes["revision"].Should().Be("v1");
         result.RedactedValueCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void Redact_removes_untrusted_terminal_controls_but_keeps_progress_carriage_returns()
+    {
+        var diagnosticEvent = new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(),
+            DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Log,
+            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
+            "progress\rnext\u001b[2J\u001b]0;forged title\u0007done\n",
+            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "web"));
+
+        new DiagnosticRedactor().Redact(diagnosticEvent).Event.Message.Should().Be("progress\rnextdone\n");
     }
 
     [Fact]

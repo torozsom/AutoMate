@@ -16,6 +16,7 @@ separate UI delivery port and is not a diagnostic persistence or analysis API.
 - `IDeploymentDiagnosticPublisher.cs` — non-blocking ingestion boundary.
 - `IDiagnosticRedactor.cs` — safe-copy redaction boundary.
 - `IDeploymentDiagnosticStore.cs` — redacted persistence and bounded context boundary shared by replay and analysis.
+- `DeploymentTerminalLog.cs` — persisted terminal message and bounded history contracts with a database order cursor.
 
 ## Related documentation
 
