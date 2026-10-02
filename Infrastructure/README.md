@@ -8,7 +8,8 @@ EF Core persistence, external-system adapters, and Application-port implementati
 
 ## Boundary
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific behavior.
+Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
+behavior.
 
 ## Related documentation
 

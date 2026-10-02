@@ -12,7 +12,8 @@ diagnostic streaming; they never store raw GitHub Actions log content.
 
 ## Boundary
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific behavior.
+Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
+behavior.
 
 ## Related documentation
 

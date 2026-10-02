@@ -20,5 +20,8 @@ internal sealed class AzureContainerAppLogCheckpointStore(AutoMateDbContext dbCo
         return checkpoint;
     }
 
-    public Task SaveAsync(CancellationToken cancellationToken) => dbContext.SaveChangesAsync(cancellationToken);
+    public Task SaveAsync(CancellationToken cancellationToken)
+    {
+        return dbContext.SaveChangesAsync(cancellationToken);
+    }
 }

@@ -8,7 +8,8 @@ Application-owned outbound ports implemented by Infrastructure or Web.
 
 ## Boundary
 
-Keep this module independent of Infrastructure and Web. Provider-facing work crosses an interface in Application/Abstractions.
+Keep this module independent of Infrastructure and Web. Provider-facing work crosses an interface in
+Application/Abstractions.
 
 ## Related documentation
 

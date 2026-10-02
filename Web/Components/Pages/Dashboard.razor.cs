@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
-using Application.Abstractions.Scanning;
 using Application.Abstractions.Hosting;
+using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Application.Orchestration;
@@ -77,8 +77,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
 
-    [Inject]
-    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
     /// Navigation manager for handling navigation within the application.
     [Inject]

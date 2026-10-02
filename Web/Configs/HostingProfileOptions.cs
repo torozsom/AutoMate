@@ -20,8 +20,8 @@ public sealed class HostingProfileOptions
     {
         return Mode.Trim().ToUpperInvariant() switch
         {
-            "SELFHOSTED" => new DeploymentCapabilities(LocalDeploymentsEnabled: true, CloudDeploymentsEnabled: true),
-            "SAAS" => new DeploymentCapabilities(LocalDeploymentsEnabled: false, CloudDeploymentsEnabled: true),
+            "SELFHOSTED" => new DeploymentCapabilities(true, true),
+            "SAAS" => new DeploymentCapabilities(false, true),
             _ => throw new InvalidOperationException(
                 $"HostingProfile:Mode '{Mode}' is invalid. Use 'SelfHosted' or 'SaaS'.")
         };

@@ -18,11 +18,11 @@ public sealed class AzureMonitorLogsClientTests
             sentRequest = request;
             sentBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
             return DelegateHttpMessageHandler.Json("""
-                { "tables": [{ "columns": [
-                  { "name": "TimeGenerated" }, { "name": "Message" }, { "name": "ContainerName" },
-                  { "name": "RevisionName" }, { "name": "Stream" }, { "name": "SourceTable" }],
-                  "rows": [["2026-09-28T10:00:00Z", "hello", "web", "rev-1", "stdout", "ContainerAppConsoleLogs"]] }] }
-                """);
+                                                   { "tables": [{ "columns": [
+                                                     { "name": "TimeGenerated" }, { "name": "Message" }, { "name": "ContainerName" },
+                                                     { "name": "RevisionName" }, { "name": "Stream" }, { "name": "SourceTable" }],
+                                                     "rows": [["2026-09-28T10:00:00Z", "hello", "web", "rev-1", "stdout", "ContainerAppConsoleLogs"]] }] }
+                                                   """);
         });
         var client = new AzureMonitorLogsClient(new StubHttpClientFactory(handler));
 

@@ -127,13 +127,15 @@ internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPubl
 
                 if (DockerMetricsLine.TryParse(line, out var metrics))
                     await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, null,
-                        DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Metric,
-                        DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
-                        $"Container metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
-                        new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, containerSuffixOrTabId),
-                        new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
-                        SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
-                            DeploymentDiagnosticStream.Metric, containerSuffixOrTabId)),
+                            DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Metric,
+                            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
+                            $"Container metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
+                            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics,
+                                containerSuffixOrTabId),
+                            new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
+                            SourceIdentity: new DeploymentDiagnosticSourceIdentity(
+                                DeploymentDiagnosticComponent.Container,
+                                DeploymentDiagnosticStream.Metric, containerSuffixOrTabId)),
                         cancellationToken);
             }
         }

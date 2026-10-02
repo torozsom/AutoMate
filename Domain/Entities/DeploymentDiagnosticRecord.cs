@@ -1,5 +1,3 @@
-using Domain.Enums;
-
 namespace Domain.Entities;
 
 /// <summary>Redacted normalized diagnostic retained for terminal replay and bounded AI context.</summary>

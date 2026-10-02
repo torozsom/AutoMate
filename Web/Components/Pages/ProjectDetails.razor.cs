@@ -1,6 +1,6 @@
 using System.Globalization;
-using Application.Abstractions.Docker;
 using Application.Abstractions.Ai;
+using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
@@ -37,21 +37,20 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
 
+    private string? _analysisMessage;
+
 
     /// A nullable variable to hold the app details fetched from the database.
     private Domain.Entities.Application? _app;
 
-    /// A terminal instance for displaying build logs.
-    private Terminal? _buildTerminal;
-
-    /// A terminal instance for GitHub Actions output from a cloud deployment.
-    private Terminal? _githubActionsTerminal;
+    /// A terminal instance for Azure Container Apps system and revision output.
+    private Terminal? _azureSystemTerminal;
 
     /// A terminal instance for Azure Container Apps console output.
     private Terminal? _azureWebTerminal;
 
-    /// A terminal instance for Azure Container Apps system and revision output.
-    private Terminal? _azureSystemTerminal;
+    /// A terminal instance for displaying build logs.
+    private Terminal? _buildTerminal;
 
     /// A nullable variable to hold the current deployment configuration when the user initiates a deployment.
     private DeploymentConfigDto? _currentDeployConfig;
@@ -65,6 +64,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
 
+    /// A terminal instance for GitHub Actions output from a cloud deployment.
+    private Terminal? _githubActionsTerminal;
+
     /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
     private HubConnection? _hubConnection;
 
@@ -77,6 +79,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// A boolean flag to indicate whether the deployment process is currently being stopped.
     private bool _isStopping;
+
+    private DeploymentAnalysisView? _latestAnalysis;
 
     /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
     private string? _selectedProjectPath;
@@ -95,8 +99,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
     private string? _workflowUrl;
-    private DeploymentAnalysisView? _latestAnalysis;
-    private string? _analysisMessage;
 
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
@@ -139,15 +141,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject]
     private IDockerService DockerService { get; set; } = null!;
 
-    [Inject]
-    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
     /// The logger used to log information and errors related to the project details component.
     [Inject]
     private ILogger<ProjectDetails> Logger { get; set; } = null!;
 
-    [Inject]
-    private IDeploymentAnalysisService DeploymentAnalysisService { get; set; } = null!;
+    [Inject] private IDeploymentAnalysisService DeploymentAnalysisService { get; set; } = null!;
 
 
     /// <summary>
@@ -191,7 +191,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         if (_app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled)
         {
-            _workflowStatusMessage = "Local Docker deployments are available only in a self-hosted AutoMate installation.";
+            _workflowStatusMessage =
+                "Local Docker deployments are available only in a self-hosted AutoMate installation.";
             return;
         }
 
@@ -224,6 +225,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _workflowStatusMessage = "Local Docker deployments are disabled for this AutoMate instance.";
             return;
         }
+
         var csProject = _app.CsProjects.FirstOrDefault(p => p.IsWebProject);
         if (csProject == null) return;
 
@@ -512,7 +514,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (deployment is null) return;
         var result = await DeploymentAnalysisService.RequestManualAsync(_currentUserId, deployment.Id);
         _analysisMessage = result.Message;
-        _latestAnalysis = result.Analysis ?? await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
+        _latestAnalysis = result.Analysis ??
+                          await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
     }
 
     private async Task SetAiConsentAsync(ChangeEventArgs args)
@@ -522,14 +525,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             var configuration = GetPrimaryWebProject()?.Configuration;
             if (configuration is not null) configuration.AiDiagnosticEgressConsented = consented;
-            _analysisMessage = consented ? "AI diagnostic egress enabled for this project." : "AI diagnostic egress disabled.";
+            _analysisMessage = consented
+                ? "AI diagnostic egress enabled for this project."
+                : "AI diagnostic egress disabled.";
         }
     }
 
     private async Task RefreshLatestAnalysisAsync()
     {
         var deployment = GetLatestDeployment();
-        _latestAnalysis = deployment is null ? null : await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
+        _latestAnalysis = deployment is null
+            ? null
+            : await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
     }
 
 

@@ -100,7 +100,8 @@ public class AutoMateDbContext(
     public DbSet<GitHubWorkflowJobCheckpoint> GitHubWorkflowJobCheckpoints => Set<GitHubWorkflowJobCheckpoint>();
 
     /// <summary>Durable checkpoints for Azure Container Apps console and system log streaming.</summary>
-    public DbSet<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints => Set<AzureContainerAppLogCheckpoint>();
+    public DbSet<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints =>
+        Set<AzureContainerAppLogCheckpoint>();
 
     /// <summary>
     ///     Gets or sets the collection of DataProtectionKey entities in the database.

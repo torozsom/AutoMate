@@ -3,8 +3,8 @@ using System.Threading.Channels;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -27,7 +27,8 @@ public sealed class DeploymentDiagnosticPublisher(
     internal ChannelReader<DeploymentDiagnosticEvent> Reader => _events.Reader;
 
     /// <inheritdoc />
-    public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken cancellationToken = default)
+    public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Validate(diagnosticEvent);
@@ -46,15 +47,18 @@ public sealed class DeploymentDiagnosticPublisher(
         if (redaction.RedactedValueCount > 0)
         {
             AutoMateTelemetry.ValuesRedacted.Add(redaction.RedactedValueCount, tags);
-            logger.LogDebug("Redacted {RedactedValueCount} value(s) from deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
+            logger.LogDebug(
+                "Redacted {RedactedValueCount} value(s) from deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
                 redaction.RedactedValueCount, redaction.Event.Source, redaction.Event.Kind, redaction.Event.ProjectId);
         }
+
         AutoMateTelemetry.IngestDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, tags);
 
         if (_events.Writer.TryWrite(redaction.Event)) return ValueTask.CompletedTask;
 
         AutoMateTelemetry.EventsDropped.Add(1, tags);
-        logger.LogWarning("Dropped deployment diagnostic because the bounded delivery queue is full. Source {Source} kind {Kind} project {ProjectId}.",
+        logger.LogWarning(
+            "Dropped deployment diagnostic because the bounded delivery queue is full. Source {Source} kind {Kind} project {ProjectId}.",
             redaction.Event.Source, redaction.Event.Kind, redaction.Event.ProjectId);
         return ValueTask.CompletedTask;
     }
@@ -74,7 +78,8 @@ public sealed class DeploymentDiagnosticPublisher(
             throw new ArgumentException("A diagnostic event must identify its project.", nameof(diagnosticEvent));
         ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.Message);
         ArgumentNullException.ThrowIfNull(diagnosticEvent.TerminalChannel);
-        if (diagnosticEvent.TerminalChannel.Kind is DeploymentTerminalChannelKind.Container or DeploymentTerminalChannelKind.Metrics)
+        if (diagnosticEvent.TerminalChannel.Kind is DeploymentTerminalChannelKind.Container
+            or DeploymentTerminalChannelKind.Metrics)
             ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.TerminalChannel.Target);
     }
 }
@@ -115,10 +120,10 @@ public sealed class DeploymentDiagnosticDispatcher(
         }
     }
 
-    private async Task PersistAsync(ChannelReader<DeploymentDiagnosticEvent> events, CancellationToken cancellationToken)
+    private async Task PersistAsync(ChannelReader<DeploymentDiagnosticEvent> events,
+        CancellationToken cancellationToken)
     {
         await foreach (var diagnosticEvent in events.ReadAllAsync(cancellationToken))
-        {
             try
             {
                 using var activity = StartOperationActivity("deployment.diagnostic.persist", diagnosticEvent);
@@ -134,16 +139,16 @@ public sealed class DeploymentDiagnosticDispatcher(
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 AutoMateTelemetry.PersistenceFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
-                logger.LogWarning(exception, "Failed to persist deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
+                logger.LogWarning(exception,
+                    "Failed to persist deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
                     diagnosticEvent.Source, diagnosticEvent.Kind, diagnosticEvent.ProjectId);
             }
-        }
     }
 
-    private async Task DeliverAsync(ChannelReader<DeploymentDiagnosticEvent> events, CancellationToken cancellationToken)
+    private async Task DeliverAsync(ChannelReader<DeploymentDiagnosticEvent> events,
+        CancellationToken cancellationToken)
     {
         await foreach (var diagnosticEvent in events.ReadAllAsync(cancellationToken))
-        {
             try
             {
                 using var activity = StartOperationActivity("deployment.diagnostic.deliver", diagnosticEvent);
@@ -157,10 +162,10 @@ public sealed class DeploymentDiagnosticDispatcher(
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
-                logger.LogWarning(exception, "Failed to deliver deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
+                logger.LogWarning(exception,
+                    "Failed to deliver deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
                     diagnosticEvent.Source, diagnosticEvent.Kind, diagnosticEvent.ProjectId);
             }
-        }
     }
 
     private Task DeliverToTerminalAsync(DeploymentDiagnosticEvent diagnosticEvent)
@@ -169,7 +174,7 @@ public sealed class DeploymentDiagnosticDispatcher(
         {
             DeploymentTerminalChannelKind.Build or DeploymentTerminalChannelKind.System or
                 DeploymentTerminalChannelKind.Container => logStreamer.StreamTerminalLogAsync(diagnosticEvent.ProjectId,
-                GetTerminalChannel(diagnosticEvent), diagnosticEvent.Message),
+                    GetTerminalChannel(diagnosticEvent), diagnosticEvent.Message),
             DeploymentTerminalChannelKind.Metrics => logStreamer.StreamContainerMetricsAsync(diagnosticEvent.ProjectId,
                 diagnosticEvent.TerminalChannel.Target!,
                 diagnosticEvent.Attributes?.GetValueOrDefault("cpu") ?? "unknown",
@@ -178,19 +183,24 @@ public sealed class DeploymentDiagnosticDispatcher(
         };
     }
 
-    private static string GetTerminalChannel(DeploymentDiagnosticEvent diagnosticEvent) =>
-        diagnosticEvent.TerminalChannel.Kind switch
+    private static string GetTerminalChannel(DeploymentDiagnosticEvent diagnosticEvent)
+    {
+        return diagnosticEvent.TerminalChannel.Kind switch
         {
-            DeploymentTerminalChannelKind.Build when diagnosticEvent.Source == DeploymentDiagnosticSource.GitHubActions =>
+            DeploymentTerminalChannelKind.Build when diagnosticEvent.Source == DeploymentDiagnosticSource.GitHubActions
+                =>
                 "github-actions",
             DeploymentTerminalChannelKind.Build => "build",
-            DeploymentTerminalChannelKind.System when diagnosticEvent.Source == DeploymentDiagnosticSource.AzureContainerApps =>
+            DeploymentTerminalChannelKind.System when diagnosticEvent.Source ==
+                                                      DeploymentDiagnosticSource.AzureContainerApps =>
                 "azure-system",
             DeploymentTerminalChannelKind.System => "system",
-            DeploymentTerminalChannelKind.Container when diagnosticEvent.TerminalChannel.Target == "cloud-web" => "azure-web",
+            DeploymentTerminalChannelKind.Container when diagnosticEvent.TerminalChannel.Target == "cloud-web" =>
+                "azure-web",
             DeploymentTerminalChannelKind.Container => diagnosticEvent.TerminalChannel.Target!,
             _ => throw new ArgumentOutOfRangeException()
         };
+    }
 
     private void LogDiagnostic(DeploymentDiagnosticEvent diagnosticEvent)
     {
@@ -203,7 +213,8 @@ public sealed class DeploymentDiagnosticDispatcher(
             ["DiagnosticKind"] = diagnosticEvent.Kind,
             ["TraceId"] = diagnosticEvent.TraceId
         });
-        logger.Log(MapLogLevel(diagnosticEvent.Severity), "Deployment diagnostic: {DiagnosticMessage}", diagnosticEvent.Message);
+        logger.Log(MapLogLevel(diagnosticEvent.Severity), "Deployment diagnostic: {DiagnosticMessage}",
+            diagnosticEvent.Message);
     }
 
     private void TryWrite(ChannelWriter<DeploymentDiagnosticEvent> writer, DeploymentDiagnosticEvent diagnosticEvent,
@@ -211,17 +222,20 @@ public sealed class DeploymentDiagnosticDispatcher(
     {
         if (writer.TryWrite(diagnosticEvent)) return;
         AutoMateTelemetry.EventsDropped.Add(1, TelemetryTags.Create(diagnosticEvent));
-        logger.LogWarning("Dropped deployment diagnostic because the {SinkName} queue is full. Source {Source} kind {Kind} project {ProjectId}.",
+        logger.LogWarning(
+            "Dropped deployment diagnostic because the {SinkName} queue is full. Source {Source} kind {Kind} project {ProjectId}.",
             sinkName, diagnosticEvent.Source, diagnosticEvent.Kind, diagnosticEvent.ProjectId);
     }
 
-    private static Channel<DeploymentDiagnosticEvent> CreateSinkChannel(int capacity) =>
-        Channel.CreateBounded<DeploymentDiagnosticEvent>(new BoundedChannelOptions(capacity)
+    private static Channel<DeploymentDiagnosticEvent> CreateSinkChannel(int capacity)
+    {
+        return Channel.CreateBounded<DeploymentDiagnosticEvent>(new BoundedChannelOptions(capacity)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleReader = true,
             SingleWriter = true
         });
+    }
 
     private static Activity? StartOperationActivity(string operationName, DeploymentDiagnosticEvent diagnosticEvent)
     {
@@ -235,25 +249,31 @@ public sealed class DeploymentDiagnosticDispatcher(
         return AutoMateTelemetry.Deployments.StartActivity(operationName);
     }
 
-    private static LogLevel MapLogLevel(DeploymentDiagnosticSeverity severity) => severity switch
+    private static LogLevel MapLogLevel(DeploymentDiagnosticSeverity severity)
     {
-        DeploymentDiagnosticSeverity.Trace => LogLevel.Trace,
-        DeploymentDiagnosticSeverity.Debug => LogLevel.Debug,
-        DeploymentDiagnosticSeverity.Information => LogLevel.Information,
-        DeploymentDiagnosticSeverity.Warning => LogLevel.Warning,
-        DeploymentDiagnosticSeverity.Error => LogLevel.Error,
-        DeploymentDiagnosticSeverity.Critical => LogLevel.Critical,
-        _ => LogLevel.Information
-    };
+        return severity switch
+        {
+            DeploymentDiagnosticSeverity.Trace => LogLevel.Trace,
+            DeploymentDiagnosticSeverity.Debug => LogLevel.Debug,
+            DeploymentDiagnosticSeverity.Information => LogLevel.Information,
+            DeploymentDiagnosticSeverity.Warning => LogLevel.Warning,
+            DeploymentDiagnosticSeverity.Error => LogLevel.Error,
+            DeploymentDiagnosticSeverity.Critical => LogLevel.Critical,
+            _ => LogLevel.Information
+        };
+    }
 }
 
 internal static class TelemetryTags
 {
-    public static TagList Create(DeploymentDiagnosticEvent diagnosticEvent) => new()
+    public static TagList Create(DeploymentDiagnosticEvent diagnosticEvent)
     {
-        { "deployment.source", diagnosticEvent.Source.ToString() },
-        { "deployment.kind", diagnosticEvent.Kind.ToString() },
-        { "deployment.severity", diagnosticEvent.Severity.ToString() },
-        { "deployment.channel", diagnosticEvent.TerminalChannel.Kind.ToString() }
-    };
+        return new TagList
+        {
+            { "deployment.source", diagnosticEvent.Source.ToString() },
+            { "deployment.kind", diagnosticEvent.Kind.ToString() },
+            { "deployment.severity", diagnosticEvent.Severity.ToString() },
+            { "deployment.channel", diagnosticEvent.TerminalChannel.Kind.ToString() }
+        };
+    }
 }

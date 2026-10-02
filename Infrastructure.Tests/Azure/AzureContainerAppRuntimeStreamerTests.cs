@@ -1,6 +1,8 @@
 using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
 using Domain.DTO;
+using Domain.Entities;
+using Domain.Enums;
 using FluentAssertions;
 using Infrastructure.Azure;
 using Infrastructure.Data;
@@ -48,12 +50,16 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         await streamer.PollOnceAsync(CancellationToken.None);
 
         diagnostics.Events.Should().Contain(eventItem => eventItem.DeploymentId == deploymentId &&
-            eventItem.Message == "console line" &&
-            eventItem.TerminalChannel == new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "cloud-web"));
+                                                         eventItem.Message == "console line" &&
+                                                         eventItem.TerminalChannel ==
+                                                         new DeploymentTerminalChannel(
+                                                             DeploymentTerminalChannelKind.Container, "cloud-web"));
         diagnostics.Events.Should().Contain(eventItem => eventItem.DeploymentId == deploymentId &&
-            eventItem.Message == "[Azure system] revision provisioned" &&
-            eventItem.TerminalChannel.Kind == DeploymentTerminalChannelKind.System &&
-            eventItem.SourceIdentity!.Stream == DeploymentDiagnosticStream.System);
+                                                         eventItem.Message == "[Azure system] revision provisioned" &&
+                                                         eventItem.TerminalChannel.Kind ==
+                                                         DeploymentTerminalChannelKind.System &&
+                                                         eventItem.SourceIdentity!.Stream ==
+                                                         DeploymentDiagnosticStream.System);
     }
 
     private static HttpResponseMessage Respond(HttpRequestMessage request)
@@ -71,29 +77,32 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             : RecordsJson("revision provisioned", "system", "ContainerAppSystemLogs"));
     }
 
-    private static string RecordsJson(string message, string stream, string sourceTable) => $$"""
-        { "tables": [{ "columns": [
-          { "name": "TimeGenerated" }, { "name": "Message" }, { "name": "ContainerName" },
-          { "name": "RevisionName" }, { "name": "Stream" }, { "name": "SourceTable" }],
-          "rows": [["2026-09-28T10:00:00Z", "{{message}}", "web", "rev-1", "{{stream}}", "{{sourceTable}}"]] }] }
-        """;
+    private static string RecordsJson(string message, string stream, string sourceTable)
+    {
+        return $$"""
+                 { "tables": [{ "columns": [
+                   { "name": "TimeGenerated" }, { "name": "Message" }, { "name": "ContainerName" },
+                   { "name": "RevisionName" }, { "name": "Stream" }, { "name": "SourceTable" }],
+                   "rows": [["2026-09-28T10:00:00Z", "{{message}}", "web", "rev-1", "{{stream}}", "{{sourceTable}}"]] }] }
+                 """;
+    }
 
     private static async Task SeedDeploymentAsync(DbContextOptions<AutoMateDbContext> options,
         IDataProtectionProvider protector, Guid deploymentId)
     {
         await using var dbContext = new AutoMateDbContext(options, protector);
         await dbContext.Database.EnsureCreatedAsync();
-        dbContext.Deployments.Add(new Domain.Entities.Deployment
+        dbContext.Deployments.Add(new Deployment
         {
             Id = deploymentId,
-            CsProject = new Domain.Entities.CsProject
+            CsProject = new CsProject
             {
                 Name = "Web", Path = "Web/Web.csproj",
                 Application = new Domain.Entities.Application
                 {
-                    Name = "Sample", SourceType = Domain.Enums.SourceType.Remote,
+                    Name = "Sample", SourceType = SourceType.Remote,
                     SourcePathOrUrl = "https://github.com/example/sample",
-                    User = new Domain.Entities.LocalUser { Username = "test", Email = "test@example.invalid" }
+                    User = new LocalUser { Username = "test", Email = "test@example.invalid" }
                 }
             }
         });
@@ -103,6 +112,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
     private sealed class RecordingPublisher : IDeploymentDiagnosticPublisher
     {
         public List<DeploymentDiagnosticEvent> Events { get; } = [];
+
         public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent,
             CancellationToken cancellationToken = default)
         {
@@ -114,7 +124,9 @@ public sealed class AzureContainerAppRuntimeStreamerTests
     private sealed class SuccessfulTokenProvider : IAzureMonitorLogsTokenProvider
     {
         public Task<AzureMonitorLogsTokenResult> GetTokenAsync(Guid userId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AzureMonitorLogsTokenResult("monitor-token", null));
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new AzureMonitorLogsTokenResult("monitor-token", null));
+        }
     }
 }

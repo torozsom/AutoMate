@@ -5,8 +5,9 @@ using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
 using Domain.DTO;
 using Domain.Entities;
-using Microsoft.Extensions.Hosting;
+using Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -25,8 +26,8 @@ public sealed class AzureContainerAppRuntimeStreamer(
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
     private readonly AzureContainerAppClient _containerAppClient = new(httpClientFactory);
     private readonly AzureMonitorLogsClient _monitorLogsClient = new(httpClientFactory);
-    private readonly ConcurrentDictionary<Guid, ContainerAppStreamTarget> _targets = new();
     private readonly ConcurrentDictionary<string, string> _reportedIssues = new();
+    private readonly ConcurrentDictionary<Guid, ContainerAppStreamTarget> _targets = new();
 
     /// <inheritdoc />
     public void StartStreaming(AzureContainerAppRuntimeStreamRequest request)
@@ -34,7 +35,8 @@ public sealed class AzureContainerAppRuntimeStreamer(
         ArgumentNullException.ThrowIfNull(request);
         if (!TryCreateStreamTarget(request, out var target))
         {
-            logger.LogWarning("Azure runtime monitoring was not registered for deployment {DeploymentId}: incomplete configuration.",
+            logger.LogWarning(
+                "Azure runtime monitoring was not registered for deployment {DeploymentId}: incomplete configuration.",
                 request.DeploymentId);
             return;
         }
@@ -63,7 +65,6 @@ public sealed class AzureContainerAppRuntimeStreamer(
     internal async Task PollOnceAsync(CancellationToken cancellationToken)
     {
         foreach (var target in _targets.Values)
-        {
             try
             {
                 await PollTargetAsync(target, cancellationToken);
@@ -74,11 +75,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Azure runtime monitoring failed for deployment {DeploymentId}.", target.DeploymentId);
-                await PublishIssueOnceAsync(target, "coordinator", "Azure runtime monitoring encountered a recoverable error.",
+                logger.LogError(ex, "Azure runtime monitoring failed for deployment {DeploymentId}.",
+                    target.DeploymentId);
+                await PublishIssueOnceAsync(target, "coordinator",
+                    "Azure runtime monitoring encountered a recoverable error.",
                     cancellationToken);
             }
-        }
     }
 
     private async Task PollTargetAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
@@ -95,7 +97,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
         ClearIssue(target, "token");
         await using var scope = scopeFactory.CreateAsyncScope();
         var checkpoints = new AzureContainerAppLogCheckpointStore(
-            scope.ServiceProvider.GetRequiredService<Infrastructure.Data.AutoMateDbContext>());
+            scope.ServiceProvider.GetRequiredService<AutoMateDbContext>());
         await TailSourceAsync(target, AzureContainerAppLogSource.Console, tokenResult.AccessToken!, checkpoints,
             cancellationToken);
         await TailSourceAsync(target, AzureContainerAppLogSource.System, tokenResult.AccessToken!, checkpoints,
@@ -123,13 +125,13 @@ public sealed class AzureContainerAppRuntimeStreamer(
             cancellationToken);
         if (metrics != null)
             await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
-                DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
-                DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
-                $"Azure Container Apps metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
-                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, CloudWebContainerName),
-                new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
-                SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
-                    DeploymentDiagnosticStream.Metric, state?.LatestRevision)),
+                    DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
+                    DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
+                    $"Azure Container Apps metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
+                    new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, CloudWebContainerName),
+                    new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
+                    SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
+                        DeploymentDiagnosticStream.Metric, state?.LatestRevision)),
                 cancellationToken);
     }
 
@@ -193,7 +195,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 isConsole ? DeploymentDiagnosticComponent.Container : DeploymentDiagnosticComponent.Revision,
                 isConsole && string.Equals(record.Stream, "stderr", StringComparison.OrdinalIgnoreCase)
                     ? DeploymentDiagnosticStream.StandardError
-                    : isConsole ? DeploymentDiagnosticStream.StandardOutput : DeploymentDiagnosticStream.System,
+                    : isConsole
+                        ? DeploymentDiagnosticStream.StandardOutput
+                        : DeploymentDiagnosticStream.System,
                 isConsole ? record.ContainerName : record.RevisionName));
     }
 
@@ -211,16 +215,18 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 DeploymentDiagnosticStream.System, target.ContainerAppName)), cancellationToken);
     }
 
-    private void ClearIssue(ContainerAppStreamTarget target, string issue) =>
+    private void ClearIssue(ContainerAppStreamTarget target, string issue)
+    {
         _reportedIssues.TryRemove($"{target.DeploymentId:N}:{issue}", out _);
+    }
 
     private static bool IsAfterCheckpoint(DateTimeOffset timestamp, string tieBreaker,
         AzureContainerAppLogCheckpoint checkpoint)
     {
         if (checkpoint.LastTimestamp is null) return true;
         var timestampComparison = timestamp.CompareTo(checkpoint.LastTimestamp.Value);
-        return timestampComparison > 0 || timestampComparison == 0 &&
-            string.CompareOrdinal(tieBreaker, checkpoint.LastTieBreaker) > 0;
+        return timestampComparison > 0 || (timestampComparison == 0 &&
+                                           string.CompareOrdinal(tieBreaker, checkpoint.LastTieBreaker) > 0);
     }
 
     private static string CreateTieBreaker(AzureMonitorLogRecord record)
@@ -240,17 +246,26 @@ public sealed class AzureContainerAppRuntimeStreamer(
             string.IsNullOrWhiteSpace(request.Config.CloudResourceGroupName) ||
             string.IsNullOrWhiteSpace(request.Config.CloudContainerAppName)) return false;
 
-        var resourceId = $"/subscriptions/{Uri.EscapeDataString(request.AzureCredentials.SubscriptionId)}/resourceGroups/{Uri.EscapeDataString(request.Config.CloudResourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(request.Config.CloudContainerAppName)}";
+        var resourceId =
+            $"/subscriptions/{Uri.EscapeDataString(request.AzureCredentials.SubscriptionId)}/resourceGroups/{Uri.EscapeDataString(request.Config.CloudResourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(request.Config.CloudContainerAppName)}";
         target = new ContainerAppStreamTarget(request.ProjectId, request.DeploymentId, request.UserId, resourceId,
             request.Config.CloudContainerAppName, request.AzureCredentials);
         return true;
     }
 
-    private static string CreateAvailabilityMessage(AzureContainerAppState state) =>
-        $"Azure Container App is available{(string.IsNullOrWhiteSpace(state.Fqdn) ? string.Empty : $" at https://{state.Fqdn}")}. Latest ready revision: {state.LatestRevision}.";
+    private static string CreateAvailabilityMessage(AzureContainerAppState state)
+    {
+        return
+            $"Azure Container App is available{(string.IsNullOrWhiteSpace(state.Fqdn) ? string.Empty : $" at https://{state.Fqdn}")}. Latest ready revision: {state.LatestRevision}.";
+    }
 
-    private sealed class ContainerAppStreamTarget(Guid projectId, Guid deploymentId, Guid userId, string resourceId,
-        string containerAppName, AzureCloudCredentialsDto azureCredentials)
+    private sealed class ContainerAppStreamTarget(
+        Guid projectId,
+        Guid deploymentId,
+        Guid userId,
+        string resourceId,
+        string containerAppName,
+        AzureCloudCredentialsDto azureCredentials)
     {
         public Guid ProjectId { get; } = projectId;
         public Guid DeploymentId { get; } = deploymentId;

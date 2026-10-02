@@ -15,7 +15,8 @@ internal sealed record GitHubWorkflowRunsResponse(
 /// </summary>
 internal sealed record GitHubWorkflowRunItem(
     [property: JsonPropertyName("id")] long Id,
-    [property: JsonPropertyName("run_attempt")] int Attempt,
+    [property: JsonPropertyName("run_attempt")]
+    int Attempt,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("conclusion")]
     string? Conclusion,

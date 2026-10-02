@@ -19,7 +19,8 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
 
         if (diagnosticEvent.Attributes is not null)
         {
-            attributes = new Dictionary<string, string>(diagnosticEvent.Attributes.Count, StringComparer.OrdinalIgnoreCase);
+            attributes =
+                new Dictionary<string, string>(diagnosticEvent.Attributes.Count, StringComparer.OrdinalIgnoreCase);
             foreach (var (key, value) in diagnosticEvent.Attributes)
             {
                 var redactedValue = IsSensitiveKey(key) ? RedactedMarker : RedactText(value);
@@ -57,10 +58,13 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
         return GitHubTokenPattern().Replace(redacted, RedactedMarker);
     }
 
-    [GeneratedRegex("(?<name>password|pwd|client_secret|access_token|refresh_token|api[_-]?key|token)\\s*[=:]\\s*(?:\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(
+        "(?<name>password|pwd|client_secret|access_token|refresh_token|api[_-]?key|token)\\s*[=:]\\s*(?:\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;]+)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex NamedSecretPattern();
 
-    [GeneratedRegex("(authorization\\s*[:=]\\s*(?:bearer|basic))\\s+[^\\s,;]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex("(authorization\\s*[:=]\\s*(?:bearer|basic))\\s+[^\\s,;]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AuthorizationPattern();
 
     [GeneratedRegex("\\beyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\b", RegexOptions.CultureInvariant)]

@@ -1,10 +1,9 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.RateLimiting;
-using System.Diagnostics;
-using Application.Abstractions.Azure;
 using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Email;
@@ -13,14 +12,15 @@ using Application.Abstractions.Hosting;
 using Application.Abstractions.Logging;
 using Application.Abstractions.Scanning;
 using Application.Abstractions.Templating;
+using Application.Ai;
 using Application.Auth;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Application.Orchestration;
 using Application.Diagnostics;
+using Application.Orchestration;
 using Domain.Entities;
-using Infrastructure.Azure;
 using Infrastructure.Ai;
+using Infrastructure.Azure;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
 using Infrastructure.Docker;
@@ -577,6 +577,7 @@ public static class ServiceConfiguration
             {
                 services.AddScoped<IDockerService, DisabledDockerService>();
             }
+
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
             services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
             services.AddHostedService<DeploymentJobWorker>();

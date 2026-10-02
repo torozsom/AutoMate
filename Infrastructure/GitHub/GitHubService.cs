@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -360,7 +361,8 @@ public sealed class GitHubService : IGitHubService
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>> DownloadWorkflowRunLogEntriesAsync(
-        string accessToken, string repoOwner, string repoName, long runId, CancellationToken cancellationToken = default)
+        string accessToken, string repoOwner, string repoName, long runId,
+        CancellationToken cancellationToken = default)
     {
         if (runId <= 0) throw new ArgumentOutOfRangeException(nameof(runId));
 
@@ -404,11 +406,11 @@ public sealed class GitHubService : IGitHubService
             return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.Available,
                 await response.Content.ReadAsStringAsync(cancellationToken));
 
-        if (response.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.Conflict or
-            System.Net.HttpStatusCode.UnprocessableEntity)
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Conflict or
+            HttpStatusCode.UnprocessableEntity)
             return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.NotAvailable);
 
-        if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden)
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.AccessDenied);
 
         _logger.LogWarning("GitHub returned {StatusCode} while downloading workflow job logs for job {JobId}.",

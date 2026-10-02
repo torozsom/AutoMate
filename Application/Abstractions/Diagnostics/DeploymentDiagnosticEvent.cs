@@ -80,8 +80,8 @@ public enum DeploymentTerminalChannelKind
 public sealed record DeploymentTerminalChannel(DeploymentTerminalChannelKind Kind, string? Target = null);
 
 /// <summary>
-/// Provider-neutral, versioned deployment observation. Provider payloads must be normalized into this type before
-/// crossing into diagnostic processing.
+///     Provider-neutral, versioned deployment observation. Provider payloads must be normalized into this type before
+///     crossing into diagnostic processing.
 /// </summary>
 public sealed record DeploymentDiagnosticEvent(
     Guid ProjectId,

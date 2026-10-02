@@ -8,24 +8,59 @@ namespace Infrastructure.Docker;
 /// </summary>
 public sealed class DisabledDockerService : IDockerService
 {
-    private static InvalidOperationException Disabled() =>
-        new("The Docker daemon is not available in this AutoMate hosting profile.");
+    public Task<bool> PingAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
 
-    public Task<bool> PingAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
-    public Task<bool> BuildImageAsync(string sourcePath, string imageTag, CancellationToken cancellationToken = default) =>
-        Task.FromException<bool>(Disabled());
-    public Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort, int containerPort = 8080,
-        string? envVarsJson = null, CancellationToken cancellationToken = default) => Task.FromException<string?>(Disabled());
+    public Task<bool> BuildImageAsync(string sourcePath, string imageTag, CancellationToken cancellationToken = default)
+    {
+        return Task.FromException<bool>(Disabled());
+    }
+
+    public Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort,
+        int containerPort = 8080,
+        string? envVarsJson = null, CancellationToken cancellationToken = default)
+    {
+        return Task.FromException<string?>(Disabled());
+    }
+
     public Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
-        CancellationToken cancellationToken = default) => Task.FromException<bool>(Disabled());
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromException<bool>(Disabled());
+    }
+
     public Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
-        CancellationToken cancellationToken = default) => Task.FromException<bool>(Disabled());
-    public Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(new List<string>());
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromException<bool>(Disabled());
+    }
+
+    public Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new List<string>());
+    }
+
     public Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
-        CancellationToken cancellationToken) => Task.FromException(Disabled());
+        CancellationToken cancellationToken)
+    {
+        return Task.FromException(Disabled());
+    }
+
     public Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
-        CancellationToken cancellationToken) => Task.FromException(Disabled());
-    public Task<int> GetContainerHostPortAsync(string containerName, CancellationToken cancellationToken = default) =>
-        Task.FromException<int>(Disabled());
+        CancellationToken cancellationToken)
+    {
+        return Task.FromException(Disabled());
+    }
+
+    public Task<int> GetContainerHostPortAsync(string containerName, CancellationToken cancellationToken = default)
+    {
+        return Task.FromException<int>(Disabled());
+    }
+
+    private static InvalidOperationException Disabled()
+    {
+        return new InvalidOperationException("The Docker daemon is not available in this AutoMate hosting profile.");
+    }
 }

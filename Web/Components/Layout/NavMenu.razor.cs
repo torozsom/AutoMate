@@ -12,8 +12,7 @@ public partial class NavMenu : ComponentBase
 
     [Inject] private ILogger<NavMenu> Logger { get; set; } = null!;
 
-    [Inject]
-    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
     /// <summary>
     ///     Restores the theme preference after the interactive connection is available.

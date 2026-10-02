@@ -3,8 +3,8 @@ using Application.Abstractions.Azure;
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Azure;
 
@@ -21,7 +21,8 @@ public sealed class AzureMonitorLogsTokenProvider(
         CancellationToken cancellationToken = default)
     {
         if (userId == Guid.Empty)
-            return new AzureMonitorLogsTokenResult(null, "Azure Monitor Logs requires the deployment's connected user.");
+            return new AzureMonitorLogsTokenResult(null,
+                "Azure Monitor Logs requires the deployment's connected user.");
 
         var settings = options.Value;
         if (string.IsNullOrWhiteSpace(settings.TokenEndpoint) || string.IsNullOrWhiteSpace(settings.ClientId) ||

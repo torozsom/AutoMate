@@ -1,7 +1,7 @@
 using Application.Abstractions.Diagnostics;
+using Application.Diagnostics;
 using FluentAssertions;
 using Infrastructure.Diagnostics;
-using Application.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 

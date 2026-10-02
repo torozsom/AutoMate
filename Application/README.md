@@ -10,7 +10,8 @@ Application contracts, coordination primitives, and outbound ports. This project
 
 ## Boundary
 
-Keep this module independent of Infrastructure and Web. Provider-facing work crosses an interface in Application/Abstractions.
+Keep this module independent of Infrastructure and Web. Provider-facing work crosses an interface in
+Application/Abstractions.
 
 ## Related documentation
 

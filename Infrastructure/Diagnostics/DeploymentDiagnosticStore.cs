@@ -12,7 +12,8 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
 {
     private static readonly TimeSpan Retention = TimeSpan.FromDays(30);
 
-    public async Task PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken cancellationToken = default)
+    public async Task PersistAsync(DeploymentDiagnosticEvent diagnosticEvent,
+        CancellationToken cancellationToken = default)
     {
         dbContext.DeploymentDiagnosticRecords.Add(new DeploymentDiagnosticRecord
         {
@@ -20,7 +21,9 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
             TimestampUtc = diagnosticEvent.TimestampUtc, Source = diagnosticEvent.Source.ToString(),
             Kind = diagnosticEvent.Kind.ToString(), Severity = diagnosticEvent.Severity.ToString(),
             Message = diagnosticEvent.Message,
-            AttributesJson = diagnosticEvent.Attributes is null ? null : JsonSerializer.Serialize(diagnosticEvent.Attributes),
+            AttributesJson = diagnosticEvent.Attributes is null
+                ? null
+                : JsonSerializer.Serialize(diagnosticEvent.Attributes),
             TraceId = diagnosticEvent.TraceId, SpanId = diagnosticEvent.SpanId, Sequence = diagnosticEvent.Sequence,
             Cursor = diagnosticEvent.Cursor, ExpiresAt = DateTimeOffset.UtcNow.Add(Retention)
         });
@@ -41,6 +44,7 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
             if (context.Length + line.Length > maximumCharacters) break;
             context.Append(line);
         }
+
         return context.ToString();
     }
 }

@@ -1,5 +1,5 @@
-using Application.Abstractions.Scanning;
 using Application.Abstractions.Hosting;
+using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Domain.DTO;
@@ -56,8 +56,7 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     [Inject]
     private ILocalSystemScannerService SystemScannerService { get; set; } = null!;
 
-    [Inject]
-    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
     /// Service for managing apps, including fetching, creating, and deleting apps associated with users.
     [Inject]
@@ -178,6 +177,7 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
             SetStatusMessage("Local projects cannot be saved in this AutoMate instance.", true);
             return;
         }
+
         if (_currentUserId == Guid.Empty)
         {
             SetStatusMessage("You need to be logged in to save projects.", true);

@@ -1,7 +1,7 @@
 using Application.Abstractions.Azure;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.GitHub;
 using Application.Abstractions.Hosting;
-using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Templating;
 using Domain.DTO;
 using Domain.Entities;

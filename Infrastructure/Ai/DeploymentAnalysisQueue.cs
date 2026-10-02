@@ -13,6 +13,6 @@ public sealed class DeploymentAnalysisQueue(AutoMateDbContext dbContext) : IDepl
         if (work is null) return null;
         work.ClaimedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
-        return new(work.AnalysisId, Guid.Empty);
+        return new DeploymentAnalysisWorkItem(work.AnalysisId, Guid.Empty);
     }
 }

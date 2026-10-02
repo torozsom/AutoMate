@@ -16,7 +16,8 @@ public sealed class GitHubWorkflowLogNormalizerTests
     [Fact]
     public void Normalize_truncates_an_oversized_line()
     {
-        var result = GitHubWorkflowLogNormalizer.Normalize(new string('x', GitHubWorkflowLogNormalizer.MaximumLineLength + 1));
+        var result =
+            GitHubWorkflowLogNormalizer.Normalize(new string('x', GitHubWorkflowLogNormalizer.MaximumLineLength + 1));
 
         result.Should().ContainSingle().Which.Should().EndWith(" [truncated]\r\n")
             .And.HaveLength(GitHubWorkflowLogNormalizer.MaximumLineLength + " [truncated]\r\n".Length);

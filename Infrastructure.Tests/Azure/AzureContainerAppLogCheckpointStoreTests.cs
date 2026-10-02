@@ -1,3 +1,5 @@
+using Domain.Entities;
+using Domain.Enums;
 using FluentAssertions;
 using Infrastructure.Azure;
 using Infrastructure.Data;
@@ -22,24 +24,24 @@ public sealed class AzureContainerAppLogCheckpointStoreTests
         {
             await dbContext.Database.EnsureCreatedAsync();
             deploymentId = Guid.NewGuid();
-            dbContext.Deployments.Add(new Domain.Entities.Deployment
+            dbContext.Deployments.Add(new Deployment
             {
                 Id = deploymentId,
-                CsProject = new Domain.Entities.CsProject
+                CsProject = new CsProject
                 {
                     Name = "Web",
                     Path = "Web/Web.csproj",
                     Application = new Domain.Entities.Application
                     {
                         Name = "Sample",
-                        SourceType = Domain.Enums.SourceType.Remote,
+                        SourceType = SourceType.Remote,
                         SourcePathOrUrl = "https://github.com/example/sample",
-                        User = new Domain.Entities.LocalUser { Username = "test", Email = "test@example.invalid" }
+                        User = new LocalUser { Username = "test", Email = "test@example.invalid" }
                     }
                 }
             });
             await dbContext.SaveChangesAsync();
-            dbContext.AzureContainerAppLogCheckpoints.Add(new Domain.Entities.AzureContainerAppLogCheckpoint
+            dbContext.AzureContainerAppLogCheckpoints.Add(new AzureContainerAppLogCheckpoint
             {
                 DeploymentId = deploymentId,
                 Source = "console",

@@ -44,5 +44,8 @@ internal sealed class GitHubWorkflowCheckpointStore(AutoMateDbContext dbContext)
         return checkpoint;
     }
 
-    public Task SaveAsync(CancellationToken cancellationToken) => dbContext.SaveChangesAsync(cancellationToken);
+    public Task SaveAsync(CancellationToken cancellationToken)
+    {
+        return dbContext.SaveChangesAsync(cancellationToken);
+    }
 }

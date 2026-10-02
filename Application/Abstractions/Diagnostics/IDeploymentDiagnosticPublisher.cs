@@ -1,7 +1,7 @@
 namespace Application.Abstractions.Diagnostics;
 
 /// <summary>
-/// Accepts normalized deployment observations for redaction, telemetry, bounded buffering, and safe UI delivery.
+///     Accepts normalized deployment observations for redaction, telemetry, bounded buffering, and safe UI delivery.
 /// </summary>
 public interface IDeploymentDiagnosticPublisher
 {
