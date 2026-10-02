@@ -8,6 +8,12 @@ namespace Domain.DTO;
 public record CloudDeploymentRequestDto
 {
     /// <summary>
+    ///     The AutoMate user that initiated the deployment. Runtime monitoring uses this identifier to obtain a
+    ///     memory-only Azure Monitor token without carrying a refresh token through the job queue.
+    /// </summary>
+    public Guid RequestingUserId { get; init; }
+
+    /// <summary>
     ///     The deployment configuration used to render cloud deployment templates.
     /// </summary>
     public DeploymentConfigDto Config { get; init; } = new();

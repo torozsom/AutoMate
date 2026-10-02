@@ -2,6 +2,10 @@
 
 Docker and Docker Compose infrastructure adapter implementation.
 
+Docker CLI output, container output, and metrics are normalized into Application deployment diagnostics before the
+redacted event pipeline forwards safe terminal data.
+Local Compose build and container log events carry the deployment ID so history stays separate across redeployments.
+
 ## Source inventory
 
 - `DockerBuildContextArchive.cs`
@@ -19,7 +23,8 @@ Docker and Docker Compose infrastructure adapter implementation.
 
 ## Boundary
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific behavior.
+Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
+behavior.
 
 ## Related documentation
 

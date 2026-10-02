@@ -6,6 +6,7 @@ Domain classifications for sources, application types, and deployment state.
 
 - `AppType.cs`
 - `DeploymentStatus.cs`
+- `GitHubWorkflowLogAvailability.cs`
 - `SourceType.cs`
 
 ## Boundary

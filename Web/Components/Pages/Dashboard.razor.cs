@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
@@ -75,6 +76,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// Service responsible for scanning project files to extract metadata and analyze dependencies.
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
+
+    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
     /// Navigation manager for handling navigation within the application.
     [Inject]
@@ -203,6 +206,12 @@ public partial class Dashboard : ComponentBase, IDisposable
     {
         ClearMessages();
 
+        if (app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            _globalErrorMessage = "Local Docker deployments are available only in a self-hosted AutoMate installation.";
+            return;
+        }
+
         if (app.SourceType == SourceType.Remote)
         {
             if (!_isAzureConnected)
@@ -304,6 +313,7 @@ public partial class Dashboard : ComponentBase, IDisposable
             {
                 await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
                 {
+                    RequestingUserId = _currentUserId,
                     Config = finalConfig,
                     Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
                     CsProjectName = cloudApp.Name,
@@ -380,7 +390,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private bool IsDeployDisabled(Domain.Entities.Application app)
     {
-        return IsDeploying(app.Id) || (app.SourceType == SourceType.Remote && !_isAzureConnected);
+        return IsDeploying(app.Id) ||
+               (app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled) ||
+               (app.SourceType == SourceType.Remote && !_isAzureConnected);
     }
 
 

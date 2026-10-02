@@ -87,6 +87,22 @@ public class AutoMateDbContext(
     /// </summary>
     public DbSet<Deployment> Deployments => Set<Deployment>();
 
+    public DbSet<DeploymentDiagnosticRecord> DeploymentDiagnosticRecords => Set<DeploymentDiagnosticRecord>();
+
+    public DbSet<AiDeploymentAnalysis> AiDeploymentAnalyses => Set<AiDeploymentAnalysis>();
+
+    public DbSet<DeploymentAnalysisWorkItem> DeploymentAnalysisWorkItems => Set<DeploymentAnalysisWorkItem>();
+
+    /// <summary>Durable checkpoints for GitHub Actions diagnostic streaming.</summary>
+    public DbSet<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints => Set<GitHubWorkflowCheckpoint>();
+
+    /// <summary>Per-job diagnostic checkpoints belonging to GitHub Actions workflow runs.</summary>
+    public DbSet<GitHubWorkflowJobCheckpoint> GitHubWorkflowJobCheckpoints => Set<GitHubWorkflowJobCheckpoint>();
+
+    /// <summary>Durable checkpoints for Azure Container Apps console and system log streaming.</summary>
+    public DbSet<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints =>
+        Set<AzureContainerAppLogCheckpoint>();
+
     /// <summary>
     ///     Gets or sets the collection of DataProtectionKey entities in the database.
     ///     Required for distributed data protection (e.g., across Docker containers).
@@ -106,6 +122,9 @@ public class AutoMateDbContext(
         ConfigureRemoteUser(modelBuilder.Entity<RemoteUser>());
         ConfigureApplication(modelBuilder.Entity<Domain.Entities.Application>());
         ConfigureCsProject(modelBuilder.Entity<CsProject>());
+        ConfigureGitHubWorkflowCheckpoints(modelBuilder);
+        ConfigureAzureContainerAppLogCheckpoints(modelBuilder);
+        ConfigureDeploymentDiagnosticsAndAnalyses(modelBuilder);
     }
 
 
@@ -228,6 +247,82 @@ public class AutoMateDbContext(
         entity.HasMany(csp => csp.Deployments)
             .WithOne(d => d.CsProject)
             .HasForeignKey(d => d.CsProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>Configures durable GitHub workflow/job stream checkpoints without retaining raw diagnostic text.</summary>
+    private static void ConfigureGitHubWorkflowCheckpoints(ModelBuilder modelBuilder)
+    {
+        var workflow = modelBuilder.Entity<GitHubWorkflowCheckpoint>();
+        workflow.HasIndex(checkpoint => new
+        {
+            checkpoint.DeploymentId,
+            checkpoint.WorkflowRunId,
+            checkpoint.WorkflowAttempt
+        }).IsUnique();
+        workflow.Property(checkpoint => checkpoint.LastWorkflowStateFingerprint).HasMaxLength(128);
+        workflow.HasOne(checkpoint => checkpoint.Deployment)
+            .WithMany(deployment => deployment.GitHubWorkflowCheckpoints)
+            .HasForeignKey(checkpoint => checkpoint.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var job = modelBuilder.Entity<GitHubWorkflowJobCheckpoint>();
+        job.HasIndex(checkpoint => new { checkpoint.GitHubWorkflowCheckpointId, checkpoint.JobId }).IsUnique();
+        job.Property(checkpoint => checkpoint.JobName).HasMaxLength(512).IsRequired();
+        job.Property(checkpoint => checkpoint.LastStateFingerprint).HasMaxLength(128);
+        job.Property(checkpoint => checkpoint.LastLogPrefixHash).HasMaxLength(128);
+        job.Property(checkpoint => checkpoint.LastLogContentHash).HasMaxLength(128);
+        job.Property(checkpoint => checkpoint.FinalArchiveContentHash).HasMaxLength(128);
+        job.HasOne(checkpoint => checkpoint.WorkflowCheckpoint)
+            .WithMany(checkpoint => checkpoint.JobCheckpoints)
+            .HasForeignKey(checkpoint => checkpoint.GitHubWorkflowCheckpointId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>Configures durable, non-sensitive Azure Container Apps log-tail cursors.</summary>
+    private static void ConfigureAzureContainerAppLogCheckpoints(ModelBuilder modelBuilder)
+    {
+        var checkpoint = modelBuilder.Entity<AzureContainerAppLogCheckpoint>();
+        checkpoint.HasIndex(item => new { item.DeploymentId, item.Source }).IsUnique();
+        checkpoint.Property(item => item.Source).HasMaxLength(32).IsRequired();
+        checkpoint.Property(item => item.LastTieBreaker).HasMaxLength(128);
+        checkpoint.HasOne(item => item.Deployment)
+            .WithMany(deployment => deployment.AzureContainerAppLogCheckpoints)
+            .HasForeignKey(item => item.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureDeploymentDiagnosticsAndAnalyses(ModelBuilder modelBuilder)
+    {
+        var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
+        diagnostic.Property(item => item.OrderId).UseIdentityByDefaultColumn();
+        diagnostic.HasIndex(item => item.OrderId).IsUnique();
+        diagnostic.HasIndex(item => new { item.DeploymentId, item.TimestampUtc, item.Sequence });
+        diagnostic.HasIndex(item => new { item.ProjectId, item.DeploymentId, item.OrderId });
+        diagnostic.HasIndex(item => item.ExpiresAt);
+        diagnostic.Property(item => item.Source).HasMaxLength(64).IsRequired();
+        diagnostic.Property(item => item.Kind).HasMaxLength(64).IsRequired();
+        diagnostic.Property(item => item.Severity).HasMaxLength(32).IsRequired();
+        diagnostic.Property(item => item.Message).IsRequired();
+        diagnostic.Property(item => item.TerminalChannel).HasMaxLength(128);
+        diagnostic.HasOne(item => item.Deployment).WithMany(deployment => deployment.DiagnosticRecords)
+            .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+
+        var analysis = modelBuilder.Entity<AiDeploymentAnalysis>();
+        analysis.HasIndex(item => item.IdempotencyKey).IsUnique();
+        analysis.HasIndex(item => new { item.DeploymentId, item.CreatedAt });
+        analysis.HasIndex(item => item.ExpiresAt);
+        analysis.Property(item => item.Provider).HasMaxLength(100).IsRequired();
+        analysis.Property(item => item.Model).HasMaxLength(100).IsRequired();
+        analysis.Property(item => item.IdempotencyKey).HasMaxLength(128).IsRequired();
+        analysis.Property(item => item.FailureCode).HasMaxLength(100);
+        analysis.HasOne(item => item.Deployment).WithMany(deployment => deployment.AiAnalyses)
+            .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+
+        var work = modelBuilder.Entity<DeploymentAnalysisWorkItem>();
+        work.HasIndex(item => item.AnalysisId).IsUnique();
+        work.HasIndex(item => new { item.CompletedAt, item.ClaimedAt });
+        work.HasOne(item => item.Analysis).WithOne().HasForeignKey<DeploymentAnalysisWorkItem>(item => item.AnalysisId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 

@@ -22,7 +22,7 @@ internal sealed class LocalDeploymentLogStreamManager(
     /// <summary>
     ///     Starts web and database container log/metric streams for a running deployment.
     /// </summary>
-    public void Start(DeploymentConfigDto config, CsProject csProject)
+    public void Start(DeploymentConfigDto config, CsProject csProject, Guid deploymentId)
     {
         var cts = new CancellationTokenSource();
         ActiveLogStreams.AddOrUpdate(config.ProjectId, cts, (_, oldCts) =>
@@ -33,7 +33,7 @@ internal sealed class LocalDeploymentLogStreamManager(
 
         var token = cts.Token;
 
-        _ = Task.Run(async () => await RunStreamsAsync(config, csProject, cts, token), token);
+        _ = Task.Run(async () => await RunStreamsAsync(config, csProject, deploymentId, cts, token), token);
     }
 
     /// <summary>
@@ -53,12 +53,13 @@ internal sealed class LocalDeploymentLogStreamManager(
     /// <summary>
     ///     Runs all configured stream tasks inside an independent service scope.
     /// </summary>
-    private async Task RunStreamsAsync(DeploymentConfigDto config, CsProject csProject, CancellationTokenSource cts,
+    private async Task RunStreamsAsync(DeploymentConfigDto config, CsProject csProject, Guid deploymentId,
+        CancellationTokenSource cts,
         CancellationToken token)
     {
         using var scope = serviceScopeFactory.CreateScope();
         var scopedDockerService = scope.ServiceProvider.GetRequiredService<IDockerService>();
-        var streamingTasks = CreateStreamingTasks(scopedDockerService, config, csProject, token);
+        var streamingTasks = CreateStreamingTasks(scopedDockerService, config, csProject, deploymentId, token);
 
         try
         {
@@ -88,14 +89,14 @@ internal sealed class LocalDeploymentLogStreamManager(
     ///     Creates Docker log and metric stream tasks for the web container and configured databases.
     /// </summary>
     private static List<Task> CreateStreamingTasks(IDockerService dockerService, DeploymentConfigDto config,
-        CsProject csProject, CancellationToken token)
+        CsProject csProject, Guid deploymentId, CancellationToken token)
     {
         var appName = OrchestrationNameNormalizer.NormalizeContainerName(config.ProjectName);
         var webContainerName = $"{OrchestrationNameNormalizer.NormalizeContainerName(csProject.Name)}-web";
         var streamingTasks = new List<Task>
         {
-            dockerService.StreamContainerLogsAsync(webContainerName, config.ProjectId, "web", token),
-            dockerService.StreamContainerMetricsAsync(webContainerName, config.ProjectId, "web", token)
+            dockerService.StreamContainerLogsAsync(webContainerName, config.ProjectId, deploymentId, "web", token),
+            dockerService.StreamContainerMetricsAsync(webContainerName, config.ProjectId, deploymentId, "web", token)
         };
 
         if (config.Databases == null)
@@ -107,12 +108,14 @@ internal sealed class LocalDeploymentLogStreamManager(
             streamingTasks.Add(dockerService.StreamContainerLogsAsync(
                 dbContainerName,
                 config.ProjectId,
+                deploymentId,
                 database.ContainerNameSuffix,
                 token));
 
             streamingTasks.Add(dockerService.StreamContainerMetricsAsync(
                 dbContainerName,
                 config.ProjectId,
+                deploymentId,
                 database.ContainerNameSuffix,
                 token));
         }

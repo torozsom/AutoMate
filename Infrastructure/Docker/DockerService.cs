@@ -1,8 +1,8 @@
 using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Text;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
-using Application.Abstractions.Logging;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
@@ -48,7 +48,8 @@ public sealed class DockerService : IDockerService, IDisposable
     /// <summary>
     ///     Initializes Docker daemon and CLI helpers using platform-specific Docker connection settings.
     /// </summary>
-    public DockerService(ILogger<DockerService> logger, ILogStreamer logStreamer, IOptions<DockerOptions> options)
+    public DockerService(ILogger<DockerService> logger, IDeploymentDiagnosticPublisher diagnostics,
+        IOptions<DockerOptions> options)
     {
         _logger = logger;
         _options = options.Value;
@@ -59,7 +60,7 @@ public sealed class DockerService : IDockerService, IDisposable
 
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
         _buildContextArchive = new DockerBuildContextArchive(_options, _logger);
-        _dockerCli = new DockerCli(_options, logStreamer, _logger);
+        _dockerCli = new DockerCli(_options, diagnostics, _logger);
     }
 
     /// <inheritdoc />
@@ -185,6 +186,7 @@ public sealed class DockerService : IDockerService, IDisposable
 
     /// <inheritdoc />
     public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
+        Guid deploymentId,
         CancellationToken cancellationToken = default)
     {
         var safeProjectName = DockerNameNormalizer.NormalizeProjectName(projectName);
@@ -192,7 +194,7 @@ public sealed class DockerService : IDockerService, IDisposable
             "[DockerService] Starting 'docker compose up -d' for project '{ProjectName}' in {Directory}",
             safeProjectName, workingDir);
 
-        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, cancellationToken,
+        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, deploymentId, cancellationToken,
             "up", "-d", "--build");
     }
 
@@ -205,7 +207,8 @@ public sealed class DockerService : IDockerService, IDisposable
             "[DockerService] Starting 'docker compose down' for project '{ProjectName}' in {Directory}",
             safeProjectName, workingDir);
 
-        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, cancellationToken, "down");
+        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, null, cancellationToken,
+            "down");
     }
 
     /// <inheritdoc />
@@ -215,7 +218,8 @@ public sealed class DockerService : IDockerService, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken)
     {
         try
@@ -248,7 +252,8 @@ public sealed class DockerService : IDockerService, IDisposable
                     if (readResult.Count > 0)
                     {
                         var logLine = Encoding.UTF8.GetString(buffer, 0, readResult.Count);
-                        await _dockerCli.StreamContainerLogAsync(projectId, containerSuffixOrTabId, logLine);
+                        await _dockerCli.StreamContainerLogAsync(projectId, deploymentId, containerSuffixOrTabId,
+                            logLine);
                     }
                 }
             }
@@ -271,10 +276,11 @@ public sealed class DockerService : IDockerService, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken)
     {
-        await _dockerCli.StreamContainerMetricsAsync(containerName, projectId, containerSuffixOrTabId,
+        await _dockerCli.StreamContainerMetricsAsync(containerName, projectId, deploymentId, containerSuffixOrTabId,
             cancellationToken);
     }
 

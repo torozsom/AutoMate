@@ -44,6 +44,9 @@ public class Configuration : BaseEntity
     /// </summary>
     public string? EnvironmentVariablesJson { get; set; }
 
+    /// <summary>Owner-granted consent for redacted diagnostics to leave AutoMate for AI analysis.</summary>
+    public bool AiDiagnosticEgressConsented { get; set; }
+
 
     /// <summary>
     ///     Gets or sets the Azure region where the container app should be deployed (e.g., "eastus").

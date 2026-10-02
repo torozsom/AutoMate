@@ -1,20 +1,28 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Azure;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Email;
 using Application.Abstractions.GitHub;
+using Application.Abstractions.Hosting;
 using Application.Abstractions.Logging;
 using Application.Abstractions.Scanning;
 using Application.Abstractions.Templating;
+using Application.Ai;
 using Application.Auth;
 using Application.Data.Apps;
 using Application.Data.Users;
+using Application.Diagnostics;
 using Application.Orchestration;
 using Domain.Entities;
+using Infrastructure.Ai;
 using Infrastructure.Azure;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics;
 using Infrastructure.Docker;
 using Infrastructure.Email;
 using Infrastructure.GitHub;
@@ -28,6 +36,10 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Web.Extensions;
 using Web.Services;
 
@@ -45,6 +57,7 @@ public static class ServiceConfiguration
     private const string AutoMateUserIdAuthProperty = "automate_user_id";
     private const string AzureConnectionRedirectUri = "/dashboard";
     private const string AzureManagementScope = "https://management.azure.com/.default";
+    private const string AzureMonitorLogsScope = "https://api.loganalytics.io/.default";
     private const string DefaultMicrosoftAuthorityTenant = "organizations";
 
 
@@ -259,7 +272,10 @@ public static class ServiceConfiguration
             builder.Services.AddHealthChecks();
 
             // Bind Strongly-Typed Configurations
-            builder.AddConfigurations();
+            var deploymentCapabilities = builder.AddConfigurations();
+
+            // Add operational telemetry before registering deployment adapters.
+            builder.AddObservability();
 
             // Add Infrastructure (DB, Redis, Clients)
             builder.AddInfrastructure();
@@ -271,7 +287,7 @@ public static class ServiceConfiguration
             builder.AddPresentation();
 
             // Add Business Logic Services
-            builder.Services.RegisterDomainServices();
+            builder.Services.RegisterDomainServices(deploymentCapabilities);
 
             // Register Minimal API Endpoints
             builder.Services.AddEndpoints();
@@ -283,10 +299,80 @@ public static class ServiceConfiguration
         /// <summary>
         ///     Binds application settings to strongly-typed option classes using the Options Pattern.
         /// </summary>
-        private void AddConfigurations()
+        private IDeploymentCapabilities AddConfigurations()
         {
             builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
             builder.Services.Configure<DockerOptions>(builder.Configuration.GetSection(DockerOptions.SectionName));
+            builder.Services.Configure<DeploymentDiagnosticOptions>(
+                builder.Configuration.GetSection(DeploymentDiagnosticOptions.SectionName));
+            builder.Services.Configure<GitHubWorkflowMonitoringOptions>(
+                builder.Configuration.GetSection(GitHubWorkflowMonitoringOptions.SectionName));
+            builder.Services.Configure<OpenTelemetryOptions>(
+                builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
+            builder.Services.Configure<AiAnalysisOptions>(
+                builder.Configuration.GetSection(AiAnalysisOptions.SectionName));
+            builder.Services.Configure<AzureMonitorLogsOptions>(options =>
+            {
+                var tenant = GetMicrosoftAuthorityTenant(builder.Configuration["Authentication:Microsoft:TenantId"]);
+                options.TokenEndpoint = $"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token";
+                options.ClientId = builder.Configuration["Authentication:Microsoft:ClientId"] ?? string.Empty;
+                options.ClientSecret = builder.Configuration["Authentication:Microsoft:ClientSecret"] ?? string.Empty;
+                options.Scope = AzureMonitorLogsScope;
+            });
+
+            var hostingProfile = builder.Configuration.GetSection(HostingProfileOptions.SectionName)
+                .Get<HostingProfileOptions>() ?? new HostingProfileOptions();
+            var capabilities = hostingProfile.ToCapabilities();
+            builder.Services.AddSingleton(capabilities);
+            builder.Services.AddSingleton<IDeploymentCapabilities>(capabilities);
+            return capabilities;
+        }
+
+
+        /// <summary>Registers OpenTelemetry for AutoMate's own requests, providers, and deployment diagnostics.</summary>
+        private void AddObservability()
+        {
+            var options = builder.Configuration.GetSection(OpenTelemetryOptions.SectionName)
+                .Get<OpenTelemetryOptions>() ?? new OpenTelemetryOptions();
+            var exportConsole = options.ExportConsole;
+            var hasOtlpEndpoint = Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out var otlpEndpoint);
+            var serviceVersion = typeof(ServiceConfiguration).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+            builder.Logging.AddOpenTelemetry(logging =>
+            {
+                logging.IncludeFormattedMessage = true;
+                logging.IncludeScopes = true;
+                if (exportConsole) logging.AddConsoleExporter();
+                if (hasOtlpEndpoint) logging.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
+            });
+
+            builder.Services.AddOpenTelemetry()
+                .ConfigureResource(resource => resource
+                    .AddService(options.ServiceName, serviceVersion: serviceVersion)
+                    .AddAttributes([
+                        new KeyValuePair<string, object>("deployment.environment",
+                            options.Environment ?? builder.Environment.EnvironmentName)
+                    ]))
+                .WithTracing(tracing =>
+                {
+                    tracing.AddAspNetCoreInstrumentation();
+                    tracing.AddHttpClientInstrumentation();
+                    tracing.AddEntityFrameworkCoreInstrumentation();
+                    tracing.AddSource(AutoMateTelemetry.Deployments.Name);
+                    tracing.AddSource(AutoMateTelemetry.Security.Name);
+                    if (exportConsole) tracing.AddConsoleExporter();
+                    if (hasOtlpEndpoint) tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
+                })
+                .WithMetrics(metrics =>
+                {
+                    metrics.AddAspNetCoreInstrumentation();
+                    metrics.AddHttpClientInstrumentation();
+                    metrics.AddRuntimeInstrumentation();
+                    metrics.AddMeter(AutoMateTelemetry.DeploymentMeter.Name);
+                    metrics.AddMeter(AutoMateTelemetry.SecurityMeter.Name);
+                    if (exportConsole) metrics.AddConsoleExporter();
+                    if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
+                });
         }
 
 
@@ -312,7 +398,14 @@ public static class ServiceConfiguration
 
             // External API Clients with Resilience
             services.AddHttpClient<IGitHubService, GitHubService>()
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
                 .AddStandardResilienceHandler();
+            services.AddHttpClient<ILlmAnalysisProvider, OpenAiAnalysisProvider>()
+                .AddStandardResilienceHandler();
+            services.AddScoped<IDeploymentDiagnosticStore, DeploymentDiagnosticStore>();
+            services.AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>();
+            services.AddScoped<IDeploymentAnalysisQueue, DeploymentAnalysisQueue>();
+            services.AddHostedService<DeploymentAnalysisWorker>();
         }
 
 
@@ -429,6 +522,21 @@ public static class ServiceConfiguration
                     });
                 });
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.OnRejected = (context, _) =>
+                {
+                    var authenticationState = context.HttpContext.User.Identity?.IsAuthenticated == true
+                        ? "authenticated"
+                        : "anonymous";
+                    using var activity = AutoMateTelemetry.Security.StartActivity("security.rate_limit.rejected");
+                    activity?.SetTag("security.authentication_state", authenticationState);
+                    var tags = new TagList { { "security.authentication_state", authenticationState } };
+                    AutoMateTelemetry.RateLimitRejections.Add(1, tags);
+                    context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("AutoMate.Security.RateLimiting")
+                        .LogWarning("Rate limit rejected request. Authentication state {AuthenticationState}.",
+                            authenticationState);
+                    return ValueTask.CompletedTask;
+                };
             });
         }
 
@@ -454,23 +562,44 @@ public static class ServiceConfiguration
         /// <summary>
         ///     Registers core domain and application services into the DI container.
         /// </summary>
-        private void RegisterDomainServices()
+        private void RegisterDomainServices(IDeploymentCapabilities capabilities)
         {
             // Core/Auth Services
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<IPasswordHasher<LocalUser>, PasswordHasher<LocalUser>>();
 
-            // Orchestration & Docker
-            services.AddScoped<IDockerService, DockerService>();
-            services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+            // Orchestration & Docker. Local services are intentionally absent from SaaS instances.
+            if (capabilities.LocalDeploymentsEnabled)
+            {
+                services.AddScoped<IDockerService, DockerService>();
+                services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+            }
+            else
+            {
+                services.AddScoped<IDockerService, DisabledDockerService>();
+            }
+
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
             services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
             services.AddHostedService<DeploymentJobWorker>();
             services.AddScoped<IAzureDeploymentOrchestrator, AzureDeploymentOrchestrator>();
-            services.AddScoped<IAzureContainerAppRuntimeStreamer, AzureContainerAppRuntimeStreamer>();
+            services.AddSingleton<AzureMonitorLogsTokenProvider>();
+            services.AddSingleton<IAzureMonitorLogsTokenProvider>(serviceProvider =>
+                serviceProvider.GetRequiredService<AzureMonitorLogsTokenProvider>());
+            services.AddSingleton<AzureContainerAppRuntimeStreamer>();
+            services.AddSingleton<IAzureContainerAppRuntimeStreamer>(serviceProvider =>
+                serviceProvider.GetRequiredService<AzureContainerAppRuntimeStreamer>());
+            services.AddHostedService(serviceProvider =>
+                serviceProvider.GetRequiredService<AzureContainerAppRuntimeStreamer>());
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
             services.AddHostedService<DeploymentCleanupHostedService>();
-            services.AddScoped<ILogStreamer, RealTimeLogStreamer>();
+            services.AddSingleton<ILogStreamer, RealTimeLogStreamer>();
+            services.AddSingleton<IDiagnosticRedactor, DiagnosticRedactor>();
+            services.AddSingleton<DeploymentDiagnosticPublisher>();
+            services.AddSingleton<IDeploymentDiagnosticPublisher>(serviceProvider =>
+                serviceProvider.GetRequiredService<DeploymentDiagnosticPublisher>());
+            services.AddHostedService<DeploymentDiagnosticDispatcher>();
+            services.AddHostedService<DeploymentDiagnosticRetentionService>();
 
             // Business & Utilities
             services.AddScoped<IApplicationService, ApplicationService>();

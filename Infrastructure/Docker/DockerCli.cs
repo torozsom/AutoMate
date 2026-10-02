@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Application.Abstractions.Logging;
+using Application.Abstractions.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Docker;
@@ -7,7 +7,7 @@ namespace Infrastructure.Docker;
 /// <summary>
 ///     Executes Docker CLI commands needed for Compose, metrics, port discovery, and project listing.
 /// </summary>
-internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer, ILogger logger)
+internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPublisher diagnostics, ILogger logger)
 {
     /// <summary>
     ///     Timeout used while listing running Docker Compose projects.
@@ -23,10 +23,11 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
     ///     Executes a Docker Compose command and streams stdout/stderr to the build log channel.
     /// </summary>
     public async Task<bool> RunComposeAsync(string workingDir, string safeProjectName, Guid projectId,
+        Guid? deploymentId,
         CancellationToken cancellationToken, params string[] composeArguments)
     {
         var startInfo = DockerProcessStartInfoFactory.CreateCompose(workingDir, safeProjectName, composeArguments);
-        return await ExecuteProcessStreamingLogsAsync(startInfo, projectId, cancellationToken);
+        return await ExecuteProcessStreamingLogsAsync(startInfo, projectId, deploymentId, cancellationToken);
     }
 
     /// <summary>
@@ -84,15 +85,23 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
     /// <summary>
     ///     Streams one container log line through the shared real-time log pipeline.
     /// </summary>
-    public async Task StreamContainerLogAsync(Guid projectId, string containerSuffixOrTabId, string logLine)
+    public async Task StreamContainerLogAsync(Guid projectId, Guid deploymentId, string containerSuffixOrTabId,
+        string logLine)
     {
-        await logStreamer.StreamContainerLogsAsync(projectId, containerSuffixOrTabId, logLine);
+        await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, deploymentId,
+            DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Log,
+            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, logLine,
+            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, containerSuffixOrTabId),
+            new Dictionary<string, string> { ["stream"] = "combined" },
+            SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
+                DeploymentDiagnosticStream.StandardOutput, containerSuffixOrTabId)));
     }
 
     /// <summary>
     ///     Streams Docker CLI stats output for one container through the metrics channel.
     /// </summary>
-    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken)
     {
         try
@@ -120,8 +129,17 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
                     break;
 
                 if (DockerMetricsLine.TryParse(line, out var metrics))
-                    await logStreamer.StreamContainerMetricsAsync(projectId, containerSuffixOrTabId, metrics.Cpu,
-                        metrics.Memory);
+                    await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, deploymentId,
+                            DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Metric,
+                            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
+                            $"Container metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
+                            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics,
+                                containerSuffixOrTabId),
+                            new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
+                            SourceIdentity: new DeploymentDiagnosticSourceIdentity(
+                                DeploymentDiagnosticComponent.Container,
+                                DeploymentDiagnosticStream.Metric, containerSuffixOrTabId)),
+                        cancellationToken);
             }
         }
         catch (OperationCanceledException ex)
@@ -179,13 +197,14 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
     ///     Executes a process and forwards all emitted output to the deployment build log.
     /// </summary>
     private async Task<bool> ExecuteProcessStreamingLogsAsync(ProcessStartInfo startInfo, Guid projectId,
+        Guid? deploymentId,
         CancellationToken cancellationToken)
     {
         using var process = new Process();
         process.StartInfo = startInfo;
 
-        process.OutputDataReceived += (_, e) => StreamBuildLogLine(projectId, e.Data);
-        process.ErrorDataReceived += (_, e) => StreamBuildLogLine(projectId, e.Data);
+        process.OutputDataReceived += (_, e) => StreamBuildLogLine(projectId, deploymentId, e.Data);
+        process.ErrorDataReceived += (_, e) => StreamBuildLogLine(projectId, deploymentId, e.Data);
 
         try
         {
@@ -225,10 +244,15 @@ internal sealed class DockerCli(DockerOptions options, ILogStreamer logStreamer,
     /// <summary>
     ///     Forwards a non-empty build log line to the real-time log streamer.
     /// </summary>
-    private void StreamBuildLogLine(Guid projectId, string? line)
+    private void StreamBuildLogLine(Guid projectId, Guid? deploymentId, string? line)
     {
         if (!string.IsNullOrWhiteSpace(line))
-            logStreamer.StreamBuildLogsAsync(projectId, line + "\r\n");
+            _ = diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, deploymentId,
+                DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.BuildProgress,
+                DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, line + "\r\n",
+                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build),
+                SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Compose,
+                    DeploymentDiagnosticStream.StandardOutput)));
     }
 
     /// <summary>

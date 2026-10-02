@@ -1,5 +1,12 @@
 bin/
 obj/
+.env
+**/.env
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+.*
+!.agents/
+.agents/*
+!.agents/AGENTS.md
+deploy/

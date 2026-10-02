@@ -5,10 +5,13 @@ Application contracts, coordination primitives, and outbound ports. This project
 ## Source inventory
 
 - `Application.csproj`
+- `Diagnostics/AutoMateTelemetry.cs` — stable, provider-independent activity and meter names for deployment and
+  security telemetry.
 
 ## Boundary
 
-Keep this module independent of Infrastructure and Web. Provider-facing work crosses an interface in Application/Abstractions.
+Keep this module independent of Infrastructure and Web. Provider-facing work crosses an interface in
+Application/Abstractions.
 
 ## Related documentation
 

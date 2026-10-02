@@ -1,4 +1,5 @@
 using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Web.Hubs;
 using Web.Routes;
 
@@ -89,13 +90,10 @@ public static class AppConfiguration
 
             try
             {
-                // Modern EF Core connectivity check
-                var canConnect = await db.Database.CanConnectAsync();
-                if (canConnect)
-                    logger.LogInformation("[Startup] Successfully connected to the database.");
-                else
-                    logger.LogWarning("[Startup] Failed to connect to the database. " +
-                                      "Ensure the database is running and credentials are valid.");
+                // A self-hosted installation starts with an empty persistent database.
+                // Applying checked-in migrations makes a tagged container image deployable without a separate EF tool.
+                await db.Database.MigrateAsync();
+                logger.LogInformation("[Startup] Database migrations are current.");
             }
             catch (Exception ex)
             {

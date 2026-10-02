@@ -5,6 +5,11 @@
 <div id="@Id" style="height: 100%; width: 100%; padding: 10px;"></div>
 
 @code {
+    private const int MaxPendingCharacters = 2_250_000;
+    private readonly Queue<string> _pendingWrites = new();
+    private int _pendingCharacters;
+    private bool _pendingOverflow;
+    private bool _isReady;
 
     /// <summary>
     ///     Unique identifier for the terminal instance, used for JavaScript interop.
@@ -31,7 +36,20 @@
         {
             await JSRuntime.InvokeVoidAsync("xtermWrapper.init", Id);
 
-            // Invoke the OnReady event if it has been provided
+            while (_pendingWrites.TryDequeue(out var pending))
+            {
+                _pendingCharacters -= pending.Length;
+                await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id, pending);
+            }
+
+            _isReady = true;
+            if (_pendingOverflow)
+            {
+                await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id,
+                    "\r\n[Some output was omitted while the terminal initialized. Reload to recover available history.]\r\n");
+                _pendingOverflow = false;
+            }
+
             if (OnReady.HasDelegate)
                 await OnReady.InvokeAsync();
         }
@@ -44,7 +62,31 @@
     /// <param name="text">The text to write.</param>
     public async Task WriteAsync(string text)
     {
+        if (!_isReady)
+        {
+            if (_pendingCharacters + text.Length <= MaxPendingCharacters)
+            {
+                _pendingWrites.Enqueue(text);
+                _pendingCharacters += text.Length;
+            }
+            else
+            {
+                _pendingOverflow = true;
+            }
+
+            return;
+        }
+
         await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id, text);
+    }
+
+    public Task ClearAsync()
+    {
+        _pendingWrites.Clear();
+        _pendingCharacters = 0;
+        _pendingOverflow = false;
+        if (!_isReady) return Task.CompletedTask;
+        return JSRuntime.InvokeVoidAsync("xtermWrapper.clear", Id).AsTask();
     }
 
 
@@ -54,7 +96,7 @@
     /// <param name="text">The text to write.</param>
     public async Task WriteLineAsync(string text)
     {
-        await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id, text + "\r\n");
+        await WriteAsync(text + "\r\n");
     }
 
 

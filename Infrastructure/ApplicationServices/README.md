@@ -1,6 +1,7 @@
 # Infrastructure Application Services
 
-Current EF-backed implementations of Application service contracts. This transitional module owns direct AutoMateDbContext access.
+Current EF-backed implementations of Application service contracts. This transitional module owns direct
+AutoMateDbContext access.
 
 ## Source inventory
 
@@ -8,7 +9,8 @@ Current EF-backed implementations of Application service contracts. This transit
 
 ## Boundary
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific behavior.
+Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
+behavior.
 
 ## Related documentation
 

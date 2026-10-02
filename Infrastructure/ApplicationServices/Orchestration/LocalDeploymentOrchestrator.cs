@@ -1,4 +1,5 @@
 using Application.Abstractions.Docker;
+using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Abstractions.Templating;
 using Domain.DTO;
@@ -21,6 +22,7 @@ public sealed class LocalDeploymentOrchestrator(
     IProjectScannerService projectScanner,
     ITemplatingService templateService,
     IDockerService dockerService,
+    IDeploymentCapabilities capabilities,
     ILogger<LocalDeploymentOrchestrator> logger,
     IServiceScopeFactory serviceScopeFactory,
     IDeploymentStatusNotifier statusNotifier)
@@ -56,6 +58,7 @@ public sealed class LocalDeploymentOrchestrator(
     public async Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config,
         CancellationToken cancellationToken = default)
     {
+        EnsureLocalDeploymentEnabled();
         ArgumentNullException.ThrowIfNull(config);
 
         logger.LogInformation(
@@ -111,6 +114,7 @@ public sealed class LocalDeploymentOrchestrator(
     public async Task StopDeploymentAsync(Guid projectId, string projectName, string csProjectPath,
         CancellationToken cancellationToken = default)
     {
+        EnsureLocalDeploymentEnabled();
         logger.LogInformation("[LocalDeploymentOrchestrator] Stopping deployment for Project ID {Id}...", projectId);
 
         var solutionRoot = await systemScanner.FindSolutionRootAsync(csProjectPath, cancellationToken);
@@ -150,6 +154,12 @@ public sealed class LocalDeploymentOrchestrator(
         }
     }
 
+    private void EnsureLocalDeploymentEnabled()
+    {
+        if (!capabilities.LocalDeploymentsEnabled)
+            throw new InvalidOperationException("Local Docker deployments are disabled for this AutoMate instance.");
+    }
+
 
     /// <summary>
     ///     Executes the main steps of the deployment process, including locating the solution root,
@@ -185,6 +195,7 @@ public sealed class LocalDeploymentOrchestrator(
 
         var isDockerSuccess =
             await dockerService.RunDockerComposeUpAsync(automateDir, config.ProjectName, config.ProjectId,
+                deployment.Id,
                 cancellationToken);
 
         if (!isDockerSuccess)
@@ -197,6 +208,6 @@ public sealed class LocalDeploymentOrchestrator(
         await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
             cancellationToken);
 
-        _logStreamManager.Start(config, csProject);
+        _logStreamManager.Start(config, csProject, deployment.Id);
     }
 }

@@ -2,6 +2,16 @@
 
 GitHub API infrastructure adapter implementation.
 
+GitHub workflow, job, and step state are normalized into deployment diagnostics while the run is active. Jobs are
+discovered page by page, and each job/step status change is shown as GitHub reports it. Text output is intentionally
+deferred until the entire workflow has completed: job-log downloads and the final run archive then supply normalized,
+redacted output through bounded chunks and persisted deduplication checkpoints. Each log download follows GitHub's
+short-lived signed redirect without forwarding the OAuth token to the download host.
+
+Job/step state lines are emitted only when that state changes; pending steps are not printed. No per-step log
+availability probe or runner-side forwarder is needed for the chosen progress-then-logs presentation. Diagnostic
+delivery failures are isolated from the workflow conclusion.
+
 ## Source inventory
 
 - `GitHubApiRequestFactory.cs`
@@ -10,12 +20,17 @@ GitHub API infrastructure adapter implementation.
 - `GitHubSecretEncryptor.cs`
 - `GitHubService.cs`
 - `GitHubWorkflowLogReader.cs`
+- `GitHubWorkflowLogNormalizer.cs`
+- `GitHubWorkflowJobMapper.cs`
+- `GitHubWorkflowJobModels.cs`
+- `GitHubWorkflowCheckpointStore.cs`
 - `GitHubWorkflowRunMapper.cs`
 - `GitHubWorkflowRunModels.cs`
 
 ## Boundary
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific behavior.
+Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
+behavior.
 
 ## Related documentation
 

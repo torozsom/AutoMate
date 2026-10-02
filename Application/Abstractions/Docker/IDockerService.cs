@@ -18,7 +18,7 @@ public interface IDockerService
         string? envVarsJson = null, CancellationToken cancellationToken = default);
 
     /// <summary>Executes the 'docker compose up' command in the specified working directory.</summary>
-    Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
+    Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId, Guid deploymentId,
         CancellationToken cancellationToken = default);
 
     /// <summary>Executes the 'docker compose down' command in the specified working directory.</summary>
@@ -29,11 +29,13 @@ public interface IDockerService
     Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Starts streaming logs for a specified container to the log streamer.</summary>
-    Task StreamContainerLogsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    Task StreamContainerLogsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken);
 
     /// <summary>Starts streaming metrics for a specified container to the log streamer.</summary>
-    Task StreamContainerMetricsAsync(string containerName, Guid projectId, string containerSuffixOrTabId,
+    Task StreamContainerMetricsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId,
         CancellationToken cancellationToken);
 
     /// <summary>Gets the host port mapped to the specified container.</summary>

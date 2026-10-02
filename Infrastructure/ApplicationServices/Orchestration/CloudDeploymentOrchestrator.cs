@@ -1,12 +1,14 @@
 using Application.Abstractions.Azure;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.GitHub;
-using Application.Abstractions.Logging;
+using Application.Abstractions.Hosting;
 using Application.Abstractions.Templating;
 using Domain.DTO;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Application.Orchestration;
 
@@ -19,8 +21,12 @@ public sealed class CloudDeploymentOrchestrator(
     IGitHubService gitHubService,
     IAzureDeploymentOrchestrator azureDeploymentOrchestrator,
     IAzureContainerAppRuntimeStreamer azureContainerAppRuntimeStreamer,
-    ILogStreamer logStreamer,
+    IDeploymentCapabilities capabilities,
+    IDeploymentDiagnosticPublisher diagnostics,
+    IDiagnosticRedactor redactor,
+    IOptions<GitHubWorkflowMonitoringOptions> workflowMonitoringOptions,
     ILogger<CloudDeploymentOrchestrator> logger,
+    ILoggerFactory loggerFactory,
     IDeploymentStatusNotifier statusNotifier)
     : ICloudDeploymentOrchestrator
 {
@@ -38,12 +44,16 @@ public sealed class CloudDeploymentOrchestrator(
     /// <summary>
     ///     Polls GitHub Actions and streams cloud deployment logs.
     /// </summary>
-    private readonly GitHubWorkflowMonitor _workflowMonitor = new(gitHubService, logStreamer, logger);
+    private readonly GitHubWorkflowMonitor _workflowMonitor = new(dbContext, gitHubService, diagnostics, redactor,
+        workflowMonitoringOptions.Value, loggerFactory.CreateLogger<GitHubWorkflowMonitor>());
 
     /// <inheritdoc />
     public async Task<Deployment> DeployCloudProjectAsync(CloudDeploymentRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        if (!capabilities.CloudDeploymentsEnabled)
+            throw new InvalidOperationException("Cloud deployments are disabled for this AutoMate instance.");
+
         CloudDeploymentRequestValidator.Validate(request);
 
         var config = request.Config;
@@ -66,7 +76,7 @@ public sealed class CloudDeploymentOrchestrator(
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync(cancellationToken);
         statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
-        await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+        await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
             $"Starting cloud deployment preparation for {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}.");
 
         try
@@ -74,7 +84,7 @@ public sealed class CloudDeploymentOrchestrator(
             var oidcSetup = await azureDeploymentOrchestrator.EnsureFederatedIdentityAsync(request.AzureCredentials,
                 config, request.RepositoryOwner, request.RepositoryName, request.BranchName, cancellationToken);
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Azure OIDC trust configured for GitHub Actions. Identity: {oidcSetup.IdentityResourceId}. Federated credential: {oidcSetup.FederatedCredentialName}. Subject: {oidcSetup.Subject}. Audience: {oidcSetup.Audience}.");
 
             if (string.IsNullOrWhiteSpace(oidcSetup.ClientId) ||
@@ -87,7 +97,8 @@ public sealed class CloudDeploymentOrchestrator(
             await gitHubService.UpsertRepositorySecretsAsync(request.GitHubAccessToken, request.RepositoryOwner,
                 request.RepositoryName, repositorySecrets, cancellationToken);
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId, "GitHub Actions repository secrets upserted.");
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
+                "GitHub Actions repository secrets upserted.");
 
             var files = await templateService.GenerateAllTemplatesAsync(config, request.Metadata, request.CsProjectName,
                 request.RepositoryRoot, cancellationToken);
@@ -95,23 +106,24 @@ public sealed class CloudDeploymentOrchestrator(
             if (files.Count == 0)
                 throw new InvalidOperationException("No cloud deployment templates were generated.");
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Generated {files.Count} cloud deployment file(s): {string.Join(", ", files.Select(f => f.Path))}.");
 
             var commitSha = await gitHubService.CommitCloudDeploymentFilesAsync(request.GitHubAccessToken,
                 request.RepositoryOwner, request.RepositoryName, files, request.BranchName,
                 cancellationToken: cancellationToken);
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Committed cloud deployment files to {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}. Commit: {commitSha}");
 
-            await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 "GitHub Actions workflow will start from the deployment branch push trigger.");
 
             deployment.ImageTag = commitSha;
             await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
                 cancellationToken);
 
-            var workflowRun = await _workflowMonitor.PollWorkflowRunAsync(request, commitSha, cancellationToken);
+            var workflowRun = await _workflowMonitor.PollWorkflowRunAsync(request, deployment, commitSha,
+                cancellationToken);
             if (workflowRun != null)
             {
                 deployment.CloudGitHubActionRunId = workflowRun.Id;
@@ -123,23 +135,26 @@ public sealed class CloudDeploymentOrchestrator(
             {
                 await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
                     cancellationToken);
-                await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                     $"GitHub Actions workflow failed. Details: {workflowRun.HtmlUrl}");
-                await _workflowMonitor.StreamWorkflowLogsAsync(request, workflowRun.Id, config.ProjectId,
-                    cancellationToken);
             }
             else if (workflowRun is { Status: "completed" } &&
                      string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
             {
-                await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                     $"GitHub Actions workflow completed successfully. Details: {workflowRun.HtmlUrl}");
-                await _workflowMonitor.StreamWorkflowLogsAsync(request, workflowRun.Id, config.ProjectId,
-                    cancellationToken);
-                azureContainerAppRuntimeStreamer.StartStreaming(request.AzureCredentials, config);
+                azureContainerAppRuntimeStreamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
+                {
+                    ProjectId = config.ProjectId,
+                    DeploymentId = deployment.Id,
+                    UserId = request.RequestingUserId,
+                    Config = config,
+                    AzureCredentials = request.AzureCredentials
+                });
             }
             else
             {
-                await _workflowMonitor.StreamBuildLogAsync(config.ProjectId,
+                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                     "GitHub Actions workflow is still queued or running. Refresh the project details page for the latest persisted status.");
             }
 

@@ -1,9 +1,11 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Application.Abstractions.GitHub;
 using Domain.Defaults;
 using Domain.DTO;
+using Domain.Enums;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Octokit;
@@ -335,26 +337,95 @@ public sealed class GitHubService : IGitHubService
 
 
     /// <inheritdoc />
-    public async Task<string?> DownloadWorkflowRunLogsAsync(string accessToken, string repoOwner, string repoName,
-        long runId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>> DownloadWorkflowRunLogEntriesAsync(
+        string accessToken, string repoOwner, string repoName, long runId,
+        CancellationToken cancellationToken = default)
     {
-        if (runId <= 0)
-            throw new ArgumentOutOfRangeException(nameof(runId), "Workflow run ID must be a positive number.");
+        if (runId <= 0) throw new ArgumentOutOfRangeException(nameof(runId));
 
         using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/logs");
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning(
-                "[GitHubService] GitHub returned {StatusCode} while downloading workflow logs for run {RunId}.",
-                response.StatusCode, runId);
-            return null;
-        }
+        using var response = await SendLogDownloadRequestAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode) return [];
 
         await using var zipStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await GitHubWorkflowLogReader.ReadFlattenedLogsAsync(zipStream, cancellationToken);
+        return await GitHubWorkflowLogReader.ReadEntriesAsync(zipStream, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<GitHubWorkflowJobDto>> GetWorkflowJobsAsync(string accessToken, string repoOwner,
+        string repoName, long runId, CancellationToken cancellationToken = default)
+    {
+        if (runId <= 0) throw new ArgumentOutOfRangeException(nameof(runId));
+
+        var jobs = new List<GitHubWorkflowJobItem>();
+        for (var page = 1; page <= 10; page++)
+        {
+            using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
+                $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/jobs?filter=latest&per_page=100&page={page}");
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+
+            var responseBody = await response.Content.ReadFromJsonAsync<GitHubWorkflowJobsResponse>(JsonOptions,
+                cancellationToken);
+            var pageJobs = responseBody?.Jobs ?? [];
+            jobs.AddRange(pageJobs);
+            if (pageJobs.Count < 100) break;
+        }
+
+        return GitHubWorkflowJobMapper.Map(jobs);
+    }
+
+    /// <inheritdoc />
+    public async Task<GitHubWorkflowJobLogDownload> DownloadWorkflowJobLogsAsync(string accessToken, string repoOwner,
+        string repoName, long jobId, CancellationToken cancellationToken = default)
+    {
+        if (jobId <= 0) throw new ArgumentOutOfRangeException(nameof(jobId));
+
+        using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
+            $"repos/{repoOwner}/{repoName}/actions/jobs/{jobId}/logs");
+        using var response = await SendLogDownloadRequestAsync(request, cancellationToken);
+
+        if (response.IsSuccessStatusCode)
+        {
+            await using var zipStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var zipLogText = await GitHubWorkflowLogReader.ReadTextAsync(zipStream, cancellationToken);
+            return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.Available, zipLogText);
+        }
+
+        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Conflict or
+            HttpStatusCode.UnprocessableEntity)
+            return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.NotAvailable);
+
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.AccessDenied);
+
+        _logger.LogWarning("GitHub returned {StatusCode} while downloading workflow job logs for job {JobId}.",
+            response.StatusCode, jobId);
+        return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.Failed);
+    }
+
+    /// <summary>
+    ///     Follows the short-lived, signed download location returned by GitHub Actions without forwarding OAuth credentials
+    ///     to the storage host. Automatic redirect behavior varies by handler and must not control log collection.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendLogDownloadRequestAsync(HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        var redirectLocation = response.Headers.Location;
+        if ((int)response.StatusCode is < 300 or >= 400 || redirectLocation is null)
+            return response;
+
+        var downloadUri = redirectLocation.IsAbsoluteUri
+            ? redirectLocation
+            : new Uri(response.RequestMessage?.RequestUri ?? GitHubApiBaseAddress, redirectLocation);
+        response.Dispose();
+
+        using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, downloadUri);
+        return await _httpClient.SendAsync(downloadRequest, HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
     }
 
 

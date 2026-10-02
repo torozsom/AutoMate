@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Application.Abstractions.Diagnostics;
 using Application.Data.Apps;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -12,6 +13,7 @@ namespace Web.Hubs;
 [AllowAnonymous]
 public sealed class LogHub(
     IApplicationService applicationService,
+    IDeploymentDiagnosticStore diagnosticStore,
     IDataProtectionProvider dataProtectionProvider,
     ILogger<LogHub> logger) : Hub<ILogClient>
 {
@@ -31,10 +33,12 @@ public sealed class LogHub(
     ///     An encrypted token containing verified identity and project mappings to authenticate the connection.
     /// </param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public async Task JoinProjectGroup(Guid projectId, string secureToken)
+    public async Task<DeploymentTerminalHistory> JoinProjectGroup(Guid projectId, Guid? deploymentId,
+        string secureToken)
     {
+        var empty = new DeploymentTerminalHistory([], false);
         if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(secureToken))
-            return;
+            throw new HubException("Invalid log subscription.");
 
         try
         {
@@ -45,19 +49,29 @@ public sealed class LogHub(
             if (parts.Length != 2
                 || !Guid.TryParse(parts[0], out var tokenProjectId)
                 || !Guid.TryParse(parts[1], out var userId))
-                return;
+                throw new HubException("Invalid log subscription.");
 
             if (tokenProjectId != projectId)
-                return;
+                throw new HubException("Invalid log subscription.");
 
             var app = await applicationService.GetAppByIdAsync(projectId, userId, Context.ConnectionAborted);
-            if (app != null)
-                await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
-                    Context.ConnectionAborted);
+            if (app is null)
+                throw new HubException("Project log access denied.");
+            if (deploymentId.HasValue && !app.CsProjects.SelectMany(project => project.Deployments)
+                    .Any(deployment => deployment.Id == deploymentId.Value))
+                throw new HubException("Deployment log access denied.");
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
+                Context.ConnectionAborted);
+            return deploymentId.HasValue
+                ? await diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500,
+                    Context.ConnectionAborted)
+                : empty;
         }
         catch (CryptographicException ex)
         {
             logger.LogDebug(ex, "Rejected log hub group join because the secure token was invalid or expired.");
+            throw new HubException("Invalid log subscription.");
         }
     }
 

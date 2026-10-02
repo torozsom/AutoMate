@@ -126,10 +126,13 @@
                             repository.</p>
                     </div>
                     <div class="empty-state-actions">
-                        <a href="/local-repos" class="btn btn-outline-primary">
-                            <i class="bi bi-folder2-open" aria-hidden="true"></i>
-                            Search locally
-                        </a>
+                        @if (DeploymentCapabilities.LocalDeploymentsEnabled)
+                        {
+                            <a href="/local-repos" class="btn btn-outline-primary">
+                                <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                                Search locally
+                            </a>
+                        }
                         <a href="/github-repos" class="btn btn-outline-dark">
                             <i class="bi bi-github" aria-hidden="true"></i>
                             Get GitHub repositories
@@ -204,10 +207,13 @@
                             <h2>Projects</h2>
                         </div>
                         <div class="project-source-actions">
-                            <a href="/local-repos" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-folder2-open" aria-hidden="true"></i>
-                                Local
-                            </a>
+                            @if (DeploymentCapabilities.LocalDeploymentsEnabled)
+                            {
+                                <a href="/local-repos" class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                                    Local
+                                </a>
+                            }
                             <a href="/github-repos" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-github" aria-hidden="true"></i>
                                 GitHub

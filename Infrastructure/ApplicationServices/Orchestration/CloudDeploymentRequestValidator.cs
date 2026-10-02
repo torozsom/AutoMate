@@ -14,6 +14,9 @@ internal static class CloudDeploymentRequestValidator
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        if (request.RequestingUserId == Guid.Empty)
+            throw new ArgumentException("A requesting user is required for cloud runtime monitoring.", nameof(request));
+
         if (string.IsNullOrWhiteSpace(request.RepositoryRoot))
             throw new ArgumentException("Repository root is required for cloud deployment template generation.",
                 nameof(request));

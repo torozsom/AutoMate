@@ -1,3 +1,5 @@
+using Application.Abstractions.Diagnostics;
+
 namespace Web.Hubs;
 
 /// <summary>
@@ -6,20 +8,14 @@ namespace Web.Hubs;
 public interface ILogClient
 {
     /// <summary>
-    ///     Receives a build log message from the server and processes it on the client side.
+    ///     Receives redacted output for one source-aware terminal channel.
     /// </summary>
-    /// <param name="message">The build log message received from the server.</param>
+    /// <param name="terminalChannel">The stable channel used to route output to the correct terminal.</param>
+    /// <param name="message">The terminal message received from the server.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task ReceiveBuildLog(string message);
+    Task ReceiveTerminalLog(DeploymentTerminalLog terminalLog);
 
-    /// <summary>
-    ///     Receives a container log message from the server, associated with a specific container, and processes it on the
-    ///     client side.
-    /// </summary>
-    /// <param name="containerName">The name of the container associated with the log message.</param>
-    /// <param name="message">The container log message received from the server.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    Task ReceiveContainerLog(string containerName, string message);
+    Task ReceiveTerminalNotice(string message);
 
     /// <summary>
     ///     Receives container metrics from the server and processes them on the client side.
