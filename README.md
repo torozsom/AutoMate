@@ -29,6 +29,22 @@ The application is built with a strict Clean Architecture split:
 
 ---
 
+## Screenshots
+
+<div align="center">
+  <img src="assets/homepage.png" width="100%" alt="AutoMate home page">
+  <br><br>
+  <img src="assets/dashboard.png" width="100%" alt="AutoMate dashboard">
+  <br><br>
+  <img src="assets/project-detail-1.png" width="100%" alt="AutoMate project details">
+  <br><br>
+  <img src="assets/project-detail-2.png" width="100%" alt="AutoMate project details">
+  <br><br>
+  <img src="assets/project-detail-3.png" width="100%" alt="AutoMate project details">
+</div>
+
+---
+
 ## Key Features
 
 - Local account registration with email verification
@@ -123,18 +139,6 @@ AutoMate intentionally keeps infrastructure and UI concerns out of the domain mo
 - **Data Protection for secrets:** provider access tokens are encrypted before persistence.
 - **OAuth and OIDC:** GitHub OAuth for source access, Microsoft OAuth for Azure connection, GitHub Actions OIDC for Azure deployment.
 - **Resource ownership boundaries:** generated deployment assets live in target repositories, while AutoMate stores only orchestration metadata.
-
----
-
-## Screenshots
-
-<div align="center">
-  <img src="assets/homepage.png" width="100%" alt="AutoMate home page">
-  <br><br>
-  <img src="assets/dashboard.png" width="100%" alt="AutoMate dashboard">
-  <br><br>
-  <img src="assets/webterminal.png" width="100%" alt="AutoMate live terminal">
-</div>
 
 ---
 
