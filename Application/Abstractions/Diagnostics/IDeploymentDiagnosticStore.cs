@@ -1,7 +1,6 @@
-using Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics;
 
-namespace Application.Abstractions.Ai;
-
+/// <summary>Persists redacted deployment diagnostics and builds bounded, safe diagnostic context.</summary>
 public interface IDeploymentDiagnosticStore
 {
     Task PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken cancellationToken = default);

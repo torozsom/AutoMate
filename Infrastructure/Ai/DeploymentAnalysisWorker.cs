@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Application.Abstractions.Ai;
+using Application.Abstractions.Diagnostics;
 using Application.Ai;
 using Domain.Enums;
 using Infrastructure.Data;

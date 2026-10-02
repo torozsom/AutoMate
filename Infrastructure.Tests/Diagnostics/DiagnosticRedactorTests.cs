@@ -46,4 +46,15 @@ public sealed class DiagnosticRedactorTests
         result.Event.Attributes["revision"].Should().Be("v1");
         result.RedactedValueCount.Should().Be(2);
     }
+
+    [Fact]
+    public void Event_contract_supports_typed_non_secret_source_identity()
+    {
+        var sourceIdentity = new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Job,
+            DeploymentDiagnosticStream.StandardError, "12345");
+
+        sourceIdentity.Component.Should().Be(DeploymentDiagnosticComponent.Job);
+        sourceIdentity.Stream.Should().Be(DeploymentDiagnosticStream.StandardError);
+        sourceIdentity.InstanceId.Should().Be("12345");
+    }
 }

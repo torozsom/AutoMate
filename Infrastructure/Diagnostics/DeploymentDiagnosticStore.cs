@@ -1,13 +1,13 @@
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
 using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Diagnostics;
 
+/// <summary>Stores already-redacted diagnostics and creates bounded analysis context from them.</summary>
 public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDeploymentDiagnosticStore
 {
     private static readonly TimeSpan Retention = TimeSpan.FromDays(30);

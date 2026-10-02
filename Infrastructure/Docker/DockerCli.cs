@@ -90,7 +90,9 @@ internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPubl
             DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Log,
             DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, logLine,
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, containerSuffixOrTabId),
-            new Dictionary<string, string> { ["stream"] = "combined" }));
+            new Dictionary<string, string> { ["stream"] = "combined" },
+            SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
+                DeploymentDiagnosticStream.StandardOutput, containerSuffixOrTabId)));
     }
 
     /// <summary>
@@ -129,7 +131,9 @@ internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPubl
                         DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
                         $"Container metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
                         new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, containerSuffixOrTabId),
-                        new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory }),
+                        new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
+                        SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
+                            DeploymentDiagnosticStream.Metric, containerSuffixOrTabId)),
                         cancellationToken);
             }
         }
@@ -240,7 +244,9 @@ internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPubl
             _ = diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, null,
                 DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.BuildProgress,
                 DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, line + "\r\n",
-                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)));
+                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build),
+                SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Compose,
+                    DeploymentDiagnosticStream.StandardOutput)));
     }
 
     /// <summary>

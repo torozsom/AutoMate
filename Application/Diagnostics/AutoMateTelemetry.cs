@@ -28,4 +28,18 @@ public static class AutoMateTelemetry
 
     /// <summary>Number of terminal delivery failures.</summary>
     public static readonly Counter<long> DeliveryFailures = Meter.CreateCounter<long>("automate.deployment.diagnostics.delivery_failures");
+
+    /// <summary>Number of redacted diagnostics persisted for bounded replay and context construction.</summary>
+    public static readonly Counter<long> EventsPersisted = Meter.CreateCounter<long>("automate.deployment.diagnostics.persisted");
+
+    /// <summary>Number of diagnostic persistence failures isolated from collection and delivery.</summary>
+    public static readonly Counter<long> PersistenceFailures = Meter.CreateCounter<long>("automate.deployment.diagnostics.persistence_failures");
+
+    /// <summary>Duration of redaction and bounded diagnostic ingestion.</summary>
+    public static readonly Histogram<double> IngestDuration = Meter.CreateHistogram<double>(
+        "automate.deployment.diagnostics.ingest.duration", unit: "ms");
+
+    /// <summary>Duration of persistence and terminal sink operations.</summary>
+    public static readonly Histogram<double> SinkDuration = Meter.CreateHistogram<double>(
+        "automate.deployment.diagnostics.sink.duration", unit: "ms");
 }

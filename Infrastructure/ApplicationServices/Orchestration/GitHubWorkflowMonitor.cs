@@ -228,12 +228,24 @@ internal sealed class GitHubWorkflowMonitor(
                     DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes)).Event.Message)
                 .ToArray();
             var archiveHash = GitHubWorkflowLogNormalizer.Hash(redactedLines);
-            if (!string.Equals(checkpoint.FinalArchiveContentHash, archiveHash, StringComparison.Ordinal))
-                foreach (var line in redactedLines)
+            var prefixMatches = checkpoint.LastLogLineCount == 0 || checkpoint.LastLogLineCount <= redactedLines.Length &&
+                string.Equals(checkpoint.LastLogPrefixHash,
+                    GitHubWorkflowLogNormalizer.Hash(redactedLines.Take(checkpoint.LastLogLineCount)),
+                    StringComparison.Ordinal);
+            if (!string.Equals(checkpoint.FinalArchiveContentHash, archiveHash, StringComparison.Ordinal) && prefixMatches)
+                foreach (var line in redactedLines.Skip(checkpoint.LastLogLineCount))
                     await diagnostics.PublishAsync(CreateEvent(deployment.Id, request.Config.ProjectId, line,
                         DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes), cancellationToken);
 
+            if (!prefixMatches)
+                await PublishAsync(deployment.Id, request.Config.ProjectId,
+                    $"GitHub Actions final archive for job {checkpoint.JobName} did not match the streamed checkpoint; duplicate output was suppressed.\r\n",
+                    DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning, attributes, cancellationToken);
+
             checkpoint.FinalArchiveContentHash = archiveHash;
+            checkpoint.LastLogLineCount = redactedLines.Length;
+            checkpoint.LastLogPrefixHash = archiveHash;
+            checkpoint.LastLogContentHash = archiveHash;
             checkpoint.IsLogFinal = true;
         }
         workflow.FinalReconciledAt = DateTimeOffset.UtcNow;
@@ -269,7 +281,25 @@ internal sealed class GitHubWorkflowMonitor(
     private static DeploymentDiagnosticEvent CreateEvent(Guid? deploymentId, Guid projectId, string message,
         DeploymentDiagnosticKind kind, DeploymentDiagnosticSeverity severity, IReadOnlyDictionary<string, string>? attributes)
         => new(projectId, deploymentId, DeploymentDiagnosticSource.GitHubActions, kind, severity, DateTimeOffset.UtcNow,
-            message, new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build), attributes);
+            message, new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build), attributes,
+            SourceIdentity: CreateSourceIdentity(kind, attributes));
+
+    private static DeploymentDiagnosticSourceIdentity CreateSourceIdentity(DeploymentDiagnosticKind kind,
+        IReadOnlyDictionary<string, string>? attributes)
+    {
+        var component = kind switch
+        {
+            DeploymentDiagnosticKind.WorkflowState => DeploymentDiagnosticComponent.Workflow,
+            DeploymentDiagnosticKind.JobState => DeploymentDiagnosticComponent.Job,
+            DeploymentDiagnosticKind.StepState => DeploymentDiagnosticComponent.Step,
+            _ => DeploymentDiagnosticComponent.Job
+        };
+        var instanceId = attributes?.GetValueOrDefault("workflow.job_id") ??
+                         attributes?.GetValueOrDefault("workflow.run_id");
+        return new DeploymentDiagnosticSourceIdentity(component,
+            kind is DeploymentDiagnosticKind.Annotation ? DeploymentDiagnosticStream.System : DeploymentDiagnosticStream.StandardOutput,
+            instanceId);
+    }
 
     private static DeploymentDiagnosticSeverity SeverityFor(string? conclusion) => conclusion?.ToLowerInvariant() switch
     {

@@ -11,9 +11,11 @@ separate UI delivery port and is not a diagnostic persistence or analysis API.
 
 ## Source inventory
 
-- `DeploymentDiagnosticEvent.cs` — source, kind, severity, correlation, terminal channel, and ordering contract.
+- `DeploymentDiagnosticEvent.cs` — source, typed source identity/stream, kind, severity, correlation, terminal
+  channel, and ordering contract.
 - `IDeploymentDiagnosticPublisher.cs` — non-blocking ingestion boundary.
 - `IDiagnosticRedactor.cs` — safe-copy redaction boundary.
+- `IDeploymentDiagnosticStore.cs` — redacted persistence and bounded context boundary shared by replay and analysis.
 
 ## Related documentation
 

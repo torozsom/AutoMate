@@ -4,11 +4,44 @@ namespace Application.Abstractions.Diagnostics;
 public enum DeploymentDiagnosticSource
 {
     AutoMate,
+    DockerDaemon,
     DockerCompose,
     DockerContainer,
     GitHubActions,
     AzureContainerApps
 }
+
+/// <summary>Identifies the stable deployment component that produced an observation.</summary>
+public enum DeploymentDiagnosticComponent
+{
+    Orchestrator,
+    Daemon,
+    Compose,
+    Build,
+    Web,
+    Database,
+    Workflow,
+    Job,
+    Step,
+    Container,
+    Revision
+}
+
+/// <summary>Identifies the output stream without requiring consumers to parse terminal text.</summary>
+public enum DeploymentDiagnosticStream
+{
+    Control,
+    StandardOutput,
+    StandardError,
+    System,
+    Metric
+}
+
+/// <summary>Non-secret, typed provider-source identity used for routing and correlation.</summary>
+public sealed record DeploymentDiagnosticSourceIdentity(
+    DeploymentDiagnosticComponent Component,
+    DeploymentDiagnosticStream Stream,
+    string? InstanceId = null);
 
 /// <summary>Classifies a diagnostic without requiring consumers to parse message text.</summary>
 public enum DeploymentDiagnosticKind
@@ -63,7 +96,8 @@ public sealed record DeploymentDiagnosticEvent(
     string? TraceId = null,
     string? SpanId = null,
     long? Sequence = null,
-    string? Cursor = null)
+    string? Cursor = null,
+    DeploymentDiagnosticSourceIdentity? SourceIdentity = null)
 {
     /// <summary>Current event schema version.</summary>
     public const int SchemaVersion = 1;

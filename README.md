@@ -192,6 +192,11 @@ Email:SenderEmail
 Email:AppPassword
 ```
 
+`appsettings.json` deliberately contains no credentials or connection strings. Configure all of the preceding
+values through user-secrets for local development, environment variables for deployed instances, or a managed secret
+store. If a credential has ever been committed, revoke and rotate it with its provider before relying on the new
+configuration source.
+
 For local development from `Web/`:
 
 ```bash

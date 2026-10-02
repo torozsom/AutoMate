@@ -106,7 +106,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Lifecycle,
                 DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, CreateAvailabilityMessage(state),
                 new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, CloudWebContainerName),
-                new Dictionary<string, string> { ["revision"] = state.LatestRevision }), cancellationToken);
+                new Dictionary<string, string> { ["revision"] = state.LatestRevision },
+                SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Revision,
+                    DeploymentDiagnosticStream.System, state.LatestRevision)), cancellationToken);
         }
 
         var metrics = await _containerAppClient.GetMetricsAsync(target.ResourceId, target.AzureCredentials.AccessToken,
@@ -117,7 +119,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
                 $"Azure Container Apps metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
                 new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, CloudWebContainerName),
-                new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory }),
+                new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
+                SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
+                    DeploymentDiagnosticStream.Metric, state?.LatestRevision)),
                 cancellationToken);
     }
 
@@ -175,8 +179,14 @@ public sealed class AzureContainerAppRuntimeStreamer(
             record.TimestampUtc, isConsole ? record.Message : $"[Azure system] {record.Message}",
             isConsole
                 ? new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, CloudWebContainerName)
-                : new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build), attributes,
-            Cursor: CreateTieBreaker(record));
+                : new DeploymentTerminalChannel(DeploymentTerminalChannelKind.System), attributes,
+            Cursor: CreateTieBreaker(record),
+            SourceIdentity: new DeploymentDiagnosticSourceIdentity(
+                isConsole ? DeploymentDiagnosticComponent.Container : DeploymentDiagnosticComponent.Revision,
+                isConsole && string.Equals(record.Stream, "stderr", StringComparison.OrdinalIgnoreCase)
+                    ? DeploymentDiagnosticStream.StandardError
+                    : isConsole ? DeploymentDiagnosticStream.StandardOutput : DeploymentDiagnosticStream.System,
+                isConsole ? record.ContainerName : record.RevisionName));
     }
 
     private async Task PublishIssueOnceAsync(ContainerAppStreamTarget target, string issue, string message,
@@ -188,7 +198,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
             DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Annotation,
             DeploymentDiagnosticSeverity.Warning, DateTimeOffset.UtcNow, $"[Azure runtime] {message}",
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build),
-            new Dictionary<string, string> { ["issue"] = issue }), cancellationToken);
+            new Dictionary<string, string> { ["issue"] = issue },
+            SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Revision,
+                DeploymentDiagnosticStream.System, target.ContainerAppName)), cancellationToken);
     }
 
     private void ClearIssue(ContainerAppStreamTarget target, string issue) =>

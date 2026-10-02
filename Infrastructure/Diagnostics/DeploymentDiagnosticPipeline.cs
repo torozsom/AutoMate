@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Threading.Channels;
 using Application.Abstractions.Diagnostics;
-using Application.Abstractions.Ai;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
 using Microsoft.Extensions.Hosting;
@@ -34,6 +33,8 @@ public sealed class DeploymentDiagnosticPublisher(
         Validate(diagnosticEvent);
 
         using var rootActivity = EnsureTraceContext();
+        using var ingestActivity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest");
+        var startedAt = Stopwatch.GetTimestamp();
         var activity = Activity.Current!;
         var redaction = redactor.Redact(diagnosticEvent with
         {
@@ -44,6 +45,7 @@ public sealed class DeploymentDiagnosticPublisher(
         AutoMateTelemetry.EventsReceived.Add(1, tags);
         if (redaction.RedactedValueCount > 0)
             AutoMateTelemetry.ValuesRedacted.Add(redaction.RedactedValueCount, tags);
+        AutoMateTelemetry.IngestDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, tags);
 
         if (_events.Writer.TryWrite(redaction.Event)) return ValueTask.CompletedTask;
 
@@ -78,42 +80,84 @@ public sealed class DeploymentDiagnosticDispatcher(
     DeploymentDiagnosticPublisher publisher,
     ILogStreamer logStreamer,
     IServiceScopeFactory scopeFactory,
+    IOptions<DeploymentDiagnosticOptions> options,
     ILogger<DeploymentDiagnosticDispatcher> logger) : BackgroundService
 {
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var diagnosticEvent in publisher.Reader.ReadAllAsync(stoppingToken))
+        var capacity = Math.Clamp(options.Value.BufferCapacity, 16, 16_384);
+        var persistenceEvents = CreateSinkChannel(capacity);
+        var terminalEvents = CreateSinkChannel(capacity);
+        var persistenceWorker = PersistAsync(persistenceEvents.Reader, stoppingToken);
+        var terminalWorker = DeliverAsync(terminalEvents.Reader, stoppingToken);
+
+        try
+        {
+            await foreach (var diagnosticEvent in publisher.Reader.ReadAllAsync(stoppingToken))
+            {
+                LogDiagnostic(diagnosticEvent);
+                TryWrite(persistenceEvents.Writer, diagnosticEvent, "persistence");
+                TryWrite(terminalEvents.Writer, diagnosticEvent, "terminal delivery");
+            }
+        }
+        finally
+        {
+            persistenceEvents.Writer.TryComplete();
+            terminalEvents.Writer.TryComplete();
+            await Task.WhenAll(persistenceWorker, terminalWorker);
+        }
+    }
+
+    private async Task PersistAsync(ChannelReader<DeploymentDiagnosticEvent> events, CancellationToken cancellationToken)
+    {
+        await foreach (var diagnosticEvent in events.ReadAllAsync(cancellationToken))
         {
             try
             {
-                await using var persistenceScope = scopeFactory.CreateAsyncScope();
-                await persistenceScope.ServiceProvider.GetRequiredService<IDeploymentDiagnosticStore>()
-                    .PersistAsync(diagnosticEvent, stoppingToken);
-                using var activity = StartDeliveryActivity(diagnosticEvent);
-                using var scope = logger.BeginScope(new Dictionary<string, object?>
-                {
-                    ["ProjectId"] = diagnosticEvent.ProjectId,
-                    ["DeploymentId"] = diagnosticEvent.DeploymentId,
-                    ["DiagnosticSource"] = diagnosticEvent.Source,
-                    ["DiagnosticKind"] = diagnosticEvent.Kind,
-                    ["TraceId"] = diagnosticEvent.TraceId
-                });
-
-                logger.Log(MapLogLevel(diagnosticEvent.Severity), "Deployment diagnostic: {DiagnosticMessage}", diagnosticEvent.Message);
-                await DeliverAsync(diagnosticEvent);
-                AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(diagnosticEvent));
+                using var activity = StartOperationActivity("deployment.diagnostic.persist", diagnosticEvent);
+                var startedAt = Stopwatch.GetTimestamp();
+                await using var scope = scopeFactory.CreateAsyncScope();
+                await scope.ServiceProvider.GetRequiredService<IDeploymentDiagnosticStore>()
+                    .PersistAsync(diagnosticEvent, cancellationToken);
+                AutoMateTelemetry.EventsPersisted.Add(1, TelemetryTags.Create(diagnosticEvent));
+                var tags = TelemetryTags.Create(diagnosticEvent);
+                tags.Add("deployment.sink", "persistence");
+                AutoMateTelemetry.SinkDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, tags);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
-                logger.LogWarning(ex, "Failed to deliver deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
+                AutoMateTelemetry.PersistenceFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
+                logger.LogWarning(exception, "Failed to persist deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
                     diagnosticEvent.Source, diagnosticEvent.Kind, diagnosticEvent.ProjectId);
             }
         }
     }
 
-    private Task DeliverAsync(DeploymentDiagnosticEvent diagnosticEvent)
+    private async Task DeliverAsync(ChannelReader<DeploymentDiagnosticEvent> events, CancellationToken cancellationToken)
+    {
+        await foreach (var diagnosticEvent in events.ReadAllAsync(cancellationToken))
+        {
+            try
+            {
+                using var activity = StartOperationActivity("deployment.diagnostic.deliver", diagnosticEvent);
+                var startedAt = Stopwatch.GetTimestamp();
+                await DeliverToTerminalAsync(diagnosticEvent);
+                AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(diagnosticEvent));
+                var tags = TelemetryTags.Create(diagnosticEvent);
+                tags.Add("deployment.sink", "terminal");
+                AutoMateTelemetry.SinkDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, tags);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
+                logger.LogWarning(exception, "Failed to deliver deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
+                    diagnosticEvent.Source, diagnosticEvent.Kind, diagnosticEvent.ProjectId);
+            }
+        }
+    }
+
+    private Task DeliverToTerminalAsync(DeploymentDiagnosticEvent diagnosticEvent)
     {
         return diagnosticEvent.TerminalChannel.Kind switch
         {
@@ -129,16 +173,47 @@ public sealed class DeploymentDiagnosticDispatcher(
         };
     }
 
-    private static Activity? StartDeliveryActivity(DeploymentDiagnosticEvent diagnosticEvent)
+    private void LogDiagnostic(DeploymentDiagnosticEvent diagnosticEvent)
+    {
+        using var scope = logger.BeginScope(new Dictionary<string, object?>
+        {
+            ["ProjectId"] = diagnosticEvent.ProjectId,
+            ["DeploymentId"] = diagnosticEvent.DeploymentId,
+            ["DiagnosticSource"] = diagnosticEvent.Source,
+            ["DiagnosticComponent"] = diagnosticEvent.SourceIdentity?.Component,
+            ["DiagnosticKind"] = diagnosticEvent.Kind,
+            ["TraceId"] = diagnosticEvent.TraceId
+        });
+        logger.Log(MapLogLevel(diagnosticEvent.Severity), "Deployment diagnostic: {DiagnosticMessage}", diagnosticEvent.Message);
+    }
+
+    private void TryWrite(ChannelWriter<DeploymentDiagnosticEvent> writer, DeploymentDiagnosticEvent diagnosticEvent,
+        string sinkName)
+    {
+        if (writer.TryWrite(diagnosticEvent)) return;
+        AutoMateTelemetry.EventsDropped.Add(1, TelemetryTags.Create(diagnosticEvent));
+        logger.LogWarning("Dropped deployment diagnostic because the {SinkName} queue is full. Source {Source} kind {Kind} project {ProjectId}.",
+            sinkName, diagnosticEvent.Source, diagnosticEvent.Kind, diagnosticEvent.ProjectId);
+    }
+
+    private static Channel<DeploymentDiagnosticEvent> CreateSinkChannel(int capacity) =>
+        Channel.CreateBounded<DeploymentDiagnosticEvent>(new BoundedChannelOptions(capacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = true
+        });
+
+    private static Activity? StartOperationActivity(string operationName, DeploymentDiagnosticEvent diagnosticEvent)
     {
         if (!string.IsNullOrWhiteSpace(diagnosticEvent.TraceId) &&
             !string.IsNullOrWhiteSpace(diagnosticEvent.SpanId) &&
             ActivityContext.TryParse($"00-{diagnosticEvent.TraceId}-{diagnosticEvent.SpanId}-01", null, false,
                 out var parentContext))
-            return AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.deliver", ActivityKind.Internal,
+            return AutoMateTelemetry.Deployments.StartActivity(operationName, ActivityKind.Internal,
                 parentContext);
 
-        return AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.deliver");
+        return AutoMateTelemetry.Deployments.StartActivity(operationName);
     }
 
     private static LogLevel MapLogLevel(DeploymentDiagnosticSeverity severity) => severity switch

@@ -52,7 +52,8 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             eventItem.TerminalChannel == new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "cloud-web"));
         diagnostics.Events.Should().Contain(eventItem => eventItem.DeploymentId == deploymentId &&
             eventItem.Message == "[Azure system] revision provisioned" &&
-            eventItem.TerminalChannel.Kind == DeploymentTerminalChannelKind.Build);
+            eventItem.TerminalChannel.Kind == DeploymentTerminalChannelKind.System &&
+            eventItem.SourceIdentity!.Stream == DeploymentDiagnosticStream.System);
     }
 
     private static HttpResponseMessage Respond(HttpRequestMessage request)
