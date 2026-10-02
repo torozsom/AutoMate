@@ -1,8 +1,9 @@
 # Configs
 
 Web dependency composition, authentication, options, and HTTP pipeline configuration. It configures OpenTelemetry for
-AutoMate's logs, traces, metrics, and deployment diagnostic activity/meter sources. Development console export is on by
-default; optional OTLP export is controlled by `OpenTelemetry` options and has no committed credentials.
+AutoMate's logs, traces, metrics, deployment diagnostic activity/meter sources, and security rate-limit rejection
+events. Development console export is on by default; optional OTLP export is controlled by `OpenTelemetry` options and
+has no committed credentials.
 
 ## Source inventory
 

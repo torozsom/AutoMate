@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using System.Diagnostics;
 using Application.Abstractions.Azure;
 using Application.Abstractions.Ai;
 using Application.Ai;
@@ -358,6 +359,7 @@ public static class ServiceConfiguration
                     tracing.AddHttpClientInstrumentation();
                     tracing.AddEntityFrameworkCoreInstrumentation();
                     tracing.AddSource(AutoMateTelemetry.Deployments.Name);
+                    tracing.AddSource(AutoMateTelemetry.Security.Name);
                     if (exportConsole) tracing.AddConsoleExporter();
                     if (hasOtlpEndpoint) tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
                 })
@@ -366,7 +368,8 @@ public static class ServiceConfiguration
                     metrics.AddAspNetCoreInstrumentation();
                     metrics.AddHttpClientInstrumentation();
                     metrics.AddRuntimeInstrumentation();
-                    metrics.AddMeter(AutoMateTelemetry.Meter.Name);
+                    metrics.AddMeter(AutoMateTelemetry.DeploymentMeter.Name);
+                    metrics.AddMeter(AutoMateTelemetry.SecurityMeter.Name);
                     if (exportConsole) metrics.AddConsoleExporter();
                     if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
                 });
@@ -518,6 +521,21 @@ public static class ServiceConfiguration
                     });
                 });
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.OnRejected = (context, _) =>
+                {
+                    var authenticationState = context.HttpContext.User.Identity?.IsAuthenticated == true
+                        ? "authenticated"
+                        : "anonymous";
+                    using var activity = AutoMateTelemetry.Security.StartActivity("security.rate_limit.rejected");
+                    activity?.SetTag("security.authentication_state", authenticationState);
+                    var tags = new TagList { { "security.authentication_state", authenticationState } };
+                    AutoMateTelemetry.RateLimitRejections.Add(1, tags);
+                    context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("AutoMate.Security.RateLimiting")
+                        .LogWarning("Rate limit rejected request. Authentication state {AuthenticationState}.",
+                            authenticationState);
+                    return ValueTask.CompletedTask;
+                };
             });
         }
 

@@ -44,7 +44,11 @@ public sealed class DeploymentDiagnosticPublisher(
         var tags = TelemetryTags.Create(redaction.Event);
         AutoMateTelemetry.EventsReceived.Add(1, tags);
         if (redaction.RedactedValueCount > 0)
+        {
             AutoMateTelemetry.ValuesRedacted.Add(redaction.RedactedValueCount, tags);
+            logger.LogDebug("Redacted {RedactedValueCount} value(s) from deployment diagnostic. Source {Source} kind {Kind} project {ProjectId}.",
+                redaction.RedactedValueCount, redaction.Event.Source, redaction.Event.Kind, redaction.Event.ProjectId);
+        }
         AutoMateTelemetry.IngestDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, tags);
 
         if (_events.Writer.TryWrite(redaction.Event)) return ValueTask.CompletedTask;
@@ -86,6 +90,7 @@ public sealed class DeploymentDiagnosticDispatcher(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        logger.LogInformation("Deployment diagnostic dispatcher started.");
         var capacity = Math.Clamp(options.Value.BufferCapacity, 16, 16_384);
         var persistenceEvents = CreateSinkChannel(capacity);
         var terminalEvents = CreateSinkChannel(capacity);
@@ -106,6 +111,7 @@ public sealed class DeploymentDiagnosticDispatcher(
             persistenceEvents.Writer.TryComplete();
             terminalEvents.Writer.TryComplete();
             await Task.WhenAll(persistenceWorker, terminalWorker);
+            logger.LogInformation("Deployment diagnostic dispatcher stopped.");
         }
     }
 
@@ -161,10 +167,9 @@ public sealed class DeploymentDiagnosticDispatcher(
     {
         return diagnosticEvent.TerminalChannel.Kind switch
         {
-            DeploymentTerminalChannelKind.Build or DeploymentTerminalChannelKind.System =>
-                logStreamer.StreamBuildLogsAsync(diagnosticEvent.ProjectId, diagnosticEvent.Message),
-            DeploymentTerminalChannelKind.Container => logStreamer.StreamContainerLogsAsync(diagnosticEvent.ProjectId,
-                diagnosticEvent.TerminalChannel.Target!, diagnosticEvent.Message),
+            DeploymentTerminalChannelKind.Build or DeploymentTerminalChannelKind.System or
+                DeploymentTerminalChannelKind.Container => logStreamer.StreamTerminalLogAsync(diagnosticEvent.ProjectId,
+                GetTerminalChannel(diagnosticEvent), diagnosticEvent.Message),
             DeploymentTerminalChannelKind.Metrics => logStreamer.StreamContainerMetricsAsync(diagnosticEvent.ProjectId,
                 diagnosticEvent.TerminalChannel.Target!,
                 diagnosticEvent.Attributes?.GetValueOrDefault("cpu") ?? "unknown",
@@ -172,6 +177,20 @@ public sealed class DeploymentDiagnosticDispatcher(
             _ => throw new ArgumentOutOfRangeException()
         };
     }
+
+    private static string GetTerminalChannel(DeploymentDiagnosticEvent diagnosticEvent) =>
+        diagnosticEvent.TerminalChannel.Kind switch
+        {
+            DeploymentTerminalChannelKind.Build when diagnosticEvent.Source == DeploymentDiagnosticSource.GitHubActions =>
+                "github-actions",
+            DeploymentTerminalChannelKind.Build => "build",
+            DeploymentTerminalChannelKind.System when diagnosticEvent.Source == DeploymentDiagnosticSource.AzureContainerApps =>
+                "azure-system",
+            DeploymentTerminalChannelKind.System => "system",
+            DeploymentTerminalChannelKind.Container when diagnosticEvent.TerminalChannel.Target == "cloud-web" => "azure-web",
+            DeploymentTerminalChannelKind.Container => diagnosticEvent.TerminalChannel.Target!,
+            _ => throw new ArgumentOutOfRangeException()
+        };
 
     private void LogDiagnostic(DeploymentDiagnosticEvent diagnosticEvent)
     {

@@ -45,10 +45,18 @@ public sealed class AzureContainerAppRuntimeStreamer(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await PollOnceAsync(stoppingToken);
-        using var timer = new PeriodicTimer(PollInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        logger.LogInformation("Azure Container Apps runtime monitoring coordinator started.");
+        try
+        {
             await PollOnceAsync(stoppingToken);
+            using var timer = new PeriodicTimer(PollInterval);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+                await PollOnceAsync(stoppingToken);
+        }
+        finally
+        {
+            logger.LogInformation("Azure Container Apps runtime monitoring coordinator stopped.");
+        }
     }
 
     /// <summary>Processes each registered target once. Internal for deterministic collector verification.</summary>
@@ -197,7 +205,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
         await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
             DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Annotation,
             DeploymentDiagnosticSeverity.Warning, DateTimeOffset.UtcNow, $"[Azure runtime] {message}",
-            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build),
+            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.System),
             new Dictionary<string, string> { ["issue"] = issue },
             SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Revision,
                 DeploymentDiagnosticStream.System, target.ContainerAppName)), cancellationToken);

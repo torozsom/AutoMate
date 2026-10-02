@@ -11,24 +11,14 @@ namespace Web.Services;
 public sealed class RealTimeLogStreamer(IHubContext<LogHub, ILogClient> hubContext) : ILogStreamer
 {
     /// <inheritdoc />
-    public async Task StreamBuildLogsAsync(Guid projectId, string message)
+    public async Task StreamTerminalLogAsync(Guid projectId, string terminalChannel, string message)
     {
         ValidateProjectId(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(terminalChannel);
 
         await hubContext.Clients
             .Group(LogHub.GetProjectGroupName(projectId))
-            .ReceiveBuildLog(message);
-    }
-
-    /// <inheritdoc />
-    public async Task StreamContainerLogsAsync(Guid projectId, string containerName, string message)
-    {
-        ValidateProjectId(projectId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(containerName);
-
-        await hubContext.Clients
-            .Group(LogHub.GetProjectGroupName(projectId))
-            .ReceiveContainerLog(containerName, message);
+            .ReceiveTerminalLog(terminalChannel, message);
     }
 
     /// <inheritdoc />

@@ -44,6 +44,15 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A terminal instance for displaying build logs.
     private Terminal? _buildTerminal;
 
+    /// A terminal instance for GitHub Actions output from a cloud deployment.
+    private Terminal? _githubActionsTerminal;
+
+    /// A terminal instance for Azure Container Apps console output.
+    private Terminal? _azureWebTerminal;
+
+    /// A terminal instance for Azure Container Apps system and revision output.
+    private Terminal? _azureSystemTerminal;
+
     /// A nullable variable to hold the current deployment configuration when the user initiates a deployment.
     private DeploymentConfigDto? _currentDeployConfig;
 
@@ -88,7 +97,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private string? _workflowUrl;
     private DeploymentAnalysisView? _latestAnalysis;
     private string? _analysisMessage;
-    private bool _isRequestingAnalysis;
 
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
@@ -375,6 +383,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_currentUserId != Guid.Empty)
         {
             _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
+            if (_app?.SourceType == SourceType.Remote)
+                _activeTab = "github-actions";
             await RefreshLatestAnalysisAsync();
 
             if (_app is { SourceType: SourceType.Local })
@@ -500,11 +510,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         var deployment = GetLatestDeployment();
         if (deployment is null) return;
-        _isRequestingAnalysis = true;
         var result = await DeploymentAnalysisService.RequestManualAsync(_currentUserId, deployment.Id);
         _analysisMessage = result.Message;
         _latestAnalysis = result.Analysis ?? await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
-        _isRequestingAnalysis = false;
     }
 
     private async Task SetAiConsentAsync(ChangeEventArgs args)
@@ -773,18 +781,21 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 .Build();
 
 
-            _hubConnection.On<string>("ReceiveBuildLog", async message =>
+            _hubConnection.On<string, string>("ReceiveTerminalLog", async (terminalChannel, message) =>
             {
-                if (_buildTerminal != null)
-                    await _buildTerminal.WriteAsync(message);
-            });
+                var terminal = terminalChannel switch
+                {
+                    "build" => _buildTerminal,
+                    "web" => _webTerminal,
+                    "github-actions" => _githubActionsTerminal,
+                    "azure-web" => _azureWebTerminal,
+                    "azure-system" => _azureSystemTerminal,
+                    _ when _dbTerminals.TryGetValue(terminalChannel, out var databaseTerminal) => databaseTerminal,
+                    _ => null
+                };
 
-            _hubConnection.On<string, string>("ReceiveContainerLog", async (containerIdentifier, message) =>
-            {
-                if ((containerIdentifier is "web" or "cloud-web") && _webTerminal != null)
-                    await _webTerminal.WriteAsync(message);
-                else if (_dbTerminals.TryGetValue(containerIdentifier, out var dbTerminal))
-                    await dbTerminal.WriteAsync(message);
+                if (terminal != null)
+                    await terminal.WriteAsync(message);
             });
 
             _hubConnection.On<string, string, string>("ReceiveContainerMetrics",

@@ -247,54 +247,99 @@
                     <div class="terminal-panel">
                         <div class="terminal-panel-header">
                             <ul class="nav nav-pills terminal-tabs" role="tablist">
-                                <li class="nav-item" role="presentation">
-                                    <button class="@GetBuildTabClass()" type="button" role="tab"
-                                            @onclick='() => SetActiveTab("build")'>
-                                        <i class="bi bi-hammer" aria-hidden="true"></i>
-                                        <span>Build logs</span>
-                                    </button>
-                                </li>
-
-                                <li class="nav-item" role="presentation">
-                                    <button class="@GetWebTabClass()" type="button" role="tab"
-                                            @onclick='() => SetActiveTab("web")'>
-                                        <i class="bi bi-globe" aria-hidden="true"></i>
-                                        <span>Web app</span>
-                                    </button>
-                                </li>
-
-                                @foreach (var db in GetDatabaseTabs())
+                                @if (_app.SourceType == SourceType.Remote)
                                 {
                                     <li class="nav-item" role="presentation">
-                                        <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab"
-                                                @onclick="() => SetActiveTab(db.TabId)">
-                                            <i class="bi bi-database" aria-hidden="true"></i>
-                                            <span>@db.DisplayName</span>
+                                        <button class="nav-link @GetTabClass("github-actions")" type="button" role="tab"
+                                                @onclick='() => SetActiveTab("github-actions")'>
+                                            <i class="bi bi-github" aria-hidden="true"></i>
+                                            <span>GitHub Actions</span>
                                         </button>
                                     </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link @GetTabClass("azure-web")" type="button" role="tab"
+                                                @onclick='() => SetActiveTab("azure-web")'>
+                                            <i class="bi bi-microsoft" aria-hidden="true"></i>
+                                            <span>Azure Web</span>
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link @GetTabClass("azure-system")" type="button" role="tab"
+                                                @onclick='() => SetActiveTab("azure-system")'>
+                                            <i class="bi bi-gear" aria-hidden="true"></i>
+                                            <span>Azure System</span>
+                                        </button>
+                                    </li>
+                                }
+                                else
+                                {
+                                    <li class="nav-item" role="presentation">
+                                        <button class="@GetBuildTabClass()" type="button" role="tab"
+                                                @onclick='() => SetActiveTab("build")'>
+                                            <i class="bi bi-hammer" aria-hidden="true"></i>
+                                            <span>Build logs</span>
+                                        </button>
+                                    </li>
+
+                                    <li class="nav-item" role="presentation">
+                                        <button class="@GetWebTabClass()" type="button" role="tab"
+                                                @onclick='() => SetActiveTab("web")'>
+                                            <i class="bi bi-globe" aria-hidden="true"></i>
+                                            <span>Web app</span>
+                                        </button>
+                                    </li>
+
+                                    @foreach (var db in GetDatabaseTabs())
+                                    {
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link @GetTabClass(db.TabId)" type="button" role="tab"
+                                                    @onclick="() => SetActiveTab(db.TabId)">
+                                                <i class="bi bi-database" aria-hidden="true"></i>
+                                                <span>@db.DisplayName</span>
+                                            </button>
+                                        </li>
+                                    }
                                 }
                             </ul>
                         </div>
 
                         <div class="terminal-panel-body">
-                            <div style="@GetBuildTerminalStyle()">
-                                <Terminal @ref="_buildTerminal" Id="build-logs-term"
-                                          OnReady='() => OnTerminalReady(_buildTerminal, "Build")'/>
-                            </div>
-
-                            <div style="@GetWebTerminalStyle()">
-                                <Terminal @ref="_webTerminal" Id="web-logs-term"
-                                          OnReady='() => OnTerminalReady(_webTerminal, "Web App")'/>
-                            </div>
-
-                            @foreach (var db in GetDatabaseTabs())
+                            @if (_app.SourceType == SourceType.Remote)
                             {
-                                var databaseTerminalStyle = GetDatabaseTerminalStyle(db.TabId);
-                                <div style="@databaseTerminalStyle">
-                                    <Terminal @ref="_dbTerminals[db.TabId]"
-                                              Id="@($"term-{db.TabId}")"
-                                              OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)'/>
+                                <div style="@GetTerminalStyle("github-actions")">
+                                    <Terminal @ref="_githubActionsTerminal" Id="github-actions-term"
+                                              OnReady='() => OnTerminalReady(_githubActionsTerminal, "GitHub Actions")'/>
                                 </div>
+                                <div style="@GetTerminalStyle("azure-web")">
+                                    <Terminal @ref="_azureWebTerminal" Id="azure-web-term"
+                                              OnReady='() => OnTerminalReady(_azureWebTerminal, "Azure Web")'/>
+                                </div>
+                                <div style="@GetTerminalStyle("azure-system")">
+                                    <Terminal @ref="_azureSystemTerminal" Id="azure-system-term"
+                                              OnReady='() => OnTerminalReady(_azureSystemTerminal, "Azure System")'/>
+                                </div>
+                            }
+                            else
+                            {
+                                <div style="@GetBuildTerminalStyle()">
+                                    <Terminal @ref="_buildTerminal" Id="build-logs-term"
+                                              OnReady='() => OnTerminalReady(_buildTerminal, "Build")'/>
+                                </div>
+
+                                <div style="@GetWebTerminalStyle()">
+                                    <Terminal @ref="_webTerminal" Id="web-logs-term"
+                                              OnReady='() => OnTerminalReady(_webTerminal, "Web App")'/>
+                                </div>
+
+                                @foreach (var db in GetDatabaseTabs())
+                                {
+                                    var databaseTerminalStyle = GetDatabaseTerminalStyle(db.TabId);
+                                    <div style="@databaseTerminalStyle">
+                                        <Terminal @ref="_dbTerminals[db.TabId]"
+                                                  Id="@($"term-{db.TabId}")"
+                                                  OnReady='() => OnDbTerminalReady(db.TabId, db.DisplayName)'/>
+                                    </div>
+                                }
                             }
                         </div>
                     </div>

@@ -1,7 +1,8 @@
 # Logging Port
 
 The Application UI-streaming port implemented by Web. It accepts only redacted, normalized terminal data from the
-deployment diagnostic dispatcher; it is not a persistence, telemetry, or AI-analysis API.
+deployment diagnostic dispatcher and routes it through stable, source-aware terminal channels; it is not a persistence,
+telemetry, or AI-analysis API.
 
 ## Source inventory
 

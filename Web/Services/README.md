@@ -1,7 +1,8 @@
 # Web Services
 
 Web transport adapters that implement Application contracts. `RealTimeLogStreamer` receives only redacted diagnostic
-terminal data from Infrastructure's hosted dispatcher and forwards it to project-authorized SignalR groups.
+terminal data from Infrastructure's hosted dispatcher and forwards its source-aware channel to project-authorized
+SignalR groups.
 
 ## Source inventory
 

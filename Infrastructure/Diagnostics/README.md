@@ -4,8 +4,9 @@ Infrastructure owns the diagnostic redactor, redacted diagnostic store, and boun
 normalized events from provider adapters, redacts them before every sink, adds structured logs/traces/metrics, and fans
 out safe terminal data and replay/context persistence through independent bounded workers.
 
-The pipeline persists only already-redacted events. LLM egress remains disabled until a separately approved provider,
-region, consent, and data-processing policy exists.
+The pipeline persists only already-redacted events. Its dispatcher maps typed terminal channels to stable UI channels,
+keeping GitHub Actions, Azure console, Azure system, local build, and local container output separate. LLM egress
+remains disabled until a separately approved provider, region, consent, and data-processing policy exists.
 
 ## Source inventory
 
