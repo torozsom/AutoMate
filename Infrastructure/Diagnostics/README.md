@@ -7,6 +7,7 @@ out safe terminal data and replay/context persistence through independent bounde
 The pipeline persists only already-redacted events. Its dispatcher maps typed terminal channels to stable UI channels,
 keeping GitHub Actions, Azure console, Azure system, local build, and local container output separate. LLM egress
 remains disabled until a separately approved provider, region, consent, and data-processing policy exists.
+Blank log lines are valid terminal output; state and annotation messages must contain non-whitespace text.
 
 ## Source inventory
 

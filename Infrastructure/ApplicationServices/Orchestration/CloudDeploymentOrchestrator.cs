@@ -26,6 +26,7 @@ public sealed class CloudDeploymentOrchestrator(
     IDiagnosticRedactor redactor,
     IOptions<GitHubWorkflowMonitoringOptions> workflowMonitoringOptions,
     ILogger<CloudDeploymentOrchestrator> logger,
+    ILoggerFactory loggerFactory,
     IDeploymentStatusNotifier statusNotifier)
     : ICloudDeploymentOrchestrator
 {
@@ -44,7 +45,7 @@ public sealed class CloudDeploymentOrchestrator(
     ///     Polls GitHub Actions and streams cloud deployment logs.
     /// </summary>
     private readonly GitHubWorkflowMonitor _workflowMonitor = new(dbContext, gitHubService, diagnostics, redactor,
-        workflowMonitoringOptions.Value);
+        workflowMonitoringOptions.Value, loggerFactory.CreateLogger<GitHubWorkflowMonitor>());
 
     /// <inheritdoc />
     public async Task<Deployment> DeployCloudProjectAsync(CloudDeploymentRequestDto request,

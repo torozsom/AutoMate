@@ -8,6 +8,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
 using Infrastructure.GitHub;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Orchestration;
 
@@ -17,16 +18,26 @@ internal sealed class GitHubWorkflowMonitor(
     IGitHubService gitHubService,
     IDeploymentDiagnosticPublisher diagnostics,
     IDiagnosticRedactor redactor,
-    GitHubWorkflowMonitoringOptions options)
+    GitHubWorkflowMonitoringOptions options,
+    ILogger<GitHubWorkflowMonitor> logger)
 {
+    /// <summary>Persists workflow and job cursors used to avoid duplicate terminal output.</summary>
     private readonly GitHubWorkflowCheckpointStore _checkpoints = new(dbContext);
 
+    /// <summary>Bounds the time spent waiting for a GitHub run to reach a terminal state.</summary>
     private readonly int _maxWorkflowPollAttempts = Math.Max(1,
         options.MaximumMonitoringMinutes * 60 / Math.Max(1, options.PollIntervalSeconds));
 
+    /// <summary>Suppresses repeated job-state lines when only a step changes.</summary>
+    private readonly Dictionary<long, string> _observedJobStates = new();
+
+    /// <summary>Suppresses repeated step-state lines within this monitor instance.</summary>
+    private readonly Dictionary<(long JobId, int StepNumber), string> _observedStepStates = new();
+
+    /// <summary>Interval between GitHub workflow and job status requests.</summary>
     private readonly TimeSpan _workflowPollDelay = TimeSpan.FromSeconds(Math.Clamp(options.PollIntervalSeconds, 1, 60));
 
-    /// <summary>Polls the matched run until terminal state, publishing state and job logs as GitHub exposes them.</summary>
+    /// <summary>Polls the matched run until terminal state, publishing progress before completed-run logs.</summary>
     public async Task<GitHubWorkflowRunDto?> PollWorkflowRunAsync(CloudDeploymentRequestDto request,
         Deployment deployment, string commitSha, CancellationToken cancellationToken)
     {
@@ -34,8 +45,22 @@ internal sealed class GitHubWorkflowMonitor(
 
         for (var attempt = 0; attempt < _maxWorkflowPollAttempts; attempt++)
         {
-            var run = await gitHubService.GetLatestWorkflowRunAsync(request.GitHubAccessToken, request.RepositoryOwner,
-                request.RepositoryName, request.WorkflowFileName, request.BranchName, commitSha, cancellationToken);
+            GitHubWorkflowRunDto? run;
+            try
+            {
+                run = await gitHubService.GetLatestWorkflowRunAsync(request.GitHubAccessToken,
+                    request.RepositoryOwner, request.RepositoryName, request.WorkflowFileName, request.BranchName,
+                    commitSha, cancellationToken);
+            }
+            catch (HttpRequestException)
+            {
+                await PublishAsync(deployment.Id, request.Config.ProjectId,
+                    "GitHub Actions workflow polling failed; AutoMate will retry on the next poll.\r\n",
+                    DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning, null, cancellationToken);
+                await Task.Delay(_workflowPollDelay, cancellationToken);
+                continue;
+            }
+
             if (run is null)
             {
                 await Task.Delay(_workflowPollDelay, cancellationToken);
@@ -49,10 +74,30 @@ internal sealed class GitHubWorkflowMonitor(
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            await StreamRunAsync(request, deployment, run, cancellationToken);
+            try
+            {
+                await StreamRunAsync(request, deployment, run, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(
+                    "GitHub workflow diagnostic collection failed for run {RunId} ({FailureType}); workflow result polling continues.",
+                    run.Id, ex.GetType().Name);
+            }
+
             if (string.Equals(run.Status, "completed", StringComparison.OrdinalIgnoreCase))
             {
-                await ReconcileFinalLogsAsync(request, deployment, run, cancellationToken);
+                try
+                {
+                    await ReconcileFinalLogsAsync(request, deployment, run, cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogWarning(
+                        "GitHub final log reconciliation failed for run {RunId} ({FailureType}); preserving the workflow conclusion.",
+                        run.Id, ex.GetType().Name);
+                }
+
                 return run;
             }
 
@@ -66,13 +111,22 @@ internal sealed class GitHubWorkflowMonitor(
     }
 
     /// <summary>Streams one cloud deployment preparation line through the diagnostic pipeline.</summary>
-    public ValueTask StreamBuildLogAsync(Guid projectId, string message)
+    public async ValueTask StreamBuildLogAsync(Guid projectId, string message)
     {
-        return PublishAsync(null, projectId,
-            $"[cloud] {message}\r\n", DeploymentDiagnosticKind.BuildProgress, DeploymentDiagnosticSeverity.Information,
-            null, CancellationToken.None);
+        try
+        {
+            await PublishAsync(null, projectId,
+                $"[cloud] {message}\r\n", DeploymentDiagnosticKind.BuildProgress,
+                DeploymentDiagnosticSeverity.Information, null, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("Cloud deployment diagnostic delivery failed for project {ProjectId} ({FailureType}).",
+                projectId, ex.GetType().Name);
+        }
     }
 
+    /// <summary>Publishes changed run and job states, then fetches job text only for a completed run.</summary>
     private async Task StreamRunAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, CancellationToken cancellationToken)
     {
@@ -94,12 +148,34 @@ internal sealed class GitHubWorkflowMonitor(
             await _checkpoints.SaveAsync(cancellationToken);
         }
 
-        var jobs = await gitHubService.GetWorkflowJobsAsync(request.GitHubAccessToken, request.RepositoryOwner,
-            request.RepositoryName, run.Id, cancellationToken);
+        IReadOnlyList<GitHubWorkflowJobDto> jobs;
+        try
+        {
+            jobs = await gitHubService.GetWorkflowJobsAsync(request.GitHubAccessToken, request.RepositoryOwner,
+                request.RepositoryName, run.Id, cancellationToken);
+        }
+        catch (HttpRequestException)
+        {
+            await PublishAsync(deployment.Id, request.Config.ProjectId,
+                "GitHub Actions job discovery failed; AutoMate will retry on the next poll.\r\n",
+                DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning,
+                new Dictionary<string, string> { ["workflow.run_id"] = run.Id.ToString(CultureInfo.InvariantCulture) },
+                cancellationToken);
+            return;
+        }
+
+        if (jobs.Count == 0 && string.Equals(run.Status, "in_progress", StringComparison.OrdinalIgnoreCase))
+            await PublishAsync(deployment.Id, request.Config.ProjectId,
+                "GitHub Actions has not reported a job yet; AutoMate is continuing to poll this run.\r\n",
+                DeploymentDiagnosticKind.WorkflowState, DeploymentDiagnosticSeverity.Information,
+                new Dictionary<string, string> { ["workflow.run_id"] = run.Id.ToString(CultureInfo.InvariantCulture) },
+                cancellationToken);
+
         foreach (var job in jobs)
             await StreamJobAsync(request, deployment, workflow, run, job, cancellationToken);
     }
 
+    /// <summary>Publishes changed job/step states and defers log text until workflow completion.</summary>
     private async Task StreamJobAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowCheckpoint workflow, GitHubWorkflowRunDto run, GitHubWorkflowJobDto job,
         CancellationToken cancellationToken)
@@ -109,13 +185,24 @@ internal sealed class GitHubWorkflowMonitor(
             $"{step.Number}:{step.Status}:{step.Conclusion}"))}");
         if (!string.Equals(checkpoint.LastStateFingerprint, stateFingerprint, StringComparison.Ordinal))
         {
-            checkpoint.LastStateFingerprint = stateFingerprint;
-            await PublishAsync(deployment.Id, request.Config.ProjectId,
-                $"GitHub Actions job {job.Name}: {job.Status}/{job.Conclusion ?? "pending"}. {job.HtmlUrl}\r\n",
-                DeploymentDiagnosticKind.JobState, SeverityFor(job.Conclusion), JobAttributes(run, job),
-                cancellationToken);
+            var jobState = $"{job.Status}|{job.Conclusion}";
+            if (!_observedJobStates.TryGetValue(job.Id, out var previousJobState) || previousJobState != jobState)
+            {
+                await PublishAsync(deployment.Id, request.Config.ProjectId,
+                    $"GitHub Actions job {job.Name}: {job.Status}/{job.Conclusion ?? "pending"}. {job.HtmlUrl}\r\n",
+                    DeploymentDiagnosticKind.JobState, SeverityFor(job.Conclusion), JobAttributes(run, job),
+                    cancellationToken);
+                _observedJobStates[job.Id] = jobState;
+            }
 
             foreach (var step in job.Steps)
+            {
+                if (string.Equals(step.Status, "pending", StringComparison.OrdinalIgnoreCase)) continue;
+                var stepKey = (job.Id, step.Number);
+                var stepState = $"{step.Status}|{step.Conclusion}";
+                if (_observedStepStates.TryGetValue(stepKey, out var previousStepState) &&
+                    previousStepState == stepState) continue;
+
                 await PublishAsync(deployment.Id, request.Config.ProjectId,
                     $"GitHub Actions step {job.Name} / {step.Name}: {step.Status}/{step.Conclusion ?? "pending"}.\r\n",
                     DeploymentDiagnosticKind.StepState, SeverityFor(step.Conclusion),
@@ -126,14 +213,21 @@ internal sealed class GitHubWorkflowMonitor(
                         ["workflow.step_status"] = step.Status,
                         ["workflow.step_conclusion"] = step.Conclusion ?? "pending"
                     }, cancellationToken);
+                _observedStepStates[stepKey] = stepState;
+            }
+
+            checkpoint.LastStateFingerprint = stateFingerprint;
             await _checkpoints.SaveAsync(cancellationToken);
         }
 
-        if (job.Status is "in_progress" or "completed" && !checkpoint.IsLogFinal &&
+        // Status is live; text is intentionally deferred until every workflow step has finished.
+        if (string.Equals(run.Status, "completed", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(job.Status, "completed", StringComparison.OrdinalIgnoreCase) && !checkpoint.IsLogFinal &&
             checkpoint.LogAvailability != GitHubWorkflowLogAvailability.AccessDenied)
             await StreamJobLogAsync(request, deployment, run, job, checkpoint, cancellationToken);
     }
 
+    /// <summary>Publishes a bounded, redacted segment of a completed job log using its durable line checkpoint.</summary>
     private async Task StreamJobLogAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, GitHubWorkflowJobDto job, GitHubWorkflowJobCheckpoint checkpoint,
         CancellationToken cancellationToken)
@@ -152,16 +246,20 @@ internal sealed class GitHubWorkflowMonitor(
         }
 
         var attributes = JobAttributes(run, job);
-        var redactedLines = GitHubWorkflowLogNormalizer.Normalize(download.Content)
-            .Select(line => redactor.Redact(CreateEvent(deployment.Id, request.Config.ProjectId, line,
-                DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes)).Event.Message)
-            .ToArray();
-        var currentHash = GitHubWorkflowLogNormalizer.Hash(redactedLines);
         var previousCount = checkpoint.LastLogLineCount;
-        var prefixMatches = previousCount <= redactedLines.Length &&
-                            string.Equals(checkpoint.LastLogPrefixHash,
-                                GitHubWorkflowLogNormalizer.Hash(redactedLines.Take(previousCount)),
-                                StringComparison.Ordinal);
+
+        // Hash the redacted representation so checkpoints never depend on secret-bearing source text.
+        string RedactLine(string line)
+        {
+            return redactor.Redact(CreateEvent(deployment.Id, request.Config.ProjectId, line,
+                DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes)).Event.Message;
+        }
+
+        var (prefixHash, prefixCount) = GitHubWorkflowLogNormalizer.HashWithCount(
+            GitHubWorkflowLogNormalizer.EnumerateLines(download.Content).Take(previousCount).Select(RedactLine));
+        var prefixMatches = prefixCount == previousCount &&
+                            (previousCount == 0 || string.Equals(checkpoint.LastLogPrefixHash, prefixHash,
+                                StringComparison.Ordinal));
 
         if (previousCount > 0 && !prefixMatches)
         {
@@ -173,17 +271,24 @@ internal sealed class GitHubWorkflowMonitor(
             return;
         }
 
-        foreach (var line in redactedLines.Skip(previousCount))
+        var chunk = GitHubWorkflowLogNormalizer.ReadChunk(download.Content, previousCount);
+        var redactedLines = chunk.Lines.Select(RedactLine).ToArray();
+        foreach (var line in redactedLines)
             await diagnostics.PublishAsync(CreateEvent(deployment.Id, request.Config.ProjectId, line,
                 DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes), cancellationToken);
 
-        checkpoint.LastLogLineCount = redactedLines.Length;
+        checkpoint.LastLogLineCount = previousCount + redactedLines.Length;
+        var currentHash = GitHubWorkflowLogNormalizer.Hash(
+            GitHubWorkflowLogNormalizer.EnumerateLines(download.Content)
+                .Take(checkpoint.LastLogLineCount).Select(RedactLine));
         checkpoint.LastLogPrefixHash = currentHash;
         checkpoint.LastLogContentHash = currentHash;
-        checkpoint.IsLogFinal = string.Equals(job.Status, "completed", StringComparison.OrdinalIgnoreCase);
+        checkpoint.IsLogFinal = !chunk.HasMore &&
+                                string.Equals(job.Status, "completed", StringComparison.OrdinalIgnoreCase);
         await _checkpoints.SaveAsync(cancellationToken);
     }
 
+    /// <summary>Fills missing post-run job output from the final archive without replaying checkpointed lines.</summary>
     private async Task ReconcileFinalLogsAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, CancellationToken cancellationToken)
     {
@@ -237,13 +342,13 @@ internal sealed class GitHubWorkflowMonitor(
                 ["workflow.archive"] = "final"
             };
             var redactedLines = GitHubWorkflowLogNormalizer
-                .Normalize(string.Join("\n", matchingEntries.Select(entry => entry.Content)))
+                .EnumerateLines(string.Join("\n", matchingEntries.Select(entry => entry.Content)))
                 .Select(line => redactor.Redact(CreateEvent(deployment.Id, request.Config.ProjectId, line,
-                    DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes)).Event.Message)
-                .ToArray();
+                    DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes)).Event.Message);
             var archiveHash = GitHubWorkflowLogNormalizer.Hash(redactedLines);
+            var archiveLineCount = redactedLines.Count();
             var prefixMatches = checkpoint.LastLogLineCount == 0 ||
-                                (checkpoint.LastLogLineCount <= redactedLines.Length &&
+                                (checkpoint.LastLogLineCount <= archiveLineCount &&
                                  string.Equals(checkpoint.LastLogPrefixHash,
                                      GitHubWorkflowLogNormalizer.Hash(redactedLines.Take(checkpoint.LastLogLineCount)),
                                      StringComparison.Ordinal));
@@ -261,7 +366,7 @@ internal sealed class GitHubWorkflowMonitor(
                     cancellationToken);
 
             checkpoint.FinalArchiveContentHash = archiveHash;
-            checkpoint.LastLogLineCount = redactedLines.Length;
+            checkpoint.LastLogLineCount = archiveLineCount;
             checkpoint.LastLogPrefixHash = archiveHash;
             checkpoint.LastLogContentHash = archiveHash;
             checkpoint.IsLogFinal = true;
@@ -271,6 +376,7 @@ internal sealed class GitHubWorkflowMonitor(
         await _checkpoints.SaveAsync(cancellationToken);
     }
 
+    /// <summary>Reports a job-log access failure without treating temporary unavailability as an error.</summary>
     private async Task PublishLogAvailabilityAsync(Guid deploymentId, Guid projectId, GitHubWorkflowRunDto run,
         GitHubWorkflowJobDto job, GitHubWorkflowLogAvailability availability, CancellationToken cancellationToken)
     {
@@ -282,6 +388,7 @@ internal sealed class GitHubWorkflowMonitor(
             DeploymentDiagnosticKind.Annotation, severity, JobAttributes(run, job), cancellationToken);
     }
 
+    /// <summary>Builds non-secret workflow and job attributes for diagnostic correlation.</summary>
     private static Dictionary<string, string> JobAttributes(GitHubWorkflowRunDto run, GitHubWorkflowJobDto job)
     {
         return new Dictionary<string, string>
@@ -295,6 +402,7 @@ internal sealed class GitHubWorkflowMonitor(
         };
     }
 
+    /// <summary>Creates and publishes a typed GitHub Actions diagnostic.</summary>
     private ValueTask PublishAsync(Guid? deploymentId, Guid projectId, string message, DeploymentDiagnosticKind kind,
         DeploymentDiagnosticSeverity severity, IReadOnlyDictionary<string, string>? attributes,
         CancellationToken cancellationToken)
@@ -303,6 +411,7 @@ internal sealed class GitHubWorkflowMonitor(
             kind, severity, attributes), cancellationToken);
     }
 
+    /// <summary>Routes a GitHub Actions observation to the project build terminal with its source identity.</summary>
     private static DeploymentDiagnosticEvent CreateEvent(Guid? deploymentId, Guid projectId, string message,
         DeploymentDiagnosticKind kind, DeploymentDiagnosticSeverity severity,
         IReadOnlyDictionary<string, string>? attributes)
@@ -314,6 +423,7 @@ internal sealed class GitHubWorkflowMonitor(
             SourceIdentity: CreateSourceIdentity(kind, attributes));
     }
 
+    /// <summary>Maps workflow, job, and step diagnostics to stable component identities.</summary>
     private static DeploymentDiagnosticSourceIdentity CreateSourceIdentity(DeploymentDiagnosticKind kind,
         IReadOnlyDictionary<string, string>? attributes)
     {
@@ -333,6 +443,7 @@ internal sealed class GitHubWorkflowMonitor(
             instanceId);
     }
 
+    /// <summary>Maps GitHub conclusions to terminal diagnostic severity.</summary>
     private static DeploymentDiagnosticSeverity SeverityFor(string? conclusion)
     {
         return conclusion?.ToLowerInvariant() switch
@@ -343,6 +454,7 @@ internal sealed class GitHubWorkflowMonitor(
         };
     }
 
+    /// <summary>Fingerprints state snapshots without persisting their display text.</summary>
     private static string Hash(string value)
     {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

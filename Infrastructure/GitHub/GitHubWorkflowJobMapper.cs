@@ -5,6 +5,7 @@ namespace Infrastructure.GitHub;
 /// <summary>Maps GitHub REST job payloads into Application-facing DTOs.</summary>
 internal static class GitHubWorkflowJobMapper
 {
+    /// <summary>Projects GitHub job and step API fields into provider-neutral progress DTOs.</summary>
     public static IReadOnlyList<GitHubWorkflowJobDto> Map(IEnumerable<GitHubWorkflowJobItem> jobs)
     {
         return jobs.Select(job => new GitHubWorkflowJobDto

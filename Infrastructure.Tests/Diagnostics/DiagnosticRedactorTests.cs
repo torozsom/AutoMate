@@ -29,6 +29,22 @@ public sealed class DiagnosticRedactorTests
     }
 
     [Fact]
+    public async Task Publisher_accepts_a_blank_GitHub_log_line()
+    {
+        var publisher = new DeploymentDiagnosticPublisher(new DiagnosticRedactor(),
+            Options.Create(new DeploymentDiagnosticOptions { BufferCapacity = 16 }),
+            NullLogger<DeploymentDiagnosticPublisher>.Instance);
+        var diagnosticEvent = new DeploymentDiagnosticEvent(Guid.NewGuid(), null,
+            DeploymentDiagnosticSource.GitHubActions, DeploymentDiagnosticKind.Log,
+            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, "\r\n",
+            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
+
+        await publisher.PublishAsync(diagnosticEvent);
+
+        (await publisher.Reader.ReadAsync()).Message.Should().Be("\r\n");
+    }
+
+    [Fact]
     public void Redact_masks_secrets_in_messages_and_attributes_before_delivery()
     {
         var diagnosticEvent = new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(),

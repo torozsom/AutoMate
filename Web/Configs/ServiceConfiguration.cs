@@ -334,7 +334,7 @@ public static class ServiceConfiguration
         {
             var options = builder.Configuration.GetSection(OpenTelemetryOptions.SectionName)
                 .Get<OpenTelemetryOptions>() ?? new OpenTelemetryOptions();
-            var exportConsole = options.ExportConsole || builder.Environment.IsDevelopment();
+            var exportConsole = options.ExportConsole;
             var hasOtlpEndpoint = Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out var otlpEndpoint);
             var serviceVersion = typeof(ServiceConfiguration).Assembly.GetName().Version?.ToString() ?? "unknown";
 
@@ -398,6 +398,7 @@ public static class ServiceConfiguration
 
             // External API Clients with Resilience
             services.AddHttpClient<IGitHubService, GitHubService>()
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
                 .AddStandardResilienceHandler();
             services.AddHttpClient<ILlmAnalysisProvider, OpenAiAnalysisProvider>()
                 .AddStandardResilienceHandler();

@@ -2,10 +2,15 @@
 
 GitHub API infrastructure adapter implementation.
 
-GitHub workflow, job, and step state are normalized into deployment diagnostics while the run is active. Completed job
-logs are fetched through GitHub's supported job-log endpoint, normalized and redacted before terminal delivery, and
-deduplicated across restarts with non-sensitive persisted checkpoints. The final run archive is used only to reconcile
-jobs whose individual log was unavailable.
+GitHub workflow, job, and step state are normalized into deployment diagnostics while the run is active. Jobs are
+discovered page by page, and each job/step status change is shown as GitHub reports it. Text output is intentionally
+deferred until the entire workflow has completed: job-log downloads and the final run archive then supply normalized,
+redacted output through bounded chunks and persisted deduplication checkpoints. Each log download follows GitHub's
+short-lived signed redirect without forwarding the OAuth token to the download host.
+
+Job/step state lines are emitted only when that state changes; pending steps are not printed. No per-step log
+availability probe or runner-side forwarder is needed for the chosen progress-then-logs presentation. Diagnostic
+delivery failures are isolated from the workflow conclusion.
 
 ## Source inventory
 

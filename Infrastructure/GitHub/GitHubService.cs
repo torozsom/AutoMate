@@ -337,29 +337,6 @@ public sealed class GitHubService : IGitHubService
 
 
     /// <inheritdoc />
-    public async Task<string?> DownloadWorkflowRunLogsAsync(string accessToken, string repoOwner, string repoName,
-        long runId, CancellationToken cancellationToken = default)
-    {
-        if (runId <= 0)
-            throw new ArgumentOutOfRangeException(nameof(runId), "Workflow run ID must be a positive number.");
-
-        using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
-            $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/logs");
-
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogWarning(
-                "[GitHubService] GitHub returned {StatusCode} while downloading workflow logs for run {RunId}.",
-                response.StatusCode, runId);
-            return null;
-        }
-
-        await using var zipStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await GitHubWorkflowLogReader.ReadFlattenedLogsAsync(zipStream, cancellationToken);
-    }
-
-    /// <inheritdoc />
     public async Task<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>> DownloadWorkflowRunLogEntriesAsync(
         string accessToken, string repoOwner, string repoName, long runId,
         CancellationToken cancellationToken = default)
@@ -368,8 +345,7 @@ public sealed class GitHubService : IGitHubService
 
         using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/logs");
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+        using var response = await SendLogDownloadRequestAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) return [];
 
         await using var zipStream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -382,13 +358,22 @@ public sealed class GitHubService : IGitHubService
     {
         if (runId <= 0) throw new ArgumentOutOfRangeException(nameof(runId));
 
-        using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
-            $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/jobs?filter=latest&per_page=100");
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        var jobs = new List<GitHubWorkflowJobItem>();
+        for (var page = 1; page <= 10; page++)
+        {
+            using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
+                $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/jobs?filter=latest&per_page=100&page={page}");
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
 
-        var jobs = await response.Content.ReadFromJsonAsync<GitHubWorkflowJobsResponse>(JsonOptions, cancellationToken);
-        return GitHubWorkflowJobMapper.Map(jobs?.Jobs ?? []);
+            var responseBody = await response.Content.ReadFromJsonAsync<GitHubWorkflowJobsResponse>(JsonOptions,
+                cancellationToken);
+            var pageJobs = responseBody?.Jobs ?? [];
+            jobs.AddRange(pageJobs);
+            if (pageJobs.Count < 100) break;
+        }
+
+        return GitHubWorkflowJobMapper.Map(jobs);
     }
 
     /// <inheritdoc />
@@ -399,12 +384,14 @@ public sealed class GitHubService : IGitHubService
 
         using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/jobs/{jobId}/logs");
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
+        using var response = await SendLogDownloadRequestAsync(request, cancellationToken);
 
         if (response.IsSuccessStatusCode)
-            return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.Available,
-                await response.Content.ReadAsStringAsync(cancellationToken));
+        {
+            await using var zipStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var zipLogText = await GitHubWorkflowLogReader.ReadTextAsync(zipStream, cancellationToken);
+            return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.Available, zipLogText);
+        }
 
         if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Conflict or
             HttpStatusCode.UnprocessableEntity)
@@ -416,6 +403,29 @@ public sealed class GitHubService : IGitHubService
         _logger.LogWarning("GitHub returned {StatusCode} while downloading workflow job logs for job {JobId}.",
             response.StatusCode, jobId);
         return new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.Failed);
+    }
+
+    /// <summary>
+    ///     Follows the short-lived, signed download location returned by GitHub Actions without forwarding OAuth credentials
+    ///     to the storage host. Automatic redirect behavior varies by handler and must not control log collection.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendLogDownloadRequestAsync(HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        var redirectLocation = response.Headers.Location;
+        if ((int)response.StatusCode is < 300 or >= 400 || redirectLocation is null)
+            return response;
+
+        var downloadUri = redirectLocation.IsAbsoluteUri
+            ? redirectLocation
+            : new Uri(response.RequestMessage?.RequestUri ?? GitHubApiBaseAddress, redirectLocation);
+        response.Dispose();
+
+        using var downloadRequest = new HttpRequestMessage(HttpMethod.Get, downloadUri);
+        return await _httpClient.SendAsync(downloadRequest, HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
     }
 
 

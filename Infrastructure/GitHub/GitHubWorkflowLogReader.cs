@@ -4,28 +4,9 @@ using Domain.DTO;
 
 namespace Infrastructure.GitHub;
 
-/// <summary>
-///     Flattens GitHub Actions workflow log archives into terminal-friendly text.
-/// </summary>
+/// <summary>Reads GitHub Actions job logs and named workflow archive entries.</summary>
 internal static class GitHubWorkflowLogReader
 {
-    /// <summary>
-    ///     Reads all file entries from a GitHub workflow log ZIP stream in stable filename order.
-    /// </summary>
-    public static async Task<string?> ReadFlattenedLogsAsync(Stream zipStream, CancellationToken cancellationToken)
-    {
-        var builder = new StringBuilder();
-
-        foreach (var entry in await ReadEntriesAsync(zipStream, cancellationToken))
-        {
-            builder.AppendLine();
-            builder.AppendLine($"===== {entry.Path} =====");
-            builder.AppendLine(entry.Content);
-        }
-
-        return builder.Length == 0 ? null : builder.ToString();
-    }
-
     /// <summary>Reads stable archive entry names alongside their log content for selective reconciliation.</summary>
     public static async Task<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>> ReadEntriesAsync(Stream zipStream,
         CancellationToken cancellationToken)
@@ -43,5 +24,50 @@ internal static class GitHubWorkflowLogReader
         }
 
         return entries;
+    }
+
+    /// <summary>Reads a job ZIP in entry order, accepting plain-text responses as a fallback.</summary>
+    public static async Task<string?> ReadTextAsync(Stream zipStream, CancellationToken cancellationToken)
+    {
+        var buffer = EnsureSeekableCopy(zipStream);
+        buffer.Position = 0;
+
+        try
+        {
+            var entries = await ReadEntriesAsync(buffer, cancellationToken);
+            if (entries.Count == 0) return null;
+
+            var builder = new StringBuilder();
+            foreach (var entry in entries)
+            {
+                if (builder.Length > 0 && !builder[^1].Equals('\n')) builder.AppendLine();
+                builder.Append(entry.Content);
+                if (!string.IsNullOrEmpty(entry.Content) &&
+                    !entry.Content.EndsWith("\n", StringComparison.Ordinal) &&
+                    !entry.Content.EndsWith("\r\n", StringComparison.Ordinal))
+                    builder.AppendLine();
+            }
+
+            return builder.ToString();
+        }
+        catch (InvalidDataException)
+        {
+            buffer.Position = 0;
+            using var reader = new StreamReader(buffer, Encoding.UTF8, leaveOpen: true);
+            var content = await reader.ReadToEndAsync(cancellationToken);
+            return string.IsNullOrEmpty(content) ? null : content;
+        }
+    }
+
+    /// <summary>Copies the response to a seekable buffer for ZIP detection and text fallback.</summary>
+    private static MemoryStream EnsureSeekableCopy(Stream source)
+    {
+        if (source.CanSeek)
+            source.Position = 0;
+
+        var buffer = new MemoryStream();
+        source.CopyTo(buffer);
+        buffer.Position = 0;
+        return buffer;
     }
 }

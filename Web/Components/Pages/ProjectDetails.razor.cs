@@ -778,15 +778,34 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 return;
             }
 
-            var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose)
-                .ToTimeLimitedDataProtector();
-            var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
-
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
                 .WithAutomaticReconnect()
                 .Build();
 
+            // Report transient disconnects while keeping the current terminal contents intact.
+            _hubConnection.Reconnecting += exception =>
+            {
+                Logger.LogWarning(exception, "Log hub connection is reconnecting for project {ProjectId}.", ProjectId);
+                return Task.CompletedTask;
+            };
+
+            // SignalR group membership is connection-scoped, so reauthorize after reconnecting.
+            _hubConnection.Reconnected += async _ =>
+            {
+                try
+                {
+                    await JoinLogHubGroupAsync();
+                    Logger.LogInformation("Log hub connection rejoined the project group for project {ProjectId}.",
+                        ProjectId);
+                }
+                catch (Exception exception)
+                {
+                    Logger.LogWarning(exception,
+                        "Log hub connection could not rejoin the project group for project {ProjectId}.",
+                        ProjectId);
+                }
+            };
 
             _hubConnection.On<string, string>("ReceiveTerminalLog", async (terminalChannel, message) =>
             {
@@ -820,13 +839,24 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             try
             {
                 await _hubConnection.StartAsync();
-                await _hubConnection.SendAsync("JoinProjectGroup", ProjectId, secureToken);
+                await JoinLogHubGroupAsync();
             }
             catch (Exception ex)
             {
                 Logger.LogError(ex, "Failed to start SignalR connection for project {ProjectId}", ProjectId);
             }
         }
+    }
+
+    /// <summary>Authorizes the current SignalR connection for this project's redacted diagnostic stream.</summary>
+    private async Task JoinLogHubGroupAsync()
+    {
+        if (_hubConnection is null || _hubConnection.State != HubConnectionState.Connected)
+            return;
+
+        var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose).ToTimeLimitedDataProtector();
+        var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
+        await _hubConnection.SendAsync("JoinProjectGroup", ProjectId, secureToken);
     }
 
 

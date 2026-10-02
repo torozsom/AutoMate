@@ -7,6 +7,7 @@ namespace Infrastructure.GitHub;
 /// <summary>Persists non-sensitive workflow streaming checkpoints for restart-safe deduplication.</summary>
 internal sealed class GitHubWorkflowCheckpointStore(AutoMateDbContext dbContext)
 {
+    /// <summary>Loads or creates the checkpoint for one deployment, workflow run, and attempt.</summary>
     public async Task<GitHubWorkflowCheckpoint> GetOrCreateWorkflowAsync(Guid deploymentId, long workflowRunId,
         int workflowAttempt, CancellationToken cancellationToken)
     {
@@ -27,6 +28,7 @@ internal sealed class GitHubWorkflowCheckpointStore(AutoMateDbContext dbContext)
         return checkpoint;
     }
 
+    /// <summary>Loads or inserts a job checkpoint associated with the given workflow checkpoint.</summary>
     public async Task<GitHubWorkflowJobCheckpoint> GetOrCreateJobAsync(GitHubWorkflowCheckpoint workflowCheckpoint,
         long jobId, string jobName, CancellationToken cancellationToken)
     {
@@ -39,11 +41,12 @@ internal sealed class GitHubWorkflowCheckpointStore(AutoMateDbContext dbContext)
             JobId = jobId,
             JobName = jobName
         };
-        workflowCheckpoint.JobCheckpoints.Add(checkpoint);
+        dbContext.Set<GitHubWorkflowJobCheckpoint>().Add(checkpoint);
         await dbContext.SaveChangesAsync(cancellationToken);
         return checkpoint;
     }
 
+    /// <summary>Persists changed state and log cursors.</summary>
     public Task SaveAsync(CancellationToken cancellationToken)
     {
         return dbContext.SaveChangesAsync(cancellationToken);

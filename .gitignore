@@ -6,4 +6,7 @@ obj/
 riderModule.iml
 /_ReSharper.Caches/
 .*
+!.agents/
+.agents/*
+!.agents/AGENTS.md
 deploy/

@@ -76,7 +76,11 @@ public sealed class DeploymentDiagnosticPublisher(
         ArgumentNullException.ThrowIfNull(diagnosticEvent);
         if (diagnosticEvent.ProjectId == Guid.Empty)
             throw new ArgumentException("A diagnostic event must identify its project.", nameof(diagnosticEvent));
-        ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.Message);
+        // Empty output lines are meaningful terminal data; lifecycle/annotation messages are not.
+        if (diagnosticEvent.Kind == DeploymentDiagnosticKind.Log)
+            ArgumentException.ThrowIfNullOrEmpty(diagnosticEvent.Message);
+        else
+            ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.Message);
         ArgumentNullException.ThrowIfNull(diagnosticEvent.TerminalChannel);
         if (diagnosticEvent.TerminalChannel.Kind is DeploymentTerminalChannelKind.Container
             or DeploymentTerminalChannelKind.Metrics)
