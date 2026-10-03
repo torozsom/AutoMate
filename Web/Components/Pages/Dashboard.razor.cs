@@ -103,6 +103,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     public void Dispose()
     {
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
+        DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
         GC.SuppressFinalize(this);
     }
 
@@ -119,6 +120,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     protected override async Task OnInitializedAsync()
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
+        DeploymentJobQueue.StateChanged += OnQueueStateChanged;
 
         _currentUserId = await GetCurrentUserIdAsync();
 
@@ -381,7 +383,14 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private bool IsDeploying(Guid projectId)
     {
-        return _deployingStates.GetValueOrDefault(projectId, false);
+        var state = DeploymentJobQueue.GetProjectState(projectId);
+        return _deployingStates.GetValueOrDefault(projectId, false) ||
+               state.QueuedDeployments > 0 || state.ActiveDeployments > 0;
+    }
+
+    private void OnQueueStateChanged(Guid projectId)
+    {
+        if (_apps?.Any(app => app.Id == projectId) == true) _ = InvokeAsync(StateHasChanged);
     }
 
 

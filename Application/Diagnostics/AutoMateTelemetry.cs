@@ -20,6 +20,19 @@ public static class AutoMateTelemetry
     /// <summary>Meter for deployment collection and delivery health.</summary>
     public static readonly Meter DeploymentMeter = new("AutoMate.Deployments");
 
+    public static readonly UpDownCounter<long> DeploymentJobsQueued = DeploymentMeter.CreateUpDownCounter<long>(
+        "automate.deployment.jobs.queued");
+    public static readonly UpDownCounter<long> DeploymentJobsActive = DeploymentMeter.CreateUpDownCounter<long>(
+        "automate.deployment.jobs.active");
+    public static readonly Counter<long> DeploymentJobsStarted = DeploymentMeter.CreateCounter<long>(
+        "automate.deployment.jobs.started");
+    public static readonly Counter<long> DeploymentJobsCompleted = DeploymentMeter.CreateCounter<long>(
+        "automate.deployment.jobs.completed");
+    public static readonly Counter<long> DeploymentJobsFailed = DeploymentMeter.CreateCounter<long>(
+        "automate.deployment.jobs.failed");
+    public static readonly Histogram<double> DeploymentQueueWait = DeploymentMeter.CreateHistogram<double>(
+        "automate.deployment.jobs.queue_wait", "ms");
+
     /// <summary>Number of requests rejected by the global rate limiter.</summary>
     public static readonly Counter<long> RateLimitRejections = SecurityMeter.CreateCounter<long>(
         "automate.security.rate_limit.rejections");

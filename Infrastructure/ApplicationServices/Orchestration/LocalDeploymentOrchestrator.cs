@@ -1,4 +1,7 @@
 using Application.Abstractions.Docker;
+using Application.Abstractions.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Abstractions.Templating;
@@ -6,6 +9,7 @@ using Domain.DTO;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
+using Infrastructure.Docker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -23,6 +27,7 @@ public sealed class LocalDeploymentOrchestrator(
     ITemplatingService templateService,
     IDockerService dockerService,
     IDeploymentCapabilities capabilities,
+    IDeploymentDiagnosticPublisher diagnostics,
     ILogger<LocalDeploymentOrchestrator> logger,
     IServiceScopeFactory serviceScopeFactory,
     IDeploymentStatusNotifier statusNotifier)
@@ -89,11 +94,29 @@ public sealed class LocalDeploymentOrchestrator(
 
         try
         {
+            await ValidateLocalResourcesAsync(config, cancellationToken);
             await ExecuteDeploymentStepsAsync(config, csProject, deployment, cancellationToken);
             return deployment;
         }
         catch (Exception ex)
         {
+            if (ex is DeploymentResourceConflictException conflict)
+            {
+                try
+                {
+                    await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(config.ProjectId, deployment.Id,
+                        DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Annotation,
+                        DeploymentDiagnosticSeverity.Error, DateTimeOffset.UtcNow,
+                        $"{conflict.Message}\r\n",
+                        new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)),
+                        CancellationToken.None);
+                }
+                catch (Exception diagnosticError)
+                {
+                    logger.LogWarning(diagnosticError,
+                        "Could not publish local resource conflict for deployment {DeploymentId}.", deployment.Id);
+                }
+            }
             logger.LogError(ex,
                 "[LocalDeploymentOrchestrator] Deployment failed during execution for project '{ProjectName}'.",
                 config.ProjectName);
@@ -160,6 +183,37 @@ public sealed class LocalDeploymentOrchestrator(
             throw new InvalidOperationException("Local Docker deployments are disabled for this AutoMate instance.");
     }
 
+    private async Task ValidateLocalResourcesAsync(DeploymentConfigDto config, CancellationToken cancellationToken)
+    {
+        var composeName = DockerNameNormalizer.NormalizeProjectName(config.ProjectName);
+        var names = await dbContext.Applications.AsNoTracking()
+            .Where(app => app.Id != config.ProjectId && app.SourceType == SourceType.Local)
+            .Select(app => app.Name)
+            .ToListAsync(cancellationToken);
+        if (names.Any(name => DockerNameNormalizer.NormalizeProjectName(name) == composeName))
+            throw new DeploymentResourceConflictException(
+                $"Docker Compose name '{composeName}' is also used by another AutoMate project. Rename one project before deploying.");
+
+        if (config.ExposedPort is < 1 or > 65535)
+            throw new DeploymentResourceConflictException("The local host port must be between 1 and 65535.");
+
+        // A redeploy may legitimately reuse its own currently bound port. The scheduler
+        // separately reserves ports while different local deployments are in progress.
+        var runningProjects = await dockerService.GetRunningProjectNamesAsync(cancellationToken);
+        if (runningProjects.Contains(composeName, StringComparer.OrdinalIgnoreCase))
+        {
+            var ownsRunningDeployment = await dbContext.Deployments.AsNoTracking().AnyAsync(
+                item => item.CsProject!.AppId == config.ProjectId && item.Status == DeploymentStatus.Running,
+                cancellationToken);
+            if (!ownsRunningDeployment)
+                throw new DeploymentResourceConflictException(
+                    $"Docker Compose name '{composeName}' is already running outside this project's active deployment.");
+            return;
+        }
+
+        LocalHostPortAvailability.Check(config.ExposedPort);
+    }
+
 
     /// <summary>
     ///     Executes the main steps of the deployment process, including locating the solution root,
@@ -209,5 +263,23 @@ public sealed class LocalDeploymentOrchestrator(
             cancellationToken);
 
         _logStreamManager.Start(config, csProject, deployment.Id);
+    }
+}
+
+internal static class LocalHostPortAvailability
+{
+    public static void Check(int port)
+    {
+        try
+        {
+            var listener = new TcpListener(IPAddress.Any, port);
+            listener.Start();
+            listener.Stop();
+        }
+        catch (SocketException ex)
+        {
+            throw new DeploymentResourceConflictException(
+                $"Host port {port} is already in use. Choose another port for this deployment.", ex);
+        }
     }
 }

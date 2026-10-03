@@ -7,6 +7,8 @@ It starts this handshake only after project loading has completed and terminal c
 render the loading view before `OnInitializedAsync` finishes.
 The shared `Terminal` component also queues writes until xterm finishes JavaScript initialization, so a fast replay
 cannot disappear during the first render. Its pre-init queue has a fixed character limit and reports overflow.
+Dashboard and project details read the process-local queue state, showing “Queued...” until a deployment or stop job
+starts. State changes notify both views without exposing the queued request's credentials.
 
 ## Source inventory
 

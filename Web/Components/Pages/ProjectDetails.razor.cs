@@ -168,6 +168,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
+        DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
 
         if (_hubConnection is not null)
         {
@@ -188,7 +189,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private bool IsDeploying()
     {
         var status = GetLatestStatus();
-        return _isDeploying || status == DeploymentStatus.Starting;
+        var queueState = DeploymentJobQueue.GetProjectState(ProjectId);
+        return _isDeploying || status == DeploymentStatus.Starting ||
+               queueState.QueuedDeployments > 0 || queueState.ActiveDeployments > 0;
+    }
+
+    private void OnQueueStateChanged(Guid projectId)
+    {
+        if (projectId == ProjectId) _ = InvokeAsync(StateHasChanged);
     }
 
 
@@ -323,6 +331,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to queue deployment for project {ProjectId}", finalConfig.ProjectId);
+            _workflowStatusMessage = ex is InvalidOperationException
+                ? ex.Message
+                : "AutoMate could not queue this deployment. Try again shortly.";
             _isDeploying = false;
             StateHasChanged();
         }
@@ -391,6 +402,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     protected override async Task OnInitializedAsync()
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
+        DeploymentJobQueue.StateChanged += OnQueueStateChanged;
         _currentUserId = await GetCurrentUserIdAsync();
 
         if (_currentUserId != Guid.Empty)

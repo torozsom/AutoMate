@@ -307,6 +307,13 @@ public static class ServiceConfiguration
                 builder.Configuration.GetSection(DeploymentDiagnosticOptions.SectionName));
             builder.Services.Configure<GitHubWorkflowMonitoringOptions>(
                 builder.Configuration.GetSection(GitHubWorkflowMonitoringOptions.SectionName));
+            builder.Services.AddOptions<DeploymentConcurrencyOptions>()
+                .Bind(builder.Configuration.GetSection(DeploymentConcurrencyOptions.SectionName))
+                .Validate(options => options.MaxLocalBuilds is >= -1 and <= 1_024 &&
+                                     options.MaxCloudDeployments is >= 1 and <= 16 &&
+                                     options.MaxQueuedJobs is >= 1 and <= 1_000,
+                    "Deployment concurrency limits must be within their supported ranges.")
+                .ValidateOnStart();
             builder.Services.Configure<OpenTelemetryOptions>(
                 builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
             builder.Services.Configure<AiAnalysisOptions>(

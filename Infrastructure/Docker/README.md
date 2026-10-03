@@ -5,6 +5,8 @@ Docker and Docker Compose infrastructure adapter implementation.
 Docker CLI output, container output, and metrics are normalized into Application deployment diagnostics before the
 redacted event pipeline forwards safe terminal data.
 Local Compose build and container log events carry the deployment ID so history stays separate across redeployments.
+Local deployment preparation checks for another project's normalized Compose name and verifies a new deployment's
+host port before starting Docker. A conflict is reported as a redacted build diagnostic on the failed deployment.
 
 ## Source inventory
 
