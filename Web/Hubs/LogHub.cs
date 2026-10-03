@@ -15,7 +15,8 @@ public sealed class LogHub(
     IApplicationService applicationService,
     IDeploymentDiagnosticStore diagnosticStore,
     IDataProtectionProvider dataProtectionProvider,
-    ILogger<LogHub> logger) : Hub<ILogClient>
+    ILogger<LogHub> logger,
+    IDeploymentRuntimeViewers viewers) : Hub<ILogClient>
 {
     /// <summary>
     ///     Data Protection purpose shared with project details pages when generating log hub join tokens.
@@ -64,6 +65,9 @@ public sealed class LogHub(
             await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
                 Context.ConnectionAborted);
             if (!deploymentId.HasValue) return empty;
+            // Only a latest deployment can collect live output; historical subscriptions remain read-only.
+            if (app.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt)?.Id == deploymentId)
+                viewers.Renew(Context.ConnectionId, projectId, deploymentId.Value);
             return afterOrderId > 0
                 ? await diagnosticStore.ReadAfterAsync(projectId, deploymentId.Value, afterOrderId, 500,
                     Context.ConnectionAborted)
@@ -86,8 +90,16 @@ public sealed class LogHub(
         if (projectId == Guid.Empty)
             return;
 
+        viewers.Remove(Context.ConnectionId, projectId);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
             Context.ConnectionAborted);
+    }
+
+    /// <inheritdoc />
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        viewers.Remove(Context.ConnectionId);
+        return base.OnDisconnectedAsync(exception);
     }
 
 

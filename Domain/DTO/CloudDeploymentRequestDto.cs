@@ -9,11 +9,13 @@ public record CloudDeploymentRequestDto
 {
     /// <summary>Durable SaaS run, when launch and workflow monitoring are separated.</summary>
     public Guid? SaasRunId { get; init; }
+
     /// <summary>Current launch lease owner, used to reject a stale worker before committing.</summary>
     public Guid? SaasLeaseOwner { get; init; }
 
     /// <summary>Returns after committing rather than holding the launch worker for workflow polling.</summary>
     public bool DeferWorkflowMonitoring { get; init; }
+
     /// <summary>
     ///     The AutoMate user that initiated the deployment. Runtime monitoring uses this identifier to obtain a
     ///     memory-only Azure Monitor token without carrying a refresh token through the job queue.

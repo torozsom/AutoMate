@@ -7,7 +7,8 @@ monitoring is separate from the launch lease. See [SaaS operations](../../docs/s
 The in-process scheduler admits a CPU-aware number of local Docker builds (at least two) and four cloud deployments
 concurrently by default.
 One stop operation may run beside builds. Jobs for the same project stay ordered without occupying a lane while waiting;
-local jobs also wait for a conflicting Compose name or host port, and cloud jobs sharing a repository branch stay ordered.
+local jobs also wait for a conflicting Compose name or host port, and cloud jobs sharing a repository branch stay
+ordered.
 The queue accepts at most 100 waiting jobs and rejects excess requests with a clear error. It remains in memory, so
 queued jobs are lost if the AutoMate host exits.
 
@@ -16,6 +17,11 @@ AutoMate build cap, or an explicit limit from 1–1024. Docker still consumes ho
 log/diagnostic resources for every active build. `MaxCloudDeployments` accepts 1–16 and `MaxQueuedJobs` accepts
 1–1000. Use environment variables with `DeploymentConcurrency__` prefixes when appropriate.
 Only job type, project ID, lane, and timing are logged; queued credentials are never included in scheduler telemetry.
+
+Self-hosted cloud jobs obtain fresh Azure ARM credentials when execution starts, rather than reusing the login token
+captured when queued. Preparation failures are saved as redacted deployment output. Cloud application status remains
+Starting until the workflow succeeds. Local runtime collectors resume after host restart for opted-in or actively
+viewed deployments; live viewing and background history consent are independent.
 
 ## Source inventory
 

@@ -18,34 +18,6 @@ namespace Infrastructure.GitHub;
 /// </summary>
 public sealed class GitHubService : IGitHubService
 {
-    /// <inheritdoc />
-    public async Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
-        string branchName, string marker, CancellationToken cancellationToken = default)
-    {
-        for (var page = 1; page <= 10; page++)
-        {
-            var path = $"repos/{Uri.EscapeDataString(repoOwner)}/{Uri.EscapeDataString(repoName)}/commits" +
-                       $"?sha={Uri.EscapeDataString(branchName)}&per_page=100&page={page}";
-            using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get, path);
-            using var response = await _httpClient.SendAsync(request, cancellationToken);
-            if (response.StatusCode == HttpStatusCode.NotFound) return null;
-            GitHubAppCredentials.ThrowIfRateLimited(response);
-            response.EnsureSuccessStatusCode();
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var commits = payload.RootElement.EnumerateArray().ToArray();
-            foreach (var item in commits)
-            {
-                if (!item.TryGetProperty("commit", out var commit) ||
-                    !commit.TryGetProperty("message", out var message) ||
-                    !message.GetString()!.Contains(marker, StringComparison.Ordinal)) continue;
-                return item.GetProperty("sha").GetString();
-            }
-            if (commits.Length < 100) return null;
-        }
-        throw new InvalidOperationException(
-            "Unable to verify the prior AutoMate commit in this branch's recent history.");
-    }
     /// <summary>
     ///     Product name sent in GitHub user-agent headers.
     /// </summary>
@@ -102,6 +74,37 @@ public sealed class GitHubService : IGitHubService
             _httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue(ProductName, ProductVersion));
 
         _httpClient.BaseAddress ??= GitHubApiBaseAddress;
+    }
+
+    /// <inheritdoc />
+    public async Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
+        string branchName, string marker, CancellationToken cancellationToken = default)
+    {
+        for (var page = 1; page <= 10; page++)
+        {
+            var path = $"repos/{Uri.EscapeDataString(repoOwner)}/{Uri.EscapeDataString(repoName)}/commits" +
+                       $"?sha={Uri.EscapeDataString(branchName)}&per_page=100&page={page}";
+            using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get, path);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            GitHubAppCredentials.ThrowIfRateLimited(response);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var commits = payload.RootElement.EnumerateArray().ToArray();
+            foreach (var item in commits)
+            {
+                if (!item.TryGetProperty("commit", out var commit) ||
+                    !commit.TryGetProperty("message", out var message) ||
+                    !message.GetString()!.Contains(marker, StringComparison.Ordinal)) continue;
+                return item.GetProperty("sha").GetString();
+            }
+
+            if (commits.Length < 100) return null;
+        }
+
+        throw new InvalidOperationException(
+            "Unable to verify the prior AutoMate commit in this branch's recent history.");
     }
 
 

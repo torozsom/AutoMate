@@ -2,8 +2,8 @@ using System.Text.Json;
 using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.GitHub;
-using Application.Orchestration;
 using Application.Diagnostics;
+using Application.Orchestration;
 using Domain.DTO;
 using Domain.Entities;
 using Domain.Enums;
@@ -30,8 +30,11 @@ public sealed class CloudRunMonitor(
     ILoggerFactory loggerFactory)
 {
     /// <summary>Collects normalized GitHub job diagnostics using the existing redacted pipeline.</summary>
-    private GitHubWorkflowMonitor CreateWorkflowMonitor() => new(dbContext, github, diagnostics, redactor,
-        monitoringOptions.Value, loggerFactory.CreateLogger<GitHubWorkflowMonitor>());
+    private GitHubWorkflowMonitor CreateWorkflowMonitor()
+    {
+        return new GitHubWorkflowMonitor(dbContext, github, diagnostics, redactor,
+            monitoringOptions.Value, loggerFactory.CreateLogger<GitHubWorkflowMonitor>());
+    }
 
     /// <summary>Claims and processes one verified webhook receipt.</summary>
     public async Task<bool> ProcessNextDeliveryAsync(CancellationToken cancellationToken)
@@ -43,7 +46,9 @@ public sealed class CloudRunMonitor(
         if (delivery is null) return false;
         var owner = Guid.NewGuid();
         var claimed = await dbContext.CloudWebhookDeliveries.Where(item => item.Id == delivery.Id &&
-                item.ProcessedAt == null && (item.LeaseUntil == null || item.LeaseUntil < now))
+                                                                           item.ProcessedAt == null &&
+                                                                           (item.LeaseUntil == null ||
+                                                                            item.LeaseUntil < now))
             .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.LeaseOwner, owner)
                 .SetProperty(item => item.LeaseUntil, now.AddMinutes(10)), cancellationToken);
         if (claimed == 0) return true;
@@ -53,8 +58,8 @@ public sealed class CloudRunMonitor(
         try
         {
             var run = await dbContext.CloudDeploymentRuns.SingleOrDefaultAsync(item =>
-                item.InstallationId == delivery.InstallationId && item.RepositoryId == delivery.RepositoryId &&
-                item.CommitSha == delivery.HeadSha && item.BranchName == delivery.HeadBranch,
+                    item.InstallationId == delivery.InstallationId && item.RepositoryId == delivery.RepositoryId &&
+                    item.CommitSha == delivery.HeadSha && item.BranchName == delivery.HeadBranch,
                 cancellationToken);
             if (run is null)
             {
@@ -65,7 +70,7 @@ public sealed class CloudRunMonitor(
                      (run.WorkflowRunId is null || run.WorkflowRunId == delivery.WorkflowRunId))
             {
                 if (await dbContext.CloudInstallationBudgets.AnyAsync(item =>
-                        item.InstallationId == run.InstallationId && item.PausedUntil > now,
+                            item.InstallationId == run.InstallationId && item.PausedUntil > now,
                         cancellationToken)) return false;
                 var runLeaseOwner = Guid.NewGuid();
                 var acquired = await dbContext.CloudDeploymentRuns.Where(item => item.Id == run.Id &&
@@ -81,9 +86,13 @@ public sealed class CloudRunMonitor(
                     HeadBranch = run.BranchName,
                     Status = delivery.Status,
                     Conclusion = delivery.Conclusion,
-                    HtmlUrl = $"https://github.com/{run.RepositoryOwner}/{run.RepositoryName}/actions/runs/{delivery.WorkflowRunId}"
+                    HtmlUrl =
+                        $"https://github.com/{run.RepositoryOwner}/{run.RepositoryName}/actions/runs/{delivery.WorkflowRunId}"
                 };
-                try { await ApplyWorkflowAsync(run, workflow, cancellationToken); }
+                try
+                {
+                    await ApplyWorkflowAsync(run, workflow, cancellationToken);
+                }
                 catch (GitHubRateLimitException limit)
                 {
                     await PauseInstallationAsync(run.InstallationId, limit.RetryAt, cancellationToken);
@@ -92,11 +101,12 @@ public sealed class CloudRunMonitor(
                 finally
                 {
                     await dbContext.CloudDeploymentRuns.Where(item => item.Id == run.Id &&
-                                                                 item.LeaseOwner == runLeaseOwner)
+                                                                      item.LeaseOwner == runLeaseOwner)
                         .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.LeaseOwner, (Guid?)null)
                             .SetProperty(item => item.LeaseUntil, (DateTimeOffset?)null), cancellationToken);
                 }
             }
+
             delivery.ProcessedAt = DateTimeOffset.UtcNow;
             AutoMateTelemetry.CloudWebhookLag.Record((delivery.ProcessedAt.Value - delivery.CreatedAt)
                 .TotalMilliseconds);
@@ -111,7 +121,7 @@ public sealed class CloudRunMonitor(
             {
                 dbContext.ChangeTracker.Clear();
                 await dbContext.CloudWebhookDeliveries.Where(item => item.Id == delivery.Id &&
-                                                               item.LeaseOwner == owner)
+                                                                     item.LeaseOwner == owner)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.LeaseOwner, (Guid?)null)
                         .SetProperty(item => item.LeaseUntil,
                             DateTimeOffset.UtcNow.AddSeconds(15)), cancellationToken);
@@ -125,14 +135,14 @@ public sealed class CloudRunMonitor(
     {
         AutoMateTelemetry.CloudProviderThrottles.Add(1);
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO cloud_installation_budgets
-                (installation_id, paused_until, updated_at, throttle_count)
-            VALUES ({installationId}, {retryAt}, {DateTimeOffset.UtcNow}, 1)
-            ON CONFLICT (installation_id) DO UPDATE SET
-                paused_until = GREATEST(cloud_installation_budgets.paused_until, EXCLUDED.paused_until),
-                updated_at = EXCLUDED.updated_at,
-                throttle_count = cloud_installation_budgets.throttle_count + 1
-            """, cancellationToken);
+                                                              INSERT INTO cloud_installation_budgets
+                                                                  (installation_id, paused_until, updated_at, throttle_count)
+                                                              VALUES ({installationId}, {retryAt}, {DateTimeOffset.UtcNow}, 1)
+                                                              ON CONFLICT (installation_id) DO UPDATE SET
+                                                                  paused_until = GREATEST(cloud_installation_budgets.paused_until, EXCLUDED.paused_until),
+                                                                  updated_at = EXCLUDED.updated_at,
+                                                                  throttle_count = cloud_installation_budgets.throttle_count + 1
+                                                              """, cancellationToken);
     }
 
     /// <summary>Rechecks one stale run in case its webhook was missed or arrived early.</summary>
@@ -150,7 +160,8 @@ public sealed class CloudRunMonitor(
         if (run is null) return false;
         var owner = Guid.NewGuid();
         var claimed = await dbContext.CloudDeploymentRuns.Where(item => item.Id == run.Id &&
-                (item.LeaseUntil == null || item.LeaseUntil < now))
+                                                                        (item.LeaseUntil == null ||
+                                                                         item.LeaseUntil < now))
             .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.LeaseOwner, owner)
                 .SetProperty(item => item.LeaseUntil, now.AddMinutes(30)), cancellationToken);
         if (claimed == 0) return true;
@@ -176,6 +187,7 @@ public sealed class CloudRunMonitor(
                     statusNotifier.NotifyStatusChanged(run.ProjectId, DeploymentStatus.Failed);
                 }
             }
+
             run.LeaseOwner = null;
             run.LeaseUntil = null;
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -239,7 +251,6 @@ public sealed class CloudRunMonitor(
                 AutoMateTelemetry.CloudRunsFailed.Add(1);
             statusNotifier.NotifyStatusChanged(run.ProjectId, deployment.Status);
             if (workflow.Conclusion == "success")
-            {
                 try
                 {
                     var azure = await azureCredentials.GetAsync(run.UserId, cancellationToken);
@@ -260,7 +271,6 @@ public sealed class CloudRunMonitor(
                     await CreateWorkflowMonitor().StreamBuildLogAsync(deployment.Id, run.ProjectId,
                         "Azure runtime monitoring is temporarily unavailable; reconnect Azure to restore it.");
                 }
-            }
         }
         else
         {

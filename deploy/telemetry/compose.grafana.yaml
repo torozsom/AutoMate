@@ -1,0 +1,29 @@
+# Local operator UI only. Combine with compose.yaml and enable both profiles.
+services:
+  grafana:
+    image: grafana/grafana:13.1.6
+    profiles: [ grafana ]
+    restart: unless-stopped
+    ports: [ "127.0.0.1:${GRAFANA_PORT:-3000}:3000" ]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/admin-password
+      GF_SECURITY_SECRET_KEY__FILE: /run/secrets/encryption-key
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_DEFAULT_THEME: dark
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3000}
+    depends_on: [ gateway ]
+    volumes:
+      - grafana:/var/lib/grafana
+      - ${TELEMETRY_SECRETS_DIR:?}/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/automate.yaml:ro
+      - ${TELEMETRY_SECRETS_DIR:?}/grafana/admin-password:/run/secrets/admin-password:ro
+      - ${TELEMETRY_SECRETS_DIR:?}/grafana/encryption-key:/run/secrets/encryption-key:ro
+      - ./grafana/provisioning/dashboards.yaml:/etc/grafana/provisioning/dashboards/automate.yaml:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+    networks: [ gateway ]
+volumes:
+  grafana:

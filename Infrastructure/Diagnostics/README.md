@@ -2,7 +2,8 @@
 
 Infrastructure owns the diagnostic redactor, redacted diagnostic store, and bounded delivery pipeline. It receives
 normalized events from provider adapters, redacts them before every sink, adds structured logs/traces/metrics, and fans
-out safe terminal data after durable persistence.
+out safe terminal data after durable persistence. Runtime output collected during authorized viewing is saved for
+replay too; the owner preference controls collection while no page is open.
 
 The pipeline persists only already-redacted events before broadcasting them. Its dispatcher maps typed terminal channels
 to stable UI channels, keeping GitHub Actions, Azure console, Azure system, local build, and local container output
@@ -12,8 +13,9 @@ Blank log lines are valid terminal output; state and annotation messages must co
 terminal escape sequences and unsafe control characters are removed before storage or delivery.
 The publisher bounds its in-memory queue and each message to 4,096 characters; overflow produces a durable gap marker.
 PostgreSQL
-assigns a unique ordering cursor, and the store returns at most 500 recent terminal events for a deployment. A hosted
-worker deletes expired records in batches every hour, including at startup.
+assigns a unique ordering cursor, and normal terminal replay returns 500 recent events for a deployment. The PostgreSQL
+fallback retention worker deletes expired records in batches every hour, including at startup; specialized stores use
+their configured compactors, while the delivery worker removes confirmed or expired short-term payloads.
 For records written before deployment correlation was added, replay also recognizes project-owned GitHub Actions and
 Docker Compose output within the deployment's creation-time window and maps it to the appropriate terminal tab.
 
@@ -32,3 +34,24 @@ never make Web, SignalR, or provider payload types part of the diagnostic contra
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+## Specialized storage
+
+`DeploymentTelemetryStore` merges PostgreSQL fallback/outbox and Loki history. `LokiDeploymentLogs` and
+`MimirDeploymentMetrics` implement separate log/metric ports. `TelemetryDeliveryWorker` leases tenant batches and waits
+for complete-prefix query visibility. `DeploymentHistoryService` authorizes historical reads and consent changes.
+`TelemetryStorageOptions` validates quotas/transport, and `TelemetryHttpTransport` bounds active and waiting requests.
+See [hosting and retention operations](../../docs/deployment-telemetry.md).
+
+`TelemetryStorageOptionsValidator` reports safe, setting-specific startup failures for missing endpoints and invalid
+limits. It never includes configured endpoint values or credentials in validation messages.
+
+`DeploymentRuntimeViewers` bounds authorized process-local viewing leases to 4,096 connections/project pairs and expires
+them after 45 seconds without renewal. Collected runtime output uses durable positive cursors for replay.
+Viewing alone does not enable unattended collection. Storage requests include capacity waits and body reads in a
+10-second deadline; provider timeouts return an availability notice without terminating live delivery.
+
+Local live numeric metrics are a presentation snapshot: `DockerMetricDelivery` centrally redacts each observation and
+delivers it without waiting for persistence. Only sampled observations enter durable history (60 seconds by default).
+The dispatcher persists those samples without rebroadcasting them over newer live values. Terminal logs retain
+persist-before-delivery semantics.

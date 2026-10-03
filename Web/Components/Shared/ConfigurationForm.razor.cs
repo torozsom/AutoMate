@@ -1,5 +1,5 @@
-using Application.Abstractions.Scanning;
 using Application.Abstractions.Hosting;
+using Application.Abstractions.Scanning;
 using Domain.Defaults;
 using Domain.DTO;
 using Microsoft.AspNetCore.Components;
@@ -11,15 +11,6 @@ namespace Web.Components.Shared;
 /// </summary>
 public partial class ConfigurationForm : ComponentBase
 {
-    /// <summary>Hosting mode determines the cloud registry guidance and defaults.</summary>
-    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
-    /// <summary>Provides the public GitHub App installation URL in SaaS mode.</summary>
-    [Inject] private IConfiguration Configuration { get; set; } = null!;
-
-    /// <summary>Public installation URL for the configured AutoMate GitHub App.</summary>
-    private string? GitHubAppInstallUrl => string.IsNullOrWhiteSpace(Configuration["GitHubApp:AppSlug"])
-        ? null
-        : $"https://github.com/apps/{Uri.EscapeDataString(Configuration["GitHubApp:AppSlug"]!)}/installations/new";
     /// <summary>
     ///     UI-friendly representation of environment variables to allow Blazor data binding.
     /// </summary>
@@ -28,6 +19,19 @@ public partial class ConfigurationForm : ComponentBase
     private CloudDefaults? _lastCloudDefaults;
     private string _selectedEnvironment = DeploymentDefaults.DevelopmentEnvironmentName;
     private string? _validationMessage;
+
+    /// <summary>Hosting mode determines the cloud registry guidance and defaults.</summary>
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+
+    /// <summary>Provides the public GitHub App installation URL in SaaS mode.</summary>
+    [Inject]
+    private IConfiguration Configuration { get; set; } = null!;
+
+    /// <summary>Public installation URL for the configured AutoMate GitHub App.</summary>
+    private string? GitHubAppInstallUrl => string.IsNullOrWhiteSpace(Configuration["GitHubApp:AppSlug"])
+        ? null
+        : $"https://github.com/apps/{Uri.EscapeDataString(Configuration["GitHubApp:AppSlug"]!)}/installations/new";
 
 
     /// <summary>

@@ -1,5 +1,5 @@
-using System.Threading.Channels;
 using System.Diagnostics;
+using System.Threading.Channels;
 using Application.Diagnostics;
 using Microsoft.Extensions.Options;
 
@@ -11,9 +11,8 @@ namespace Application.Orchestration;
 public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> options) : IDeploymentJobQueue
 {
     private readonly object _gate = new();
-    private readonly Dictionary<Guid, DeploymentQueueState> _states = new();
     private readonly int _maxQueued = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
-    private int _queued;
+
     private readonly Channel<QueuedDeploymentJob> _queue = Channel.CreateBounded<QueuedDeploymentJob>(
         new BoundedChannelOptions(Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000))
         {
@@ -21,6 +20,9 @@ public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> op
             SingleReader = true,
             SingleWriter = false
         });
+
+    private readonly Dictionary<Guid, DeploymentQueueState> _states = new();
+    private int _queued;
 
     public event Action<Guid>? StateChanged;
 
@@ -49,8 +51,10 @@ public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> op
                 SetStateUnderLock(job.ProjectId, state);
                 throw new InvalidOperationException("The deployment queue is full. Try again after a job starts.");
             }
+
             AutoMateTelemetry.DeploymentJobsQueued.Add(1);
         }
+
         NotifyStateChanged(job.ProjectId);
         return ValueTask.CompletedTask;
     }
@@ -63,7 +67,10 @@ public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> op
 
     public DeploymentQueueState GetProjectState(Guid projectId)
     {
-        lock (_gate) return GetStateUnderLock(projectId);
+        lock (_gate)
+        {
+            return GetStateUnderLock(projectId);
+        }
     }
 
     public void MarkStarted(DeploymentJob job)
@@ -83,6 +90,7 @@ public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> op
             AutoMateTelemetry.DeploymentJobsQueued.Add(-1);
             AutoMateTelemetry.DeploymentJobsActive.Add(1);
         }
+
         NotifyStateChanged(projectId);
     }
 
@@ -99,11 +107,14 @@ public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> op
             });
             AutoMateTelemetry.DeploymentJobsActive.Add(-1);
         }
+
         NotifyStateChanged(projectId);
     }
 
-    private DeploymentQueueState GetStateUnderLock(Guid projectId) =>
-        _states.TryGetValue(projectId, out var state) ? state : default;
+    private DeploymentQueueState GetStateUnderLock(Guid projectId)
+    {
+        return _states.TryGetValue(projectId, out var state) ? state : default;
+    }
 
     private void SetStateUnderLock(Guid projectId, DeploymentQueueState state)
     {
@@ -115,9 +126,13 @@ public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> op
     {
         if (StateChanged is not { } callbacks) return;
         foreach (Action<Guid> callback in callbacks.GetInvocationList())
-        {
-            try { callback(projectId); }
-            catch { /* A disconnected UI subscriber cannot interrupt job admission. */ }
-        }
+            try
+            {
+                callback(projectId);
+            }
+            catch
+            {
+                /* A disconnected UI subscriber cannot interrupt job admission. */
+            }
     }
 }

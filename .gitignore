@@ -9,4 +9,6 @@ riderModule.iml
 !.agents/
 .agents/*
 !.agents/AGENTS.md
-deploy/
+!deploy/**/.env.example
+# Local telemetry certificates, credentials, and isolated test artifacts.
+.telemetry/

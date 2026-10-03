@@ -17,7 +17,10 @@ public sealed record CloudDeploymentStart(
     string RepositoryRoot);
 
 /// <summary>Public receipt returned as soon as a cloud request is admitted.</summary>
-public sealed record CloudDeploymentReceipt(Guid RunId, CloudRunPhase Phase, DateTimeOffset QueuedAt,
+public sealed record CloudDeploymentReceipt(
+    Guid RunId,
+    CloudRunPhase Phase,
+    DateTimeOffset QueuedAt,
     string? FailureReason);
 
 /// <summary>Authorizes and records SaaS cloud launches without carrying credentials through a queue.</summary>

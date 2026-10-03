@@ -34,10 +34,6 @@ public partial class Dashboard : ComponentBase, IDisposable
 
     /// The ID of the currently authenticated user, used to fetch and manage their projects.
     private Guid _currentUserId;
-    /// <summary>Stable retry key while one cloud submission is pending.</summary>
-    private string? _pendingCloudIdempotencyKey;
-    /// <summary>Project associated with the pending cloud retry key.</summary>
-    private Guid _pendingCloudProjectId;
 
     /// A message to display global errors that occur during operations like deployment or project fetching.
     private string? _globalErrorMessage;
@@ -50,6 +46,12 @@ public partial class Dashboard : ComponentBase, IDisposable
 
     /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
     private bool _isLoading = true;
+
+    /// <summary>Stable retry key while one cloud submission is pending.</summary>
+    private string? _pendingCloudIdempotencyKey;
+
+    /// <summary>Project associated with the pending cloud retry key.</summary>
+    private Guid _pendingCloudProjectId;
 
     /// The remote application currently selected for cloud deployment.
     private Domain.Entities.Application? _selectedCloudApp;
@@ -74,7 +76,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
     /// <summary>Durable SaaS cloud admission.</summary>
-    [Inject] private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
+    [Inject]
+    private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
 
     /// Service for managing user accounts.
     [Inject]
@@ -327,6 +330,7 @@ public partial class Dashboard : ComponentBase, IDisposable
                         _pendingCloudProjectId = finalConfig.ProjectId;
                         _pendingCloudIdempotencyKey = null;
                     }
+
                     _pendingCloudIdempotencyKey ??= Guid.NewGuid().ToString("N");
                     await CloudDeploymentRuns.StartAsync(new CloudDeploymentStart(
                         _currentUserId, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
@@ -335,19 +339,22 @@ public partial class Dashboard : ComponentBase, IDisposable
                         cloudApp.Name, "."));
                     _pendingCloudIdempotencyKey = null;
                 }
-                else await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+                else
                 {
-                    RequestingUserId = _currentUserId,
-                    Config = finalConfig,
-                    Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
-                    CsProjectName = cloudApp.Name,
-                    RepositoryRoot = ".",
-                    GitHubAccessToken = userDetails.AccessToken,
-                    GitHubContainerRegistryToken = userDetails.AccessToken,
-                    AzureCredentials = azureCredentials,
-                    RepositoryOwner = repository.Owner,
-                    RepositoryName = repository.Name
-                }));
+                    await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+                    {
+                        RequestingUserId = _currentUserId,
+                        Config = finalConfig,
+                        Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                        CsProjectName = cloudApp.Name,
+                        RepositoryRoot = ".",
+                        GitHubAccessToken = userDetails.AccessToken,
+                        GitHubContainerRegistryToken = userDetails.AccessToken,
+                        AzureCredentials = azureCredentials,
+                        RepositoryOwner = repository.Owner,
+                        RepositoryName = repository.Name
+                    }));
+                }
 
                 _globalSuccessMessage =
                     $"Cloud deployment workflow for '{finalConfig.ProjectName}' has been queued.";

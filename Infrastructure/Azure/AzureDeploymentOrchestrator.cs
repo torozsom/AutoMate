@@ -17,6 +17,9 @@ public sealed class AzureDeploymentOrchestrator(
     private readonly AzureFederatedCredentialService _federatedCredentialService =
         new(httpClientFactory, logger);
 
+    /// <summary>Creates the customer's registry before GitHub Actions attempts its first image push.</summary>
+    private readonly AzureContainerRegistryProvisioner _registryProvisioner = new(httpClientFactory);
+
     /// <summary>
     ///     Ensures Azure resource providers needed by the deployment configuration are registered.
     /// </summary>
@@ -27,9 +30,6 @@ public sealed class AzureDeploymentOrchestrator(
     ///     Assigns resource-group permissions to the managed identity used by GitHub Actions.
     /// </summary>
     private readonly AzureRoleAssignmentService _roleAssignmentService = new(httpClientFactory);
-
-    /// <summary>Creates the customer's registry before GitHub Actions attempts its first image push.</summary>
-    private readonly AzureContainerRegistryProvisioner _registryProvisioner = new(httpClientFactory);
 
     /// <inheritdoc />
     public async Task<AzureOidcSetupResultDto> EnsureFederatedIdentityAsync(AzureCloudCredentialsDto credentials,

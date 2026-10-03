@@ -25,6 +25,12 @@ namespace Web.Components.Pages;
 /// </summary>
 public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 {
+    /// <summary>Stops database-backed status and terminal catch-up when the page closes.</summary>
+    private readonly CancellationTokenSource _cloudPollCancellation = new();
+
+    /// <summary>Prevents overlapping status refreshes in one Blazor circuit.</summary>
+    private readonly SemaphoreSlim _cloudPollGate = new(1, 1);
+
     /// A dictionary to store the latest CPU and memory usage metrics for each container.
     private readonly Dictionary<string, (string Cpu, string Memory)> _containerMetrics = new();
 
@@ -36,6 +42,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private readonly List<string> _metricContainerNames = [];
 
     private readonly List<DeploymentTerminalLog> _pendingTerminalLogs = [];
+
+    /// <summary>Bounded identities rendered ahead of the confirmed replay cursor.</summary>
+    private readonly HashSet<long> _renderedTerminalIds = [];
+
+    /// <summary>Serializes initial, reconnect and periodic replay handshakes.</summary>
+    private readonly SemaphoreSlim _terminalReplayGate = new(1, 1);
 
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
@@ -55,6 +67,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A terminal instance for displaying build logs.
     private Terminal? _buildTerminal;
 
+    /// <summary>Background refresh task for multi-instance SaaS deployments.</summary>
+    private Task? _cloudPollTask;
+
+    /// <summary>Newest durable SaaS run displayed by this page.</summary>
+    private CloudDeploymentReceipt? _cloudRunReceipt;
+
     /// A nullable variable to hold the current deployment configuration when the user initiates a deployment.
     private DeploymentConfigDto? _currentDeployConfig;
 
@@ -63,19 +81,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The internal AutoMate user ID resolved once during component initialization.
     private Guid _currentUserId;
-    /// <summary>Newest durable SaaS run displayed by this page.</summary>
-    private CloudDeploymentReceipt? _cloudRunReceipt;
-    /// <summary>Stops database-backed status and terminal catch-up when the page closes.</summary>
-    private readonly CancellationTokenSource _cloudPollCancellation = new();
-    /// <summary>Background refresh task for multi-instance SaaS deployments.</summary>
-    private Task? _cloudPollTask;
-    /// <summary>Prevents overlapping status refreshes in one Blazor circuit.</summary>
-    private readonly SemaphoreSlim _cloudPollGate = new(1, 1);
-    /// <summary>Stable key used if the current SaaS admission request is retried.</summary>
-    private string? _pendingCloudIdempotencyKey;
 
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
+
+    /// <summary>Suppresses repeated empty-history notices during SaaS catch-up polls.</summary>
+    private bool _emptyTerminalNoticeShown;
 
     /// A terminal instance for GitHub Actions output from a cloud deployment.
     private Terminal? _githubActionsTerminal;
@@ -95,9 +106,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A boolean flag to indicate whether the deployment process is currently being stopped.
     private bool _isStopping;
 
+    /// <summary>Suppresses unchanged storage-status notices during periodic catch-up.</summary>
+    private string? _lastHistoryAvailability;
+
     private long _lastTerminalOrderId;
 
     private DeploymentAnalysisView? _latestAnalysis;
+
+    /// <summary>Bounds saved metric recovery while waiting for the first live sample.</summary>
+    private DateTimeOffset _nextMetricReplayAt;
+
+    /// <summary>Stable key used if the current SaaS admission request is retried.</summary>
+    private string? _pendingCloudIdempotencyKey;
 
     /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
     private string? _selectedProjectPath;
@@ -105,9 +125,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A boolean flag to control the visibility of the deployment configuration modal.
     private bool _showConfigModal;
 
+    /// <summary>Distinguishes recovered observations from fresh live samples.</summary>
+    private bool _showSavedMetricNotice;
+
     private bool _terminalBufferOverflow;
-    /// <summary>Suppresses repeated empty-history notices during SaaS catch-up polls.</summary>
-    private bool _emptyTerminalNoticeShown;
     private Guid? _terminalDeploymentId;
     private bool _terminalReplayPending = true;
 
@@ -141,10 +162,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
     /// <summary>Durable SaaS cloud admission.</summary>
-    [Inject] private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
+    [Inject]
+    private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
 
     /// <summary>Creates an independent read scope for each cross-instance status poll.</summary>
-    [Inject] private IServiceScopeFactory ScopeFactory { get; set; } = null!;
+    [Inject]
+    private IServiceScopeFactory ScopeFactory { get; set; } = null!;
 
     /// The user service used to retrieve user details and manage user-related operations.
     [Inject]
@@ -187,10 +210,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         await _cloudPollCancellation.CancelAsync();
         if (_cloudPollTask is not null)
-        {
-            try { await _cloudPollTask; }
-            catch (OperationCanceledException) { }
-        }
+            try
+            {
+                await _cloudPollTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
         _cloudPollCancellation.Dispose();
         _cloudPollGate.Dispose();
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
@@ -405,19 +432,22 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 _pendingCloudIdempotencyKey = null;
                 UpdateCloudRunMessage();
             }
-            else await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+            else
             {
-                RequestingUserId = _currentUserId,
-                Config = finalConfig,
-                Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
-                CsProjectName = _app.Name,
-                RepositoryRoot = ".",
-                GitHubAccessToken = userDetails.AccessToken,
-                GitHubContainerRegistryToken = userDetails.AccessToken,
-                AzureCredentials = azureCredentials,
-                RepositoryOwner = repository.Owner,
-                RepositoryName = repository.Name
-            }));
+                await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+                {
+                    RequestingUserId = _currentUserId,
+                    Config = finalConfig,
+                    Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                    CsProjectName = _app.Name,
+                    RepositoryRoot = ".",
+                    GitHubAccessToken = userDetails.AccessToken,
+                    GitHubContainerRegistryToken = userDetails.AccessToken,
+                    AzureCredentials = azureCredentials,
+                    RepositoryOwner = repository.Owner,
+                    RepositoryName = repository.Name
+                }));
+            }
 
             _workflowStatusMessage = "GitHub Actions workflow has been queued.";
             _workflowUrl = $"https://github.com/{repository.Owner}/{repository.Name}/actions/workflows/deploy.yml";
@@ -456,7 +486,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 UpdateCloudRunMessage();
                 _cloudPollTask = PollSaasCloudAsync(_cloudPollCancellation.Token);
             }
+
             await RefreshLatestAnalysisAsync();
+            if (_app is not null && _cloudPollTask is null)
+                _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
 
             if (_app is { SourceType: SourceType.Local })
             {
@@ -475,6 +508,26 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         await UpdateWebHostPortAsync();
 
         _isLoading = false;
+    }
+
+    /// <summary>Confirms replay progress for self-hosted pages without depending on live-delivery order.</summary>
+    private async Task PollTerminalHistoryAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+            try
+            {
+                if (_hubConnection?.State == HubConnectionState.Connected && _terminalDeploymentId.HasValue)
+                    await JoinLogHubGroupAsync();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Terminal catch-up unavailable: {FailureType}.", ex.GetType().Name);
+            }
     }
 
     /// <summary>Refreshes SaaS phase and catches up redacted logs across app instances.</summary>
@@ -500,12 +553,22 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     UpdateCloudRunMessage();
                     await InvokeAsync(StateHasChanged);
                 }
+
                 if (_hubConnection?.State == HubConnectionState.Connected && _terminalDeploymentId.HasValue)
                     await JoinLogHubGroupAsync();
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
-            catch (Exception ex) { Logger.LogWarning(ex, "SaaS cloud status refresh failed for {ProjectId}.", ProjectId); }
-            finally { _cloudPollGate.Release(); }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "SaaS cloud status refresh failed for {ProjectId}.", ProjectId);
+            }
+            finally
+            {
+                _cloudPollGate.Release();
+            }
         }
     }
 
@@ -611,7 +674,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (latestDeploymentId != _terminalDeploymentId)
             {
                 _terminalDeploymentId = latestDeploymentId;
+                _containerMetrics.Clear();
+                _metricContainerNames.Clear();
+                _currentMetricIndex = 0;
+                _nextMetricReplayAt = DateTimeOffset.MinValue;
+                _showSavedMetricNotice = false;
                 _lastTerminalOrderId = 0;
+                _renderedTerminalIds.Clear();
+                _lastHistoryAvailability = null;
                 _emptyTerminalNoticeShown = false;
                 _pendingTerminalLogs.Clear();
                 _terminalReplayPending = true;
@@ -955,9 +1025,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
                 (containerName, cpuUsage, memoryUsage) =>
                 {
-                    InvokeAsync(() =>
+                    return InvokeAsync(() =>
                     {
                         _containerMetrics[containerName] = (cpuUsage, memoryUsage);
+                        _showSavedMetricNotice = false;
                         if (!_metricContainerNames.Contains(containerName)) _metricContainerNames.Add(containerName);
                         StateHasChanged();
                     });
@@ -984,35 +1055,92 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_hubConnection is null || _hubConnection.State != HubConnectionState.Connected)
             return;
 
-        var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose).ToTimeLimitedDataProtector();
-        var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
-        _terminalReplayPending = true;
-        var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
-            ProjectId, _terminalDeploymentId, secureToken, _lastTerminalOrderId);
-        await InvokeAsync(async () =>
+        await _terminalReplayGate.WaitAsync(_cloudPollCancellation.Token);
+        try
         {
-            if (!_emptyTerminalNoticeShown && _terminalDeploymentId.HasValue && _lastTerminalOrderId == 0 &&
-                history.Events.Count == 0 && _pendingTerminalLogs.Count == 0)
+            var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose)
+                .ToTimeLimitedDataProtector();
+            var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
+            _terminalReplayPending = true;
+            var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
+                ProjectId, _terminalDeploymentId, secureToken, _lastTerminalOrderId);
+            await InvokeAsync(async () =>
             {
-                await WriteTerminalNoticeAsync("No saved terminal output is available for this deployment.");
-                _emptyTerminalNoticeShown = true;
-            }
-            if (history.EarlierOmitted)
-                await WriteTerminalNoticeAsync(_lastTerminalOrderId == 0
-                    ? "Earlier output omitted; showing the most recent 500 events."
-                    : "More output is available and will load on the next refresh.");
-            foreach (var terminalLog in history.Events)
-                await WriteTerminalLogAsync(terminalLog);
-            foreach (var terminalLog in _pendingTerminalLogs.OrderBy(item => item.OrderId))
-                await WriteTerminalLogAsync(terminalLog);
-            _pendingTerminalLogs.Clear();
-            _terminalReplayPending = false;
-            if (_terminalBufferOverflow)
+                if (!_emptyTerminalNoticeShown && _terminalDeploymentId.HasValue && _lastTerminalOrderId == 0 &&
+                    history.Events.Count == 0 && _pendingTerminalLogs.Count == 0)
+                {
+                    await WriteTerminalNoticeAsync("No saved terminal output is available for this deployment.");
+                    _emptyTerminalNoticeShown = true;
+                }
+
+                if (history.Availability is not null && history.Availability != _lastHistoryAvailability)
+                    await WriteTerminalNoticeAsync(history.Availability);
+                _lastHistoryAvailability = history.Availability;
+                if (history.EarlierOmitted)
+                    await WriteTerminalNoticeAsync(_lastTerminalOrderId == 0
+                        ? "Earlier output omitted; showing the most recent 500 events."
+                        : "More output is available and will load on the next refresh.");
+                foreach (var terminalLog in history.Events)
+                    await WriteTerminalLogAsync(terminalLog, true);
+                if (history.CanAdvanceCursor && history.Events.Count > 0)
+                {
+                    _lastTerminalOrderId = Math.Max(_lastTerminalOrderId, history.Events.Max(e => e.OrderId));
+                    _renderedTerminalIds.RemoveWhere(id => id <= _lastTerminalOrderId);
+                }
+
+                foreach (var terminalLog in _pendingTerminalLogs.OrderBy(item => item.OrderId))
+                    await WriteTerminalLogAsync(terminalLog);
+                _pendingTerminalLogs.Clear();
+                _terminalReplayPending = false;
+                if (_terminalBufferOverflow)
+                {
+                    await WriteTerminalNoticeAsync(
+                        "Some live output was omitted. Reload to recover available history.");
+                    _terminalBufferOverflow = false;
+                }
+            });
+        }
+        finally
+        {
+            _terminalReplayGate.Release();
+        }
+
+        await RestoreMetricSnapshotAsync();
+    }
+
+    /// <summary>Restores the latest saved numeric samples after reload, without replacing newer live values.</summary>
+    private async Task RestoreMetricSnapshotAsync()
+    {
+        if (!_terminalDeploymentId.HasValue || _containerMetrics.Count > 0 ||
+            DateTimeOffset.UtcNow < _nextMetricReplayAt) return;
+        _nextMetricReplayAt = DateTimeOffset.UtcNow.AddSeconds(60);
+        var deploymentId = _terminalDeploymentId.Value;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var end = DateTimeOffset.UtcNow;
+            var history = await scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>()
+                .ReadMetricsAsync(_currentUserId, ProjectId, deploymentId, end.AddMinutes(-15), end, 15,
+                    _cloudPollCancellation.Token);
+            await InvokeAsync(() =>
             {
-                await WriteTerminalNoticeAsync("Some live output was omitted. Reload to recover available history.");
-                _terminalBufferOverflow = false;
-            }
-        });
+                if (_terminalDeploymentId != deploymentId) return;
+                foreach (var group in history.Points.GroupBy(p => p.Container))
+                {
+                    if (_containerMetrics.ContainsKey(group.Key)) continue;
+                    _containerMetrics[group.Key] = DeploymentMetricDisplay.Latest(group);
+                    if (!_metricContainerNames.Contains(group.Key)) _metricContainerNames.Add(group.Key);
+                    _showSavedMetricNotice = true;
+                }
+
+                StateHasChanged();
+            });
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException ||
+                                          !_cloudPollCancellation.IsCancellationRequested)
+        {
+            Logger.LogWarning("Saved metric recovery unavailable: {FailureType}.", exception.GetType().Name);
+        }
     }
 
     private async Task ClearTerminalsAsync()
@@ -1026,10 +1154,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 await terminal.ClearAsync();
     }
 
-    private async Task WriteTerminalLogAsync(DeploymentTerminalLog terminalLog)
+    private async Task WriteTerminalLogAsync(DeploymentTerminalLog terminalLog, bool isReplay = false)
     {
-        if (terminalLog.OrderId <= _lastTerminalOrderId) return;
-        _lastTerminalOrderId = terminalLog.OrderId;
+        var liveOnly = terminalLog.OrderId < 0;
+        if (!liveOnly && (terminalLog.OrderId <= _lastTerminalOrderId ||
+                          _renderedTerminalIds.Contains(terminalLog.OrderId))) return;
+        if (!liveOnly && _renderedTerminalIds.Count >= 2000 && !isReplay)
+        {
+            _terminalBufferOverflow = true;
+            return;
+        }
+
+        if (!liveOnly && _renderedTerminalIds.Count < 2000) _renderedTerminalIds.Add(terminalLog.OrderId);
         var terminal = terminalLog.TerminalChannel switch
         {
             "build" => _buildTerminal,

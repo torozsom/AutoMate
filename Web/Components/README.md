@@ -28,3 +28,17 @@ Infrastructure types are registered only in Web/Configs.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+`Pages/DeploymentHistory.razor` provides historical channel pages and CPU/memory charts.
+Its isolated stylesheet bounds the terminal viewport so xterm fitting cannot grow the page. Saved output is rendered
+independently of metric queries; metric-provider failures keep the logs visible and show a separate availability notice.
+Changing history pages or channels replaces terminal content instead of accumulating it. The shared xterm wrapper
+coalesces resize notifications and fits only when the viewport dimensions change.
+`Shared/TelemetryPreferences.razor`
+records explicit runtime and managed-provider consent. Project replay tracks a confirmed cursor separately from bounded
+rendered live identities and does not advance on failed backend reads. Self-hosted pages also periodically catch up.
+
+Runtime logs and metrics collected while viewing are saved for 30-day replay. The checkbox enables background
+collection while the page is closed. Metric history defaults to 60-second sampling; local live cards update with each
+Docker stats observation (normally every 1–2 seconds). The metric cards restore the latest
+saved numeric snapshot while awaiting live updates. `DeploymentMetricDisplay` formats numeric units for the cards.

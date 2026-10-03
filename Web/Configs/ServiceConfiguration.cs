@@ -21,13 +21,13 @@ using Application.Diagnostics;
 using Application.Orchestration;
 using Domain.Entities;
 using Infrastructure.Ai;
+using Infrastructure.ApplicationServices.Orchestration;
 using Infrastructure.Azure;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
 using Infrastructure.Docker;
 using Infrastructure.Email;
 using Infrastructure.GitHub;
-using Infrastructure.ApplicationServices.Orchestration;
 using Infrastructure.Scanner;
 using Infrastructure.Templating;
 using Microsoft.AspNetCore.Authentication;
@@ -38,6 +38,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -399,6 +400,7 @@ public static class ServiceConfiguration
                     metrics.AddRuntimeInstrumentation();
                     metrics.AddMeter(AutoMateTelemetry.DeploymentMeter.Name);
                     metrics.AddMeter(AutoMateTelemetry.SecurityMeter.Name);
+                    metrics.AddMeter("AutoMate.TelemetryStorage");
                     if (exportConsole) metrics.AddConsoleExporter();
                     if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
                 });
@@ -433,7 +435,41 @@ public static class ServiceConfiguration
                 .AddStandardResilienceHandler();
             services.AddHttpClient<ILlmAnalysisProvider, OpenAiAnalysisProvider>()
                 .AddStandardResilienceHandler();
-            services.AddScoped<IDeploymentDiagnosticStore, DeploymentDiagnosticStore>();
+            services.AddSingleton<IValidateOptions<TelemetryStorageOptions>, TelemetryStorageOptionsValidator>();
+            services.AddOptions<TelemetryStorageOptions>().Bind(config.GetSection(TelemetryStorageOptions.SectionName))
+                .ValidateOnStart();
+            services.AddHttpClient("DeploymentTelemetry", client => client.Timeout = TimeSpan.FromSeconds(15))
+                .ConfigurePrimaryHttpMessageHandler(sp =>
+                {
+                    var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+                    var settings = sp.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value;
+                    if (!string.IsNullOrWhiteSpace(settings.CaCertificatePath))
+                    {
+                        // Scope private pilot trust to this client; normal hostname and chain verification remain enabled.
+                        var policy = new X509ChainPolicy
+                        {
+                            TrustMode = X509ChainTrustMode.CustomRootTrust,
+                            RevocationMode = X509RevocationMode.NoCheck
+                        };
+                        policy.CustomTrustStore.Add(
+                            X509CertificateLoader.LoadCertificateFromFile(settings.CaCertificatePath));
+                        handler.SslOptions.CertificateChainPolicy = policy;
+                    }
+
+                    return handler;
+                });
+            services.AddSingleton<TelemetryHttpTransport>();
+            services.AddScoped<DeploymentDiagnosticStore>();
+            services.AddScoped<DeploymentTelemetryStore>();
+            services.AddScoped<IDeploymentDiagnosticStore>(sp => sp.GetRequiredService<DeploymentTelemetryStore>());
+            services.AddScoped<LokiDeploymentLogs>();
+            services.AddScoped<IDeploymentLogWriter>(sp => sp.GetRequiredService<LokiDeploymentLogs>());
+            services.AddScoped<IDeploymentLogQuery>(sp => sp.GetRequiredService<LokiDeploymentLogs>());
+            services.AddScoped<MimirDeploymentMetrics>();
+            services.AddScoped<IDeploymentMetricWriter>(sp => sp.GetRequiredService<MimirDeploymentMetrics>());
+            services.AddScoped<IDeploymentMetricQuery>(sp => sp.GetRequiredService<MimirDeploymentMetrics>());
+            services.AddScoped<IDeploymentHistoryService, DeploymentHistoryService>();
+            services.AddHostedService<TelemetryDeliveryWorker>();
             services.AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>();
             services.AddScoped<IDeploymentAnalysisQueue, DeploymentAnalysisQueue>();
             services.AddHostedService<DeploymentAnalysisWorker>();
@@ -615,6 +651,7 @@ public static class ServiceConfiguration
             {
                 services.AddScoped<IDockerService, DockerService>();
                 services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
+                services.AddHostedService<LocalRuntimeRecoveryService>();
             }
             else
             {
@@ -622,18 +659,19 @@ public static class ServiceConfiguration
             }
 
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
+            services.AddScoped<AzureArmCredentialsProvider>();
             services.AddScoped<ICloudDeploymentRunService, CloudDeploymentRunService>();
             if (!capabilities.LocalDeploymentsEnabled && capabilities.CloudDeploymentsEnabled)
             {
                 services.AddScoped<IGitHubWebhookReceiver, GitHubWebhookReceiver>();
                 services.AddScoped<CloudRunProcessor>();
                 services.AddScoped<CloudRunMonitor>();
-                services.AddScoped<AzureArmCredentialsProvider>();
                 services.AddHostedService<CloudDeploymentScheduler>();
                 services.AddHostedService<CloudRunMonitorService>();
                 services.AddHostedService<CloudRunRetentionService>();
                 services.AddHostedService<CloudRunMetricsService>();
             }
+
             services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
             if (capabilities.LocalDeploymentsEnabled)
                 services.AddHostedService<DeploymentJobWorker>();
@@ -651,6 +689,8 @@ public static class ServiceConfiguration
                 services.AddHostedService<DeploymentCleanupHostedService>();
             services.AddSingleton<ILogStreamer, RealTimeLogStreamer>();
             services.AddSingleton<IDiagnosticRedactor, DiagnosticRedactor>();
+            services.AddSingleton<TimeProvider>(TimeProvider.System);
+            services.AddSingleton<IDeploymentRuntimeViewers, DeploymentRuntimeViewers>();
             services.AddSingleton<DeploymentDiagnosticPublisher>();
             services.AddSingleton<IDeploymentDiagnosticPublisher>(serviceProvider =>
                 serviceProvider.GetRequiredService<DeploymentDiagnosticPublisher>());

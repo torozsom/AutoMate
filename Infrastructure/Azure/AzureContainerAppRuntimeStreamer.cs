@@ -6,6 +6,8 @@ using Application.Abstractions.Diagnostics;
 using Domain.DTO;
 using Domain.Entities;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -20,10 +22,11 @@ public sealed class AzureContainerAppRuntimeStreamer(
     IHttpClientFactory httpClientFactory,
     IServiceScopeFactory scopeFactory,
     IOptions<AzureMonitorLogsOptions> options,
-    ILogger<AzureContainerAppRuntimeStreamer> logger) : BackgroundService, IAzureContainerAppRuntimeStreamer
+    ILogger<AzureContainerAppRuntimeStreamer> logger,
+    IOptions<TelemetryStorageOptions>? telemetry = null) : BackgroundService, IAzureContainerAppRuntimeStreamer
 {
     private const string CloudWebContainerName = "cloud-web";
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
     private readonly AzureContainerAppClient _containerAppClient = new(httpClientFactory);
     private readonly AzureMonitorLogsClient _monitorLogsClient = new(httpClientFactory);
     private readonly ConcurrentDictionary<string, string> _reportedIssues = new();
@@ -51,7 +54,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
         try
         {
             await PollOnceAsync(stoppingToken);
-            using var timer = new PeriodicTimer(PollInterval);
+            using var timer =
+                new PeriodicTimer(
+                    TimeSpan.FromSeconds(telemetry?.Value.RuntimeSampleSeconds ?? PollInterval.TotalSeconds));
             while (await timer.WaitForNextTickAsync(stoppingToken))
                 await PollOnceAsync(stoppingToken);
         }
@@ -85,6 +90,15 @@ public sealed class AzureContainerAppRuntimeStreamer(
 
     private async Task PollTargetAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
     {
+        await using var policyScope = scopeFactory.CreateAsyncScope();
+        var project = await policyScope.ServiceProvider.GetRequiredService<AutoMateDbContext>().Applications
+            .Where(p => p.Id == target.ProjectId && p.UserId == target.UserId)
+            .Select(p => new { p.RuntimeDiagnosticsEnabled }).SingleOrDefaultAsync(cancellationToken);
+        if (project is null || (!project.RuntimeDiagnosticsEnabled &&
+                                !(policyScope.ServiceProvider.GetService<IDeploymentRuntimeViewers>()?.HasViewers(
+                                    target.ProjectId,
+                                    target.DeploymentId) ?? false)))
+            return;
         await PollStateAndMetricsAsync(target, cancellationToken);
 
         var tokenResult = await monitorTokenProvider.GetTokenAsync(target.UserId, cancellationToken);
@@ -131,8 +145,20 @@ public sealed class AzureContainerAppRuntimeStreamer(
                     new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, CloudWebContainerName),
                     new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
                     SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
-                        DeploymentDiagnosticStream.Metric, state?.LatestRevision)),
+                        DeploymentDiagnosticStream.Metric, state?.LatestRevision),
+                    Metrics: NumericSamples(metrics)),
                 cancellationToken);
+    }
+
+    /// <summary>Preserves ARM numeric units without reparsing localized display text.</summary>
+    private static IReadOnlyList<DeploymentMetricSample> NumericSamples(AzureContainerAppMetrics metrics)
+    {
+        var samples = new List<DeploymentMetricSample>();
+        if (metrics.CpuCores is { } cpu && double.IsFinite(cpu) && cpu >= 0)
+            samples.Add(new DeploymentMetricSample("automate_cpu_usage_cores", cpu, "cores"));
+        if (metrics.MemoryBytes is { } memory && double.IsFinite(memory) && memory >= 0)
+            samples.Add(new DeploymentMetricSample("automate_memory_used_bytes", memory, "bytes"));
+        return samples;
     }
 
     private async Task TailSourceAsync(ContainerAppStreamTarget target, AzureContainerAppLogSource source,
@@ -180,8 +206,10 @@ public sealed class AzureContainerAppRuntimeStreamer(
         var isConsole = source == AzureContainerAppLogSource.Console;
         var attributes = new Dictionary<string, string>
         {
-            ["source_table"] = record.SourceTable, ["stream"] = record.Stream,
-            ["revision"] = record.RevisionName, ["container"] = record.ContainerName
+            ["source_table"] = record.SourceTable,
+            ["stream"] = record.Stream,
+            ["revision"] = record.RevisionName,
+            ["container"] = record.ContainerName
         };
         return new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
             DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Log,

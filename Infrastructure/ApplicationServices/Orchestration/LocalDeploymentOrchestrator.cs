@@ -1,7 +1,7 @@
-using Application.Abstractions.Docker;
-using Application.Abstractions.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Abstractions.Templating;
@@ -12,6 +12,7 @@ using Infrastructure.Data;
 using Infrastructure.Docker;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Orchestration;
@@ -30,13 +31,15 @@ public sealed class LocalDeploymentOrchestrator(
     IDeploymentDiagnosticPublisher diagnostics,
     ILogger<LocalDeploymentOrchestrator> logger,
     IServiceScopeFactory serviceScopeFactory,
-    IDeploymentStatusNotifier statusNotifier)
+    IDeploymentStatusNotifier statusNotifier,
+    IHostApplicationLifetime lifetime)
     : ILocalDeploymentOrchestrator
 {
     /// <summary>
     ///     Manages background Docker log and metric streaming workers.
     /// </summary>
-    private readonly LocalDeploymentLogStreamManager _logStreamManager = new(serviceScopeFactory, logger);
+    private readonly LocalDeploymentLogStreamManager _logStreamManager =
+        new(serviceScopeFactory, logger, lifetime.ApplicationStopping);
 
     /// <summary>
     ///     Handles deployment status persistence and UI notifications.
@@ -101,14 +104,13 @@ public sealed class LocalDeploymentOrchestrator(
         catch (Exception ex)
         {
             if (ex is DeploymentResourceConflictException conflict)
-            {
                 try
                 {
                     await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(config.ProjectId, deployment.Id,
-                        DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Annotation,
-                        DeploymentDiagnosticSeverity.Error, DateTimeOffset.UtcNow,
-                        $"{conflict.Message}\r\n",
-                        new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)),
+                            DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Annotation,
+                            DeploymentDiagnosticSeverity.Error, DateTimeOffset.UtcNow,
+                            $"{conflict.Message}\r\n",
+                            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)),
                         CancellationToken.None);
                 }
                 catch (Exception diagnosticError)
@@ -116,7 +118,7 @@ public sealed class LocalDeploymentOrchestrator(
                     logger.LogWarning(diagnosticError,
                         "Could not publish local resource conflict for deployment {DeploymentId}.", deployment.Id);
                 }
-            }
+
             logger.LogError(ex,
                 "[LocalDeploymentOrchestrator] Deployment failed during execution for project '{ProjectName}'.",
                 config.ProjectName);

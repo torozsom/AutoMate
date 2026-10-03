@@ -16,3 +16,5 @@ Infrastructure types are registered only in Web/Configs.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+`Endpoints/DeploymentHistoryEndpoint.cs` provides owner-authorized cursor log pages and bounded metric-range APIs.

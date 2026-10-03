@@ -174,9 +174,11 @@ AutoMate intentionally keeps infrastructure and UI concerns out of the domain mo
 
 ### 1. Start Local Infrastructure
 
+Hosting files are centralized in [`deploy/`](./deploy/README.md). If `deploy/.env` does not exist, copy
+`deploy/.env.example` to it and set private database credentials. Run the following from the repository root:
+
 ```bash
-cd .docker
-docker compose up -d
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d
 ```
 
 ### 2. Configure Secrets
@@ -286,15 +288,13 @@ dotnet build AutoMate.slnx
 ### Run Infrastructure Only
 
 ```bash
-cd .docker
-docker compose up -d
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d
 ```
 
 ### Stop Infrastructure
 
 ```bash
-cd .docker
-docker compose down
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml down
 ```
 
 ---
@@ -321,3 +321,9 @@ AutoMate currently supports:
 - live workflow/build/runtime log streaming
 
 Future improvements may include richer Azure subscription selection, deployment history UX, cost controls, and broader cloud target support.
+
+## Deployment history storage
+
+PostgreSQL remains the default. Optional Loki/Mimir storage separates terminal logs and numeric metrics while preserving
+reload replay and historical deployment views. Runtime collection is owner opt-in. See
+[configuration, quotas and the self-managed pilot](docs/deployment-telemetry.md).

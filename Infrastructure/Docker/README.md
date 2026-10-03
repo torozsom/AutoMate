@@ -31,3 +31,12 @@ behavior.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+Runtime collectors run while an authorized project page is viewing the deployment, or follow explicit owner opt-in
+without a browser. Viewed output is saved for replay. `LocalRuntimeRecoveryService` restores missing collectors
+after host restart using the current project dependency configuration. Numeric CPU samples preserve cores (Docker
+percent /
+100); memory uses bytes. `DockerMetricDelivery` forwards every Docker stats observation to authorized live viewers
+(normally every 1–2 seconds), independently of storage. Durable metric samples default to 60 seconds. The dispatcher
+does not resend sampled Docker metrics, avoiding stale values overwriting newer live observations. Collectors are
+cancelled on host shutdown.

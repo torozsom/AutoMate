@@ -1,5 +1,5 @@
+using System.Globalization;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -82,12 +82,14 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
         if ((int)response.StatusCode == 403 && response.Headers.RetryAfter is null && !remainingZero)
             return;
         var now = DateTimeOffset.UtcNow;
-        var retryAt = response.Headers.RetryAfter?.Delta is { } delta ? now.Add(delta) :
-            response.Headers.RetryAfter?.Date ?? now.AddMinutes(1);
+        var retryAt = response.Headers.RetryAfter?.Delta is { } delta
+            ? now.Add(delta)
+            : response.Headers.RetryAfter?.Date ?? now.AddMinutes(1);
         if (response.Headers.TryGetValues("X-RateLimit-Reset", out var resets) &&
             long.TryParse(resets.FirstOrDefault(), out var epoch))
             retryAt = DateTimeOffset.FromUnixTimeSeconds(epoch) > retryAt
-                ? DateTimeOffset.FromUnixTimeSeconds(epoch) : retryAt;
+                ? DateTimeOffset.FromUnixTimeSeconds(epoch)
+                : retryAt;
         if (retryAt < now) retryAt = now.AddMinutes(1);
         throw new GitHubRateLimitException(retryAt);
     }
@@ -101,7 +103,7 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
         {
             iat = now - 60,
             exp = now + 540,
-            iss = _options.AppId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            iss = _options.AppId.ToString(CultureInfo.InvariantCulture)
         }));
         var input = header + "." + payload;
         using var rsa = RSA.Create();
@@ -112,6 +114,9 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
     }
 
     /// <summary>Encodes one JWT segment without padding.</summary>
-    private static string Encode(byte[] bytes) => Convert.ToBase64String(bytes)
-        .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    private static string Encode(byte[] bytes)
+    {
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    }
 }

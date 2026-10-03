@@ -152,7 +152,7 @@ public sealed class DeploymentJobWorkerTests
         var queue = new DeploymentJobQueue(Options.Create(new DeploymentConcurrencyOptions { MaxQueuedJobs = 2 }));
         await queue.EnqueueAsync(Local(Guid.NewGuid(), "one", 18300));
         await queue.EnqueueAsync(Local(Guid.NewGuid(), "two", 18301));
-        Func<Task> enqueue = async () => await queue.EnqueueAsync(Local(Guid.NewGuid(), "three", 18302));
+        var enqueue = async () => await queue.EnqueueAsync(Local(Guid.NewGuid(), "three", 18302));
         await enqueue.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*queue is full*");
     }
@@ -189,22 +189,24 @@ public sealed class DeploymentJobWorkerTests
         harness.Queue.GetProjectState(project).Active.Should().Be(0);
     }
 
-    private static LocalDeploymentJob Local(Guid projectId, string name, int port) =>
-        new(new DeploymentConfigDto { ProjectId = projectId, ProjectName = name, ExposedPort = port });
+    private static LocalDeploymentJob Local(Guid projectId, string name, int port)
+    {
+        return new LocalDeploymentJob(new DeploymentConfigDto
+            { ProjectId = projectId, ProjectName = name, ExposedPort = port });
+    }
 
-    private static CloudDeploymentJob Cloud(Guid projectId, string repository) =>
-        new(new CloudDeploymentRequestDto
+    private static CloudDeploymentJob Cloud(Guid projectId, string repository)
+    {
+        return new CloudDeploymentJob(new CloudDeploymentRequestDto
         {
             Config = new DeploymentConfigDto { ProjectId = projectId, ProjectName = repository },
             RepositoryOwner = "owner", RepositoryName = repository
         });
+    }
 
     private sealed class Harness : IAsyncDisposable
     {
         private readonly ServiceProvider _provider;
-        public Tracker Tracker { get; } = new();
-        public IDeploymentJobQueue Queue { get; }
-        public DeploymentJobWorker Worker { get; }
 
         public Harness(DeploymentConcurrencyOptions? options = null)
         {
@@ -215,7 +217,7 @@ public sealed class DeploymentJobWorkerTests
             services.AddSingleton<IDeploymentCapabilities>(new Capabilities());
             services.AddSingleton<IDeploymentStatusNotifier>(new DeploymentStatusNotifier(
                 NullLogger<DeploymentStatusNotifier>.Instance));
-            services.AddSingleton<IOptions<DeploymentConcurrencyOptions>>(Options.Create(
+            services.AddSingleton(Options.Create(
                 options ?? new DeploymentConcurrencyOptions { MaxLocalBuilds = 2, MaxCloudDeployments = 4 }));
             services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
             services.AddSingleton<ILogger<DeploymentJobWorker>>(NullLogger<DeploymentJobWorker>.Instance);
@@ -225,8 +227,20 @@ public sealed class DeploymentJobWorkerTests
             Worker = _provider.GetRequiredService<DeploymentJobWorker>();
         }
 
-        public async Task<Start> ReadStartAsync() =>
-            await Tracker.Started.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        public Tracker Tracker { get; } = new();
+        public IDeploymentJobQueue Queue { get; }
+        public DeploymentJobWorker Worker { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Worker.StopAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+            await _provider.DisposeAsync();
+        }
+
+        public async Task<Start> ReadStartAsync()
+        {
+            return await Tracker.Started.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+        }
 
         public async Task<List<Start>> ReadStartsAsync(int count)
         {
@@ -241,12 +255,6 @@ public sealed class DeploymentJobWorkerTests
             while (!predicate(Queue.GetProjectState(projectId)))
                 await Task.Delay(10, timeout.Token);
         }
-
-        public async ValueTask DisposeAsync()
-        {
-            await Worker.StopAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
-            await _provider.DisposeAsync();
-        }
     }
 
     private sealed record Start(Guid ProjectId, string Kind, Guid ScopeId);
@@ -257,13 +265,19 @@ public sealed class DeploymentJobWorkerTests
         public HashSet<Guid> FailProjects { get; } = [];
         public Channel<Start> Started { get; } = Channel.CreateUnbounded<Start>();
 
-        public Task WaitAsync(Guid projectId, CancellationToken cancellationToken) =>
-            _gates.GetOrAdd(projectId, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously))
+        public Task WaitAsync(Guid projectId, CancellationToken cancellationToken)
+        {
+            return _gates.GetOrAdd(projectId,
+                    _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously))
                 .Task.WaitAsync(cancellationToken);
+        }
 
-        public void Release(Guid projectId) =>
-            _gates.GetOrAdd(projectId, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously))
+        public void Release(Guid projectId)
+        {
+            _gates.GetOrAdd(projectId,
+                    _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously))
                 .TrySetResult();
+        }
     }
 
     private sealed class FakeLocal(Tracker tracker) : ILocalDeploymentOrchestrator
@@ -274,7 +288,8 @@ public sealed class DeploymentJobWorkerTests
             CancellationToken cancellationToken = default)
         {
             await tracker.Started.Writer.WriteAsync(new Start(config.ProjectId, "local", _scopeId), cancellationToken);
-            if (tracker.FailProjects.Contains(config.ProjectId)) throw new InvalidOperationException("simulated failure");
+            if (tracker.FailProjects.Contains(config.ProjectId))
+                throw new InvalidOperationException("simulated failure");
             await tracker.WaitAsync(config.ProjectId, cancellationToken);
             return new Deployment();
         }

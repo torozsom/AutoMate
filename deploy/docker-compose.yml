@@ -1,3 +1,4 @@
+name: docker
 services:
   automate_database:
     image: postgres:latest

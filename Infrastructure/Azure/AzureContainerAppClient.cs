@@ -22,12 +22,12 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
     /// <summary>
     ///     Azure Monitor metric name for Container Apps CPU usage.
     /// </summary>
-    private const string CpuMetricName = "CpuUsage";
+    private const string CpuMetricName = "UsageNanoCores";
 
     /// <summary>
     ///     Azure Monitor metric name for Container Apps working set memory.
     /// </summary>
-    private const string MemoryMetricName = "MemoryWorkingSet";
+    private const string MemoryMetricName = "WorkingSetBytes";
 
     /// <summary>
     ///     Display value used when Azure returns no recent metric sample.
@@ -77,6 +77,8 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
 
         var cpu = UnknownMetricValue;
         var memory = UnknownMetricValue;
+        double? cpuCores = null;
+        double? memoryBytes = null;
 
         if (!document.RootElement.TryGetProperty("value", out var values) || values.ValueKind != JsonValueKind.Array)
             return null;
@@ -89,12 +91,18 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
                 continue;
 
             if (string.Equals(name, CpuMetricName, StringComparison.OrdinalIgnoreCase))
-                cpu = $"{latestAverage.Value:0.##} cores";
+            {
+                cpuCores = latestAverage.Value / 1_000_000_000;
+                cpu = string.Create(CultureInfo.InvariantCulture, $"{cpuCores.Value:0.##} cores");
+            }
             else if (string.Equals(name, MemoryMetricName, StringComparison.OrdinalIgnoreCase))
+            {
+                memoryBytes = latestAverage;
                 memory = FormatBytes(latestAverage.Value);
+            }
         }
 
-        return new AzureContainerAppMetrics(cpu, memory);
+        return new AzureContainerAppMetrics(cpu, memory, cpuCores, memoryBytes);
     }
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Application.Abstractions.GitHub;
 using Domain.Entities;
+using Domain.Enums;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -22,8 +23,15 @@ public sealed class GitHubWebhookReceiver(AutoMateDbContext dbContext, IOptions<
             throw new UnauthorizedAccessException("Invalid GitHub webhook delivery.");
         var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(options.Value.WebhookSecret), body.Span);
         byte[] provided;
-        try { provided = Convert.FromHexString(signature[7..]); }
-        catch (FormatException) { throw new UnauthorizedAccessException("Invalid GitHub webhook signature."); }
+        try
+        {
+            provided = Convert.FromHexString(signature[7..]);
+        }
+        catch (FormatException)
+        {
+            throw new UnauthorizedAccessException("Invalid GitHub webhook signature.");
+        }
+
         if (provided.Length != expected.Length || !CryptographicOperations.FixedTimeEquals(expected, provided))
             throw new UnauthorizedAccessException("Invalid GitHub webhook signature.");
         if (eventName != "workflow_run") return;
@@ -50,12 +58,15 @@ public sealed class GitHubWebhookReceiver(AutoMateDbContext dbContext, IOptions<
         };
         if (!await dbContext.CloudDeploymentRuns.AsNoTracking().AnyAsync(item =>
                 item.InstallationId == delivery.InstallationId && item.RepositoryId == delivery.RepositoryId &&
-                item.Phase != Domain.Enums.CloudRunPhase.Succeeded &&
-                item.Phase != Domain.Enums.CloudRunPhase.Failed &&
-                item.Phase != Domain.Enums.CloudRunPhase.TimedOut, cancellationToken))
+                item.Phase != CloudRunPhase.Succeeded &&
+                item.Phase != CloudRunPhase.Failed &&
+                item.Phase != CloudRunPhase.TimedOut, cancellationToken))
             return;
         dbContext.CloudWebhookDeliveries.Add(delivery);
-        try { await dbContext.SaveChangesAsync(cancellationToken); }
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
         catch (DbUpdateException)
         {
             // Redelivery races are expected across app instances; the unique delivery ID wins.

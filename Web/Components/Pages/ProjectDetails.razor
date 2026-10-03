@@ -238,6 +238,8 @@
                                         </div>
                                     </div>
                                     <div class="deployment-date">@FormatTimestamp(deployment.CreatedAt)</div>
+                                    <a class="btn btn-sm btn-outline-secondary"
+                                       href="@($"/project/{ProjectId}/deployment/{deployment.Id}")">View history</a>
                                 </div>
                             }
                         }
@@ -245,6 +247,7 @@
                 </section>
 
                 <section id="logs" class="console-section" aria-labelledby="logs-title">
+                    <TelemetryPreferences ProjectId="ProjectId"/>
                     <div class="section-heading">
                         <div>
                             <div class="section-kicker">Live logs</div>
@@ -363,6 +366,11 @@
 
                     @if (latestStatus == DeploymentStatus.Running && _metricContainerNames.Count > 0)
                     {
+                        @if (_showSavedMetricNotice)
+                        {
+                            <p role="status">Showing recent saved samples while waiting for live metrics.</p>
+                        }
+
                         var currentContainer = _metricContainerNames[_currentMetricIndex];
                         var metrics = _containerMetrics[currentContainer];
 
@@ -532,7 +540,9 @@
         if (!string.IsNullOrWhiteSpace(deployment.DockerContainerId))
             return deployment.DockerContainerId;
 
-        return "No deployment artifact recorded";
+        return deployment.Status == DeploymentStatus.Failed
+            ? "Failed before an artifact was recorded; see deployment logs"
+            : "Deployment artifact not yet recorded";
     }
 
 }

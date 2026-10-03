@@ -2,8 +2,9 @@ using System.Data;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Application.Abstractions.GitHub;
-using Application.Orchestration;
 using Application.Diagnostics;
+using Application.Orchestration;
+using Domain.Defaults;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
@@ -36,9 +37,9 @@ public sealed class CloudDeploymentRunService(
         if (previous is not null) return ReceiptForSameRequest(previous, start);
 
         var project = await dbContext.Applications.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == start.ProjectId && item.UserId == start.UserId &&
-                                          item.SourceType == SourceType.Remote, cancellationToken)
-            ?? throw new UnauthorizedAccessException("The cloud project is unavailable to this user.");
+                          .SingleOrDefaultAsync(item => item.Id == start.ProjectId && item.UserId == start.UserId &&
+                                                        item.SourceType == SourceType.Remote, cancellationToken)
+                      ?? throw new UnauthorizedAccessException("The cloud project is unavailable to this user.");
         if (!Uri.TryCreate(project.SourcePathOrUrl, UriKind.Absolute, out var uri) ||
             uri.Host != "github.com" ||
             !uri.AbsolutePath.Trim('/').TrimEnd('/').Equals(
@@ -59,7 +60,6 @@ public sealed class CloudDeploymentRunService(
             start.UserGitHubAccessToken, start.RepositoryOwner, start.RepositoryName, cancellationToken);
 
         for (var attempt = 0; attempt < 3; attempt++)
-        {
             try
             {
                 return await AdmitAsync(start, registry, installationId, repositoryId, cancellationToken);
@@ -75,8 +75,28 @@ public sealed class CloudDeploymentRunService(
                 if (ex is not PostgresException { SqlState: "40001" } || attempt == 2) throw;
                 await Task.Delay(TimeSpan.FromMilliseconds(20 * (attempt + 1)), cancellationToken);
             }
-        }
+
         throw new InvalidOperationException("Cloud deployment admission could not be completed.");
+    }
+
+    /// <inheritdoc />
+    public async Task<CloudDeploymentReceipt?> GetAsync(Guid userId, Guid runId,
+        CancellationToken cancellationToken = default)
+    {
+        var run = await dbContext.CloudDeploymentRuns.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == runId && item.UserId == userId, cancellationToken);
+        return run is null ? null : Receipt(run);
+    }
+
+    /// <inheritdoc />
+    public async Task<CloudDeploymentReceipt?> GetLatestForProjectAsync(Guid userId, Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        var run = await dbContext.CloudDeploymentRuns.AsNoTracking()
+            .Where(item => item.UserId == userId && item.ProjectId == projectId)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        return run is null ? null : Receipt(run);
     }
 
     /// <summary>Checks the queue limit and persists the run and wakeup in one serializable transaction.</summary>
@@ -111,9 +131,9 @@ public sealed class CloudDeploymentRunService(
             RepositoryId = repositoryId,
             RepositoryOwner = start.RepositoryOwner,
             RepositoryName = start.RepositoryName,
-            BranchName = Domain.Defaults.DeploymentDefaults.CloudDeploymentBranchName,
+            BranchName = DeploymentDefaults.CloudDeploymentBranchName,
             EnvironmentName = start.Config.EnvironmentName,
-            WorkflowFileName = Domain.Defaults.DeploymentDefaults.CloudWorkflowFileName,
+            WorkflowFileName = DeploymentDefaults.CloudWorkflowFileName,
             RegistryServer = registry,
             SnapshotJson = snapshot,
             NextAttemptAt = DateTimeOffset.UtcNow
@@ -126,29 +146,11 @@ public sealed class CloudDeploymentRunService(
         return Receipt(run);
     }
 
-    /// <inheritdoc />
-    public async Task<CloudDeploymentReceipt?> GetAsync(Guid userId, Guid runId,
-        CancellationToken cancellationToken = default)
-    {
-        var run = await dbContext.CloudDeploymentRuns.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == runId && item.UserId == userId, cancellationToken);
-        return run is null ? null : Receipt(run);
-    }
-
-    /// <inheritdoc />
-    public async Task<CloudDeploymentReceipt?> GetLatestForProjectAsync(Guid userId, Guid projectId,
-        CancellationToken cancellationToken = default)
-    {
-        var run = await dbContext.CloudDeploymentRuns.AsNoTracking()
-            .Where(item => item.UserId == userId && item.ProjectId == projectId)
-            .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-        return run is null ? null : Receipt(run);
-    }
-
     /// <summary>Projects a public receipt without exposing protected configuration.</summary>
-    private static CloudDeploymentReceipt Receipt(CloudDeploymentRun run) =>
-        new(run.Id, run.Phase, run.CreatedAt, run.FailureReason);
+    private static CloudDeploymentReceipt Receipt(CloudDeploymentRun run)
+    {
+        return new CloudDeploymentReceipt(run.Id, run.Phase, run.CreatedAt, run.FailureReason);
+    }
 
     /// <summary>Prevents one idempotency key from silently representing a different target.</summary>
     private static CloudDeploymentReceipt ReceiptForSameRequest(CloudDeploymentRun run,

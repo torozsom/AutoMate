@@ -1,0 +1,208 @@
+{
+  "uid": "automate-deployments",
+  "title": "AutoMate deployments",
+  "tags": [
+    "automate",
+    "development"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "timezone": "browser",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "project",
+        "label": "Project ID",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "GUID without hyphens; .* displays all projects owned by the configured tenant."
+      },
+      {
+        "name": "deployment",
+        "label": "Deployment ID",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "GUID without hyphens; .* displays all deployments."
+      },
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "channel",
+        "label": "Log channel",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "build, github-actions, web, azure-web, azure-system, or .*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Local operator view",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "This dashboard reads the configured AutoMate owner's Loki and Mimir stores. Enter project/deployment GUIDs **without hyphens**, or use `.*` for all. Runtime CPU/memory requires owner opt-in in AutoMate. Pending PostgreSQL outbox data appears here only after ingestion. Use **Explore** for custom queries. This UI is for local operators; dashboard filters are not tenant authorization."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "CPU usage (cores)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "automate-mimir"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "automate_cpu_usage_cores{project_id=~\"$project\",deployment_id=~\"$deployment\",container=~\"$container\"}",
+          "legendFormat": "{{container}} · {{deployment_id}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "axisLabel": "CPU cores",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Memory usage and limit",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "automate-mimir"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "automate_memory_used_bytes{project_id=~\"$project\",deployment_id=~\"$deployment\",container=~\"$container\"}",
+          "legendFormat": "{{container}} used",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "automate_memory_limit_bytes{project_id=~\"$project\",deployment_id=~\"$deployment\",container=~\"$container\"}",
+          "legendFormat": "{{container}} limit",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Saved deployment output",
+      "datasource": {
+        "type": "loki",
+        "uid": "automate-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"automate\"} | project_id=~\"$project\" | deployment_id=~\"$deployment\" | channel=~\"$channel\" | json message=\"event.message\" | line_format \"{{.message}}\"",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "exact",
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}

@@ -17,15 +17,30 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
     {
         var record = new DeploymentDiagnosticRecord
         {
-            DeploymentId = diagnosticEvent.DeploymentId, ProjectId = diagnosticEvent.ProjectId,
-            TimestampUtc = diagnosticEvent.TimestampUtc, Source = diagnosticEvent.Source.ToString(),
-            Kind = diagnosticEvent.Kind.ToString(), Severity = diagnosticEvent.Severity.ToString(),
-            Message = diagnosticEvent.Message, TerminalChannel = terminalChannel,
+            DeploymentId = diagnosticEvent.DeploymentId,
+            ProjectId = diagnosticEvent.ProjectId,
+            TimestampUtc = diagnosticEvent.TimestampUtc,
+            Source = diagnosticEvent.Source.ToString(),
+            Kind = diagnosticEvent.Kind.ToString(),
+            Severity = diagnosticEvent.Severity.ToString(),
+            Message = diagnosticEvent.Message,
+            TerminalChannel = terminalChannel,
+            MetricSamplesJson = diagnosticEvent.Metrics is null
+                ? null
+                : JsonSerializer.Serialize(diagnosticEvent.Metrics),
+            SourceIdentityJson = diagnosticEvent.SourceIdentity is null
+                ? null
+                : JsonSerializer.Serialize(diagnosticEvent.SourceIdentity),
             AttributesJson = diagnosticEvent.Attributes is null
                 ? null
                 : JsonSerializer.Serialize(diagnosticEvent.Attributes),
-            TraceId = diagnosticEvent.TraceId, SpanId = diagnosticEvent.SpanId, Sequence = diagnosticEvent.Sequence,
-            Cursor = diagnosticEvent.Cursor, ExpiresAt = DateTimeOffset.UtcNow.Add(Retention)
+            TraceId = diagnosticEvent.TraceId,
+            SpanId = diagnosticEvent.SpanId,
+            Sequence = diagnosticEvent.Sequence,
+            Cursor = diagnosticEvent.Kind == DeploymentDiagnosticKind.Metric
+                ? diagnosticEvent.TerminalChannel.Target
+                : diagnosticEvent.Cursor,
+            ExpiresAt = DateTimeOffset.UtcNow.Add(Retention)
         };
         dbContext.DeploymentDiagnosticRecords.Add(record);
         await dbContext.SaveChangesAsync(cancellationToken);

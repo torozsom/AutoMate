@@ -2,7 +2,7 @@
 @inject ILogger<Terminal> Logger
 @implements IAsyncDisposable
 
-<div id="@Id" style="height: 100%; width: 100%; padding: 10px;"></div>
+<div id="@Id" style="height: 100%; width: 100%; padding: 10px; box-sizing: border-box; overflow: hidden;"></div>
 
 @code {
     private const int MaxPendingCharacters = 2_250_000;

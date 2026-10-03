@@ -22,8 +22,8 @@ public sealed class GitHubSaasCommitRecoveryTests
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""
-                    [{"sha":"abc123","commit":{"message":"Add deployment\n\nAutoMate-Run: 0123456789abcdef"}}]
-                    """)
+                                            [{"sha":"abc123","commit":{"message":"Add deployment\n\nAutoMate-Run: 0123456789abcdef"}}]
+                                            """)
             };
         });
         var service = new GitHubService(new HttpClient(handler),

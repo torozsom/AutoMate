@@ -8,7 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.ApplicationServices.Orchestration;
 
 /// <summary>Removes transient webhook and outbox metadata after the diagnostic retention window.</summary>
-public sealed class CloudRunRetentionService(IServiceScopeFactory scopeFactory,
+public sealed class CloudRunRetentionService(
+    IServiceScopeFactory scopeFactory,
     ILogger<CloudRunRetentionService> logger) : BackgroundService
 {
     /// <inheritdoc />
@@ -32,8 +33,10 @@ public sealed class CloudRunRetentionService(IServiceScopeFactory scopeFactory,
 
                 var outboxIds = await db.CloudRunOutbox.AsNoTracking()
                     .Where(item => db.CloudDeploymentRuns.Any(run => run.Id == item.RunId &&
-                        run.CompletedAt < cutoff && (run.Phase == CloudRunPhase.Succeeded ||
-                            run.Phase == CloudRunPhase.Failed || run.Phase == CloudRunPhase.TimedOut)))
+                                                                     run.CompletedAt < cutoff &&
+                                                                     (run.Phase == CloudRunPhase.Succeeded ||
+                                                                      run.Phase == CloudRunPhase.Failed ||
+                                                                      run.Phase == CloudRunPhase.TimedOut)))
                     .OrderBy(item => item.CreatedAt).Take(1_000)
                     .Select(item => item.Id).ToListAsync(stoppingToken);
                 if (outboxIds.Count > 0)

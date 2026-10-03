@@ -94,6 +94,11 @@ public sealed class DeploymentDiagnosticPublisher(
         else
             ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.Message);
         ArgumentNullException.ThrowIfNull(diagnosticEvent.TerminalChannel);
+        if (diagnosticEvent.Metrics is { } samples && (samples.Count > 3 || samples.Any(s =>
+                !MimirDeploymentMetrics.Units.TryGetValue(s.Name, out var unit) || unit != s.Unit ||
+                !double.IsFinite(s.Value) || s.Value < 0)))
+            throw new ArgumentException("Metric samples must use supported names, finite values and explicit units.",
+                nameof(diagnosticEvent));
         if (diagnosticEvent.TerminalChannel.Kind is DeploymentTerminalChannelKind.Container
             or DeploymentTerminalChannelKind.Metrics)
             ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.TerminalChannel.Target);
@@ -138,7 +143,6 @@ public sealed class DeploymentDiagnosticDispatcher(
 
     private async Task ProcessAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken stoppingToken)
     {
-        LogDiagnostic(diagnosticEvent);
         var channel = diagnosticEvent.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
             ? null
             : GetTerminalChannel(diagnosticEvent);
@@ -148,7 +152,12 @@ public sealed class DeploymentDiagnosticDispatcher(
             await using var scope = scopeFactory.CreateAsyncScope();
             orderId = await scope.ServiceProvider.GetRequiredService<IDeploymentDiagnosticStore>()
                 .PersistAsync(diagnosticEvent, channel, stoppingToken);
-            AutoMateTelemetry.EventsPersisted.Add(1, TelemetryTags.Create(diagnosticEvent));
+            if (orderId == 0) return;
+            if (orderId > 0)
+            {
+                AutoMateTelemetry.EventsPersisted.Add(1, TelemetryTags.Create(diagnosticEvent));
+                LogDiagnostic(diagnosticEvent);
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -161,6 +170,11 @@ public sealed class DeploymentDiagnosticDispatcher(
             return;
         }
 
+        // Docker already delivers every observation directly. Do not overwrite a newer live value with a delayed
+        // durable sample. Azure metrics retain their provider-polling delivery path.
+        if (diagnosticEvent is
+            { Source: DeploymentDiagnosticSource.DockerContainer, Kind: DeploymentDiagnosticKind.Metric })
+            return;
         try
         {
             await DeliverToTerminalAsync(diagnosticEvent, channel, orderId);

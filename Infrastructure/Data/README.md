@@ -24,3 +24,8 @@ behavior.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+`AddSpecializedTelemetryStorage` adds explicit runtime/managed-egress preferences, tenant leases, durable rate/series
+state and diagnostic outbox fields. `AddTelemetryBufferAccounting` backfills tenant/global buffer byte accounting.
+Confirmed specialized payloads leave PostgreSQL; legacy logs expire normally.
+See [telemetry operations](../../docs/deployment-telemetry.md).

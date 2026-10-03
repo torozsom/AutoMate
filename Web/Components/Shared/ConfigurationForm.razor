@@ -65,6 +65,7 @@
                             </a>
                         }
                     }
+
                     <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Resource Group</label>
@@ -79,7 +80,8 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Registry Server</label>
                             <input type="text" class="form-control"
-                                   @bind="Config.CloudRegistryName" placeholder="myregistry.azurecr.io" autocomplete="off"/>
+                                   @bind="Config.CloudRegistryName" placeholder="myregistry.azurecr.io"
+                                   autocomplete="off"/>
                         </div>
                     </div>
                 }

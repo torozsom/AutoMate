@@ -6,6 +6,7 @@ using Domain.Enums;
 using FluentAssertions;
 using Infrastructure.Azure;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics;
 using Infrastructure.Tests.TestSupport;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -18,8 +19,10 @@ namespace Infrastructure.Tests.Azure;
 
 public sealed class AzureContainerAppRuntimeStreamerTests
 {
-    [Fact]
-    public async Task PollOnce_routes_console_and_system_records_with_deployment_correlation()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PollOnce_routes_console_and_system_records_with_deployment_correlation(bool saved)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -27,8 +30,14 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         var protector = new EphemeralDataProtectionProvider();
         var deploymentId = Guid.NewGuid();
         await SeedDeploymentAsync(dbOptions, protector, deploymentId);
+        await using var seeded = new AutoMateDbContext(dbOptions, protector);
+        var project = await seeded.Applications.SingleAsync();
+        project.RuntimeDiagnosticsEnabled = saved;
+        await seeded.SaveChangesAsync();
+        var viewers = new DeploymentRuntimeViewers(TimeProvider.System);
 
         using var serviceProvider = new ServiceCollection()
+            .AddSingleton<IDeploymentRuntimeViewers>(viewers)
             .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(dbOptions, protector))
             .BuildServiceProvider();
         var diagnostics = new RecordingPublisher();
@@ -40,12 +49,19 @@ public sealed class AzureContainerAppRuntimeStreamerTests
 
         streamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
         {
-            ProjectId = Guid.NewGuid(),
+            ProjectId = project.Id,
             DeploymentId = deploymentId,
-            UserId = Guid.NewGuid(),
+            UserId = project.UserId,
             AzureCredentials = new AzureCloudCredentialsDto { SubscriptionId = "sub", AccessToken = "arm-token" },
             Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
         });
+
+        if (!saved)
+        {
+            await streamer.PollOnceAsync(CancellationToken.None);
+            diagnostics.Events.Should().BeEmpty();
+            viewers.Renew("authorized-owner", project.Id, deploymentId);
+        }
 
         await streamer.PollOnceAsync(CancellationToken.None);
 
@@ -97,10 +113,13 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             Id = deploymentId,
             CsProject = new CsProject
             {
-                Name = "Web", Path = "Web/Web.csproj",
+                Name = "Web",
+                Path = "Web/Web.csproj",
                 Application = new Domain.Entities.Application
                 {
-                    Name = "Sample", SourceType = SourceType.Remote,
+                    Name = "Sample",
+                    SourceType = SourceType.Remote,
+                    RuntimeDiagnosticsEnabled = true,
                     SourcePathOrUrl = "https://github.com/example/sample",
                     User = new LocalUser { Username = "test", Email = "test@example.invalid" }
                 }

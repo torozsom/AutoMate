@@ -27,3 +27,6 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+`TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state. Application runtime
+and managed-egress preferences are explicit default-off consent fields.

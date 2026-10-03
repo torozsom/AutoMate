@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Azure;
 
-/// <summary>Refreshes Azure Resource Manager credentials when a durable cloud run starts.</summary>
+/// <summary>Refreshes Azure Resource Manager credentials when a cloud launch starts.</summary>
 public sealed class AzureArmCredentialsProvider(
     AutoMateDbContext dbContext,
     IHttpClientFactory httpClientFactory,
@@ -17,8 +17,8 @@ public sealed class AzureArmCredentialsProvider(
     public async Task<AzureCloudCredentialsDto> GetAsync(Guid userId, CancellationToken cancellationToken)
     {
         var user = await dbContext.Users.OfType<RemoteUser>()
-            .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken)
-            ?? throw new InvalidOperationException("Reconnect Azure before deploying.");
+                       .SingleOrDefaultAsync(item => item.Id == userId, cancellationToken)
+                   ?? throw new InvalidOperationException("Reconnect Azure before deploying.");
         if (string.IsNullOrWhiteSpace(user.AzureRefreshToken) ||
             string.IsNullOrWhiteSpace(user.AzureTenantId) ||
             string.IsNullOrWhiteSpace(user.AzureSubscriptionId))
@@ -44,10 +44,12 @@ public sealed class AzureArmCredentialsProvider(
                     ?? throw new InvalidOperationException("Azure did not issue an ARM token.");
         if (payload.RootElement.TryGetProperty("refresh_token", out var rotated) &&
             !string.IsNullOrWhiteSpace(rotated.GetString()))
-        {
             user.AzureRefreshToken = rotated.GetString();
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
+        user.AzureAccessToken = token;
+        if (payload.RootElement.TryGetProperty("expires_in", out var lifetime) && lifetime.TryGetInt32(out var seconds))
+            user.AzureTokenExpiresAt = DateTimeOffset.UtcNow.AddSeconds(seconds);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         return new AzureCloudCredentialsDto
         {
             TenantId = user.AzureTenantId,

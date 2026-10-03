@@ -15,6 +15,7 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
 {
     /// <summary>Azure built-in AcrPull role.</summary>
     private const string AcrPullRole = "7f951dda-4ed3-4680-a7ca-43fe172d538d";
+
     /// <summary>Azure built-in AcrPush role.</summary>
     private const string AcrPushRole = "8311e382-0749-4cb8-b61a-304f252e45ec";
 
@@ -32,7 +33,7 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
         string roleId, string accessToken, CancellationToken cancellationToken)
     {
         var principalId = identity.Data.PrincipalId?.ToString()
-            ?? throw new InvalidOperationException("Azure managed identity principal ID is missing.");
+                          ?? throw new InvalidOperationException("Azure managed identity principal ID is missing.");
         var assignmentName = CreateDeterministicGuid($"{scope}:{principalId}:{roleId}");
         var requestUri = $"{AzureConstants.ManagementEndpoint}{scope}/providers/Microsoft.Authorization/" +
                          $"roleAssignments/{assignmentName}?api-version={AzureConstants.RoleAssignmentApiVersion}";
@@ -53,6 +54,7 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
             throw new InvalidOperationException(
                 "AutoMate could not grant Azure Container Registry access. The connected Azure account needs role assignment rights.");
     }
+
     /// <summary>
     ///     Ensures the managed identity has Contributor access on the target resource group.
     /// </summary>

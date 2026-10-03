@@ -60,12 +60,22 @@ public sealed class CloudDeploymentRunServiceTests
     {
         /// <summary>Open in-memory connection used by all fixture queries.</summary>
         public SqliteConnection Connection { get; } = new("Data Source=:memory:");
+
         /// <summary>Scoped EF context under test.</summary>
         public AutoMateDbContext Db { get; private set; } = null!;
+
         /// <summary>Authorized account.</summary>
         private Guid UserId { get; } = Guid.NewGuid();
+
         /// <summary>Owned remote project.</summary>
         private Guid ProjectId { get; } = Guid.NewGuid();
+
+        /// <inheritdoc />
+        public async ValueTask DisposeAsync()
+        {
+            await Db.DisposeAsync();
+            await Connection.DisposeAsync();
+        }
 
         /// <summary>Creates a schema and a user-owned remote project.</summary>
         public static async Task<Fixture> CreateAsync()
@@ -91,22 +101,21 @@ public sealed class CloudDeploymentRunServiceTests
         }
 
         /// <summary>Builds a service with a one-item queue for quota verification.</summary>
-        public CloudDeploymentRunService Service() => new(Db, new StubGitHubApp(),
-            Options.Create(new CloudSaasOptions { MaxQueuedPerUser = 1 }));
+        public CloudDeploymentRunService Service()
+        {
+            return new CloudDeploymentRunService(Db, new StubGitHubApp(),
+                Options.Create(new CloudSaasOptions { MaxQueuedPerUser = 1 }));
+        }
 
         /// <summary>Builds a valid request for the owned project.</summary>
-        public CloudDeploymentStart Start(string key) => new(UserId, ProjectId, key, "acme", "web",
-            "oauth-user-token", new DeploymentConfigDto
-            {
-                ProjectId = ProjectId, CloudRegistryName = "customer.azurecr.io",
-                EnvironmentName = "Production"
-            }, new ProjectMetadataDto(), "web", ".");
-
-        /// <inheritdoc />
-        public async ValueTask DisposeAsync()
+        public CloudDeploymentStart Start(string key)
         {
-            await Db.DisposeAsync();
-            await Connection.DisposeAsync();
+            return new CloudDeploymentStart(UserId, ProjectId, key, "acme", "web",
+                "oauth-user-token", new DeploymentConfigDto
+                {
+                    ProjectId = ProjectId, CloudRegistryName = "customer.azurecr.io",
+                    EnvironmentName = "Production"
+                }, new ProjectMetadataDto(), "web", ".");
         }
     }
 
@@ -115,11 +124,16 @@ public sealed class CloudDeploymentRunServiceTests
     {
         /// <inheritdoc />
         public Task<(long InstallationId, long RepositoryId)> ResolveRepositoryAsync(string userAccessToken,
-            string owner, string repository, CancellationToken cancellationToken) =>
-            Task.FromResult((17L, 42L));
+            string owner, string repository, CancellationToken cancellationToken)
+        {
+            return Task.FromResult((17L, 42L));
+        }
 
         /// <inheritdoc />
         public Task<string> CreateInstallationTokenAsync(long installationId,
-            CancellationToken cancellationToken) => Task.FromResult("installation-token");
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult("installation-token");
+        }
     }
 }

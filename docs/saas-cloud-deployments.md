@@ -10,8 +10,8 @@ finishes monitoring. The self-hosted profile keeps its in-process Docker and clo
 - Register a GitHub App and set `GitHubApp:AppId`, `GitHubApp:AppSlug`, `GitHubApp:PrivateKeyPem`, and
   `GitHubApp:WebhookSecret` through a managed secret provider or secret mount. Configure its webhook URL as
   `https://<host>/api/github/app/webhook`; subscribe to `workflow_run`. Grant repository **Contents: write**,
-  **Workflows: write**, **Actions: read**, and **Secrets: write** only for selected repositories. Keep
-  **Metadata: read**. The App key and webhook secret must never be committed to configuration files.
+  **Workflows: write**, **Actions: read**, and **Secrets: write** only for selected repositories. Keep **Metadata:
+  read**. The App key and webhook secret must never be committed to configuration files.
 - Mount a PFX certificate on every SaaS instance and set `SaaS:DataProtectionCertificatePath` and
   `SaaS:DataProtectionCertificatePassword` from the secret provider. Share the same certificate across instances and
   retain old private keys during certificate rotation while any protected user tokens or run snapshots remain in use.
@@ -44,7 +44,8 @@ shared Data Protection certificate, and completed migrations.
 `cloud_deployment_runs` owns phase, lease, correlation, and protected configuration. `cloud_run_outbox` is inserted in
 the same transaction as admission. The worker writes an `AutoMate-Run` marker in the Git commit and checks recent
 branch history before a retry after an uncertain result. A run-scoped PostgreSQL advisory lock serializes the remote
-commit check and push across lease recovery, and a stale lease owner cannot push. If it cannot verify the prior commit, it fails safely
+commit check and push across lease recovery, and a stale lease owner cannot push. If it cannot verify the prior commit,
+it fails safely
 rather than pushing a possible duplicate. Webhooks store only verified correlation metadata in
 `cloud_webhook_deliveries`; redelivery IDs are unique. The monitor resumes from persisted GitHub diagnostic checkpoints.
 

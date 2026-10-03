@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Application.Abstractions.GitHub;
 using Application.Orchestration;
-using Infrastructure.GitHub;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,7 +54,10 @@ public sealed class HostingProfileRegistrationTests
                 services.GetRequiredService<IStartupValidator>().Validate());
             Assert.Contains("configured GitHub App", failure.Message);
         }
-        finally { File.Delete(certificatePath); }
+        finally
+        {
+            File.Delete(certificatePath);
+        }
     }
 
     /// <summary>Uses isolated configuration and fake connection settings without contacting providers.</summary>

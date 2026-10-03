@@ -9,7 +9,8 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.ApplicationServices.Orchestration;
 
 /// <summary>Samples cluster-wide queue and monitor state for autoscaling and alerts.</summary>
-public sealed class CloudRunMetricsService(IServiceScopeFactory scopeFactory,
+public sealed class CloudRunMetricsService(
+    IServiceScopeFactory scopeFactory,
     ILogger<CloudRunMetricsService> logger) : BackgroundService
 {
     /// <inheritdoc />

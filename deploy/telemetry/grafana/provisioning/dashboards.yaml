@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+  - name: AutoMate development
+    orgId: 1
+    folder: AutoMate
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

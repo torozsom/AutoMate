@@ -1,0 +1,18 @@
+# Isolated tests only: never use this override for a public installation.
+services:
+  loki:
+    ports: [ "127.0.0.1:${TEST_LOKI_PORT:-24310}:3100" ]
+  mimir:
+    ports: [ "127.0.0.1:${TEST_MIMIR_PORT:-24909}:9009" ]
+  postgres:
+    image: postgres:17-alpine
+    profiles: [ telemetry ]
+    environment:
+      POSTGRES_USER: automate_test
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:?Set a disposable test password}
+      POSTGRES_DB: automate_telemetry_test
+    ports: [ "127.0.0.1:${TEST_POSTGRES_PORT:-24532}:5432" ]
+    volumes: [ postgres_test:/var/lib/postgresql/data ]
+    networks: [ gateway ]
+volumes:
+  postgres_test:

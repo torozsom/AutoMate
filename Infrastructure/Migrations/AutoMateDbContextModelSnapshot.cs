@@ -131,11 +131,19 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<bool>("ManagedTelemetryConsent")
+                        .HasColumnType("boolean")
+                        .HasColumnName("managed_telemetry_consent");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("name");
+
+                    b.Property<bool>("RuntimeDiagnosticsEnabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("runtime_diagnostics_enabled");
 
                     b.Property<string>("SourcePathOrUrl")
                         .IsRequired()
@@ -737,6 +745,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("attributes_json");
 
+                    b.Property<DateTimeOffset?>("BufferExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("buffer_expires_at");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -744,6 +756,18 @@ namespace Infrastructure.Migrations
                     b.Property<string>("Cursor")
                         .HasColumnType("text")
                         .HasColumnName("cursor");
+
+                    b.Property<bool>("DeliveryAccepted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("delivery_accepted");
+
+                    b.Property<int>("DeliveryBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("delivery_bytes");
+
+                    b.Property<string>("DeliveryJson")
+                        .HasColumnType("text")
+                        .HasColumnName("delivery_json");
 
                     b.Property<Guid?>("DeploymentId")
                         .HasColumnType("uuid")
@@ -763,6 +787,10 @@ namespace Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("message");
+
+                    b.Property<string>("MetricSamplesJson")
+                        .HasColumnType("text")
+                        .HasColumnName("metric_samples_json");
 
                     b.Property<long>("OrderId")
                         .ValueGeneratedOnAdd()
@@ -791,9 +819,21 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("source");
 
+                    b.Property<string>("SourceIdentityJson")
+                        .HasColumnType("text")
+                        .HasColumnName("source_identity_json");
+
                     b.Property<string>("SpanId")
                         .HasColumnType("text")
                         .HasColumnName("span_id");
+
+                    b.Property<DateTimeOffset?>("StoredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("stored_at");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
 
                     b.Property<string>("TerminalChannel")
                         .HasMaxLength(128)
@@ -815,12 +855,18 @@ namespace Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_deployment_diagnostic_records");
 
+                    b.HasIndex("BufferExpiresAt")
+                        .HasDatabaseName("ix_deployment_diagnostic_records_buffer_expires_at");
+
                     b.HasIndex("ExpiresAt")
                         .HasDatabaseName("ix_deployment_diagnostic_records_expires_at");
 
                     b.HasIndex("OrderId")
                         .IsUnique()
                         .HasDatabaseName("ix_deployment_diagnostic_records_order_id");
+
+                    b.HasIndex("TenantId", "OrderId")
+                        .HasDatabaseName("ix_deployment_diagnostic_records_tenant_id_order_id");
 
                     b.HasIndex("DeploymentId", "TimestampUtc", "Sequence")
                         .HasDatabaseName("ix_deployment_diagnostic_records_deployment_id_timestamp_utc_s");
@@ -950,6 +996,79 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_git_hub_workflow_job_checkpoints_git_hub_workflow_checkpoin");
 
                     b.ToTable("git_hub_workflow_job_checkpoints", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.TelemetryTenantState", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<long>("BufferedBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("buffered_bytes");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("DroppedEvents")
+                        .HasColumnType("bigint")
+                        .HasColumnName("dropped_events");
+
+                    b.Property<DateTimeOffset>("DueAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at");
+
+                    b.Property<DateTimeOffset>("LastStoredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_stored_at");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_id");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until");
+
+                    b.Property<string>("MetricIdentitiesJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("metric_identities_json");
+
+                    b.Property<long>("RateWindowBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("rate_window_bytes");
+
+                    b.Property<DateTimeOffset>("RateWindowStart")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rate_window_start");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_telemetry_tenant_states");
+
+                    b.HasIndex("DueAt")
+                        .HasDatabaseName("ix_telemetry_tenant_states_due_at");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_telemetry_tenant_states_tenant_id");
+
+                    b.ToTable("telemetry_tenant_states", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.User", b =>

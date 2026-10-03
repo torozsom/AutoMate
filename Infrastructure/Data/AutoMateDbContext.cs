@@ -104,6 +104,9 @@ public class AutoMateDbContext(
 
     public DbSet<DeploymentDiagnosticRecord> DeploymentDiagnosticRecords => Set<DeploymentDiagnosticRecord>();
 
+    /// <summary>Specialized telemetry delivery leases and loss accounting.</summary>
+    public DbSet<TelemetryTenantState> TelemetryTenantStates => Set<TelemetryTenantState>();
+
     public DbSet<AiDeploymentAnalysis> AiDeploymentAnalyses => Set<AiDeploymentAnalysis>();
 
     public DbSet<DeploymentAnalysisWorkItem> DeploymentAnalysisWorkItems => Set<DeploymentAnalysisWorkItem>();
@@ -361,6 +364,11 @@ public class AutoMateDbContext(
     private static void ConfigureDeploymentDiagnosticsAndAnalyses(ModelBuilder modelBuilder)
     {
         var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
+        diagnostic.HasIndex(item => new { item.TenantId, item.OrderId });
+        diagnostic.HasIndex(item => item.BufferExpiresAt);
+        var tenant = modelBuilder.Entity<TelemetryTenantState>();
+        tenant.HasIndex(item => item.TenantId).IsUnique();
+        tenant.HasIndex(item => item.DueAt);
         diagnostic.Property(item => item.OrderId).UseIdentityByDefaultColumn();
         diagnostic.HasIndex(item => item.OrderId).IsUnique();
         diagnostic.HasIndex(item => new { item.DeploymentId, item.TimestampUtc, item.Sequence });

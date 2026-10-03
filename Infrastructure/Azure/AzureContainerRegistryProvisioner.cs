@@ -27,6 +27,7 @@ internal sealed class AzureContainerRegistryProvisioner(IHttpClientFactory httpC
             await VerifyServerAsync(existing, server, cancellationToken);
             return id;
         }
+
         if (existing.StatusCode != HttpStatusCode.NotFound) existing.EnsureSuccessStatusCode();
 
         using var put = Request(HttpMethod.Put, uri, credentials.AccessToken);
@@ -58,10 +59,12 @@ internal sealed class AzureContainerRegistryProvisioner(IHttpClientFactory httpC
                     throw new InvalidOperationException("Azure returned a different Container Registry server.");
                 return id;
             }
+
             if (state is "Failed" or "Canceled")
                 throw new InvalidOperationException("Azure Container Registry provisioning failed.");
             await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
         }
+
         throw new TimeoutException("Azure Container Registry provisioning did not finish in time.");
     }
 

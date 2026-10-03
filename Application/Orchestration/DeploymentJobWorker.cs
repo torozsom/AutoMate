@@ -19,16 +19,16 @@ public sealed class DeploymentJobWorker(
     IOptions<DeploymentConcurrencyOptions> options,
     ILogger<DeploymentJobWorker> logger) : BackgroundService
 {
+    private readonly int _cloudLimit = Math.Clamp(options.Value.MaxCloudDeployments, 1, 16);
+
     private readonly int _localLimit = options.Value.MaxLocalBuilds switch
     {
         -1 => Math.Max(2, Environment.ProcessorCount / 2),
         0 => int.MaxValue,
         var configured => Math.Clamp(configured, 1, 1_024)
     };
-    private readonly int _cloudLimit = Math.Clamp(options.Value.MaxCloudDeployments, 1, 16);
-    private readonly int _pendingLimit = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
 
-    private sealed record RunningJob(QueuedDeploymentJob Queued, Task<bool> Task);
+    private readonly int _pendingLimit = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -88,7 +88,7 @@ public sealed class DeploymentJobWorker(
             var queued = pending[index];
             var job = queued.Job;
             if (!earlierProjects.Add(job.ProjectId) || running.Any(item => item.Queued.Job.ProjectId == job.ProjectId)
-                || !LaneAvailable(job, running) || ResourceInUse(job, running))
+                                                    || !LaneAvailable(job, running) || ResourceInUse(job, running))
             {
                 index++;
                 continue;
@@ -105,13 +105,16 @@ public sealed class DeploymentJobWorker(
         }
     }
 
-    private bool LaneAvailable(DeploymentJob job, List<RunningJob> running) => job switch
+    private bool LaneAvailable(DeploymentJob job, List<RunningJob> running)
     {
-        LocalDeploymentJob => running.Count(item => item.Queued.Job is LocalDeploymentJob) < _localLimit,
-        CloudDeploymentJob => running.Count(item => item.Queued.Job is CloudDeploymentJob) < _cloudLimit,
-        StopLocalDeploymentJob => running.Count(item => item.Queued.Job is StopLocalDeploymentJob) < 1,
-        _ => false
-    };
+        return job switch
+        {
+            LocalDeploymentJob => running.Count(item => item.Queued.Job is LocalDeploymentJob) < _localLimit,
+            CloudDeploymentJob => running.Count(item => item.Queued.Job is CloudDeploymentJob) < _cloudLimit,
+            StopLocalDeploymentJob => running.Count(item => item.Queued.Job is StopLocalDeploymentJob) < 1,
+            _ => false
+        };
+    }
 
     private static bool ResourceInUse(DeploymentJob job, List<RunningJob> running)
     {
@@ -145,23 +148,28 @@ public sealed class DeploymentJobWorker(
         return string.IsNullOrEmpty(normalized) ? "automate-project" : normalized;
     }
 
-    private static string Lane(DeploymentJob job) => job switch
+    private static string Lane(DeploymentJob job)
     {
-        LocalDeploymentJob => "local",
-        CloudDeploymentJob => "cloud",
-        StopLocalDeploymentJob => "stop",
-        _ => "unknown"
-    };
+        return job switch
+        {
+            LocalDeploymentJob => "local",
+            CloudDeploymentJob => "cloud",
+            StopLocalDeploymentJob => "stop",
+            _ => "unknown"
+        };
+    }
 
     private async Task FinishAsync(RunningJob running)
     {
         var succeeded = await running.Task;
         queue.MarkCompleted(running.Queued.Job);
         var lane = Lane(running.Queued.Job);
-        if (succeeded) AutoMateTelemetry.DeploymentJobsCompleted.Add(1,
-            new KeyValuePair<string, object?>("lane", lane));
-        else AutoMateTelemetry.DeploymentJobsFailed.Add(1,
-            new KeyValuePair<string, object?>("lane", lane));
+        if (succeeded)
+            AutoMateTelemetry.DeploymentJobsCompleted.Add(1,
+                new KeyValuePair<string, object?>("lane", lane));
+        else
+            AutoMateTelemetry.DeploymentJobsFailed.Add(1,
+                new KeyValuePair<string, object?>("lane", lane));
     }
 
     private async Task<bool> ProcessJobSafelyAsync(DeploymentJob job, CancellationToken cancellationToken)
@@ -188,7 +196,10 @@ public sealed class DeploymentJobWorker(
 
     private void NotifyFailureStatus(Guid projectId)
     {
-        try { statusNotifier.NotifyStatusChanged(projectId, DeploymentStatus.Failed); }
+        try
+        {
+            statusNotifier.NotifyStatusChanged(projectId, DeploymentStatus.Failed);
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to publish deployment failure for project {ProjectId}.", projectId);
@@ -202,7 +213,8 @@ public sealed class DeploymentJobWorker(
         {
             case LocalDeploymentJob localJob:
                 if (!capabilities.LocalDeploymentsEnabled)
-                    throw new InvalidOperationException("Local Docker deployments are disabled for this AutoMate instance.");
+                    throw new InvalidOperationException(
+                        "Local Docker deployments are disabled for this AutoMate instance.");
                 await scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>()
                     .DeployLocalProjectAsync(localJob.Config, cancellationToken);
                 break;
@@ -214,7 +226,8 @@ public sealed class DeploymentJobWorker(
                 break;
             case StopLocalDeploymentJob stopJob:
                 if (!capabilities.LocalDeploymentsEnabled)
-                    throw new InvalidOperationException("Local Docker deployments are disabled for this AutoMate instance.");
+                    throw new InvalidOperationException(
+                        "Local Docker deployments are disabled for this AutoMate instance.");
                 await scope.ServiceProvider.GetRequiredService<ILocalDeploymentOrchestrator>()
                     .StopDeploymentAsync(stopJob.ProjectId, stopJob.ProjectName, stopJob.CsProjectPath,
                         cancellationToken);
@@ -223,4 +236,6 @@ public sealed class DeploymentJobWorker(
                 throw new NotSupportedException($"Unsupported deployment job type {job.GetType().Name}.");
         }
     }
+
+    private sealed record RunningJob(QueuedDeploymentJob Queued, Task<bool> Task);
 }

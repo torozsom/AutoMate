@@ -15,7 +15,7 @@ public sealed class LocalHostPortAvailabilityTests
         try
         {
             var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-            Action check = () => LocalHostPortAvailability.Check(port);
+            var check = () => LocalHostPortAvailability.Check(port);
             check.Should().Throw<DeploymentResourceConflictException>()
                 .WithMessage($"Host port {port} is already in use*");
         }

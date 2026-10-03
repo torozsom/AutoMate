@@ -32,15 +32,20 @@ public sealed class CloudDeploymentScheduler(
                     if (claim is null) break;
                     running.Add(RunClaimedAsync(claim.Value.RunId, claim.Value.LeaseOwner, stoppingToken));
                 }
+
                 await Task.Delay(TimeSpan.FromSeconds(options.Value.SchedulerPollSeconds), stoppingToken);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
             catch (Exception ex)
             {
                 logger.LogError(ex, "SaaS cloud admission failed; retrying after a bounded pause.");
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
         }
+
         await Task.WhenAll(running);
     }
 
@@ -55,7 +60,9 @@ public sealed class CloudDeploymentScheduler(
             await scope.ServiceProvider.GetRequiredService<CloudRunProcessor>()
                 .ProcessAsync(runId, leaseOwner, runCancellation.Token);
         }
-        catch (OperationCanceledException) when (runCancellation.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (runCancellation.IsCancellationRequested)
+        {
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "Cloud launch {RunId} stopped unexpectedly; its lease will recover.", runId);
@@ -63,8 +70,13 @@ public sealed class CloudDeploymentScheduler(
         finally
         {
             await runCancellation.CancelAsync();
-            try { await heartbeat; }
-            catch (OperationCanceledException) { }
+            try
+            {
+                await heartbeat;
+            }
+            catch (OperationCanceledException)
+            {
+            }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Lease renewal failed for cloud launch {RunId}; the run will recover.",
@@ -96,7 +108,9 @@ public sealed class CloudDeploymentScheduler(
                 }
             }
         }
-        catch (OperationCanceledException) when (runCancellation.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (runCancellation.IsCancellationRequested)
+        {
+        }
         catch
         {
             await runCancellation.CancelAsync();

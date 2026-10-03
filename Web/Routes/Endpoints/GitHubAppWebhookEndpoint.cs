@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Application.Abstractions.GitHub;
 using Application.Abstractions.Hosting;
 
@@ -23,6 +24,7 @@ public sealed class GitHubAppWebhookEndpoint : IEndpoint
                 if (body.Length + read > 1_048_576) return Results.StatusCode(413);
                 await body.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
             }
+
             try
             {
                 await receiver.ReceiveAsync(body.ToArray(),
@@ -31,9 +33,18 @@ public sealed class GitHubAppWebhookEndpoint : IEndpoint
                     context.Request.Headers["X-GitHub-Event"].ToString(), cancellationToken);
                 return Results.Accepted();
             }
-            catch (UnauthorizedAccessException) { return Results.Unauthorized(); }
-            catch (System.Text.Json.JsonException) { return Results.BadRequest(); }
-            catch (KeyNotFoundException) { return Results.BadRequest(); }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.Unauthorized();
+            }
+            catch (JsonException)
+            {
+                return Results.BadRequest();
+            }
+            catch (KeyNotFoundException)
+            {
+                return Results.BadRequest();
+            }
         }).AllowAnonymous();
     }
 }

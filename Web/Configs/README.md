@@ -23,3 +23,10 @@ Infrastructure types are registered only in Web/Configs.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+`TelemetryStorage` selects PostgreSQL or Loki/Mimir and validates endpoints, transport, managed onboarding and quotas
+at startup. [Telemetry hosting](../../docs/deployment-telemetry.md) documents operator secrets and retention controls.
+
+Telemetry startup validation uses `TelemetryStorageOptionsValidator` to identify individual invalid settings without
+exposing their values. Local IDE launches can import the complete pilot settings with
+`deploy/telemetry/Configure-TelemetryDevelopment.ps1`.
