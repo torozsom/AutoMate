@@ -125,6 +125,8 @@ internal sealed class AzureResourceProviderRegistrar(
     private static IReadOnlyCollection<string> GetRequiredResourceProviders(DeploymentConfigDto config)
     {
         var providers = new HashSet<string>(BaseRequiredResourceProviders, StringComparer.OrdinalIgnoreCase);
+        if (config.CloudRegistryName.EndsWith(".azurecr.io", StringComparison.OrdinalIgnoreCase))
+            providers.Add("Microsoft.ContainerRegistry");
 
         foreach (var database in config.Databases)
             switch (database.DbType.Trim().ToLowerInvariant())

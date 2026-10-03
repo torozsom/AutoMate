@@ -9,6 +9,10 @@ Persisted business entities with no EF Core or transport dependencies.
 - `BaseEntity.cs`
 - `Configuration.cs`
 - `CsProject.cs`
+- `CloudDeploymentRun.cs`, `CloudRunOutbox.cs`, `CloudWebhookDelivery.cs`, `CloudInstallationBudget.cs` — SaaS
+  control-plane state, verified webhook inbox, and installation cooldowns.
+- `CloudDeploymentRun.cs`, `CloudRunOutbox.cs`, `CloudWebhookDelivery.cs`, `CloudInstallationBudget.cs` — SaaS
+  control-plane state, verified webhook inbox, and installation cooldowns.
 - `Deployment.cs`
 - `GitHubWorkflowCheckpoint.cs`
 - `GitHubWorkflowJobCheckpoint.cs`

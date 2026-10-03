@@ -30,7 +30,8 @@
     {
         var isDeploying = IsDeploying();
         var queueState = DeploymentJobQueue.GetProjectState(ProjectId);
-        var isQueued = queueState.QueuedDeployments > 0 && queueState.ActiveDeployments == 0;
+        var isQueued = (queueState.QueuedDeployments > 0 && queueState.ActiveDeployments == 0) ||
+                       _cloudRunReceipt?.Phase == CloudRunPhase.Queued;
         var isStopping = _isStopping || queueState.QueuedStops > 0 || queueState.ActiveStops > 0;
         var latestStatus = GetLatestStatus();
         var latestDeployment = GetLatestDeployment();

@@ -34,7 +34,7 @@ public sealed class LogHub(
     /// </param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task<DeploymentTerminalHistory> JoinProjectGroup(Guid projectId, Guid? deploymentId,
-        string secureToken)
+        string secureToken, long afterOrderId = 0)
     {
         var empty = new DeploymentTerminalHistory([], false);
         if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(secureToken))
@@ -63,10 +63,12 @@ public sealed class LogHub(
 
             await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
                 Context.ConnectionAborted);
-            return deploymentId.HasValue
-                ? await diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500,
+            if (!deploymentId.HasValue) return empty;
+            return afterOrderId > 0
+                ? await diagnosticStore.ReadAfterAsync(projectId, deploymentId.Value, afterOrderId, 500,
                     Context.ConnectionAborted)
-                : empty;
+                : await diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500,
+                    Context.ConnectionAborted);
         }
         catch (CryptographicException ex)
         {

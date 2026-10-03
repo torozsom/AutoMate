@@ -7,6 +7,7 @@ using Domain.DTO;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +20,7 @@ public sealed class CloudDeploymentOrchestrator(
     AutoMateDbContext dbContext,
     ITemplatingService templateService,
     IGitHubService gitHubService,
+    IGitHubAppCredentials githubApp,
     IAzureDeploymentOrchestrator azureDeploymentOrchestrator,
     IAzureContainerAppRuntimeStreamer azureContainerAppRuntimeStreamer,
     IDeploymentCapabilities capabilities,
@@ -67,14 +69,18 @@ public sealed class CloudDeploymentOrchestrator(
         var csProject = await _csProjectResolver.GetOrCreateAsync(request, cancellationToken);
         config.CsProjectId = csProject.Id;
 
-        var deployment = new Deployment
+        CloudDeploymentRun? saasRun = null;
+        if (request.SaasRunId is { } runId)
+            saasRun = await dbContext.CloudDeploymentRuns.SingleAsync(item => item.Id == runId, cancellationToken);
+        var deployment = saasRun?.DeploymentId is { } existingDeploymentId
+            ? await dbContext.Deployments.SingleAsync(item => item.Id == existingDeploymentId, cancellationToken)
+            : new Deployment { CsProjectId = csProject.Id, Status = DeploymentStatus.Starting };
+        if (saasRun?.DeploymentId is null)
         {
-            CsProjectId = csProject.Id,
-            Status = DeploymentStatus.Starting
-        };
-
-        dbContext.Deployments.Add(deployment);
-        await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.Deployments.Add(deployment);
+            if (saasRun is not null) saasRun.DeploymentId = deployment.Id;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
         statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
         await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
             $"Starting cloud deployment preparation for {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}.");
@@ -91,6 +97,14 @@ public sealed class CloudDeploymentOrchestrator(
                 string.IsNullOrWhiteSpace(oidcSetup.TenantId) ||
                 string.IsNullOrWhiteSpace(oidcSetup.SubscriptionId))
                 throw new InvalidOperationException("Azure OIDC setup did not return complete credentials.");
+
+            // Azure provisioning can outlast an installation token; mint one immediately before GitHub calls.
+            if (saasRun is not null)
+                request = request with
+                {
+                    GitHubAccessToken = await githubApp.CreateInstallationTokenAsync(saasRun.InstallationId,
+                        cancellationToken)
+                };
 
             var repositorySecrets = CloudRepositorySecretBuilder.Build(request, oidcSetup);
 
@@ -109,16 +123,63 @@ public sealed class CloudDeploymentOrchestrator(
             await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Generated {files.Count} cloud deployment file(s): {string.Join(", ", files.Select(f => f.Path))}.");
 
-            var commitSha = await gitHubService.CommitCloudDeploymentFilesAsync(request.GitHubAccessToken,
-                request.RepositoryOwner, request.RepositoryName, files, request.BranchName,
-                cancellationToken: cancellationToken);
+            if (saasRun is not null)
+                request = request with
+                {
+                    GitHubAccessToken = await githubApp.CreateInstallationTokenAsync(saasRun.InstallationId,
+                        cancellationToken)
+                };
+
+            string commitSha;
+            if (saasRun is not null)
+            {
+                // A recovered worker must finish checking the marker before another worker can commit
+                // this run. The transaction-scoped advisory lock also protects the uncertain-commit case.
+                await using var commitTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+                var leaseBytes = saasRun.Id.ToByteArray();
+                var lockKeyA = BitConverter.ToInt32(leaseBytes, 0);
+                var lockKeyB = BitConverter.ToInt32(leaseBytes, 4);
+                await dbContext.Database.SqlQuery<int>($"""
+                    SELECT 1 AS "Value" FROM pg_advisory_xact_lock({lockKeyA}, {lockKeyB})
+                    """).SingleAsync(cancellationToken);
+                await dbContext.Entry(saasRun).ReloadAsync(cancellationToken);
+                if (saasRun.LeaseOwner != request.SaasLeaseOwner ||
+                    saasRun.Phase != CloudRunPhase.Preparing)
+                    throw new InvalidOperationException("The launch lease was lost before the GitHub commit.");
+                var marker = $"AutoMate-Run: {saasRun.Id:N}";
+                commitSha = saasRun.Attempt > 1 ? await gitHubService.FindDeploymentCommitAsync(
+                    request.GitHubAccessToken, request.RepositoryOwner, request.RepositoryName,
+                    request.BranchName, marker, cancellationToken) ?? string.Empty : string.Empty;
+                if (string.IsNullOrEmpty(commitSha))
+                    commitSha =
+                    await gitHubService.CommitCloudDeploymentFilesAsync(request.GitHubAccessToken,
+                        request.RepositoryOwner, request.RepositoryName, files, request.BranchName,
+                        commitMessage: $"Add AutoMate Azure deployment workflow\n\n{marker}",
+                        cancellationToken: cancellationToken);
+                deployment.ImageTag = commitSha;
+                saasRun.CommitSha = commitSha;
+                saasRun.CommittedAt = DateTimeOffset.UtcNow;
+                saasRun.Phase = CloudRunPhase.AwaitingWorkflow;
+                saasRun.LeaseOwner = null;
+                saasRun.LeaseUntil = null;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await commitTransaction.CommitAsync(cancellationToken);
+            }
+            else
+            {
+                commitSha = await gitHubService.CommitCloudDeploymentFilesAsync(request.GitHubAccessToken,
+                    request.RepositoryOwner, request.RepositoryName, files, request.BranchName,
+                    cancellationToken: cancellationToken);
+                deployment.ImageTag = commitSha;
+            }
             await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Committed cloud deployment files to {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}. Commit: {commitSha}");
 
             await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 "GitHub Actions workflow will start from the deployment branch push trigger.");
 
-            deployment.ImageTag = commitSha;
+            if (request.DeferWorkflowMonitoring)
+                return deployment;
             await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
                 cancellationToken);
 
@@ -170,9 +231,12 @@ public sealed class CloudDeploymentOrchestrator(
                 "[CloudDeploymentOrchestrator] Cloud deployment preparation failed for project '{ProjectName}'.",
                 config.ProjectName);
 
-            deployment.Status = DeploymentStatus.Failed;
-            await dbContext.SaveChangesAsync(CancellationToken.None);
-            statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
+            if (saasRun is null)
+            {
+                deployment.Status = DeploymentStatus.Failed;
+                await dbContext.SaveChangesAsync(CancellationToken.None);
+                statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
+            }
             throw;
         }
     }

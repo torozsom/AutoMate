@@ -9,6 +9,10 @@ The shared `Terminal` component also queues writes until xterm finishes JavaScri
 cannot disappear during the first render. Its pre-init queue has a fixed character limit and reports overflow.
 Dashboard and project details read the process-local queue state, showing “Queued...” until a deployment or stop job
 starts. State changes notify both views without exposing the queued request's credentials.
+In SaaS mode, cloud submissions use the durable Application admission service. Project details polls the authorized
+run phase and incremental redacted terminal history so status and logs catch up across AutoMate instances.
+In SaaS mode, cloud submissions use the durable Application admission service. Project details polls the authorized
+run phase and incremental redacted terminal history so status and logs catch up across AutoMate instances.
 
 ## Source inventory
 

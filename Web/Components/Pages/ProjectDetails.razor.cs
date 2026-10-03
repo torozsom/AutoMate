@@ -63,6 +63,16 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The internal AutoMate user ID resolved once during component initialization.
     private Guid _currentUserId;
+    /// <summary>Newest durable SaaS run displayed by this page.</summary>
+    private CloudDeploymentReceipt? _cloudRunReceipt;
+    /// <summary>Stops database-backed status and terminal catch-up when the page closes.</summary>
+    private readonly CancellationTokenSource _cloudPollCancellation = new();
+    /// <summary>Background refresh task for multi-instance SaaS deployments.</summary>
+    private Task? _cloudPollTask;
+    /// <summary>Prevents overlapping status refreshes in one Blazor circuit.</summary>
+    private readonly SemaphoreSlim _cloudPollGate = new(1, 1);
+    /// <summary>Stable key used if the current SaaS admission request is retried.</summary>
+    private string? _pendingCloudIdempotencyKey;
 
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
@@ -96,6 +106,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private bool _showConfigModal;
 
     private bool _terminalBufferOverflow;
+    /// <summary>Suppresses repeated empty-history notices during SaaS catch-up polls.</summary>
+    private bool _emptyTerminalNoticeShown;
     private Guid? _terminalDeploymentId;
     private bool _terminalReplayPending = true;
 
@@ -127,6 +139,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// Queue that hands deployment work to the hosted background worker.
     [Inject]
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
+
+    /// <summary>Durable SaaS cloud admission.</summary>
+    [Inject] private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
+
+    /// <summary>Creates an independent read scope for each cross-instance status poll.</summary>
+    [Inject] private IServiceScopeFactory ScopeFactory { get; set; } = null!;
 
     /// The user service used to retrieve user details and manage user-related operations.
     [Inject]
@@ -167,6 +185,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        await _cloudPollCancellation.CancelAsync();
+        if (_cloudPollTask is not null)
+        {
+            try { await _cloudPollTask; }
+            catch (OperationCanceledException) { }
+        }
+        _cloudPollCancellation.Dispose();
+        _cloudPollGate.Dispose();
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
 
@@ -191,6 +217,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         var status = GetLatestStatus();
         var queueState = DeploymentJobQueue.GetProjectState(ProjectId);
         return _isDeploying || status == DeploymentStatus.Starting ||
+               _cloudRunReceipt?.Phase is CloudRunPhase.Queued or CloudRunPhase.Preparing or
+                   CloudRunPhase.AwaitingWorkflow or CloudRunPhase.WorkflowRunning ||
                queueState.QueuedDeployments > 0 || queueState.ActiveDeployments > 0;
     }
 
@@ -366,7 +394,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         try
         {
-            await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+            if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+            {
+                _pendingCloudIdempotencyKey ??= Guid.NewGuid().ToString("N");
+                _cloudRunReceipt = await CloudDeploymentRuns.StartAsync(new CloudDeploymentStart(
+                    _currentUserId, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
+                    repository.Owner, repository.Name, userDetails.AccessToken,
+                    finalConfig, CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                    _app.Name, "."));
+                _pendingCloudIdempotencyKey = null;
+                UpdateCloudRunMessage();
+            }
+            else await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
             {
                 RequestingUserId = _currentUserId,
                 Config = finalConfig,
@@ -411,6 +450,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _terminalDeploymentId = GetLatestDeployment()?.Id;
             if (_app?.SourceType == SourceType.Remote)
                 _activeTab = "github-actions";
+            if (_app?.SourceType == SourceType.Remote && !DeploymentCapabilities.LocalDeploymentsEnabled)
+            {
+                _cloudRunReceipt = await CloudDeploymentRuns.GetLatestForProjectAsync(_currentUserId, ProjectId);
+                UpdateCloudRunMessage();
+                _cloudPollTask = PollSaasCloudAsync(_cloudPollCancellation.Token);
+            }
             await RefreshLatestAnalysisAsync();
 
             if (_app is { SourceType: SourceType.Local })
@@ -430,6 +475,55 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         await UpdateWebHostPortAsync();
 
         _isLoading = false;
+    }
+
+    /// <summary>Refreshes SaaS phase and catches up redacted logs across app instances.</summary>
+    private async Task PollSaasCloudAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+        {
+            if (!await _cloudPollGate.WaitAsync(0, cancellationToken)) continue;
+            try
+            {
+                await using var scope = ScopeFactory.CreateAsyncScope();
+                var receipt = await scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>()
+                    .GetLatestForProjectAsync(_currentUserId, ProjectId, cancellationToken);
+                if (receipt?.RunId != _cloudRunReceipt?.RunId || receipt?.Phase != _cloudRunReceipt?.Phase)
+                {
+                    _cloudRunReceipt = receipt;
+                    UpdateCloudRunMessage();
+                    await InvokeAsync(() => RefreshProjectAsync());
+                }
+                else if (receipt?.Phase == CloudRunPhase.Queued)
+                {
+                    UpdateCloudRunMessage();
+                    await InvokeAsync(StateHasChanged);
+                }
+                if (_hubConnection?.State == HubConnectionState.Connected && _terminalDeploymentId.HasValue)
+                    await JoinLogHubGroupAsync();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { break; }
+            catch (Exception ex) { Logger.LogWarning(ex, "SaaS cloud status refresh failed for {ProjectId}.", ProjectId); }
+            finally { _cloudPollGate.Release(); }
+        }
+    }
+
+    /// <summary>Shows durable queue age and workflow phase after reloads and cross-instance updates.</summary>
+    private void UpdateCloudRunMessage()
+    {
+        _workflowStatusMessage = _cloudRunReceipt?.Phase switch
+        {
+            CloudRunPhase.Queued =>
+                $"Queued for {Math.Max(0, (int)(DateTimeOffset.UtcNow - _cloudRunReceipt.QueuedAt).TotalSeconds)} seconds.",
+            CloudRunPhase.Preparing => "Configuring Azure and GitHub for deployment...",
+            CloudRunPhase.AwaitingWorkflow => "GitHub Actions workflow is queued.",
+            CloudRunPhase.WorkflowRunning => "GitHub Actions workflow is running.",
+            CloudRunPhase.Succeeded => "GitHub Actions workflow completed successfully.",
+            CloudRunPhase.Failed => _cloudRunReceipt.FailureReason ?? "Cloud deployment failed.",
+            CloudRunPhase.TimedOut => _cloudRunReceipt.FailureReason ?? "Cloud workflow monitoring timed out.",
+            _ => _workflowStatusMessage
+        };
     }
 
 
@@ -518,6 +612,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             {
                 _terminalDeploymentId = latestDeploymentId;
                 _lastTerminalOrderId = 0;
+                _emptyTerminalNoticeShown = false;
                 _pendingTerminalLogs.Clear();
                 _terminalReplayPending = true;
                 await ClearTerminalsAsync();
@@ -893,14 +988,19 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
         _terminalReplayPending = true;
         var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
-            ProjectId, _terminalDeploymentId, secureToken);
+            ProjectId, _terminalDeploymentId, secureToken, _lastTerminalOrderId);
         await InvokeAsync(async () =>
         {
-            if (_terminalDeploymentId.HasValue && _lastTerminalOrderId == 0 &&
+            if (!_emptyTerminalNoticeShown && _terminalDeploymentId.HasValue && _lastTerminalOrderId == 0 &&
                 history.Events.Count == 0 && _pendingTerminalLogs.Count == 0)
+            {
                 await WriteTerminalNoticeAsync("No saved terminal output is available for this deployment.");
+                _emptyTerminalNoticeShown = true;
+            }
             if (history.EarlierOmitted)
-                await WriteTerminalNoticeAsync("Earlier output omitted; showing the most recent 500 events.");
+                await WriteTerminalNoticeAsync(_lastTerminalOrderId == 0
+                    ? "Earlier output omitted; showing the most recent 500 events."
+                    : "More output is available and will load on the next refresh.");
             foreach (var terminalLog in history.Events)
                 await WriteTerminalLogAsync(terminalLog);
             foreach (var terminalLog in _pendingTerminalLogs.OrderBy(item => item.OrderId))

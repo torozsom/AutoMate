@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Claims;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using Application.Abstractions.Ai;
@@ -26,6 +27,7 @@ using Infrastructure.Diagnostics;
 using Infrastructure.Docker;
 using Infrastructure.Email;
 using Infrastructure.GitHub;
+using Infrastructure.ApplicationServices.Orchestration;
 using Infrastructure.Scanner;
 using Infrastructure.Templating;
 using Microsoft.AspNetCore.Authentication;
@@ -314,6 +316,18 @@ public static class ServiceConfiguration
                                      options.MaxQueuedJobs is >= 1 and <= 1_000,
                     "Deployment concurrency limits must be within their supported ranges.")
                 .ValidateOnStart();
+            builder.Services.AddOptions<CloudSaasOptions>()
+                .Bind(builder.Configuration.GetSection(CloudSaasOptions.SectionName))
+                .Validate(options => options.MaxQueuedPerUser is >= 1 and <= 1_000 &&
+                                     options.MaxActivePerUser is >= 1 and <= 128 &&
+                                     options.MaxActivePerInstallation is >= 1 and <= 128 &&
+                                     options.MaxActiveGlobally is >= 1 and <= 4_096 &&
+                                     options.MaxActivePerWorker is >= 1 and <= 256 &&
+                                     options.SchedulerPollSeconds is >= 1 and <= 60,
+                    "Cloud SaaS admission limits must be within their supported ranges.")
+                .ValidateOnStart();
+            builder.Services.AddOptions<GitHubAppOptions>()
+                .Bind(builder.Configuration.GetSection(GitHubAppOptions.SectionName));
             builder.Services.Configure<OpenTelemetryOptions>(
                 builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
             builder.Services.Configure<AiAnalysisOptions>(
@@ -330,6 +344,14 @@ public static class ServiceConfiguration
             var hostingProfile = builder.Configuration.GetSection(HostingProfileOptions.SectionName)
                 .Get<HostingProfileOptions>() ?? new HostingProfileOptions();
             var capabilities = hostingProfile.ToCapabilities();
+            if (!capabilities.LocalDeploymentsEnabled && capabilities.CloudDeploymentsEnabled)
+                builder.Services.AddOptions<GitHubAppOptions>()
+                    .Validate(options => options.AppId > 0 &&
+                                         !string.IsNullOrWhiteSpace(options.AppSlug) &&
+                                         !string.IsNullOrWhiteSpace(options.PrivateKeyPem) &&
+                                         !string.IsNullOrWhiteSpace(options.WebhookSecret),
+                        "SaaS requires a configured GitHub App ID, slug, signing key, and webhook secret.")
+                    .ValidateOnStart();
             builder.Services.AddSingleton(capabilities);
             builder.Services.AddSingleton<IDeploymentCapabilities>(capabilities);
             return capabilities;
@@ -407,6 +429,8 @@ public static class ServiceConfiguration
             services.AddHttpClient<IGitHubService, GitHubService>()
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
                 .AddStandardResilienceHandler();
+            services.AddHttpClient<IGitHubAppCredentials, GitHubAppCredentials>()
+                .AddStandardResilienceHandler();
             services.AddHttpClient<ILlmAnalysisProvider, OpenAiAnalysisProvider>()
                 .AddStandardResilienceHandler();
             services.AddScoped<IDeploymentDiagnosticStore, DeploymentDiagnosticStore>();
@@ -439,9 +463,20 @@ public static class ServiceConfiguration
             services.AddAntiforgery();
 
             // Data Protection (Keeps cookies valid across container restarts)
-            services.AddDataProtection()
+            var dataProtection = services.AddDataProtection()
                 .PersistKeysToDbContext<AutoMateDbContext>()
                 .SetApplicationName(AppName);
+            if (string.Equals(config["HostingProfile:Mode"], "SaaS", StringComparison.OrdinalIgnoreCase))
+            {
+                var certificatePath = config["SaaS:DataProtectionCertificatePath"];
+                var certificatePassword = config["SaaS:DataProtectionCertificatePassword"];
+                if (string.IsNullOrWhiteSpace(certificatePath) || !File.Exists(certificatePath))
+                    throw new InvalidOperationException(
+                        "SaaS requires a mounted Data Protection certificate for encrypted shared keys.");
+                dataProtection.ProtectKeysWithCertificate(
+                    X509CertificateLoader.LoadPkcs12FromFile(certificatePath, certificatePassword,
+                        X509KeyStorageFlags.EphemeralKeySet));
+            }
 
             // Authentication Setup
             services.AddAuthentication(options =>
@@ -587,8 +622,21 @@ public static class ServiceConfiguration
             }
 
             services.AddScoped<ICloudDeploymentOrchestrator, CloudDeploymentOrchestrator>();
+            services.AddScoped<ICloudDeploymentRunService, CloudDeploymentRunService>();
+            if (!capabilities.LocalDeploymentsEnabled && capabilities.CloudDeploymentsEnabled)
+            {
+                services.AddScoped<IGitHubWebhookReceiver, GitHubWebhookReceiver>();
+                services.AddScoped<CloudRunProcessor>();
+                services.AddScoped<CloudRunMonitor>();
+                services.AddScoped<AzureArmCredentialsProvider>();
+                services.AddHostedService<CloudDeploymentScheduler>();
+                services.AddHostedService<CloudRunMonitorService>();
+                services.AddHostedService<CloudRunRetentionService>();
+                services.AddHostedService<CloudRunMetricsService>();
+            }
             services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
-            services.AddHostedService<DeploymentJobWorker>();
+            if (capabilities.LocalDeploymentsEnabled)
+                services.AddHostedService<DeploymentJobWorker>();
             services.AddScoped<IAzureDeploymentOrchestrator, AzureDeploymentOrchestrator>();
             services.AddSingleton<AzureMonitorLogsTokenProvider>();
             services.AddSingleton<IAzureMonitorLogsTokenProvider>(serviceProvider =>
@@ -599,7 +647,8 @@ public static class ServiceConfiguration
             services.AddHostedService(serviceProvider =>
                 serviceProvider.GetRequiredService<AzureContainerAppRuntimeStreamer>());
             services.AddSingleton<IDeploymentStatusNotifier, DeploymentStatusNotifier>();
-            services.AddHostedService<DeploymentCleanupHostedService>();
+            if (capabilities.LocalDeploymentsEnabled)
+                services.AddHostedService<DeploymentCleanupHostedService>();
             services.AddSingleton<ILogStreamer, RealTimeLogStreamer>();
             services.AddSingleton<IDiagnosticRedactor, DiagnosticRedactor>();
             services.AddSingleton<DeploymentDiagnosticPublisher>();

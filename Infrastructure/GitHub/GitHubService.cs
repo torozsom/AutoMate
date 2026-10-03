@@ -18,6 +18,34 @@ namespace Infrastructure.GitHub;
 /// </summary>
 public sealed class GitHubService : IGitHubService
 {
+    /// <inheritdoc />
+    public async Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
+        string branchName, string marker, CancellationToken cancellationToken = default)
+    {
+        for (var page = 1; page <= 10; page++)
+        {
+            var path = $"repos/{Uri.EscapeDataString(repoOwner)}/{Uri.EscapeDataString(repoName)}/commits" +
+                       $"?sha={Uri.EscapeDataString(branchName)}&per_page=100&page={page}";
+            using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get, path);
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            GitHubAppCredentials.ThrowIfRateLimited(response);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var commits = payload.RootElement.EnumerateArray().ToArray();
+            foreach (var item in commits)
+            {
+                if (!item.TryGetProperty("commit", out var commit) ||
+                    !commit.TryGetProperty("message", out var message) ||
+                    !message.GetString()!.Contains(marker, StringComparison.Ordinal)) continue;
+                return item.GetProperty("sha").GetString();
+            }
+            if (commits.Length < 100) return null;
+        }
+        throw new InvalidOperationException(
+            "Unable to verify the prior AutoMate commit in this branch's recent history.");
+    }
     /// <summary>
     ///     Product name sent in GitHub user-agent headers.
     /// </summary>
@@ -201,6 +229,14 @@ public sealed class GitHubService : IGitHubService
 
             return createdCommit.Sha;
         }
+        catch (RateLimitExceededException ex)
+        {
+            throw new GitHubRateLimitException(ex.Reset);
+        }
+        catch (AbuseException)
+        {
+            throw new GitHubRateLimitException(DateTimeOffset.UtcNow.AddMinutes(1));
+        }
         catch (OperationCanceledException)
         {
             _logger.LogWarning(
@@ -239,6 +275,7 @@ public sealed class GitHubService : IGitHubService
         using var publicKeyRequest = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
             $"repos/{repoOwner}/{repoName}/actions/secrets/public-key");
         using var publicKeyResponse = await _httpClient.SendAsync(publicKeyRequest, cancellationToken);
+        GitHubAppCredentials.ThrowIfRateLimited(publicKeyResponse);
         publicKeyResponse.EnsureSuccessStatusCode();
 
         var publicKey = await publicKeyResponse.Content.ReadFromJsonAsync<GitHubRepositoryPublicKey>(JsonOptions,
@@ -262,6 +299,7 @@ public sealed class GitHubService : IGitHubService
                 options: JsonOptions);
 
             using var response = await _httpClient.SendAsync(request, cancellationToken);
+            GitHubAppCredentials.ThrowIfRateLimited(response);
             response.EnsureSuccessStatusCode();
 
             _logger.LogInformation("[GitHubService] Upserted repository secret {SecretName} for {Owner}/{Repo}.",
@@ -295,6 +333,7 @@ public sealed class GitHubService : IGitHubService
         request.Content = JsonContent.Create(new GitHubWorkflowDispatchRequest(branchName), options: JsonOptions);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
+        GitHubAppCredentials.ThrowIfRateLimited(response);
         response.EnsureSuccessStatusCode();
 
         _logger.LogInformation("[GitHubService] Dispatched workflow {Workflow} for {Owner}/{Repo}@{Branch}.",
@@ -326,6 +365,7 @@ public sealed class GitHubService : IGitHubService
             $"repos/{repoOwner}/{repoName}/actions/runs?branch={Uri.EscapeDataString(branchName)}&per_page=20");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
+        GitHubAppCredentials.ThrowIfRateLimited(response);
         response.EnsureSuccessStatusCode();
 
         var runsResponse = await response.Content.ReadFromJsonAsync<GitHubWorkflowRunsResponse>(JsonOptions,
@@ -364,6 +404,7 @@ public sealed class GitHubService : IGitHubService
             using var request = GitHubApiRequestFactory.Create(accessToken, HttpMethod.Get,
                 $"repos/{repoOwner}/{repoName}/actions/runs/{runId}/jobs?filter=latest&per_page=100&page={page}");
             using var response = await _httpClient.SendAsync(request, cancellationToken);
+            GitHubAppCredentials.ThrowIfRateLimited(response);
             response.EnsureSuccessStatusCode();
 
             var responseBody = await response.Content.ReadFromJsonAsync<GitHubWorkflowJobsResponse>(JsonOptions,
@@ -414,6 +455,7 @@ public sealed class GitHubService : IGitHubService
     {
         var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
+        GitHubAppCredentials.ThrowIfRateLimited(response);
         var redirectLocation = response.Headers.Location;
         if ((int)response.StatusCode is < 300 or >= 400 || redirectLocation is null)
             return response;

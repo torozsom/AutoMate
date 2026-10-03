@@ -67,6 +67,25 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
         return new DeploymentTerminalHistory(rows, earlierOmitted);
     }
 
+    /// <inheritdoc />
+    public async Task<DeploymentTerminalHistory> ReadAfterAsync(Guid projectId, Guid deploymentId,
+        long afterOrderId, int limit, CancellationToken cancellationToken = default)
+    {
+        var boundedLimit = Math.Clamp(limit, 1, 2_000);
+        var now = DateTimeOffset.UtcNow;
+        var rows = await dbContext.DeploymentDiagnosticRecords.AsNoTracking()
+            .Where(item => item.ProjectId == projectId && item.DeploymentId == deploymentId &&
+                           item.TerminalChannel != null && item.ExpiresAt > now &&
+                           item.OrderId > afterOrderId)
+            .OrderBy(item => item.OrderId).Take(boundedLimit + 1)
+            .Select(item => new DeploymentTerminalLog(item.OrderId, item.ProjectId, item.DeploymentId,
+                item.TerminalChannel!, item.Message))
+            .ToListAsync(cancellationToken);
+        var moreAvailable = rows.Count > boundedLimit;
+        if (moreAvailable) rows.RemoveAt(rows.Count - 1);
+        return new DeploymentTerminalHistory(rows, moreAvailable);
+    }
+
     public async Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default)
     {
         var now = DateTimeOffset.UtcNow;

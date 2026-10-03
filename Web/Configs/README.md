@@ -5,6 +5,9 @@ AutoMate's logs, traces, metrics, deployment diagnostic activity/meter sources, 
 events. Development console export is on by default; optional OTLP export is controlled by `OpenTelemetry` options and
 has no committed credentials.
 
+GitHub App credentials are required and validated at startup only in the SaaS hosting profile. Self-hosted pages can
+resolve shared deployment services without configuring a GitHub App.
+
 ## Source inventory
 
 - `AppConfiguration.cs`

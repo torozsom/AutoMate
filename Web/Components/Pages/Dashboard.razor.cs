@@ -34,6 +34,10 @@ public partial class Dashboard : ComponentBase, IDisposable
 
     /// The ID of the currently authenticated user, used to fetch and manage their projects.
     private Guid _currentUserId;
+    /// <summary>Stable retry key while one cloud submission is pending.</summary>
+    private string? _pendingCloudIdempotencyKey;
+    /// <summary>Project associated with the pending cloud retry key.</summary>
+    private Guid _pendingCloudProjectId;
 
     /// A message to display global errors that occur during operations like deployment or project fetching.
     private string? _globalErrorMessage;
@@ -68,6 +72,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// Queue that hands deployment work to the hosted background worker.
     [Inject]
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
+
+    /// <summary>Durable SaaS cloud admission.</summary>
+    [Inject] private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
 
     /// Service for managing user accounts.
     [Inject]
@@ -313,7 +320,22 @@ public partial class Dashboard : ComponentBase, IDisposable
 
             try
             {
-                await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+                if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+                {
+                    if (_pendingCloudProjectId != finalConfig.ProjectId)
+                    {
+                        _pendingCloudProjectId = finalConfig.ProjectId;
+                        _pendingCloudIdempotencyKey = null;
+                    }
+                    _pendingCloudIdempotencyKey ??= Guid.NewGuid().ToString("N");
+                    await CloudDeploymentRuns.StartAsync(new CloudDeploymentStart(
+                        _currentUserId, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
+                        repository.Owner, repository.Name, userDetails.AccessToken,
+                        finalConfig, CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                        cloudApp.Name, "."));
+                    _pendingCloudIdempotencyKey = null;
+                }
+                else await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
                 {
                     RequestingUserId = _currentUserId,
                     Config = finalConfig,

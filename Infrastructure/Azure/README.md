@@ -1,6 +1,9 @@
 # Azure
 
 Azure Container Apps and OIDC infrastructure adapters.
+For SaaS, launch workers refresh ARM credentials on demand, ensure a customer ACR exists, assign separate push and pull
+identities, and use the pull identity for Container Apps image access. ACR creation and role assignment require the
+connected customer's Azure account to have sufficient permission.
 
 Container Apps availability, metrics, console output, and system/revision events are normalized into deployment
 diagnostics before terminal delivery. `AzureContainerAppRuntimeStreamer` is a host-managed coordinator; it queries

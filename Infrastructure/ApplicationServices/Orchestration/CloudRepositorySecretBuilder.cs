@@ -19,11 +19,14 @@ internal static class CloudRepositorySecretBuilder
         {
             ["AZURE_CLIENT_ID"] = oidcSetup.ClientId,
             ["AZURE_TENANT_ID"] = oidcSetup.TenantId,
-            ["AZURE_SUBSCRIPTION_ID"] = oidcSetup.SubscriptionId,
-            ["GHCR_PAT"] = string.IsNullOrWhiteSpace(request.GitHubContainerRegistryToken)
-                ? request.GitHubAccessToken
-                : request.GitHubContainerRegistryToken
+            ["AZURE_SUBSCRIPTION_ID"] = oidcSetup.SubscriptionId
         };
+        if (!request.Config.CloudRegistryName.EndsWith(".azurecr.io", StringComparison.OrdinalIgnoreCase))
+            secrets["GHCR_PAT"] = string.IsNullOrWhiteSpace(request.GitHubContainerRegistryToken)
+                ? request.GitHubAccessToken
+                : request.GitHubContainerRegistryToken;
+        else if (!string.IsNullOrWhiteSpace(oidcSetup.RegistryPullIdentityResourceId))
+            secrets["AZURE_ACR_PULL_IDENTITY_ID"] = oidcSetup.RegistryPullIdentityResourceId;
 
         AddDatabaseSecrets(secrets, request.Config.Databases);
         AddCustomEnvironmentSecrets(secrets, request.Config.CustomEnvVars);

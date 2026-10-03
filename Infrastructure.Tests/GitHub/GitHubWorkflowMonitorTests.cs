@@ -101,6 +101,10 @@ public sealed class GitHubWorkflowMonitorTests
     /// <summary>Returns one running snapshot followed by a completed snapshot and job log.</summary>
     private sealed class WorkflowSequenceGitHubService(RecordingPublisher publisher) : IGitHubService
     {
+        /// <inheritdoc />
+        public Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
+            string branchName, string marker, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
         /// <summary>Number of workflow status requests made by the monitor.</summary>
         private int _runPolls;
 

@@ -211,6 +211,317 @@ namespace Infrastructure.Migrations
                     b.ToTable("azure_container_app_log_checkpoints", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.CloudDeploymentRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt");
+
+                    b.Property<string>("BranchName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("branch_name");
+
+                    b.Property<string>("CommitSha")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("commit_sha");
+
+                    b.Property<DateTimeOffset?>("CommittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("committed_at");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("DeploymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deployment_id");
+
+                    b.Property<string>("EnvironmentName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("environment_name");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<long>("InstallationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("installation_id");
+
+                    b.Property<DateTimeOffset?>("LaunchStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("launch_started_at");
+
+                    b.Property<Guid?>("LeaseOwner")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_owner");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phase");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("RegistryServer")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("registry_server");
+
+                    b.Property<long>("RepositoryId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("repository_id");
+
+                    b.Property<string>("RepositoryName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("repository_name");
+
+                    b.Property<string>("RepositoryOwner")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("repository_owner");
+
+                    b.Property<string>("SnapshotJson")
+                        .HasColumnType("text")
+                        .HasColumnName("snapshot_json");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("WorkflowFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("workflow_file_name");
+
+                    b.Property<long?>("WorkflowRunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("workflow_run_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cloud_deployment_runs");
+
+                    b.HasIndex("ProjectId", "CreatedAt")
+                        .HasDatabaseName("ix_cloud_deployment_runs_project_id_created_at");
+
+                    b.HasIndex("UserId", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_cloud_deployment_runs_user_id_idempotency_key");
+
+                    b.HasIndex("UserId", "LaunchStartedAt")
+                        .HasDatabaseName("ix_cloud_deployment_runs_user_id_launch_started_at");
+
+                    b.HasIndex("InstallationId", "Phase", "LeaseUntil")
+                        .HasDatabaseName("ix_cloud_deployment_runs_installation_id_phase_lease_until");
+
+                    b.HasIndex("InstallationId", "RepositoryId", "CommitSha")
+                        .HasDatabaseName("ix_cloud_deployment_runs_installation_id_repository_id_commit_");
+
+                    b.HasIndex("Phase", "NextAttemptAt", "CreatedAt")
+                        .HasDatabaseName("ix_cloud_deployment_runs_phase_next_attempt_at_created_at");
+
+                    b.HasIndex("UserId", "Phase", "LeaseUntil")
+                        .HasDatabaseName("ix_cloud_deployment_runs_user_id_phase_lease_until");
+
+                    b.HasIndex("RepositoryId", "BranchName", "EnvironmentName", "CreatedAt")
+                        .HasDatabaseName("ix_cloud_deployment_runs_repository_id_branch_name_environment");
+
+                    b.ToTable("cloud_deployment_runs", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.CloudInstallationBudget", b =>
+                {
+                    b.Property<long>("InstallationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("installation_id");
+
+                    b.Property<DateTimeOffset>("PausedUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("paused_until");
+
+                    b.Property<int>("ThrottleCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("throttle_count");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("InstallationId")
+                        .HasName("pk_cloud_installation_budgets");
+
+                    b.ToTable("cloud_installation_budgets", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.CloudRunOutbox", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DispatchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("dispatched_at");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("run_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cloud_run_outbox");
+
+                    b.HasIndex("DispatchedAt")
+                        .HasDatabaseName("ix_cloud_run_outbox_dispatched_at");
+
+                    b.HasIndex("RunId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_cloud_run_outbox_run_id");
+
+                    b.ToTable("cloud_run_outbox", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.CloudWebhookDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Conclusion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("conclusion");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DeliveryId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("delivery_id");
+
+                    b.Property<string>("HeadBranch")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("head_branch");
+
+                    b.Property<string>("HeadSha")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("head_sha");
+
+                    b.Property<long>("InstallationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("installation_id");
+
+                    b.Property<Guid?>("LeaseOwner")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_owner");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until");
+
+                    b.Property<DateTimeOffset?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<long>("RepositoryId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("repository_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("WorkflowAttempt")
+                        .HasColumnType("integer")
+                        .HasColumnName("workflow_attempt");
+
+                    b.Property<string>("WorkflowPath")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("workflow_path");
+
+                    b.Property<long>("WorkflowRunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("workflow_run_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_cloud_webhook_deliveries");
+
+                    b.HasIndex("DeliveryId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_cloud_webhook_deliveries_delivery_id");
+
+                    b.HasIndex("ProcessedAt", "CreatedAt")
+                        .HasDatabaseName("ix_cloud_webhook_deliveries_processed_at_created_at");
+
+                    b.ToTable("cloud_webhook_deliveries", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.Configuration", b =>
                 {
                     b.Property<Guid>("Id")
@@ -819,6 +1130,33 @@ namespace Infrastructure.Migrations
                         .HasConstraintName("fk_azure_container_app_log_checkpoints_deployments_deployment_");
 
                     b.Navigation("Deployment");
+                });
+
+            modelBuilder.Entity("Domain.Entities.CloudDeploymentRun", b =>
+                {
+                    b.HasOne("Domain.Entities.Application", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cloud_deployment_runs_applications_project_id");
+
+                    b.HasOne("Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cloud_deployment_runs_users_user_id");
+                });
+
+            modelBuilder.Entity("Domain.Entities.CloudRunOutbox", b =>
+                {
+                    b.HasOne("Domain.Entities.CloudDeploymentRun", null)
+                        .WithOne()
+                        .HasForeignKey("Domain.Entities.CloudRunOutbox", "RunId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_cloud_run_outbox_cloud_deployment_runs_run_id");
                 });
 
             modelBuilder.Entity("Domain.Entities.Configuration", b =>

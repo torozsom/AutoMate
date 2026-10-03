@@ -1,6 +1,8 @@
 # Routes
 
 Minimal API endpoint contracts and endpoint implementations.
+The SaaS-only GitHub App webhook endpoint accepts bounded HTTPS POST bodies and delegates signature verification and
+minimal metadata persistence to Infrastructure.
 
 ## Source inventory
 

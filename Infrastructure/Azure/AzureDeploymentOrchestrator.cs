@@ -28,6 +28,9 @@ public sealed class AzureDeploymentOrchestrator(
     /// </summary>
     private readonly AzureRoleAssignmentService _roleAssignmentService = new(httpClientFactory);
 
+    /// <summary>Creates the customer's registry before GitHub Actions attempts its first image push.</summary>
+    private readonly AzureContainerRegistryProvisioner _registryProvisioner = new(httpClientFactory);
+
     /// <inheritdoc />
     public async Task<AzureOidcSetupResultDto> EnsureFederatedIdentityAsync(AzureCloudCredentialsDto credentials,
         DeploymentConfigDto config, string repositoryOwner, string repositoryName, string branchName,
@@ -54,12 +57,26 @@ public sealed class AzureDeploymentOrchestrator(
         await _roleAssignmentService.EnsureContributorAssignmentAsync(resourceGroup, identity,
             credentials.AccessToken, cancellationToken);
 
+        string? pullIdentityId = null;
+        if (config.CloudRegistryName.EndsWith(".azurecr.io", StringComparison.OrdinalIgnoreCase))
+        {
+            var registryId = await _registryProvisioner.EnsureAsync(credentials, config, cancellationToken);
+            var pullIdentity = await AzureManagedIdentityProvisioner.EnsureUserAssignedIdentityAsync(resourceGroup,
+                setupContext.IdentityName + "-pull", config.CloudAzureRegion, cancellationToken);
+            await _roleAssignmentService.EnsureRegistryAssignmentsAsync(registryId, identity, pullIdentity,
+                credentials.AccessToken, cancellationToken);
+            pullIdentityId = pullIdentity.Id.ToString();
+        }
+
         logger.LogInformation(
             "[AzureDeploymentOrchestrator] OIDC trust configured for {Owner}/{Repo}@{Branch}. Identity: {IdentityResourceId}. ClientId: {ClientId}. TenantId: {TenantId}. FederatedCredential: {FederatedCredentialName}. Issuer: {Issuer}. Subject: {Subject}. Audience: {Audience}.",
             repositoryOwner, repositoryName, branchName, identity.Id, identity.Data.ClientId, identity.Data.TenantId,
             setupContext.FederatedCredentialName, AzureConstants.GitHubTokenIssuer, setupContext.Subject,
             AzureConstants.AzureTokenExchangeAudience);
 
-        return AzureOidcSetupPlanner.CreateResult(credentials, identity, setupContext);
+        return AzureOidcSetupPlanner.CreateResult(credentials, identity, setupContext) with
+        {
+            RegistryPullIdentityResourceId = pullIdentityId
+        };
     }
 }

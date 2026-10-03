@@ -1,6 +1,9 @@
 # Data
 
 EF Core DbContext, mappings, token protection conversion, and migrations.
+SaaS cloud runs, transactional outbox wakeups, webhook receipts, and installation cooldowns are stored in PostgreSQL.
+Run configuration snapshots use a separate Data Protection purpose because they may contain customer environment
+secrets; SaaS startup requires a shared certificate to encrypt the database key ring.
 
 ## Source inventory
 

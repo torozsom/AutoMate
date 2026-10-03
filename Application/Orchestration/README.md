@@ -1,6 +1,9 @@
 # Orchestration
 
 Deployment orchestration contracts, job queue primitives, and status notification contracts.
+In SaaS mode, `ICloudDeploymentRunService` admits authorized, idempotent cloud runs into PostgreSQL; its receipt
+exposes queued age and cloud phase without credentials. `CloudSaasOptions` controls cluster admission. Cloud workflow
+monitoring is separate from the launch lease. See [SaaS operations](../../docs/saas-cloud-deployments.md).
 The in-process scheduler admits a CPU-aware number of local Docker builds (at least two) and four cloud deployments
 concurrently by default.
 One stop operation may run beside builds. Jobs for the same project stay ordered without occupying a lane while waiting;
@@ -21,6 +24,10 @@ Only job type, project ID, lane, and timing are logged; queued credentials are n
 - `DeploymentJobWorker.cs`
 - `DeploymentConcurrencyOptions.cs`
 - `QueuedDeploymentJob.cs`
+- `CloudDeploymentStart.cs`
+- `CloudSaasOptions.cs`
+- `CloudDeploymentStart.cs`
+- `CloudSaasOptions.cs`
 - `DeploymentStatusNotifier.cs`
 - `ICloudDeploymentOrchestrator.cs`
 - `IDeploymentJobQueue.cs`

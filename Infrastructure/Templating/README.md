@@ -1,6 +1,8 @@
 # Templating
 
 Scriban deployment-artifact generation infrastructure adapter.
+An `.azurecr.io` registry renders the Azure OIDC/ACR workflow and a managed-identity Container App registry entry.
+The legacy GHCR template remains available for self-hosted deployments.
 
 ## Source inventory
 
