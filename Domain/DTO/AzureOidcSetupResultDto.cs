@@ -25,6 +25,9 @@ public record AzureOidcSetupResultDto
     /// </summary>
     public string IdentityResourceId { get; init; } = string.Empty;
 
+    /// <summary>Dedicated pull-only identity attached to the Container App for ACR access.</summary>
+    public string? RegistryPullIdentityResourceId { get; init; }
+
     /// <summary>
     ///     The federated credential name configured on the managed identity.
     /// </summary>

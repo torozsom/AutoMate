@@ -7,6 +7,14 @@ deployment
 belonging to that project. The join returns bounded redacted history after subscription, allowing clients to merge
 buffered live events by database ordering cursor without gaps or duplicates.
 
+An authorized join for the latest deployment also renews a 45-second live runtime viewing lease. Project details
+renews through its existing catch-up handshake. Leaving/disconnecting removes interest; abandoned connections expire.
+Historical subscriptions do not enable collection. Viewed runtime output is saved for replay. The owner preference
+controls collection while no page is open.
+
+If a reload or navigation disconnects during replay, the hub ends the canceled read without reporting a failed
+subscription or confirming a replay cursor. Provider cancellation on an active connection remains an error.
+
 ## Source inventory
 
 - `ILogClient.cs`

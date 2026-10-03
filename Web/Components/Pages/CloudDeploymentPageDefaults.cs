@@ -27,7 +27,7 @@ internal static class CloudDeploymentPageDefaults
             CloudAzureRegion = DeploymentDefaults.AzureRegion,
             CloudResourceGroupName = $"{resourceName}-prod-rg",
             CloudContainerAppName = $"{resourceName}-prod-app",
-            CloudRegistryName = "ghcr.io",
+            CloudRegistryName = string.Empty,
             Databases = []
         };
     }

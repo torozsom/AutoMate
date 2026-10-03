@@ -1,7 +1,11 @@
 using System.Collections.Concurrent;
+using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Domain.DTO;
 using Domain.Entities;
+using Domain.Enums;
+using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -12,19 +16,39 @@ namespace Application.Orchestration;
 /// </summary>
 internal sealed class LocalDeploymentLogStreamManager(
     IServiceScopeFactory serviceScopeFactory,
-    ILogger logger)
+    ILogger logger,
+    CancellationToken applicationStopping = default)
 {
     /// <summary>
     ///     Active per-project cancellation sources for background log streaming workers.
     /// </summary>
     private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> ActiveLogStreams = new();
 
+    /// <summary>Checks whether the host already supervises a project.</summary>
+    public static bool IsActive(Guid projectId)
+    {
+        return ActiveLogStreams.ContainsKey(projectId);
+    }
+
+    /// <summary>Restores a collector without replacing an existing deployment's supervisor.</summary>
+    public void EnsureStarted(DeploymentConfigDto config, CsProject csProject, Guid deploymentId)
+    {
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(applicationStopping);
+        if (!ActiveLogStreams.TryAdd(config.ProjectId, cts))
+        {
+            cts.Dispose();
+            return;
+        }
+
+        _ = Task.Run(() => RunStreamsAsync(config, csProject, deploymentId, cts, cts.Token));
+    }
+
     /// <summary>
     ///     Starts web and database container log/metric streams for a running deployment.
     /// </summary>
     public void Start(DeploymentConfigDto config, CsProject csProject, Guid deploymentId)
     {
-        var cts = new CancellationTokenSource();
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(applicationStopping);
         ActiveLogStreams.AddOrUpdate(config.ProjectId, cts, (_, oldCts) =>
         {
             oldCts.Cancel();
@@ -59,16 +83,70 @@ internal sealed class LocalDeploymentLogStreamManager(
     {
         using var scope = serviceScopeFactory.CreateScope();
         var scopedDockerService = scope.ServiceProvider.GetRequiredService<IDockerService>();
-        var streamingTasks = CreateStreamingTasks(scopedDockerService, config, csProject, deploymentId, token);
-
         try
         {
-            await Task.WhenAll(streamingTasks);
+            // Host-owned collection follows consent independently of page views.
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            CancellationTokenSource? collection = null;
+            Task? running = null;
+            try
+            {
+                do
+                {
+                    await using var policyScope = serviceScopeFactory.CreateAsyncScope();
+                    var db = policyScope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+                    var current = await db.Deployments.Where(d => d.CsProject!.AppId == config.ProjectId)
+                        .OrderByDescending(d => d.CreatedAt).Select(d => new { d.Id, d.Status })
+                        .FirstOrDefaultAsync(token);
+                    if (current?.Id != deploymentId || current.Status != DeploymentStatus.Running) break;
+                    var enabled = await db.Applications
+                        .AnyAsync(p => p.Id == config.ProjectId && p.RuntimeDiagnosticsEnabled, token);
+                    enabled |= policyScope.ServiceProvider.GetRequiredService<IDeploymentRuntimeViewers>()
+                        .HasViewers(config.ProjectId, deploymentId);
+                    if (enabled && running is null)
+                    {
+                        collection = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        running = Task.WhenAll(CreateStreamingTasks(scopedDockerService, config, csProject,
+                            deploymentId, collection.Token));
+                    }
+
+                    if ((!enabled || running?.IsCompleted == true) && running is not null)
+                    {
+                        await collection!.CancelAsync();
+                        try
+                        {
+                            await running;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                        }
+
+                        collection.Dispose();
+                        collection = null;
+                        running = null;
+                    }
+                } while (await timer.WaitForNextTickAsync(token));
+            }
+            finally
+            {
+                if (collection is not null)
+                {
+                    await collection.CancelAsync();
+                    try
+                    {
+                        if (running is not null) await running;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+
+                    collection.Dispose();
+                }
+            }
         }
-        catch (OperationCanceledException ex)
+        catch (OperationCanceledException)
         {
-            logger.LogInformation("[LocalDeploymentOrchestrator] Log streaming cancelled for Project ID {Id}." +
-                                  "Exception: {Ex}", config.ProjectId, ex);
+            logger.LogDebug("Log streaming cancelled for project {ProjectId}.", config.ProjectId);
         }
         catch (Exception ex)
         {

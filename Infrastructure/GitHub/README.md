@@ -1,6 +1,9 @@
 # GitHub
 
 GitHub API infrastructure adapter implementation.
+The SaaS GitHub App adapter validates the initiating user's repository write permission, resolves the repository
+installation, and mints short-lived installation tokens. Signed `workflow_run` deliveries are deduplicated by GitHub
+delivery ID and stored as minimal metadata. Provider throttling pauses launches for an installation.
 
 GitHub workflow, job, and step state are normalized into deployment diagnostics while the run is active. Jobs are
 discovered page by page, and each job/step status change is shown as GitHub reports it. Text output is intentionally

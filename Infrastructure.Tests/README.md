@@ -10,3 +10,6 @@ dotnet test AutoMate.slnx --no-restore
 
 These tests use fake HTTP responses and temporary SQLite databases. They do not contact Docker, GitHub, Azure, or an
 OpenTelemetry collector.
+
+Telemetry integration tests additionally use an explicitly configured disposable PostgreSQL/Loki/Mimir stack. They are
+skipped without `AUTOMATE_TELEMETRY_TEST_DB`. See [telemetry verification](../docs/deployment-telemetry.md).

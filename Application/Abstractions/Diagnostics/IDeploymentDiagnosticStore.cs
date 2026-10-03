@@ -9,6 +9,10 @@ public interface IDeploymentDiagnosticStore
     Task<DeploymentTerminalHistory> ReadRecentAsync(Guid projectId, Guid deploymentId, int limit,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Reads a bounded ordered page after a previously delivered terminal event.</summary>
+    Task<DeploymentTerminalHistory> ReadAfterAsync(Guid projectId, Guid deploymentId, long afterOrderId,
+        int limit, CancellationToken cancellationToken = default);
+
     Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default);
 
     Task<string> BuildContextAsync(Guid deploymentId, int maximumCharacters,

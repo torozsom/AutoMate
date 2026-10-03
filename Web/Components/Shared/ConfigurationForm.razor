@@ -53,6 +53,19 @@
                 @if (IsCloudDeployment)
                 {
                     <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Azure Settings</h6>
+                    @if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+                    {
+                        <p class="small text-muted">Install the AutoMate GitHub App on this repository and choose an
+                            Azure Container Registry in the resource group below. AutoMate creates a Basic registry if
+                            that name is available; Azure charges your subscription for it.</p>
+                        @if (GitHubAppInstallUrl is not null)
+                        {
+                            <a href="@GitHubAppInstallUrl" target="_blank" rel="noopener noreferrer">
+                                Install AutoMate GitHub App
+                            </a>
+                        }
+                    }
+
                     <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Resource Group</label>
@@ -67,7 +80,8 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Registry Server</label>
                             <input type="text" class="form-control"
-                                   @bind="Config.CloudRegistryName" placeholder="ghcr.io" autocomplete="off"/>
+                                   @bind="Config.CloudRegistryName" placeholder="myregistry.azurecr.io"
+                                   autocomplete="off"/>
                         </div>
                     </div>
                 }

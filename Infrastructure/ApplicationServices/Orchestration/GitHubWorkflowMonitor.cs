@@ -37,6 +37,15 @@ internal sealed class GitHubWorkflowMonitor(
     /// <summary>Interval between GitHub workflow and job status requests.</summary>
     private readonly TimeSpan _workflowPollDelay = TimeSpan.FromSeconds(Math.Clamp(options.PollIntervalSeconds, 1, 60));
 
+    /// <summary>Collects one webhook-triggered snapshot without occupying a launch worker while waiting.</summary>
+    public async Task ObserveWorkflowRunAsync(CloudDeploymentRequestDto request, Deployment deployment,
+        GitHubWorkflowRunDto run, CancellationToken cancellationToken)
+    {
+        await StreamRunAsync(request, deployment, run, cancellationToken);
+        if (string.Equals(run.Status, "completed", StringComparison.OrdinalIgnoreCase))
+            await ReconcileFinalLogsAsync(request, deployment, run, cancellationToken);
+    }
+
     /// <summary>Polls the matched run until terminal state, publishing progress before completed-run logs.</summary>
     public async Task<GitHubWorkflowRunDto?> PollWorkflowRunAsync(CloudDeploymentRequestDto request,
         Deployment deployment, string commitSha, CancellationToken cancellationToken)

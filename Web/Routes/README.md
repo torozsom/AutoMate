@@ -1,6 +1,8 @@
 # Routes
 
 Minimal API endpoint contracts and endpoint implementations.
+The SaaS-only GitHub App webhook endpoint accepts bounded HTTPS POST bodies and delegates signature verification and
+minimal metadata persistence to Infrastructure.
 
 ## Source inventory
 
@@ -14,3 +16,5 @@ Infrastructure types are registered only in Web/Configs.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+`Endpoints/DeploymentHistoryEndpoint.cs` provides owner-authorized cursor log pages and bounded metric-range APIs.

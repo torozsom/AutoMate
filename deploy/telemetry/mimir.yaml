@@ -1,0 +1,47 @@
+multitenancy_enabled: true
+server:
+  http_listen_port: 9009
+common:
+  storage:
+    backend: s3
+    s3:
+      endpoint: objects:8333
+      access_key_id: ${OBJECT_STORAGE_ACCESS_KEY}
+      secret_access_key: ${OBJECT_STORAGE_SECRET_KEY}
+      insecure: true
+blocks_storage:
+  s3: { bucket_name: automate-metrics }
+  tsdb: { dir: /var/mimir/tsdb }
+  bucket_store: { sync_dir: /var/mimir/bucket-sync }
+ruler_storage:
+  s3: { bucket_name: automate-rules }
+alertmanager_storage:
+  s3: { bucket_name: automate-alerts }
+alertmanager:
+  data_dir: /var/mimir/alerts
+ingester:
+  ring:
+    replication_factor: 1
+    kvstore: { store: inmemory }
+    tokens_file_path: /var/mimir/tokens
+distributor:
+  ring:
+    kvstore: { store: inmemory }
+compactor:
+  data_dir: /var/mimir/compactor
+  compaction_interval: 30m
+  deletion_delay: 2h
+  sharding_ring:
+    kvstore: { store: inmemory }
+store_gateway:
+  sharding_ring:
+    replication_factor: 1
+    kvstore: { store: inmemory }
+limits:
+  compactor_blocks_retention_period: 720h
+  out_of_order_time_window: 24h
+  ingestion_rate: 100
+  ingestion_burst_size: 300
+  max_global_series_per_user: 300
+  max_total_query_length: 720h
+  max_query_parallelism: 4

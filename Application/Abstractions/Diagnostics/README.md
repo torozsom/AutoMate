@@ -21,3 +21,10 @@ separate UI delivery port and is not a diagnostic persistence or analysis API.
 ## Related documentation
 
 - [Solution navigation map](../../../.agents/navigation.md)
+
+`DeploymentTelemetry.cs` defines separate log/metric write/query ports, typed numeric samples, bounded history responses
+and owner-authorized preferences. History availability and cursor-advance flags distinguish delayed storage and
+omissions.
+
+`IDeploymentRuntimeViewers` tracks short-lived authorized collection interest. Output collected during viewing is
+saved for replay; unattended collection requires the owner's separate background preference.

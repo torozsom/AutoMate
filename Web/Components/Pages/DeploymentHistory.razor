@@ -1,0 +1,249 @@
+@page "/project/{ProjectId:guid}/deployment/{DeploymentId:guid}"
+@using Application.Abstractions.Diagnostics
+@using Application.Data.Users
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject AuthenticationStateProvider Authentication
+@inject IUserService Users
+@inject IDeploymentHistoryService History
+@inject ILogger<DeploymentHistory> Logger
+
+<PageTitle>Deployment history</PageTitle>
+<main class="container py-4">
+    <a href="@($"/project/{ProjectId}")">Back to project</a>
+    <h1>Deployment history</h1>
+    <p>Deployment @DeploymentId</p>
+    @if (_error is not null)
+    {
+        <p role="alert">@_error</p>
+    }
+    @if (_authorized)
+    {
+        <TelemetryPreferences ProjectId="ProjectId"/>
+        @if (_history?.Availability is { } availability)
+        {
+            <p role="status">@availability</p>
+        }
+
+        <h2>Saved terminal output</h2>
+        <label for="history-channel">Terminal</label>
+        <select id="history-channel" class="form-select mb-3" @bind="_channel" @bind:after="RenderTerminalAsync">
+            @foreach (var channel in _history?.Events.Select(e => e.TerminalChannel).Distinct() ?? [])
+            {
+                <option value="@channel">@channel</option>
+            }
+        </select>
+        <div class="history-terminal-viewport">
+            <Terminal @ref="_terminal" OnReady="RenderTerminalAsync"/>
+        </div>
+        <div class="my-3 d-flex gap-2">
+            <button class="btn btn-outline-secondary" disabled="@(_busy || _history?.EarlierOmitted != true)"
+                    @onclick="EarlierAsync">Earlier output
+            </button>
+            <button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LatestAsync">Latest output</button>
+        </div>
+        <h2>CPU and memory history</h2>
+        @if (_metricAvailability is not null)
+        {
+            <p role="status">@_metricAvailability</p>
+        }
+
+        <label for="metric-range">Metric range</label>
+        <select id="metric-range" class="form-select mb-3" @bind="_metricDays" @bind:after="LatestAsync"
+                disabled="@_busy">
+            <option value="1">Last 24 hours</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+        </select>
+        <p>Missing samples remain gaps; averages, minimums and maximums cover each interval.</p>
+        @if (_metrics.Count == 0)
+        {
+            <p>No saved metric samples in this range. Runtime collection is optional.</p>
+        }
+
+        @foreach (var series in _metrics.GroupBy(p => (p.Container, p.Name, p.Unit)))
+        {
+            <h3>@series.Key.Container — @series.Key.Name (@series.Key.Unit)</h3>
+            <svg viewBox="0 0 600 140" role="img" aria-label="@($"{series.Key.Name} over time")"
+                 style="width:100%;max-width:900px">
+                @foreach (var segment in Segments(series.ToArray()))
+                {
+                    <polyline points="@segment" fill="none" stroke="currentColor" stroke-width="2"/>
+                }
+            </svg>
+            <details>
+                <summary>Numeric samples</summary>
+                <table class="table">
+                    <thead>
+                    <tr>
+                        <th>UTC</th>
+                        <th>Average</th>
+                        <th>Minimum</th>
+                        <th>Maximum</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var point in series)
+                    {
+                        <tr>
+                            <td>@point.Timestamp.ToString("u")</td>
+                            <td>@point.Average.ToString("G5")</td>
+                            <td>@point.Minimum.ToString("G5")</td>
+                            <td>@point.Maximum.ToString("G5")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </details>
+        }
+    }
+</main>
+
+@code {
+
+    /// <summary>Authorized project identity.</summary>
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    /// <summary>Selected historical run identity.</summary>
+    [Parameter]
+    public Guid DeploymentId { get; set; }
+
+    /// <summary>Internal owner identity.</summary>
+    private Guid _owner;
+
+    /// <summary>Server-authorized page state.</summary>
+    private bool _authorized;
+
+    /// <summary>Suppresses overlapping history reads.</summary>
+    private bool _busy;
+
+    /// <summary>Bounded current output page.</summary>
+    private DeploymentTerminalHistory? _history;
+
+    /// <summary>Bounded metric aggregates.</summary>
+    private IReadOnlyList<DeploymentMetricPoint> _metrics = [];
+
+    /// <summary>Distinguishes missing data from unavailable or truncated history.</summary>
+    private string? _metricAvailability;
+
+    /// <summary>Selected original terminal channel.</summary>
+    private string _channel = "";
+
+    /// <summary>Terminal presentation sink.</summary>
+    private Terminal? _terminal;
+
+    /// <summary>Safe history failure message.</summary>
+    private string? _error;
+
+    /// <summary>Fixed chart time range.</summary>
+    private readonly DateTimeOffset _end = DateTimeOffset.UtcNow;
+
+    /// <summary>Includes retained older deployments by default, with bounded zoom choices.</summary>
+    private int _metricDays = 30;
+
+    /// <summary>Preserves the selected page/channel across unchanged route parameters.</summary>
+    private (Guid Project, Guid Deployment)? _loadedRoute;
+
+    /// <inheritdoc />
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedRoute == (ProjectId, DeploymentId)) return;
+        _loadedRoute = (ProjectId, DeploymentId);
+        _history = null;
+        _metrics = [];
+        _channel = "";
+        _authorized = false;
+        _owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication, Users);
+        await LoadAsync(0);
+    }
+
+    /// <summary>Requests the preceding cursor page without accumulating unbounded terminal memory.</summary>
+    private Task EarlierAsync()
+    {
+        return LoadAsync(_history?.Events.FirstOrDefault()?.OrderId ?? 0);
+    }
+
+    /// <summary>Returns to the most recent page.</summary>
+    private Task LatestAsync()
+    {
+        return LoadAsync(0);
+    }
+
+    /// <summary>Loads authorized bounded output and metric history.</summary>
+    private async Task LoadAsync(long cursor)
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            _history = await History.ReadLogsAsync(_owner, ProjectId, DeploymentId, cursor, true, 500);
+            _authorized = true;
+            _channel = _history.Events.Any(e => e.TerminalChannel == _channel) ? _channel : _history.Events.FirstOrDefault()?.TerminalChannel ?? "";
+            _error = null;
+            await RenderTerminalAsync();
+            if (cursor == 0)
+            {
+                try
+                {
+                    var metricHistory = await History.ReadMetricsAsync(_owner, ProjectId, DeploymentId, _end.AddDays(-_metricDays), _end, 120);
+                    _metrics = metricHistory.Points;
+                    _metricAvailability = metricHistory.Availability;
+                }
+                catch (Exception ex) when (ex is not UnauthorizedAccessException)
+                {
+                    Logger.LogWarning("Metric history unavailable: {FailureType}.", ex.GetType().Name);
+                    _metrics = [];
+                    _metricAvailability = "Metric history is temporarily unavailable. Saved terminal output remains available.";
+                }
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _authorized = false;
+            _error = "Deployment history access denied.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning("Deployment history unavailable: {FailureType}.", ex.GetType().Name);
+            _error = "Some deployment history is temporarily unavailable.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <summary>Restores the selected channel into xterm after its initialization.</summary>
+    private async Task RenderTerminalAsync()
+    {
+        if (_terminal is null || _history is null) return;
+        await _terminal.ClearAsync();
+        var output = string.Concat(_history.Events.Where(e => e.TerminalChannel == _channel).Select(e => e.Message));
+        await _terminal.WriteAsync(output.Length > 0 ? output : "[No saved output in this terminal page.]\r\n");
+    }
+
+    /// <summary>Splits sparse chart output at missing intervals rather than drawing across gaps.</summary>
+    private IEnumerable<string> Segments(DeploymentMetricPoint[] points)
+    {
+        var maximum = Math.Max(1, points.Max(p => p.Maximum));
+        var parts = new List<string>();
+        DateTimeOffset? previous = null;
+        foreach (var point in points.OrderBy(p => p.Timestamp))
+        {
+            if (previous.HasValue && point.Timestamp - previous.Value > TimeSpan.FromSeconds(Math.Max(60, _metricDays * 86400 / 120d) + 5))
+            {
+                yield return string.Join(' ', parts);
+                parts.Clear();
+            }
+
+            var x = 600 * (point.Timestamp - _end.AddDays(-_metricDays)).TotalSeconds / (_metricDays * 86400);
+            var y = 130 - 120 * point.Average / maximum;
+            parts.Add(FormattableString.Invariant($"{x:0.##},{y:0.##}"));
+            previous = point.Timestamp;
+        }
+
+        if (parts.Count > 0) yield return string.Join(' ', parts);
+    }
+
+}

@@ -42,6 +42,9 @@ public class AutoMateDbContext(
     /// </summary>
     private const string AzureTokenProtectorPurpose = "AutoMate.AzureTokenProtector";
 
+    /// <summary>Separates protected SaaS request snapshots from OAuth token protection.</summary>
+    private const string CloudRunSnapshotProtectorPurpose = "AutoMate.CloudRunSnapshot";
+
     /// <summary>
     ///     Maximum persisted length for user email addresses.
     /// </summary>
@@ -87,7 +90,22 @@ public class AutoMateDbContext(
     /// </summary>
     public DbSet<Deployment> Deployments => Set<Deployment>();
 
+    /// <summary>Durable SaaS cloud deployment requests.</summary>
+    public DbSet<CloudDeploymentRun> CloudDeploymentRuns => Set<CloudDeploymentRun>();
+
+    /// <summary>Transactional launch wakeups.</summary>
+    public DbSet<CloudRunOutbox> CloudRunOutbox => Set<CloudRunOutbox>();
+
+    /// <summary>Verified GitHub webhook receipts.</summary>
+    public DbSet<CloudWebhookDelivery> CloudWebhookDeliveries => Set<CloudWebhookDelivery>();
+
+    /// <summary>Cluster-visible GitHub installation cooldowns.</summary>
+    public DbSet<CloudInstallationBudget> CloudInstallationBudgets => Set<CloudInstallationBudget>();
+
     public DbSet<DeploymentDiagnosticRecord> DeploymentDiagnosticRecords => Set<DeploymentDiagnosticRecord>();
+
+    /// <summary>Specialized telemetry delivery leases and loss accounting.</summary>
+    public DbSet<TelemetryTenantState> TelemetryTenantStates => Set<TelemetryTenantState>();
 
     public DbSet<AiDeploymentAnalysis> AiDeploymentAnalyses => Set<AiDeploymentAnalysis>();
 
@@ -122,9 +140,60 @@ public class AutoMateDbContext(
         ConfigureRemoteUser(modelBuilder.Entity<RemoteUser>());
         ConfigureApplication(modelBuilder.Entity<Domain.Entities.Application>());
         ConfigureCsProject(modelBuilder.Entity<CsProject>());
+        ConfigureCloudDeploymentRuns(modelBuilder);
         ConfigureGitHubWorkflowCheckpoints(modelBuilder);
         ConfigureAzureContainerAppLogCheckpoints(modelBuilder);
         ConfigureDeploymentDiagnosticsAndAnalyses(modelBuilder);
+    }
+
+    /// <summary>Indexes durable admission and protects deployment configuration snapshots.</summary>
+    private void ConfigureCloudDeploymentRuns(ModelBuilder modelBuilder)
+    {
+        var run = modelBuilder.Entity<CloudDeploymentRun>();
+        run.Property(item => item.SnapshotJson)
+            .HasConversion(CreateProtectedStringConverter(CloudRunSnapshotProtectorPurpose));
+        run.Property(item => item.Phase).HasConversion<string>().HasMaxLength(32);
+        run.Property(item => item.IdempotencyKey).HasMaxLength(128).IsRequired();
+        run.Property(item => item.RepositoryOwner).HasMaxLength(255).IsRequired();
+        run.Property(item => item.RepositoryName).HasMaxLength(255).IsRequired();
+        run.Property(item => item.BranchName).HasMaxLength(255).IsRequired();
+        run.Property(item => item.EnvironmentName).HasMaxLength(100).IsRequired();
+        run.Property(item => item.WorkflowFileName).HasMaxLength(255).IsRequired();
+        run.Property(item => item.RegistryServer).HasMaxLength(255).IsRequired();
+        run.Property(item => item.CommitSha).HasMaxLength(64);
+        run.Property(item => item.FailureReason).HasMaxLength(512);
+        run.HasIndex(item => new { item.UserId, item.IdempotencyKey }).IsUnique();
+        run.HasIndex(item => new { item.Phase, item.NextAttemptAt, item.CreatedAt });
+        run.HasIndex(item => new { item.InstallationId, item.RepositoryId, item.CommitSha });
+        run.HasIndex(item => new { item.InstallationId, item.Phase, item.LeaseUntil });
+        run.HasIndex(item => new { item.UserId, item.Phase, item.LeaseUntil });
+        run.HasIndex(item => new { item.UserId, item.LaunchStartedAt });
+        run.HasIndex(item => new { item.RepositoryId, item.BranchName, item.EnvironmentName, item.CreatedAt });
+        run.HasIndex(item => new { item.ProjectId, item.CreatedAt });
+        run.HasOne<Domain.Entities.Application>().WithMany().HasForeignKey(item => item.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+        run.HasOne<User>().WithMany().HasForeignKey(item => item.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var outbox = modelBuilder.Entity<CloudRunOutbox>();
+        outbox.HasIndex(item => item.RunId).IsUnique();
+        outbox.HasIndex(item => item.DispatchedAt);
+        outbox.HasOne<CloudDeploymentRun>().WithOne().HasForeignKey<CloudRunOutbox>(item => item.RunId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var delivery = modelBuilder.Entity<CloudWebhookDelivery>();
+        delivery.Property(item => item.DeliveryId).HasMaxLength(100).IsRequired();
+        delivery.Property(item => item.HeadSha).HasMaxLength(64).IsRequired();
+        delivery.Property(item => item.HeadBranch).HasMaxLength(255).IsRequired();
+        delivery.Property(item => item.WorkflowPath).HasMaxLength(512).IsRequired();
+        delivery.Property(item => item.Status).HasMaxLength(32).IsRequired();
+        delivery.Property(item => item.Conclusion).HasMaxLength(32);
+        delivery.HasIndex(item => item.DeliveryId).IsUnique();
+        delivery.HasIndex(item => new { item.ProcessedAt, item.CreatedAt });
+
+        var budget = modelBuilder.Entity<CloudInstallationBudget>();
+        budget.HasKey(item => item.InstallationId);
+        budget.Property(item => item.InstallationId).ValueGeneratedNever();
     }
 
 
@@ -295,6 +364,11 @@ public class AutoMateDbContext(
     private static void ConfigureDeploymentDiagnosticsAndAnalyses(ModelBuilder modelBuilder)
     {
         var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
+        diagnostic.HasIndex(item => new { item.TenantId, item.OrderId });
+        diagnostic.HasIndex(item => item.BufferExpiresAt);
+        var tenant = modelBuilder.Entity<TelemetryTenantState>();
+        tenant.HasIndex(item => item.TenantId).IsUnique();
+        tenant.HasIndex(item => item.DueAt);
         diagnostic.Property(item => item.OrderId).UseIdentityByDefaultColumn();
         diagnostic.HasIndex(item => item.OrderId).IsUnique();
         diagnostic.HasIndex(item => new { item.DeploymentId, item.TimestampUtc, item.Sequence });

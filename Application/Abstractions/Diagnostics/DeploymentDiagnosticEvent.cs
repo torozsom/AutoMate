@@ -97,7 +97,8 @@ public sealed record DeploymentDiagnosticEvent(
     string? SpanId = null,
     long? Sequence = null,
     string? Cursor = null,
-    DeploymentDiagnosticSourceIdentity? SourceIdentity = null)
+    DeploymentDiagnosticSourceIdentity? SourceIdentity = null,
+    IReadOnlyList<DeploymentMetricSample>? Metrics = null)
 {
     /// <summary>Current event schema version.</summary>
     public const int SchemaVersion = 1;

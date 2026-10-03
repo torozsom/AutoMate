@@ -13,6 +13,48 @@ namespace Infrastructure.Azure;
 /// </summary>
 internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFactory)
 {
+    /// <summary>Azure built-in AcrPull role.</summary>
+    private const string AcrPullRole = "7f951dda-4ed3-4680-a7ca-43fe172d538d";
+
+    /// <summary>Azure built-in AcrPush role.</summary>
+    private const string AcrPushRole = "8311e382-0749-4cb8-b61a-304f252e45ec";
+
+    /// <summary>Grants the workflow identity push and the app identity pull on one ACR.</summary>
+    public async Task EnsureRegistryAssignmentsAsync(string registryId,
+        UserAssignedIdentityResource workflowIdentity, UserAssignedIdentityResource pullIdentity,
+        string accessToken, CancellationToken cancellationToken)
+    {
+        await EnsureRoleAsync(registryId, workflowIdentity, AcrPushRole, accessToken, cancellationToken);
+        await EnsureRoleAsync(registryId, pullIdentity, AcrPullRole, accessToken, cancellationToken);
+    }
+
+    /// <summary>Creates a deterministic resource-scoped role assignment.</summary>
+    private async Task EnsureRoleAsync(string scope, UserAssignedIdentityResource identity,
+        string roleId, string accessToken, CancellationToken cancellationToken)
+    {
+        var principalId = identity.Data.PrincipalId?.ToString()
+                          ?? throw new InvalidOperationException("Azure managed identity principal ID is missing.");
+        var assignmentName = CreateDeterministicGuid($"{scope}:{principalId}:{roleId}");
+        var requestUri = $"{AzureConstants.ManagementEndpoint}{scope}/providers/Microsoft.Authorization/" +
+                         $"roleAssignments/{assignmentName}?api-version={AzureConstants.RoleAssignmentApiVersion}";
+        var subscriptionScope = scope[..scope.IndexOf("/resourceGroups/", StringComparison.OrdinalIgnoreCase)];
+        using var request = new HttpRequestMessage(HttpMethod.Put, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent.Create(new
+        {
+            properties = new
+            {
+                roleDefinitionId = $"{subscriptionScope}/providers/Microsoft.Authorization/roleDefinitions/{roleId}",
+                principalId,
+                principalType = AzureConstants.ContributorPrincipalType
+            }
+        });
+        using var response = await httpClientFactory.CreateClient().SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(
+                "AutoMate could not grant Azure Container Registry access. The connected Azure account needs role assignment rights.");
+    }
+
     /// <summary>
     ///     Ensures the managed identity has Contributor access on the target resource group.
     /// </summary>

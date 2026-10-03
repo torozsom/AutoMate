@@ -17,15 +17,30 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
     {
         var record = new DeploymentDiagnosticRecord
         {
-            DeploymentId = diagnosticEvent.DeploymentId, ProjectId = diagnosticEvent.ProjectId,
-            TimestampUtc = diagnosticEvent.TimestampUtc, Source = diagnosticEvent.Source.ToString(),
-            Kind = diagnosticEvent.Kind.ToString(), Severity = diagnosticEvent.Severity.ToString(),
-            Message = diagnosticEvent.Message, TerminalChannel = terminalChannel,
+            DeploymentId = diagnosticEvent.DeploymentId,
+            ProjectId = diagnosticEvent.ProjectId,
+            TimestampUtc = diagnosticEvent.TimestampUtc,
+            Source = diagnosticEvent.Source.ToString(),
+            Kind = diagnosticEvent.Kind.ToString(),
+            Severity = diagnosticEvent.Severity.ToString(),
+            Message = diagnosticEvent.Message,
+            TerminalChannel = terminalChannel,
+            MetricSamplesJson = diagnosticEvent.Metrics is null
+                ? null
+                : JsonSerializer.Serialize(diagnosticEvent.Metrics),
+            SourceIdentityJson = diagnosticEvent.SourceIdentity is null
+                ? null
+                : JsonSerializer.Serialize(diagnosticEvent.SourceIdentity),
             AttributesJson = diagnosticEvent.Attributes is null
                 ? null
                 : JsonSerializer.Serialize(diagnosticEvent.Attributes),
-            TraceId = diagnosticEvent.TraceId, SpanId = diagnosticEvent.SpanId, Sequence = diagnosticEvent.Sequence,
-            Cursor = diagnosticEvent.Cursor, ExpiresAt = DateTimeOffset.UtcNow.Add(Retention)
+            TraceId = diagnosticEvent.TraceId,
+            SpanId = diagnosticEvent.SpanId,
+            Sequence = diagnosticEvent.Sequence,
+            Cursor = diagnosticEvent.Kind == DeploymentDiagnosticKind.Metric
+                ? diagnosticEvent.TerminalChannel.Target
+                : diagnosticEvent.Cursor,
+            ExpiresAt = DateTimeOffset.UtcNow.Add(Retention)
         };
         dbContext.DeploymentDiagnosticRecords.Add(record);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -65,6 +80,25 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
         if (earlierOmitted) rows.RemoveAt(rows.Count - 1);
         rows.Reverse();
         return new DeploymentTerminalHistory(rows, earlierOmitted);
+    }
+
+    /// <inheritdoc />
+    public async Task<DeploymentTerminalHistory> ReadAfterAsync(Guid projectId, Guid deploymentId,
+        long afterOrderId, int limit, CancellationToken cancellationToken = default)
+    {
+        var boundedLimit = Math.Clamp(limit, 1, 2_000);
+        var now = DateTimeOffset.UtcNow;
+        var rows = await dbContext.DeploymentDiagnosticRecords.AsNoTracking()
+            .Where(item => item.ProjectId == projectId && item.DeploymentId == deploymentId &&
+                           item.TerminalChannel != null && item.ExpiresAt > now &&
+                           item.OrderId > afterOrderId)
+            .OrderBy(item => item.OrderId).Take(boundedLimit + 1)
+            .Select(item => new DeploymentTerminalLog(item.OrderId, item.ProjectId, item.DeploymentId,
+                item.TerminalChannel!, item.Message))
+            .ToListAsync(cancellationToken);
+        var moreAvailable = rows.Count > boundedLimit;
+        if (moreAvailable) rows.RemoveAt(rows.Count - 1);
+        return new DeploymentTerminalHistory(rows, moreAvailable);
     }
 
     public async Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default)

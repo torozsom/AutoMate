@@ -5,4 +5,8 @@ namespace Infrastructure.Azure;
 /// </summary>
 /// <param name="Cpu">The latest average CPU usage display value.</param>
 /// <param name="Memory">The latest average memory usage display value.</param>
-internal sealed record AzureContainerAppMetrics(string Cpu, string Memory);
+internal sealed record AzureContainerAppMetrics(
+    string Cpu,
+    string Memory,
+    double? CpuCores = null,
+    double? MemoryBytes = null);

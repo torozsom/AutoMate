@@ -1,6 +1,9 @@
 # Data
 
 EF Core DbContext, mappings, token protection conversion, and migrations.
+SaaS cloud runs, transactional outbox wakeups, webhook receipts, and installation cooldowns are stored in PostgreSQL.
+Run configuration snapshots use a separate Data Protection purpose because they may contain customer environment
+secrets; SaaS startup requires a shared certificate to encrypt the database key ring.
 
 ## Source inventory
 
@@ -21,3 +24,8 @@ behavior.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+`AddSpecializedTelemetryStorage` adds explicit runtime/managed-egress preferences, tenant leases, durable rate/series
+state and diagnostic outbox fields. `AddTelemetryBufferAccounting` backfills tenant/global buffer byte accounting.
+Confirmed specialized payloads leave PostgreSQL; legacy logs expire normally.
+See [telemetry operations](../../docs/deployment-telemetry.md).

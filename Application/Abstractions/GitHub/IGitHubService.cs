@@ -33,6 +33,10 @@ public interface IGitHubService
         List<TemplateFile> files, string branchName = DeploymentDefaults.CloudDeploymentBranchName,
         string commitMessage = "Add AutoMate Azure deployment workflow", CancellationToken cancellationToken = default);
 
+    /// <summary>Finds a recent commit containing a durable deployment marker after an uncertain push result.</summary>
+    Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
+        string branchName, string marker, CancellationToken cancellationToken = default);
+
     /// <summary>
     ///     Creates or updates GitHub Actions repository secrets used by the generated cloud workflow.
     /// </summary>

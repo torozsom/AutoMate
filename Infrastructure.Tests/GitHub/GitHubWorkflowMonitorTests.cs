@@ -111,6 +111,13 @@ public sealed class GitHubWorkflowMonitorTests
         public bool JobLogRequestedAfterCompletedRun { get; private set; }
 
         /// <inheritdoc />
+        public Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
+            string branchName, string marker, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        /// <inheritdoc />
         public Task<GitHubWorkflowRunDto?> GetLatestWorkflowRunAsync(string accessToken, string repoOwner,
             string repoName, string workflowFileName, string branchName, string? headSha = null,
             CancellationToken cancellationToken = default)

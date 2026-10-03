@@ -296,7 +296,7 @@
                                         {
                                             <span class="spinner-border spinner-border-sm" role="status"
                                                   aria-hidden="true"></span>
-                                            <span>Deploying...</span>
+                                            <span>@(DeploymentJobQueue.GetProjectState(project.Id) is { QueuedDeployments: > 0, ActiveDeployments: 0 } ? "Queued..." : "Deploying...")</span>
                                         }
                                         else
                                         {

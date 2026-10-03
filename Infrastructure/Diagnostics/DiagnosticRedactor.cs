@@ -20,20 +20,44 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
         if (diagnosticEvent.Attributes is not null)
         {
             attributes =
-                new Dictionary<string, string>(diagnosticEvent.Attributes.Count, StringComparer.OrdinalIgnoreCase);
-            foreach (var (key, value) in diagnosticEvent.Attributes)
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (key, value) in diagnosticEvent.Attributes.Take(32))
             {
                 var redactedValue = IsSensitiveKey(key) ? RedactedMarker : SanitizeControls(RedactText(value));
                 if (!string.Equals(redactedValue, value, StringComparison.Ordinal)) redactedCount++;
-                attributes[key] = redactedValue;
+                attributes[SafeField(key, 128)] = redactedValue[..Math.Min(1024, redactedValue.Length)];
             }
         }
 
         return new RedactionResult(diagnosticEvent with
         {
-            Message = redactedMessage,
-            Attributes = attributes ?? diagnosticEvent.Attributes
+            Message = redactedMessage.Length <= 4096
+                ? redactedMessage
+                : redactedMessage[..4096] + " [output truncated]\r\n",
+            Attributes = attributes ?? diagnosticEvent.Attributes,
+            SourceIdentity = diagnosticEvent.SourceIdentity is { } identity
+                ? identity with
+                {
+                    InstanceId = identity.InstanceId is null ? null : SafeField(identity.InstanceId, 128)
+                }
+                : null,
+            Cursor = diagnosticEvent.Cursor is null ? null : SafeField(diagnosticEvent.Cursor, 512),
+            TraceId = diagnosticEvent.TraceId is null ? null : SafeField(diagnosticEvent.TraceId, 32),
+            SpanId = diagnosticEvent.SpanId is null ? null : SafeField(diagnosticEvent.SpanId, 16),
+            TerminalChannel = diagnosticEvent.TerminalChannel with
+            {
+                Target = diagnosticEvent.TerminalChannel.Target is null
+                    ? null
+                    : SafeField(diagnosticEvent.TerminalChannel.Target, 128)
+            }
         }, redactedCount);
+    }
+
+    /// <summary>Bounds and redacts provider-controlled correlation fields.</summary>
+    private static string SafeField(string value, int maximum)
+    {
+        var safe = SanitizeControls(RedactText(value));
+        return safe[..Math.Min(maximum, safe.Length)];
     }
 
     private static bool IsSensitiveKey(string key)

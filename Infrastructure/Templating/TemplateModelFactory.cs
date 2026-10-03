@@ -48,6 +48,10 @@ internal static class TemplateModelFactory
             log_analytics_workspace_name = $"{cloudNames.ContainerAppName}-logs",
             managed_identity_name = $"{cloudNames.ContainerAppName}-identity",
             registry_server = cloudNames.RegistryName,
+            use_acr = cloudNames.RegistryName.EndsWith(".azurecr.io", StringComparison.OrdinalIgnoreCase),
+            registry_name = cloudNames.RegistryName.EndsWith(".azurecr.io", StringComparison.OrdinalIgnoreCase)
+                ? cloudNames.RegistryName[..^".azurecr.io".Length]
+                : cloudNames.RegistryName,
             image_name = normalizedAppName,
 
             // Custom environment variables are ordered for stable generated output.

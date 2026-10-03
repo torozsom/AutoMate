@@ -12,11 +12,16 @@ param containerEnvironmentName string = '{{ container_environment_name }}'
 @description('Log Analytics workspace name.')
 param logAnalyticsWorkspaceName string = '{{ log_analytics_workspace_name }}'
 
-@description('Fully qualified container image, for example ghcr.io/owner/repository:sha.')
+@description('Fully qualified container image.')
 param containerImage string
 
 @description('Container registry server.')
 param containerRegistryServer string = '{{ registry_server }}'
+{{- if use_acr }}
+
+@description('User-assigned identity with AcrPull on the customer registry.')
+param registryPullIdentityId string
+{{- else }}
 
 @description('Container registry username. Required when the registry is private.')
 param containerRegistryUsername string = ''
@@ -24,6 +29,7 @@ param containerRegistryUsername string = ''
 @secure()
 @description('Container registry password or PAT. Required when the registry is private.')
 param containerRegistryPassword string = ''
+{{- end }}
 
 @description('Application environment name exposed to ASP.NET Core.')
 param aspNetCoreEnvironment string = '{{ environment_name }}'
@@ -46,7 +52,9 @@ param {{ db.bicep_password_param }} string
 param {{ env_var.bicep_value_param }} string
 
 {{- end }}
+{{- if !use_acr }}
 var hasRegistryCredentials = !empty(containerRegistryUsername) && !empty(containerRegistryPassword)
+{{- end }}
 
 {{- for db in databases }}
 var db{{ db.index }}ServerName = take('${containerAppName}-{{ db.resource_suffix }}-${uniqueString(resourceGroup().id)}', {{ if db.type == 'MongoDB' }}44{{ else }}63{{ end }})
@@ -283,6 +291,14 @@ var customEnvironmentSecrets = [
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
+{{- if use_acr }}
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${registryPullIdentityId}': {}
+    }
+  }
+{{- end }}
 {{- if requires_db }}
   dependsOn: [
 {{- for db in databases }}
@@ -313,6 +329,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'auto'
         allowInsecure: false
       }
+{{- if use_acr }}
+      secrets: concat(databaseConnectionSecrets, customEnvironmentSecrets)
+      registries: [
+        {
+          server: containerRegistryServer
+          identity: registryPullIdentityId
+        }
+      ]
+{{- else }}
       secrets: concat(hasRegistryCredentials ? [
         {
           name: 'container-registry-password'
@@ -326,6 +351,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
           passwordSecretRef: 'container-registry-password'
         }
       ] : []
+{{- end }}
     }
     template: {
       containers: [

@@ -47,6 +47,12 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
     private bool _isLoading = true;
 
+    /// <summary>Stable retry key while one cloud submission is pending.</summary>
+    private string? _pendingCloudIdempotencyKey;
+
+    /// <summary>Project associated with the pending cloud retry key.</summary>
+    private Guid _pendingCloudProjectId;
+
     /// The remote application currently selected for cloud deployment.
     private Domain.Entities.Application? _selectedCloudApp;
 
@@ -68,6 +74,10 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// Queue that hands deployment work to the hosted background worker.
     [Inject]
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
+
+    /// <summary>Durable SaaS cloud admission.</summary>
+    [Inject]
+    private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
 
     /// Service for managing user accounts.
     [Inject]
@@ -103,6 +113,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     public void Dispose()
     {
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
+        DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
         GC.SuppressFinalize(this);
     }
 
@@ -119,6 +130,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     protected override async Task OnInitializedAsync()
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
+        DeploymentJobQueue.StateChanged += OnQueueStateChanged;
 
         _currentUserId = await GetCurrentUserIdAsync();
 
@@ -311,19 +323,38 @@ public partial class Dashboard : ComponentBase, IDisposable
 
             try
             {
-                await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+                if (!DeploymentCapabilities.LocalDeploymentsEnabled)
                 {
-                    RequestingUserId = _currentUserId,
-                    Config = finalConfig,
-                    Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
-                    CsProjectName = cloudApp.Name,
-                    RepositoryRoot = ".",
-                    GitHubAccessToken = userDetails.AccessToken,
-                    GitHubContainerRegistryToken = userDetails.AccessToken,
-                    AzureCredentials = azureCredentials,
-                    RepositoryOwner = repository.Owner,
-                    RepositoryName = repository.Name
-                }));
+                    if (_pendingCloudProjectId != finalConfig.ProjectId)
+                    {
+                        _pendingCloudProjectId = finalConfig.ProjectId;
+                        _pendingCloudIdempotencyKey = null;
+                    }
+
+                    _pendingCloudIdempotencyKey ??= Guid.NewGuid().ToString("N");
+                    await CloudDeploymentRuns.StartAsync(new CloudDeploymentStart(
+                        _currentUserId, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
+                        repository.Owner, repository.Name, userDetails.AccessToken,
+                        finalConfig, CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                        cloudApp.Name, "."));
+                    _pendingCloudIdempotencyKey = null;
+                }
+                else
+                {
+                    await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
+                    {
+                        RequestingUserId = _currentUserId,
+                        Config = finalConfig,
+                        Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
+                        CsProjectName = cloudApp.Name,
+                        RepositoryRoot = ".",
+                        GitHubAccessToken = userDetails.AccessToken,
+                        GitHubContainerRegistryToken = userDetails.AccessToken,
+                        AzureCredentials = azureCredentials,
+                        RepositoryOwner = repository.Owner,
+                        RepositoryName = repository.Name
+                    }));
+                }
 
                 _globalSuccessMessage =
                     $"Cloud deployment workflow for '{finalConfig.ProjectName}' has been queued.";
@@ -381,7 +412,14 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private bool IsDeploying(Guid projectId)
     {
-        return _deployingStates.GetValueOrDefault(projectId, false);
+        var state = DeploymentJobQueue.GetProjectState(projectId);
+        return _deployingStates.GetValueOrDefault(projectId, false) ||
+               state.QueuedDeployments > 0 || state.ActiveDeployments > 0;
+    }
+
+    private void OnQueueStateChanged(Guid projectId)
+    {
+        if (_apps?.Any(app => app.Id == projectId) == true) _ = InvokeAsync(StateHasChanged);
     }
 
 

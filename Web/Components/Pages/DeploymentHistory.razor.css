@@ -1,0 +1,7 @@
+.history-terminal-viewport {
+    height: clamp(20rem, 55vh, 36rem);
+    min-height: 0;
+    overflow: hidden;
+    background: #1e1e1e;
+    border-radius: 0.5rem;
+}

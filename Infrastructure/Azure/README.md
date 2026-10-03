@@ -1,6 +1,9 @@
 # Azure
 
 Azure Container Apps and OIDC infrastructure adapters.
+For SaaS, launch workers refresh ARM credentials on demand, ensure a customer ACR exists, assign separate push and pull
+identities, and use the pull identity for Container Apps image access. ACR creation and role assignment require the
+connected customer's Azure account to have sufficient permission.
 
 Container Apps availability, metrics, console output, and system/revision events are normalized into deployment
 diagnostics before terminal delivery. `AzureContainerAppRuntimeStreamer` is a host-managed coordinator; it queries
@@ -35,3 +38,10 @@ behavior.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+Runtime polling checks owner opt-in or an authorized live viewer before provider calls and defaults to 60 seconds.
+Viewed observations are saved for replay. Cloud launch paths, including self-hosted launches, refresh ARM
+credentials at execution time and persist rotated credentials through the protected user mapping. Preparation failures
+are published through redaction to the deployment Build terminal. Numeric core/byte observations
+use Azure Monitor `UsageNanoCores` divided by one billion and `WorkingSetBytes`, rather than parsing display strings.
+See [Microsoft's metric definitions](https://learn.microsoft.com/en-us/azure/container-apps/metrics).

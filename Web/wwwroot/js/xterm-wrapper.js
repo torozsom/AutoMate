@@ -6,6 +6,7 @@ window.xtermWrapper = {
     terminals: {},
 
     init: function (elementId) {
+        this.dispose(elementId);
         const term = new Terminal({
             theme: {background: '#1e1e1e'},
             convertEol: true,
@@ -18,14 +19,26 @@ window.xtermWrapper = {
 
         const container = document.getElementById(elementId);
         term.open(container);
-        fitAddon.fit();
-
-        const resizeObserver = new ResizeObserver(() => {
-            fitAddon.fit();
-        });
+        // Fitting changes xterm's children. Only fit again when the external viewport changes, and do it outside
+        // the ResizeObserver callback to avoid a content/resize feedback loop.
+        const entry = {term, fitAddon, resizeObserver: null, frame: null, width: 0, height: 0};
+        const fit = () => {
+            if (entry.frame !== null) return;
+            entry.frame = requestAnimationFrame(() => {
+                entry.frame = null;
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                if (width <= 0 || height <= 0 || (width === entry.width && height === entry.height)) return;
+                entry.width = width;
+                entry.height = height;
+                fitAddon.fit();
+            });
+        };
+        const resizeObserver = new ResizeObserver(fit);
+        entry.resizeObserver = resizeObserver;
         resizeObserver.observe(container);
-
-        this.terminals[elementId] = {term, fitAddon, resizeObserver};
+        this.terminals[elementId] = entry;
+        fit();
     },
 
     write: function (elementId, data) {
@@ -42,6 +55,7 @@ window.xtermWrapper = {
 
     dispose: function (elementId) {
         if (this.terminals[elementId]) {
+            if (this.terminals[elementId].frame !== null) cancelAnimationFrame(this.terminals[elementId].frame);
             this.terminals[elementId].resizeObserver.disconnect();
             this.terminals[elementId].term.dispose();
             delete this.terminals[elementId];

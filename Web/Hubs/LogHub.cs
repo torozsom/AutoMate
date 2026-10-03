@@ -15,7 +15,8 @@ public sealed class LogHub(
     IApplicationService applicationService,
     IDeploymentDiagnosticStore diagnosticStore,
     IDataProtectionProvider dataProtectionProvider,
-    ILogger<LogHub> logger) : Hub<ILogClient>
+    ILogger<LogHub> logger,
+    IDeploymentRuntimeViewers viewers) : Hub<ILogClient>
 {
     /// <summary>
     ///     Data Protection purpose shared with project details pages when generating log hub join tokens.
@@ -34,7 +35,7 @@ public sealed class LogHub(
     /// </param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task<DeploymentTerminalHistory> JoinProjectGroup(Guid projectId, Guid? deploymentId,
-        string secureToken)
+        string secureToken, long afterOrderId = 0)
     {
         var empty = new DeploymentTerminalHistory([], false);
         if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(secureToken))
@@ -63,10 +64,21 @@ public sealed class LogHub(
 
             await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
                 Context.ConnectionAborted);
-            return deploymentId.HasValue
-                ? await diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500,
+            if (!deploymentId.HasValue) return empty;
+            // Only a latest deployment can collect live output; historical subscriptions remain read-only.
+            if (app.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt)?.Id == deploymentId)
+                viewers.Renew(Context.ConnectionId, projectId, deploymentId.Value);
+            return afterOrderId > 0
+                ? await diagnosticStore.ReadAfterAsync(projectId, deploymentId.Value, afterOrderId, 500,
                     Context.ConnectionAborted)
-                : empty;
+                : await diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500,
+                    Context.ConnectionAborted);
+        }
+        catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
+        {
+            // A reload/navigation can disconnect while replay is awaiting storage. No replay cursor was confirmed.
+            logger.LogDebug("Log replay canceled because the project connection closed.");
+            return new DeploymentTerminalHistory([], false, CanAdvanceCursor: false);
         }
         catch (CryptographicException ex)
         {
@@ -84,8 +96,16 @@ public sealed class LogHub(
         if (projectId == Guid.Empty)
             return;
 
+        viewers.Remove(Context.ConnectionId, projectId);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
             Context.ConnectionAborted);
+    }
+
+    /// <inheritdoc />
+    public override Task OnDisconnectedAsync(Exception? exception)
+    {
+        viewers.Remove(Context.ConnectionId);
+        return base.OnDisconnectedAsync(exception);
     }
 
 

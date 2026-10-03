@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Docker;
@@ -7,7 +8,15 @@ namespace Infrastructure.Docker;
 /// <summary>
 ///     Executes Docker CLI commands needed for Compose, metrics, port discovery, and project listing.
 /// </summary>
-internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPublisher diagnostics, ILogger logger)
+internal sealed class DockerCli(
+    DockerOptions options,
+    IDeploymentDiagnosticPublisher diagnostics,
+    ILogger logger,
+    int sampleSeconds,
+    ILogStreamer live,
+    IDiagnosticRedactor redactor,
+    IDeploymentRuntimeViewers viewers,
+    TimeProvider clock)
 {
     /// <summary>
     ///     Timeout used while listing running Docker Compose projects.
@@ -122,6 +131,7 @@ internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPubl
             await using var registration = cancellationToken.Register(() => KillProcessTree(process));
 
             using var reader = process.StandardOutput;
+            var delivery = new DockerMetricDelivery(diagnostics, live, redactor, viewers, clock, sampleSeconds, logger);
             while (!cancellationToken.IsCancellationRequested)
             {
                 var line = await reader.ReadLineAsync(cancellationToken);
@@ -129,16 +139,7 @@ internal sealed class DockerCli(DockerOptions options, IDeploymentDiagnosticPubl
                     break;
 
                 if (DockerMetricsLine.TryParse(line, out var metrics))
-                    await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, deploymentId,
-                            DeploymentDiagnosticSource.DockerContainer, DeploymentDiagnosticKind.Metric,
-                            DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
-                            $"Container metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
-                            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics,
-                                containerSuffixOrTabId),
-                            new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
-                            SourceIdentity: new DeploymentDiagnosticSourceIdentity(
-                                DeploymentDiagnosticComponent.Container,
-                                DeploymentDiagnosticStream.Metric, containerSuffixOrTabId)),
+                    await delivery.ObserveAsync(projectId, deploymentId, containerSuffixOrTabId, metrics,
                         cancellationToken);
             }
         }
