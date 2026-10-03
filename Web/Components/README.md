@@ -7,6 +7,8 @@ It starts this handshake only after project loading has completed and terminal c
 render the loading view before `OnInitializedAsync` finishes.
 The shared `Terminal` component also queues writes until xterm finishes JavaScript initialization, so a fast replay
 cannot disappear during the first render. Its pre-init queue has a fixed character limit and reports overflow.
+SignalR startup and replay use the page's cancellation token; navigation cancels them without a connection-failure
+notice. Genuine connection and storage failures remain observable.
 Dashboard and project details read the process-local queue state, showing “Queued...” until a deployment or stop job
 starts. State changes notify both views without exposing the queued request's credentials.
 In SaaS mode, cloud submissions use the durable Application admission service. Project details polls the authorized

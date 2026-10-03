@@ -12,6 +12,9 @@ renews through its existing catch-up handshake. Leaving/disconnecting removes in
 Historical subscriptions do not enable collection. Viewed runtime output is saved for replay. The owner preference
 controls collection while no page is open.
 
+If a reload or navigation disconnects during replay, the hub ends the canceled read without reporting a failed
+subscription or confirming a replay cursor. Provider cancellation on an active connection remains an error.
+
 ## Source inventory
 
 - `ILogClient.cs`

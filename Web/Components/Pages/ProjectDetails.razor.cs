@@ -990,6 +990,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     Logger.LogInformation("Log hub connection rejoined the project group for project {ProjectId}.",
                         ProjectId);
                 }
+                catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
+                {
+                    // Navigation ended this page's subscription; no UI remains to report a failure to.
+                }
                 catch (Exception exception)
                 {
                     Logger.LogWarning(exception,
@@ -1037,8 +1041,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
             try
             {
-                await _hubConnection.StartAsync();
+                await _hubConnection.StartAsync(_cloudPollCancellation.Token);
                 await JoinLogHubGroupAsync();
+            }
+            catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
+            {
+                // Reload/navigation cancels initial connection and replay without a failure notice.
             }
             catch (Exception ex)
             {
@@ -1052,7 +1060,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Authorizes the current SignalR connection for this project's redacted diagnostic stream.</summary>
     private async Task JoinLogHubGroupAsync()
     {
-        if (_hubConnection is null || _hubConnection.State != HubConnectionState.Connected)
+        if (_cloudPollCancellation.IsCancellationRequested || _hubConnection is null ||
+            _hubConnection.State != HubConnectionState.Connected)
             return;
 
         await _terminalReplayGate.WaitAsync(_cloudPollCancellation.Token);
@@ -1063,7 +1072,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
             _terminalReplayPending = true;
             var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
-                ProjectId, _terminalDeploymentId, secureToken, _lastTerminalOrderId);
+                ProjectId, _terminalDeploymentId, secureToken, _lastTerminalOrderId, _cloudPollCancellation.Token);
             await InvokeAsync(async () =>
             {
                 if (!_emptyTerminalNoticeShown && _terminalDeploymentId.HasValue && _lastTerminalOrderId == 0 &&

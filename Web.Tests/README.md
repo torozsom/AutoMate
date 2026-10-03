@@ -5,6 +5,8 @@ shared cloud dependencies without starting hosted workers or contacting PostgreS
 
 Run with `dotnet test Web.Tests/Web.Tests.csproj`.
 
+LogHub cancellation tests distinguish navigation disconnects from provider failures and retain token validation.
+
 Deployment-history tests verify saved terminal output survives metric-backend failure and empty output has an explicit
 notice. Metric display tests check restored numeric units. Browser-wrapper regression tests exercise resize feedback,
 hidden terminals, history replacement, and disposal using Node's built-in test runner:

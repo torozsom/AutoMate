@@ -74,6 +74,12 @@ public sealed class LogHub(
                 : await diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500,
                     Context.ConnectionAborted);
         }
+        catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
+        {
+            // A reload/navigation can disconnect while replay is awaiting storage. No replay cursor was confirmed.
+            logger.LogDebug("Log replay canceled because the project connection closed.");
+            return new DeploymentTerminalHistory([], false, CanAdvanceCursor: false);
+        }
         catch (CryptographicException ex)
         {
             logger.LogDebug(ex, "Rejected log hub group join because the secure token was invalid or expired.");
