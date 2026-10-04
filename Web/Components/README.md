@@ -1,5 +1,22 @@
 # Components
 
+## Telemetry presentation
+
+Project details groups daily analytics with live container utilization in Metrics. Deployment history opens with
+container-scoped resource summaries and a separate Logs card. Charts and numeric tables are collapsed by default;
+range changes preserve log paging and channels. Independent asynchronous scopes isolate history and analytics database
+reads, and cancelled/stale responses cannot overwrite newer selections.
+
+`Shared/TelemetryChart.razor` renders labeled SVG charts, visible isolated observations and gaps. Its local
+`wwwroot/js/telemetry-chart.js` module handles pointer/touch and arrow-key inspection without server roundtrips,
+maintains legible axis text when resized, and disposes listeners/observers. Shared presentation styles use AutoMate's
+light/dark theme tokens. `Shared/TelemetryPresentation.cs` owns friendly names, binary memory units, sub-core precision,
+rounded axes and sample-weighted daily averages. Historical summaries average returned interval aggregates; raw sample
+counts are unavailable there. Memory capacity remains supporting text rather than flattening the usage chart.
+
+Collection consent remains explicit; retention/sampling help is collapsed. No storage/API/schema changes are involved.
+Rendering fixtures in Web.Tests generate ignored `.artifacts/metrics-preview` HTML for browser checks without OAuth.
+
 Project details offers Stop only for local sources. Remote cloud deployments must be stopped in the provider portal;
 the handler also rejects remote sources so their relative project paths never enter the local filesystem scanner.
 

@@ -7,7 +7,7 @@
 
 @if (_preferences is not null)
 {
-    <div class="mb-3">
+    <div class="telemetry-preferences">
         <label class="form-check">
             <input class="form-check-input" type="checkbox" checked="@_preferences.RuntimeEnabled"
                    @onchange="ChangeRuntimeAsync"/>
@@ -21,10 +21,10 @@
                 <span class="form-check-label">Allow redacted diagnostics to be sent to the configured managed provider in @_preferences.ProcessingRegion</span>
             </label>
         }
-        <small>Build output and runtime logs/metrics collected while this page is open are saved for 30 days.
+        <details><summary>Retention and sampling details</summary><small>Build output and runtime logs/metrics collected while this page is open are saved for 30 days.
             Web and database terminals restore saved output after reload. Enable background collection above to collect
             while the page is closed.
-            Metric history is sampled every 60 seconds by default; local live values update every few seconds.</small>
+            Metric history is sampled every 60 seconds by default; local live values update every few seconds.</small></details>
         @if (_error is not null)
         {
             <p role="alert">@_error</p>

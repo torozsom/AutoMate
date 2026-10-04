@@ -247,7 +247,6 @@
                     </div>
                 </section>
 
-                <ProjectTelemetrySummary ProjectId="ProjectId" UserId="_currentUserId"/>
                 <section id="logs" class="console-section" aria-labelledby="logs-title">
                     <TelemetryPreferences ProjectId="ProjectId"/>
                     <div class="section-heading">
@@ -362,10 +361,12 @@
                     <div class="section-heading">
                         <div>
                             <div class="section-kicker">Metrics</div>
-                            <h2 id="metrics-title">Container utilization</h2>
+                            <h2 id="metrics-title">Metrics</h2>
                         </div>
                     </div>
 
+                    <ProjectTelemetrySummary ProjectId="ProjectId" UserId="_currentUserId"/>
+                    <h3 class="h6">Container utilization</h3>
                     @if (latestStatus == DeploymentStatus.Running && _metricContainerNames.Count > 0)
                     {
                         @if (_showSavedMetricNotice)

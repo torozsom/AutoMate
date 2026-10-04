@@ -1,5 +1,10 @@
 # Web Tests
 
+Telemetry presentation tests cover resource formatting, weighted daily averages, sparse markers, gaps, independent
+log/metric controls, stale replies and access denial. Static-rendering tests produce provider-fixture previews under
+`.artifacts/metrics-preview` using the actual summary/history components; these are not live deployment data.
+Run client interaction checks with `node --test Web.Tests/JavaScript/telemetry-chart.test.cjs`.
+
 Credential-free tests of the Web composition root and hosting-profile configuration. Tests resolve the dashboard's
 shared cloud dependencies without starting hosted workers or contacting PostgreSQL, Redis, GitHub, or Azure.
 

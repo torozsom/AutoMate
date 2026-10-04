@@ -2,6 +2,7 @@ using System.Reflection;
 using Application.Abstractions.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
+using Microsoft.Extensions.DependencyInjection;
 using Web.Components.Pages;
 using Web.Components.Shared;
 using Xunit;
@@ -27,6 +28,7 @@ public sealed class DeploymentHistoryTests
         SetProperty(page, "DeploymentId", deployment);
 
         await LoadAsync(page);
+        await LoadMetricsAsync(page);
 
         Assert.Equal("web started\r\nrequest served\r\n", js.Output);
         Assert.Equal("web", GetField<string>(page, "_channel"));
@@ -52,7 +54,8 @@ public sealed class DeploymentHistoryTests
         SetProperty(terminal, "JSRuntime", js);
         SetField(terminal, "_isReady", true);
         var page = new DeploymentHistory();
-        SetProperty(page, "History", history);
+        var services = new ServiceCollection().AddSingleton(history).BuildServiceProvider();
+        SetProperty(page, "ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
         SetProperty(page, "Logger", NullLogger<DeploymentHistory>.Instance);
         SetField(page, "_terminal", terminal);
         return (page, js);
@@ -63,6 +66,68 @@ public sealed class DeploymentHistoryTests
     {
         return (Task)typeof(DeploymentHistory).GetMethod("LoadAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(page, [null])!;
+    }
+
+    /// <summary>Exercises the independent metric range action.</summary>
+    private static Task LoadMetricsAsync(DeploymentHistory page) =>
+        (Task)typeof(DeploymentHistory).GetMethod("LoadMetricsAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(page, null)!;
+
+    /// <summary>Changing metric ranges must not replace the log cursor, channel, or rendered output.</summary>
+    [Fact]
+    public async Task Metric_range_changes_preserve_terminal_and_log_paging()
+    {
+        var history = new HistoryStub(new DeploymentTerminalHistory([
+            new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), "build", "saved output")
+        ], false));
+        var (page, js) = CreatePage(history);
+        await LoadAsync(page);
+        SetField(page, "_earlierCursor", "unchanged cursor");
+        SetField(page, "_metricDays", 7);
+        await LoadMetricsAsync(page);
+        Assert.Equal("saved output", js.Output);
+        Assert.Equal("build", GetField<string>(page, "_channel"));
+        Assert.Equal("unchanged cursor", GetField<string>(page, "_earlierCursor"));
+        Assert.Equal(1, history.LogReads);
+    }
+
+    /// <summary>An obsolete response cannot replace the latest range, even if a provider ignores cancellation.</summary>
+    [Fact]
+    public async Task Latest_metric_range_wins_and_defaults_to_a_measured_container()
+    {
+        var older = new TaskCompletionSource<DeploymentMetricHistory>();
+        var history = new HistoryStub(new DeploymentTerminalHistory([], false));
+        var calls = 0;
+        var now = DateTimeOffset.UtcNow;
+        history.Metrics = () => ++calls == 1 ? older.Task : Task.FromResult(new DeploymentMetricHistory([
+            new("web", TelemetryPresentation.Cpu, "cores", now, .006, 0, .012),
+            new("db", TelemetryPresentation.Memory, "bytes", now, 1024, 1024, 1024)
+        ]));
+        var (page, _) = CreatePage(history);
+        var first = LoadMetricsAsync(page);
+        SetField(page, "_metricDays", 7);
+        await LoadMetricsAsync(page);
+        older.SetResult(new DeploymentMetricHistory([new("old", TelemetryPresentation.Cpu, "cores", now, 99, 99, 99)]));
+        await first;
+        Assert.Equal(7, GetField<int>(page, "_loadedMetricDays"));
+        Assert.Equal("db", GetField<string>(page, "_metricContainer"));
+        Assert.Equal(2, GetField<IReadOnlyList<DeploymentMetricPoint>>(page, "_metrics").Count);
+        Assert.False(GetField<bool>(page, "_metricBusy"));
+    }
+
+    /// <summary>Metric authorization failures must hide the entire authorized history region.</summary>
+    [Fact]
+    public async Task Metric_access_denied_hides_history()
+    {
+        var history = new HistoryStub(new DeploymentTerminalHistory([], false))
+        {
+            Metrics = () => Task.FromException<DeploymentMetricHistory>(new UnauthorizedAccessException())
+        };
+        var (page, _) = CreatePage(history);
+        await LoadAsync(page);
+        Assert.True(GetField<bool>(page, "_authorized"));
+        await LoadMetricsAsync(page);
+        Assert.False(GetField<bool>(page, "_authorized"));
+        Assert.Equal("Deployment history access denied.", GetField<string>(page, "_error"));
     }
 
     /// <summary>Supplies component injection properties without creating a web host.</summary>
@@ -109,10 +174,16 @@ public sealed class DeploymentHistoryTests
     /// <summary>Returns saved logs while simulating an unavailable independent metric backend.</summary>
     private sealed class HistoryStub(DeploymentTerminalHistory logs) : IDeploymentHistoryService
     {
+        /// <summary>Counts actual log queries independently of metric requests.</summary>
+        public int LogReads { get; private set; }
+        /// <summary>Controllable independent provider response for concurrency and authorization scenarios.</summary>
+        public Func<Task<DeploymentMetricHistory>> Metrics { get; set; } =
+            () => Task.FromException<DeploymentMetricHistory>(new HttpRequestException("Metric backend unavailable"));
         /// <inheritdoc />
         public Task<DeploymentTerminalHistory> ReadLogsAsync(Guid userId, Guid projectId, Guid deploymentId,
             long cursor, bool backwards, int limit, CancellationToken cancellationToken = default)
         {
+            LogReads++;
             return Task.FromResult(logs);
         }
 
@@ -120,7 +191,7 @@ public sealed class DeploymentHistoryTests
         public Task<DeploymentMetricHistory> ReadMetricsAsync(Guid userId, Guid projectId, Guid deploymentId,
             DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken = default)
         {
-            return Task.FromException<DeploymentMetricHistory>(new HttpRequestException("Metric backend unavailable"));
+            return Metrics();
         }
 
         /// <inheritdoc />

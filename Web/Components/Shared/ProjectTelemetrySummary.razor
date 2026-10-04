@@ -1,122 +1,58 @@
-@using System.Globalization
 @using Application.Abstractions.Diagnostics
 @implements IDisposable
 @inject IServiceScopeFactory ServiceScopes
 @inject ILogger<ProjectTelemetrySummary> Logger
 
-<section class="console-section" aria-labelledby="project-analytics-title">
-    <h2 id="project-analytics-title">Project analytics</h2>
-    <label for="project-analytics-range">Period</label>
-    <select id="project-analytics-range" class="form-select mb-3" @bind="_days" @bind:after="LoadAsync"
-            disabled="@_busy">
-        <option value="7">Last 7 days</option>
-        <option value="30">Last 30 days</option>
-        <option value="365">Last year</option>
-    </select>
-    @if (_notice is not null)
-    {
-        <p role="status">@_notice</p>
-    }
+<div class="telemetry-panel" aria-labelledby="project-analytics-title" aria-busy="@_busy">
+    <div class="telemetry-toolbar">
+        <div><h3 id="project-analytics-title">Project analytics</h3><p class="telemetry-muted">Daily observations across this project's deployments</p></div>
+        <label class="telemetry-control">Period
+            <select class="form-select" @bind="_days" @bind:after="LoadAsync">
+                <option value="7">7 days</option><option value="30">30 days</option><option value="365">1 year</option>
+            </select>
+        </label>
+    </div>
+    @if (_busy) { <p class="telemetry-muted" role="status">Loading analytics…</p> }
     @if (_summary is { } summary)
     {
-        <dl class="row">
-            <dt class="col-sm-6">Deployments</dt>
-            <dd class="col-sm-6">@summary.Deployments</dd>
-            <dt class="col-sm-6">Successful / failed</dt>
-            <dd class="col-sm-6">@summary.SuccessfulDeployments / @summary.FailedDeployments</dd>
-            <dt class="col-sm-6">Average cloud deployment duration (including queue)</dt>
-            <dd class="col-sm-6">@(summary.AverageDeploymentSeconds is { } seconds ? $"{seconds:0} s" : "Unavailable")</dd>
-        </dl>
-        @foreach (var metric in summary.Daily.Where(d => d.SampleCount > 0).GroupBy(d => (d.Metric, d.Unit)))
-        {
-            var count = metric.Sum(d => d.SampleCount);
-            var average = metric.Sum(d => d.Average!.Value * d.SampleCount) / count;
-            <p><strong>@metric.Key.Metric:</strong> @average.ToString("G5") @metric.Key.Unit average across observed
-                container samples (@count samples).</p>
-            var points = metric.GroupBy(row => row.DayUtc.UtcDateTime.Date).OrderBy(group => group.Key)
-                .Select(group => (Day: group.Key, Value: group.Sum(row => row.Average!.Value * row.SampleCount) / group.Sum(row => row.SampleCount))).ToArray();
-            var maximum = Math.Max(points.Max(point => point.Value), 0.000001);
-            var first = DateTime.UtcNow.Date.AddDays(-_days);
-            <figure>
-                <svg viewBox="0 0 600 140" width="100%" role="img"
-                     aria-label="@($"Daily {metric.Key.Metric} observed averages, in {metric.Key.Unit}. See the daily statistics table for values and quality.")">
-                    <line x1="20" y1="120" x2="580" y2="120" stroke="currentColor"/>
-                    @for (var index = 0; index < points.Length; index++)
-                    {
-                        var point = points[index];
-                        var x = 20 + (point.Day - first).TotalDays / _days * 560;
-                        var y = 115 - point.Value / maximum * 100;
-                        if (index > 0 && (point.Day - points[index - 1].Day).TotalDays == 1)
-                        {
-                            var previous = points[index - 1];
-                            <line x1="@Svg(20 + (previous.Day - first).TotalDays / _days * 560)"
-                                  y1="@Svg(115 - previous.Value / maximum * 100)" x2="@Svg(x)" y2="@Svg(y)"
-                                  stroke="currentColor" stroke-width="2"/>
-                        }
-
-                        <circle cx="@Svg(x)" cy="@Svg(y)" r="3" fill="currentColor">
-                            <title>@point.Day.ToString("yyyy-MM-dd"): @Format(point.Value) @metric.Key.Unit</title>
-                        </circle>
-                    }
-                </svg>
-                <figcaption>@metric.Key.Metric (@metric.Key.Unit): daily observed-container averages; scale
-                    0–@Format(maximum). Gaps indicate missing days. Deployment details and sample quality appear in the
-                    table.
-                </figcaption>
-            </figure>
-        }
-
-        <p>Observed error log entries: @summary.Daily.Sum(d => d.ObservedErrors). Counts may include retries or
-            collection gaps.</p>
-        <p>Detailed logs and charts cover 30 days. Daily statistics cover one year. Missing data remains
-            unavailable.</p>
-        <details>
-            <summary>Daily deployment statistics</summary>
-            <div class="table-responsive">
-                <table class="table">
-                    <caption>UTC daily statistics by deployment and container</caption>
-                    <thead>
-                    <tr>
-                        <th scope="col">Day</th>
-                        <th scope="col">Deployment</th>
-                        <th scope="col">Container</th>
-                        <th scope="col">Metric</th>
-                        <th scope="col">Average</th>
-                        <th scope="col">Minimum</th>
-                        <th scope="col">Maximum</th>
-                        <th scope="col">Samples / errors</th>
-                        <th scope="col">Quality</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @foreach (var row in summary.Daily.Take(500))
-                    {
-                        <tr>
-                            <td>@row.DayUtc.ToString("yyyy-MM-dd")</td>
-                            <td>
-                                <a href="@($"/project/{ProjectId}/deployment/{row.DeploymentId}")">@row.DeploymentId.ToString("N")[..8]</a>
-                            </td>
-                            <td>@row.Container</td>
-                            <td>@row.Metric (@row.Unit)</td>
-                            <td>@Format(row.Average)</td>
-                            <td>@Format(row.Minimum)</td>
-                            <td>@Format(row.Maximum)</td>
-                            <td>@(row.Metric == "observed_log_errors" ? row.ObservedErrors : row.SampleCount)</td>
-                            <td>@(row.Incomplete ? "Partial / approximate" : "Observed")</td>
-                        </tr>
-                    }
-                    </tbody>
-                </table>
+        <div class="telemetry-kpis">
+            <div class="telemetry-kpi"><span>Deployments</span><strong>@summary.Deployments</strong><small>In the selected period</small></div>
+            <div class="telemetry-kpi"><span>Successful / failed</span><strong>@summary.SuccessfulDeployments / @summary.FailedDeployments</strong><small>Deployment outcomes</small></div>
+            <div class="telemetry-kpi"><span>Average CPU</span><strong>@Average(TelemetryPresentation.Cpu)</strong><small>Per observed container</small></div>
+            <div class="telemetry-kpi"><span>Average memory</span><strong>@Average(TelemetryPresentation.Memory)</strong><small>Per observed container</small></div>
+        </div>
+        <div class="telemetry-support"><span>Observed log errors: <strong>@(summary.Daily.Any(d => d.Metric == "observed_log_errors") ? summary.Daily.Where(d => d.Metric == "observed_log_errors").Sum(d => d.ObservedErrors).ToString() : "—")</strong> · approximate</span>
+            @if (summary.AverageDeploymentSeconds is { } seconds) { <span>Average cloud deployment: @TimeSpan.FromSeconds(seconds).ToString("g") · includes queue</span> }
+            @if (summary.Daily.Count > 0) { <span>Updated @summary.Daily.Max(r => r.UpdatedAt).ToString("u")</span> }
+        </div>
+        @if (_notice is not null) { <p class="telemetry-notice" role="status">@_notice</p> }
+        <details class="telemetry-explore">
+            <summary>Explore metrics <span>CPU, memory and daily statistics</span></summary>
+            <div class="telemetry-chart-grid">
+                <TelemetryChart Title="Daily CPU usage" Metric="@TelemetryPresentation.Cpu" Points="@Daily(TelemetryPresentation.Cpu)" Start="_start" End="_end"/>
+                <TelemetryChart Title="Daily memory usage" Metric="@TelemetryPresentation.Memory" Points="@Daily(TelemetryPresentation.Memory)" Start="_start" End="_end"/>
             </div>
-            @if (summary.Daily.Count > 500)
-            {
-                <p>Showing the first 500 rows. Select a shorter period for more detail.</p>
-            }
+            <p class="telemetry-muted">Sample-weighted daily averages per observed container. Missing days remain gaps. Daily statistics are retained for one year.</p>
+            <details class="telemetry-table-details"><summary>Daily deployment statistics</summary>
+                <div class="table-responsive"><table class="table telemetry-table">
+                    <caption>UTC daily statistics by deployment and container</caption>
+                    <thead><tr><th>Day</th><th>Deployment</th><th>Container</th><th>Metric</th><th>Average</th><th>Minimum</th><th>Maximum</th><th>Samples / errors</th><th>Quality</th></tr></thead>
+                    <tbody>@foreach (var row in summary.Daily.Take(500))
+                    {
+                        <tr><td>@row.DayUtc.ToString("yyyy-MM-dd")</td><td><a href="@($"/project/{ProjectId}/deployment/{row.DeploymentId}")">@row.DeploymentId.ToString("N")[..8]</a></td>
+                            <td>@row.Container</td><td><span title="@row.Metric">@TelemetryPresentation.Label(row.Metric)</span></td>
+                            <td>@TelemetryPresentation.Format(row.Average, row.Metric)</td><td>@TelemetryPresentation.Format(row.Minimum, row.Metric)</td><td>@TelemetryPresentation.Format(row.Maximum, row.Metric)</td>
+                            <td>@(row.Metric == "observed_log_errors" ? row.ObservedErrors : row.SampleCount)</td><td>@(row.Incomplete ? "Partial / approximate" : "Observed")</td></tr>
+                    }</tbody>
+                </table></div>
+                @if (summary.Daily.Count > 500) { <p>Showing the first 500 rows. Select a shorter period for more detail.</p> }
+            </details>
         </details>
     }
-</section>
-
+    else { <p class="telemetry-notice" role="status">@(_notice ?? "No analytics available yet.")</p> }
+</div>
 @code {
+    /// <summary>Authorized project whose daily statistics are displayed.</summary>
     [Parameter] public Guid ProjectId { get; set; }
     /// <summary>The parent page's resolved owner; the analytics service still verifies project ownership.</summary>
     [Parameter] public Guid UserId { get; set; }
@@ -126,7 +62,17 @@
     private string? _notice;
     private ProjectTelemetryAnalytics? _summary;
     private readonly CancellationTokenSource _lifetime = new();
+    /// <summary>Cancellation source for the most recently requested period.</summary>
+    private CancellationTokenSource? _load;
+    /// <summary>Bounds shared summary and chart time ranges.</summary>
+    private DateTimeOffset _start, _end;
+    /// <summary>Formats a sample-weighted project resource average.</summary>
+    private string Average(string metric) => TelemetryPresentation.Format(
+        TelemetryPresentation.WeightedAverage(_summary!.Daily.Where(r => r.Metric == metric)), metric);
+    /// <summary>Returns observed daily points for a selected resource.</summary>
+    private IReadOnlyList<TelemetryChartPoint> Daily(string metric) => TelemetryPresentation.DailyPoints(_summary!.Daily.Where(r => r.Metric == metric));
 
+    /// <inheritdoc />
     protected override async Task OnParametersSetAsync()
     {
         if (_loaded == ProjectId) return;
@@ -134,8 +80,12 @@
         await LoadAsync();
     }
 
+    /// <summary>Loads an independently scoped period and discards cancelled or obsolete responses.</summary>
     private async Task LoadAsync()
     {
+        _load?.Cancel();
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _load = request;
         _busy = true;
         try
         {
@@ -143,32 +93,27 @@
             await using var scope = ServiceScopes.CreateAsyncScope();
             var analytics = scope.ServiceProvider.GetRequiredService<IProjectTelemetryAnalytics>();
             var now = DateTimeOffset.UtcNow;
-            _summary = await analytics.ReadAsync(UserId, ProjectId, now.AddDays(-_days), now, _lifetime.Token);
+            var start = now.AddDays(-_days);
+            var result = await analytics.ReadAsync(UserId, ProjectId, start, now, request.Token);
+            if (request.IsCancellationRequested) return;
+            _start = start; _end = now;
+            _summary = result;
             _notice = _summary.Availability;
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (request.IsCancellationRequested)
         {
         }
         catch (Exception ex)
         {
+            if (request.IsCancellationRequested) return;
             _summary = null;
             _notice = "Project analytics are temporarily unavailable.";
             Logger.LogWarning("Project analytics unavailable: {FailureType}.", ex.GetType().Name);
         }
         finally
         {
-            _busy = false;
+            if (ReferenceEquals(_load, request)) { _busy = false; _load = null; }
         }
-    }
-
-    private static string Format(double? value)
-    {
-        return value?.ToString("G5") ?? "Unavailable";
-    }
-
-    private static string Svg(double value)
-    {
-        return value.ToString("0.###", CultureInfo.InvariantCulture);
     }
 
     public void Dispose()
