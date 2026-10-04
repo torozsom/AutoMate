@@ -7,8 +7,26 @@ namespace Infrastructure.Diagnostics;
 
 /// <summary>Loki JSON ingestion and bounded structured-metadata queries.</summary>
 public sealed class LokiDeploymentLogs(TelemetryHttpTransport transport, IOptions<TelemetryStorageOptions> options)
-    : IDeploymentLogWriter, IDeploymentLogQuery
+    : IDeploymentLogWriter, IDeploymentLogQuery, IDeploymentLogSearch, IDeploymentErrorCountQuery
 {
+    public async Task<long> CountErrorsAsync(Guid tenant, Guid project, Guid deployment, DateTimeOffset start,
+        DateTimeOffset end, CancellationToken token)
+    {
+        var seconds = Math.Max(1, (int)Math.Ceiling((end - start).TotalSeconds));
+        var query = $"sum(count_over_time({{service_name=\"automate\",severity=~\"Error|Critical\"}}" +
+                    $" | project_id=\"{project:N}\" | deployment_id=\"{deployment:N}\" [{seconds}s]))";
+        using var response = await transport.SendAsync(Url("loki/api/v1/query") +
+                                                       $"?query={Uri.EscapeDataString(query)}&time={Nanoseconds(end)}",
+            tenant, null, token);
+        if (response.RootElement.GetProperty("status").GetString() != "success")
+            throw new InvalidOperationException("Log error count query failed.");
+        return response.RootElement.GetProperty("data").GetProperty("result").EnumerateArray().Sum(item =>
+            double.TryParse(item.GetProperty("value")[1].GetString(), CultureInfo.InvariantCulture, out var value) &&
+            double.IsFinite(value) && value >= 0
+                ? (long)value
+                : 0);
+    }
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenantId, Guid projectId,
         Guid deploymentId, long cursor, bool backwards, int limit, CancellationToken cancellationToken,
@@ -29,6 +47,16 @@ public sealed class LokiDeploymentLogs(TelemetryHttpTransport transport, IOption
             events.Min(e => e.StoredAt).AddSeconds(-1));
         var ids = visible.Select(e => e.EventId).ToHashSet();
         return events.All(e => ids.Contains(e.EventId));
+    }
+
+    public Task<IReadOnlyList<DeploymentLogEnvelope>> SearchAsync(Guid tenant, Guid project, Guid deployment,
+        long cursor, bool backwards, int limit, string search, CancellationToken token)
+    {
+        if (search.Length > 256) throw new ArgumentException("Log search is limited to 256 characters.");
+        var filter = $" | project_id=\"{project:N}\" | deployment_id=\"{deployment:N}\"";
+        if (cursor > 0) filter += $" | order_id {(backwards ? "<" : ">")} {cursor}";
+        filter += " |= " + JsonSerializer.Serialize(search);
+        return QueryAsync(tenant, filter, backwards, Math.Clamp(limit, 1, 2001), token);
     }
 
     /// <inheritdoc />

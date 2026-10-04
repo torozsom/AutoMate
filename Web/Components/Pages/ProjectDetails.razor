@@ -76,7 +76,8 @@
                         </button>
 
                         <button class="btn btn-outline-danger action-button" @onclick="StopDeploymentAsync"
-                                disabled="@(isStopping || isDeploying)">
+                                title="@(_app.SourceType == SourceType.Local ? "Stop local deployment" : "Stop cloud deployments in your cloud provider's portal")"
+                                disabled="@(isStopping || isDeploying || _app.SourceType != SourceType.Local)">
                             @if (isStopping)
                             {
                                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -246,6 +247,7 @@
                     </div>
                 </section>
 
+                <ProjectTelemetrySummary ProjectId="ProjectId" UserId="_currentUserId"/>
                 <section id="logs" class="console-section" aria-labelledby="logs-title">
                     <TelemetryPreferences ProjectId="ProjectId"/>
                     <div class="section-heading">

@@ -7,7 +7,7 @@ namespace Infrastructure.Diagnostics;
 
 /// <summary>OTLP/HTTP numeric ingestion and Prometheus-compatible historical queries.</summary>
 public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOptions<TelemetryStorageOptions> options)
-    : IDeploymentMetricWriter, IDeploymentMetricQuery
+    : IDeploymentMetricWriter, IDeploymentMetricQuery, IDailyDeploymentMetricQuery
 {
     /// <summary>Fixed series names prevent arbitrary metric/label injection.</summary>
     internal static readonly IReadOnlyDictionary<string, string> Units = new Dictionary<string, string>
@@ -16,6 +16,40 @@ public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOp
         ["automate_memory_used_bytes"] = "bytes",
         ["automate_memory_limit_bytes"] = "bytes"
     };
+
+    public static IReadOnlyDictionary<string, string> SupportedUnits => Units;
+
+    public async Task<IReadOnlyList<DailyMetricStatistics>> ReadDailyAsync(Guid tenant, Guid project, Guid deployment,
+        DateTimeOffset start, DateTimeOffset end, CancellationToken token)
+    {
+        var seconds = Math.Max(1, (int)Math.Ceiling((end - start).TotalSeconds));
+        var result = new List<DailyMetricStatistics>();
+        foreach (var name in Units.Keys)
+        {
+            var series = new Dictionary<string, double[]>();
+            var functions = new[] { "count_over_time", "sum_over_time", "min_over_time", "max_over_time" };
+            for (var i = 0; i < functions.Length; i++)
+            {
+                var query = $"{functions[i]}({Selector(name, project, deployment)}[{seconds}s])";
+                using var response = await QueryAsync(tenant, "query", query, "&time=" + Seconds(end), token);
+                foreach (var item in response.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
+                {
+                    var container = item.GetProperty("metric").GetProperty("container").GetString()!;
+                    if (!series.TryGetValue(container, out var values))
+                        series[container] = values = Enumerable.Repeat(double.NaN, 4).ToArray();
+                    if (double.TryParse(item.GetProperty("value")[1].GetString(), CultureInfo.InvariantCulture,
+                            out var value) && double.IsFinite(value))
+                        values[i] = value;
+                }
+            }
+
+            result.AddRange(series.Where(p => p.Value.All(double.IsFinite) && p.Value[0] > 0).Select(p =>
+                new DailyMetricStatistics(p.Key, name, Units[name], (long)p.Value[0], p.Value[1], p.Value[2],
+                    p.Value[3])));
+        }
+
+        return result;
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,

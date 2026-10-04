@@ -653,6 +653,11 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("cloud_app_url");
 
+                    b.Property<string>("CloudContainerAppName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cloud_container_app_name");
+
                     b.Property<string>("CloudContainerRevision")
                         .HasColumnType("text")
                         .HasColumnName("cloud_container_revision");
@@ -660,6 +665,11 @@ namespace Infrastructure.Migrations
                     b.Property<long?>("CloudGitHubActionRunId")
                         .HasColumnType("bigint")
                         .HasColumnName("cloud_git_hub_action_run_id");
+
+                    b.Property<string>("CloudResourceId")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("cloud_resource_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -676,6 +686,14 @@ namespace Infrastructure.Migrations
                     b.Property<string>("ImageTag")
                         .HasColumnType("text")
                         .HasColumnName("image_tag");
+
+                    b.Property<Guid?>("RuntimeCollectorLeaseOwner")
+                        .HasColumnType("uuid")
+                        .HasColumnName("runtime_collector_lease_owner");
+
+                    b.Property<DateTimeOffset?>("RuntimeCollectorLeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("runtime_collector_lease_until");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -732,6 +750,92 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_deployment_analysis_work_items_completed_at_claimed_at");
 
                     b.ToTable("deployment_analysis_work_items", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.DeploymentDailyTelemetry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Container")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("container");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("DayUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("day_utc");
+
+                    b.Property<Guid>("DeploymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deployment_id");
+
+                    b.Property<bool>("Incomplete")
+                        .HasColumnType("boolean")
+                        .HasColumnName("incomplete");
+
+                    b.Property<double?>("Maximum")
+                        .HasColumnType("double precision")
+                        .HasColumnName("maximum");
+
+                    b.Property<string>("Metric")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("metric");
+
+                    b.Property<double?>("Minimum")
+                        .HasColumnType("double precision")
+                        .HasColumnName("minimum");
+
+                    b.Property<long>("ObservedErrors")
+                        .HasColumnType("bigint")
+                        .HasColumnName("observed_errors");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<long>("SampleCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sample_count");
+
+                    b.Property<double>("Sum")
+                        .HasColumnType("double precision")
+                        .HasColumnName("sum");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deployment_daily_telemetry");
+
+                    b.HasIndex("UserId", "ProjectId", "DayUtc")
+                        .HasDatabaseName("ix_deployment_daily_telemetry_user_id_project_id_day_utc");
+
+                    b.HasIndex("DeploymentId", "DayUtc", "Container", "Metric")
+                        .IsUnique()
+                        .HasDatabaseName("ix_deployment_daily_telemetry_deployment_id_day_utc_container_");
+
+                    b.ToTable("deployment_daily_telemetry", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.DeploymentDiagnosticRecord", b =>
@@ -1324,6 +1428,16 @@ namespace Infrastructure.Migrations
                         .HasConstraintName("fk_deployment_analysis_work_items_ai_deployment_analyses_analy");
 
                     b.Navigation("Analysis");
+                });
+
+            modelBuilder.Entity("Domain.Entities.DeploymentDailyTelemetry", b =>
+                {
+                    b.HasOne("Domain.Entities.Deployment", null)
+                        .WithMany()
+                        .HasForeignKey("DeploymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_deployment_daily_telemetry_deployments_deployment_id");
                 });
 
             modelBuilder.Entity("Domain.Entities.DeploymentDiagnosticRecord", b =>

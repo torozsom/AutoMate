@@ -51,6 +51,13 @@ public class Deployment : BaseEntity
     /// </summary>
     public string? CloudContainerRevision { get; set; }
 
+    /// <summary>Non-secret provider identity used to recover cloud collectors after restart.</summary>
+    public string? CloudResourceId { get; set; }
+
+    public string? CloudContainerAppName { get; set; }
+    public Guid? RuntimeCollectorLeaseOwner { get; set; }
+    public DateTimeOffset? RuntimeCollectorLeaseUntil { get; set; }
+
     /// <summary>Durable non-sensitive checkpoints for GitHub Actions diagnostic streaming.</summary>
     public ICollection<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints { get; set; } = [];
 

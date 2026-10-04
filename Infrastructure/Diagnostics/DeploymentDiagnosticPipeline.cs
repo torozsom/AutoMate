@@ -15,7 +15,8 @@ namespace Infrastructure.Diagnostics;
 public sealed class DeploymentDiagnosticPublisher(
     IDiagnosticRedactor redactor,
     IOptions<DeploymentDiagnosticOptions> options,
-    ILogger<DeploymentDiagnosticPublisher> logger) : IDeploymentDiagnosticPublisher
+    ILogger<DeploymentDiagnosticPublisher> logger,
+    IServiceScopeFactory? scopes = null) : IDeploymentDiagnosticPublisher, IDurableDeploymentDiagnosticPublisher
 {
     private readonly ConcurrentDictionary<Guid, int> _droppedProjects = new();
 
@@ -68,6 +69,33 @@ public sealed class DeploymentDiagnosticPublisher(
             "Dropped deployment diagnostic because the bounded delivery queue is full. Source {Source} kind {Kind} project {ProjectId}.",
             safeEvent.Source, safeEvent.Kind, safeEvent.ProjectId);
         return ValueTask.CompletedTask;
+    }
+
+    public async Task<bool> PublishDurablyAsync(DeploymentDiagnosticEvent diagnosticEvent,
+        CancellationToken cancellationToken)
+    {
+        Validate(diagnosticEvent);
+        var safe = redactor.Redact(diagnosticEvent).Event with { EventId = diagnosticEvent.EventId ?? Guid.NewGuid() };
+        if (safe.Message.Length > 4096) safe = safe with { Message = safe.Message[..4096] + " [output truncated]" };
+        await using var scope = scopes!.CreateAsyncScope();
+        var channel = safe.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
+            ? null
+            : DeploymentDiagnosticDispatcher.GetTerminalChannel(safe);
+        var order = await scope.ServiceProvider.GetRequiredService<IDeploymentDiagnosticStore>()
+            .PersistAsync(safe, channel, cancellationToken);
+        if (order <= 0) return false;
+        if (channel is not null)
+            try
+            {
+                await scope.ServiceProvider.GetRequiredService<ILogStreamer>().StreamTerminalLogAsync(
+                    new DeploymentTerminalLog(order, safe.ProjectId, safe.DeploymentId, channel, safe.Message));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning("Durable diagnostic live delivery unavailable: {FailureType}.", ex.GetType().Name);
+            }
+
+        return true;
     }
 
     internal int DrainDropped(Guid projectId)
@@ -156,7 +184,9 @@ public sealed class DeploymentDiagnosticDispatcher(
             if (orderId > 0)
             {
                 AutoMateTelemetry.EventsPersisted.Add(1, TelemetryTags.Create(diagnosticEvent));
-                LogDiagnostic(diagnosticEvent);
+                // Deployment payloads have their own tenant storage; don't duplicate them into platform logging.
+                if (!scope.ServiceProvider.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value.DiskGateway)
+                    LogDiagnostic(diagnosticEvent);
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -220,7 +250,7 @@ public sealed class DeploymentDiagnosticDispatcher(
         };
     }
 
-    private static string GetTerminalChannel(DeploymentDiagnosticEvent diagnosticEvent)
+    internal static string GetTerminalChannel(DeploymentDiagnosticEvent diagnosticEvent)
     {
         return diagnosticEvent.TerminalChannel.Kind switch
         {

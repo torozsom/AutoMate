@@ -1,0 +1,180 @@
+@using System.Globalization
+@using Application.Abstractions.Diagnostics
+@implements IDisposable
+@inject IServiceScopeFactory ServiceScopes
+@inject ILogger<ProjectTelemetrySummary> Logger
+
+<section class="console-section" aria-labelledby="project-analytics-title">
+    <h2 id="project-analytics-title">Project analytics</h2>
+    <label for="project-analytics-range">Period</label>
+    <select id="project-analytics-range" class="form-select mb-3" @bind="_days" @bind:after="LoadAsync"
+            disabled="@_busy">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="365">Last year</option>
+    </select>
+    @if (_notice is not null)
+    {
+        <p role="status">@_notice</p>
+    }
+    @if (_summary is { } summary)
+    {
+        <dl class="row">
+            <dt class="col-sm-6">Deployments</dt>
+            <dd class="col-sm-6">@summary.Deployments</dd>
+            <dt class="col-sm-6">Successful / failed</dt>
+            <dd class="col-sm-6">@summary.SuccessfulDeployments / @summary.FailedDeployments</dd>
+            <dt class="col-sm-6">Average cloud deployment duration (including queue)</dt>
+            <dd class="col-sm-6">@(summary.AverageDeploymentSeconds is { } seconds ? $"{seconds:0} s" : "Unavailable")</dd>
+        </dl>
+        @foreach (var metric in summary.Daily.Where(d => d.SampleCount > 0).GroupBy(d => (d.Metric, d.Unit)))
+        {
+            var count = metric.Sum(d => d.SampleCount);
+            var average = metric.Sum(d => d.Average!.Value * d.SampleCount) / count;
+            <p><strong>@metric.Key.Metric:</strong> @average.ToString("G5") @metric.Key.Unit average across observed
+                container samples (@count samples).</p>
+            var points = metric.GroupBy(row => row.DayUtc.UtcDateTime.Date).OrderBy(group => group.Key)
+                .Select(group => (Day: group.Key, Value: group.Sum(row => row.Average!.Value * row.SampleCount) / group.Sum(row => row.SampleCount))).ToArray();
+            var maximum = Math.Max(points.Max(point => point.Value), 0.000001);
+            var first = DateTime.UtcNow.Date.AddDays(-_days);
+            <figure>
+                <svg viewBox="0 0 600 140" width="100%" role="img"
+                     aria-label="@($"Daily {metric.Key.Metric} observed averages, in {metric.Key.Unit}. See the daily statistics table for values and quality.")">
+                    <line x1="20" y1="120" x2="580" y2="120" stroke="currentColor"/>
+                    @for (var index = 0; index < points.Length; index++)
+                    {
+                        var point = points[index];
+                        var x = 20 + (point.Day - first).TotalDays / _days * 560;
+                        var y = 115 - point.Value / maximum * 100;
+                        if (index > 0 && (point.Day - points[index - 1].Day).TotalDays == 1)
+                        {
+                            var previous = points[index - 1];
+                            <line x1="@Svg(20 + (previous.Day - first).TotalDays / _days * 560)"
+                                  y1="@Svg(115 - previous.Value / maximum * 100)" x2="@Svg(x)" y2="@Svg(y)"
+                                  stroke="currentColor" stroke-width="2"/>
+                        }
+
+                        <circle cx="@Svg(x)" cy="@Svg(y)" r="3" fill="currentColor">
+                            <title>@point.Day.ToString("yyyy-MM-dd"): @Format(point.Value) @metric.Key.Unit</title>
+                        </circle>
+                    }
+                </svg>
+                <figcaption>@metric.Key.Metric (@metric.Key.Unit): daily observed-container averages; scale
+                    0–@Format(maximum). Gaps indicate missing days. Deployment details and sample quality appear in the
+                    table.
+                </figcaption>
+            </figure>
+        }
+
+        <p>Observed error log entries: @summary.Daily.Sum(d => d.ObservedErrors). Counts may include retries or
+            collection gaps.</p>
+        <p>Detailed logs and charts cover 30 days. Daily statistics cover one year. Missing data remains
+            unavailable.</p>
+        <details>
+            <summary>Daily deployment statistics</summary>
+            <div class="table-responsive">
+                <table class="table">
+                    <caption>UTC daily statistics by deployment and container</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">Day</th>
+                        <th scope="col">Deployment</th>
+                        <th scope="col">Container</th>
+                        <th scope="col">Metric</th>
+                        <th scope="col">Average</th>
+                        <th scope="col">Minimum</th>
+                        <th scope="col">Maximum</th>
+                        <th scope="col">Samples / errors</th>
+                        <th scope="col">Quality</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in summary.Daily.Take(500))
+                    {
+                        <tr>
+                            <td>@row.DayUtc.ToString("yyyy-MM-dd")</td>
+                            <td>
+                                <a href="@($"/project/{ProjectId}/deployment/{row.DeploymentId}")">@row.DeploymentId.ToString("N")[..8]</a>
+                            </td>
+                            <td>@row.Container</td>
+                            <td>@row.Metric (@row.Unit)</td>
+                            <td>@Format(row.Average)</td>
+                            <td>@Format(row.Minimum)</td>
+                            <td>@Format(row.Maximum)</td>
+                            <td>@(row.Metric == "observed_log_errors" ? row.ObservedErrors : row.SampleCount)</td>
+                            <td>@(row.Incomplete ? "Partial / approximate" : "Observed")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            @if (summary.Daily.Count > 500)
+            {
+                <p>Showing the first 500 rows. Select a shorter period for more detail.</p>
+            }
+        </details>
+    }
+</section>
+
+@code {
+    [Parameter] public Guid ProjectId { get; set; }
+    /// <summary>The parent page's resolved owner; the analytics service still verifies project ownership.</summary>
+    [Parameter] public Guid UserId { get; set; }
+    private int _days = 30;
+    private Guid _loaded;
+    private bool _busy;
+    private string? _notice;
+    private ProjectTelemetryAnalytics? _summary;
+    private readonly CancellationTokenSource _lifetime = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == ProjectId) return;
+        _loaded = ProjectId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _busy = true;
+        try
+        {
+            // Blazor children may load while their parent is querying; never share the circuit's EF context.
+            await using var scope = ServiceScopes.CreateAsyncScope();
+            var analytics = scope.ServiceProvider.GetRequiredService<IProjectTelemetryAnalytics>();
+            var now = DateTimeOffset.UtcNow;
+            _summary = await analytics.ReadAsync(UserId, ProjectId, now.AddDays(-_days), now, _lifetime.Token);
+            _notice = _summary.Availability;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _summary = null;
+            _notice = "Project analytics are temporarily unavailable.";
+            Logger.LogWarning("Project analytics unavailable: {FailureType}.", ex.GetType().Name);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string Format(double? value)
+    {
+        return value?.ToString("G5") ?? "Unavailable";
+    }
+
+    private static string Svg(double value)
+    {
+        return value.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
+
+}

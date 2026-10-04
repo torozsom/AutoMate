@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted on 2026-10-02.
+Accepted on 2026-10-02. SaaS delivery buffers and aggregate retention are superseded
+by [ADR 0002](0002-saas-telemetry-disk-spool.md): raw SaaS telemetry uses disk segments, and daily numeric aggregates
+may be retained for 365 days. The 30-day raw-data/redaction/security decisions continue to apply.
 
 ## Decisions
 

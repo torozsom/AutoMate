@@ -62,7 +62,7 @@ public sealed class DeploymentHistoryTests
     private static Task LoadAsync(DeploymentHistory page)
     {
         return (Task)typeof(DeploymentHistory).GetMethod("LoadAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(page, [0L])!;
+            .Invoke(page, [null])!;
     }
 
     /// <summary>Supplies component injection properties without creating a web host.</summary>

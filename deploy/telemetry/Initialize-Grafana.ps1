@@ -1,7 +1,9 @@
 <# Provisions a local operator's fixed-tenant data sources without rotating existing login credentials. #>
 param(
     [Parameter(Mandatory)] [guid]$TenantId,
-    [string]$SecretsDirectory = (Join-Path $PSScriptRoot '../../.telemetry/pilot')
+    [string]$SecretsDirectory = (Join-Path $PSScriptRoot '../../.telemetry/pilot'),
+    [guid[]]$AdditionalTenantIds = @(),
+    [hashtable]$CatalogDataSource
 )
 $ErrorActionPreference = 'Stop'
 if ($TenantId -eq [guid]::Empty) { throw 'Select the AutoMate project owner ID, not an empty tenant.' }
@@ -14,12 +16,14 @@ $certificate = [System.IO.File]::ReadAllText((Join-Path $resolvedDirectory 'tls.
 $grafanaDirectory = Join-Path $resolvedDirectory 'grafana'
 New-Item -ItemType Directory -Path $grafanaDirectory -Force | Out-Null
 if ($IsWindows) {
-    $acl = Get-Acl -LiteralPath $grafanaDirectory
+    # Read/write only access rules; copying audit rules would require SeSecurityPrivilege.
+    $directoryInfo = [System.IO.DirectoryInfo]::new($grafanaDirectory)
+    $acl = [System.IO.FileSystemAclExtensions]::GetAccessControl($directoryInfo, [System.Security.AccessControl.AccessControlSections]::Access)
     $acl.SetAccessRuleProtection($true, $false)
     $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     $acl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
         $identity, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-    Set-Acl -LiteralPath $grafanaDirectory -AclObject $acl
+    [System.IO.FileSystemAclExtensions]::SetAccessControl($directoryInfo, $acl)
 } else { & chmod 700 $grafanaDirectory }
 foreach ($secretName in @('admin-password', 'encryption-key')) {
     $secretPath = Join-Path $grafanaDirectory $secretName
@@ -28,7 +32,12 @@ foreach ($secretName in @('admin-password', 'encryption-key')) {
         [System.IO.File]::WriteAllText($secretPath, $secret)
     }
 }
-$sources = foreach ($definition in @(
+$sources = foreach ($scope in @(@{ Id = $TenantId; Suffix = ''; Label = '' }) + @(
+    @($TenantId) + @($AdditionalTenantIds) | Select-Object -Unique | ForEach-Object {
+        @{ Id = $_; Suffix = '-' + $_.ToString('N'); Label = ' ' + $_.ToString('N') }
+    }
+)) {
+foreach ($definition in @(
     @{ Name = 'AutoMate Loki'; Uid = 'automate-loki'; Type = 'loki'; Url = 'https://gateway/loki'; Default = $false },
     @{ Name = 'AutoMate Mimir'; Uid = 'automate-mimir'; Type = 'prometheus'; Url = 'https://gateway/mimir/prometheus'; Default = $true }
 )) {
@@ -43,14 +52,18 @@ $sources = foreach ($definition in @(
         $settings.disableRecordingRules = $true
     } else { $settings.maxLines = 500 }
     @{
-        name = $definition.Name; uid = $definition.Uid; type = $definition.Type
-        access = 'proxy'; url = $definition.Url; isDefault = $definition.Default; editable = $false
+        name = $definition.Name + $scope.Label
+        uid = $(if ($scope.Suffix) { $(if ($definition.Type -eq 'loki') { 'l' } else { 'm' }) + $scope.Suffix } else { $definition.Uid })
+        type = $definition.Type
+        access = 'proxy'; url = $definition.Url; isDefault = ($definition.Default -and !$scope.Suffix); editable = $false
         jsonData = $settings
         secureJsonData = @{
-            httpHeaderValue1 = $TenantId.ToString('N'); httpHeaderValue2 = $authorization; tlsCACert = $certificate
+            httpHeaderValue1 = $scope.Id.ToString('N'); httpHeaderValue2 = $authorization; tlsCACert = $certificate
         }
     }
 }
+}
+if ($CatalogDataSource) { $sources = @($sources) + @($CatalogDataSource) }
 # JSON is also valid YAML; serialization avoids quoting credentials and PEM contents by hand.
 $provisioning = @{ apiVersion = 1; datasources = @($sources) } | ConvertTo-Json -Depth 10
 # Grafana expands dollar signs even in JSON/YAML values. Escape literal dollars before provisioning.

@@ -1,5 +1,8 @@
 # Components
 
+Project details offers Stop only for local sources. Remote cloud deployments must be stopped in the provider portal;
+the handler also rejects remote sources so their relative project paths never enter the local filesystem scanner.
+
 Blazor components and their presentation-specific code-behind files.
 The project details page restores bounded terminal history for the latest deployment after joining its authorized
 SignalR group, merges buffered live events by database cursor, and repeats that handshake after reconnecting.
@@ -44,3 +47,14 @@ Runtime logs and metrics collected while viewing are saved for 30-day replay. Th
 collection while the page is closed. Metric history defaults to 60-second sampling; local live cards update with each
 Docker stats observation (normally every 1–2 seconds). The metric cards restore the latest
 saved numeric snapshot while awaiting live updates. `DeploymentMetricDisplay` formats numeric units for the cards.
+
+## Deployment telemetry update
+
+Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployment logs and metrics. PostgreSQL payload
+writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
+gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
+revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
+Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+points.
+
+ProjectTelemetrySummary receives the already resolved owner from ProjectDetails and creates a separate dependency scope for each analytics load. This prevents its EF queries from sharing the parent's circuit context during overlapping rendering/history loads; the application service still checks ownership.

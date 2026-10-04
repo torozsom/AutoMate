@@ -1,0 +1,37 @@
+# Development pilot only. Production must use private TLS and an encrypted persistent volume.
+# Combine with compose.yaml; initialize the base pilot credentials first.
+services:
+  spool-permissions:
+    image: busybox:1.37
+    profiles: [ telemetry ]
+    user: root
+    command: [ "sh", "-ec", "chown 10001:10001 /spool; chmod 700 /spool" ]
+    volumes: [ telemetry-spool:/spool ]
+    network_mode: none
+  telemetry:
+    build:
+      context: ../..
+      dockerfile: Telemetry/Dockerfile
+    profiles: [ telemetry ]
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: ${TELEMETRY_DATABASE_CONNECTION:?Supply the application database connection}
+      DiskSpool__Directory: /var/telemetry
+      TelemetryStorage__Backend: LokiMimir
+      TelemetryStorage__DeliveryMode: DiskGateway
+      TelemetryStorage__GatewayUrl: http://telemetry:8080
+      TelemetryStorage__GatewayToken: ${TELEMETRY_INGEST_TOKEN:?Generate a private random credential with at least 32 characters}
+      TelemetryStorage__AllowInsecureDevelopment: "true"
+      TelemetryStorage__LokiUrl: http://loki:3100
+      TelemetryStorage__MetricsWriteUrl: http://mimir:9009/otlp/v1/metrics
+      TelemetryStorage__MetricsQueryUrl: http://mimir:9009/prometheus
+    volumes: [ telemetry-spool:/var/telemetry ]
+    ports: [ "127.0.0.1:${TELEMETRY_INGEST_PORT:-9450}:8080" ]
+    networks: [ gateway, storage ]
+    depends_on:
+      spool-permissions: { condition: service_completed_successfully }
+      loki: { condition: service_started }
+      mimir: { condition: service_started }
+volumes:
+  telemetry-spool:

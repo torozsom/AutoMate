@@ -1,0 +1,262 @@
+{
+  "uid": "automate-hierarchy",
+  "title": "AutoMate user project deployment",
+  "tags": [
+    "automate",
+    "development"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "timezone": "browser",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "user",
+        "current": {},
+        "sort": 0,
+        "hide": 0,
+        "allValue": null,
+        "query": "SELECT username || ' · ' || left(user_id,8) AS __text, user_id AS __value FROM grafana_catalog.users ORDER BY username,user_id",
+        "options": [],
+        "datasource": {
+          "uid": "automate-catalog",
+          "type": "grafana-postgresql-datasource"
+        },
+        "label": "User",
+        "refresh": 1,
+        "definition": "SELECT username || ' · ' || left(user_id,8) AS __text, user_id AS __value FROM grafana_catalog.users ORDER BY username,user_id",
+        "includeAll": false,
+        "type": "query",
+        "multi": false
+      },
+      {
+        "name": "project",
+        "current": {
+          "value": "$__all",
+          "text": "All"
+        },
+        "sort": 0,
+        "hide": 0,
+        "allValue": ".*",
+        "query": "SELECT name || ' · ' || left(project_id,8) AS __text, project_id AS __value FROM grafana_catalog.projects WHERE user_id=${user:sqlstring} ORDER BY name,project_id",
+        "options": [
+          {
+            "value": "$__all",
+            "text": "All",
+            "selected": true
+          }
+        ],
+        "datasource": {
+          "uid": "automate-catalog",
+          "type": "grafana-postgresql-datasource"
+        },
+        "label": "Project",
+        "refresh": 1,
+        "definition": "SELECT name || ' · ' || left(project_id,8) AS __text, project_id AS __value FROM grafana_catalog.projects WHERE user_id=${user:sqlstring} ORDER BY name,project_id",
+        "includeAll": true,
+        "type": "query",
+        "multi": false
+      },
+      {
+        "name": "deployment",
+        "current": {
+          "value": "$__all",
+          "text": "All"
+        },
+        "sort": 0,
+        "hide": 0,
+        "allValue": ".*",
+        "query": "SELECT to_char(created_at,'YYYY-MM-DD HH24:MI') || ' UTC · ' || left(deployment_id,8) || ' · ' || CASE status WHEN 0 THEN 'Starting' WHEN 1 THEN 'Running' WHEN 2 THEN 'Stopped' WHEN 3 THEN 'Failed' ELSE status::text END AS __text, deployment_id AS __value FROM grafana_catalog.deployments WHERE user_id=${user:sqlstring} AND project_id ~ '^(${project:regex})$' ORDER BY created_at DESC,deployment_id",
+        "options": [
+          {
+            "value": "$__all",
+            "text": "All",
+            "selected": true
+          }
+        ],
+        "datasource": {
+          "uid": "automate-catalog",
+          "type": "grafana-postgresql-datasource"
+        },
+        "label": "Deployment",
+        "refresh": 1,
+        "definition": "SELECT to_char(created_at,'YYYY-MM-DD HH24:MI') || ' UTC · ' || left(deployment_id,8) || ' · ' || CASE status WHEN 0 THEN 'Starting' WHEN 1 THEN 'Running' WHEN 2 THEN 'Stopped' WHEN 3 THEN 'Failed' ELSE status::text END AS __text, deployment_id AS __value FROM grafana_catalog.deployments WHERE user_id=${user:sqlstring} AND project_id ~ '^(${project:regex})$' ORDER BY created_at DESC,deployment_id",
+        "includeAll": true,
+        "type": "query",
+        "multi": false
+      },
+      {
+        "name": "container",
+        "label": "Container",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "channel",
+        "label": "Log channel",
+        "type": "textbox",
+        "query": ".*",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        },
+        "description": "build, github-actions, web, azure-web, azure-system, or .*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Local operator view",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Select **User → Project → Deployment** above. Project and deployment lists update from read-only metadata; log payloads come from Loki and metric samples from Mimir. All stays within the selected user. CPU/memory requires runtime collection enabled in AutoMate. Pending disk-buffer data appears here after ingestion. This is a private operator dashboard."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "CPU usage (cores)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "m-${user}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "automate_cpu_usage_cores{project_id=~\"$project\",deployment_id=~\"$deployment\",container=~\"$container\"}",
+          "legendFormat": "{{container}} · {{deployment_id}}",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "custom": {
+            "axisLabel": "CPU cores",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Memory usage and limit",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "m-${user}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "automate_memory_used_bytes{project_id=~\"$project\",deployment_id=~\"$deployment\",container=~\"$container\"}",
+          "legendFormat": "{{container}} used",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "automate_memory_limit_bytes{project_id=~\"$project\",deployment_id=~\"$deployment\",container=~\"$container\"}",
+          "legendFormat": "{{container}} limit",
+          "range": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "logs",
+      "title": "Saved deployment output",
+      "datasource": {
+        "type": "loki",
+        "uid": "l-${user}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 24,
+        "h": 14
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"automate\"} | project_id=~\"$project\" | deployment_id=~\"$deployment\" | channel=~\"$channel\" | json message=\"event.message\" | line_format \"{{.message}}\"",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "exact",
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}
+

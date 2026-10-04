@@ -1,0 +1,13 @@
+**
+!Domain/
+!Domain/**
+!Application/
+!Application/**
+!Infrastructure/
+!Infrastructure/**
+!Telemetry/
+!Telemetry/**
+**/bin
+**/obj
+**/.env
+**/*.env

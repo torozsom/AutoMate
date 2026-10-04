@@ -62,7 +62,7 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
     ///     Reads recent average CPU and memory metrics for a Container App.
     /// </summary>
     public async Task<AzureContainerAppMetrics?> GetMetricsAsync(string resourceId, string accessToken,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? revision = null)
     {
         var endTime = DateTimeOffset.UtcNow;
         var startTime = endTime.AddMinutes(-5);
@@ -70,6 +70,10 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
                          $"/providers/microsoft.insights/metrics?api-version={MetricsApiVersion}" +
                          $"&metricnames={CpuMetricName},{MemoryMetricName}" +
                          $"&timespan={Uri.EscapeDataString($"{startTime:O}/{endTime:O}")}&interval=PT1M&aggregation=Average";
+        if (!string.IsNullOrWhiteSpace(revision))
+            requestUri += "&$filter=" +
+                          Uri.EscapeDataString("revisionName eq '" +
+                                               revision.Replace("'", "''", StringComparison.Ordinal) + "'");
 
         using var document = await SendRequestAsync(requestUri, accessToken, cancellationToken);
         if (document == null)

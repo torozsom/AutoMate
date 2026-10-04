@@ -26,6 +26,11 @@
         }
 
         <h2>Saved terminal output</h2>
+        <label for="history-search">Search saved logs</label>
+        <div class="d-flex gap-2 mb-3">
+            <input id="history-search" class="form-control" maxlength="256" @bind="_search"/>
+            <button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LatestAsync">Search</button>
+        </div>
         <label for="history-channel">Terminal</label>
         <select id="history-channel" class="form-select mb-3" @bind="_channel" @bind:after="RenderTerminalAsync">
             @foreach (var channel in _history?.Events.Select(e => e.TerminalChannel).Distinct() ?? [])
@@ -121,6 +126,9 @@
     /// <summary>Bounded current output page.</summary>
     private DeploymentTerminalHistory? _history;
 
+    private string? _earlierCursor;
+    private string _search = "";
+
     /// <summary>Bounded metric aggregates.</summary>
     private IReadOnlyList<DeploymentMetricPoint> _metrics = [];
 
@@ -155,34 +163,36 @@
         _channel = "";
         _authorized = false;
         _owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication, Users);
-        await LoadAsync(0);
+        await LoadAsync(null);
     }
 
     /// <summary>Requests the preceding cursor page without accumulating unbounded terminal memory.</summary>
     private Task EarlierAsync()
     {
-        return LoadAsync(_history?.Events.FirstOrDefault()?.OrderId ?? 0);
+        return LoadAsync(_earlierCursor);
     }
 
     /// <summary>Returns to the most recent page.</summary>
     private Task LatestAsync()
     {
-        return LoadAsync(0);
+        return LoadAsync(null);
     }
 
     /// <summary>Loads authorized bounded output and metric history.</summary>
-    private async Task LoadAsync(long cursor)
+    private async Task LoadAsync(string? cursor)
     {
         if (_busy) return;
         _busy = true;
         try
         {
-            _history = await History.ReadLogsAsync(_owner, ProjectId, DeploymentId, cursor, true, 500);
+            var page = await History.ReadLogsV2Async(_owner, ProjectId, DeploymentId, cursor, true, 500, _search);
+            _earlierCursor = page.EarlierCursor;
+            _history = new DeploymentTerminalHistory(page.Events, page.EarlierCursor is not null, page.Availability, page.CanAdvanceCursor);
             _authorized = true;
             _channel = _history.Events.Any(e => e.TerminalChannel == _channel) ? _channel : _history.Events.FirstOrDefault()?.TerminalChannel ?? "";
             _error = null;
             await RenderTerminalAsync();
-            if (cursor == 0)
+            if (cursor is null)
             {
                 try
                 {

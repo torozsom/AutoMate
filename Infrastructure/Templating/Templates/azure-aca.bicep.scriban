@@ -15,6 +15,8 @@ param logAnalyticsWorkspaceName string = '{{ log_analytics_workspace_name }}'
 @description('Fully qualified container image.')
 param containerImage string
 
+param revisionSuffix string = ''
+
 @description('Container registry server.')
 param containerRegistryServer string = '{{ registry_server }}'
 {{- if use_acr }}
@@ -354,6 +356,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
 {{- end }}
     }
     template: {
+      revisionSuffix: revisionSuffix
       containers: [
         {
           name: 'web'

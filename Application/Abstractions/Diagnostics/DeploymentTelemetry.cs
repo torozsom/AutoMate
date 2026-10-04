@@ -65,6 +65,15 @@ public interface IDeploymentMetricQuery
 /// <summary>Authorized application boundary for history and runtime collection preferences.</summary>
 public interface IDeploymentHistoryService
 {
+    async Task<TelemetryLogPage> ReadLogsV2Async(Guid user, Guid project, Guid deployment, string? cursor,
+        bool backwards, int limit, string? search = null, CancellationToken token = default)
+    {
+        var history = await ReadLogsAsync(user, project, deployment,
+            TelemetryHistoryCursor.Decode(cursor, project, deployment),
+            backwards, limit, token);
+        return TelemetryHistoryCursor.Page(history, project, deployment);
+    }
+
     /// <summary>Reads owner-scoped collection and provider-consent preferences.</summary>
     Task<DeploymentTelemetryPreferences> GetPreferencesAsync(Guid userId, Guid projectId,
         CancellationToken cancellationToken = default);

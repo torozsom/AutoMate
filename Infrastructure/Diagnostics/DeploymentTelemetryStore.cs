@@ -17,12 +17,31 @@ public sealed class DeploymentTelemetryStore(
     IOptions<TelemetryStorageOptions> options,
     IDiagnosticRedactor redactor,
     ILogger<DeploymentTelemetryStore> logger,
-    IDeploymentRuntimeViewers viewers) : IDeploymentDiagnosticStore
+    IDeploymentRuntimeViewers viewers,
+    ITelemetryGateway? gateway = null,
+    TelemetryProjectPolicyCache? policies = null) : IDeploymentDiagnosticStore
 {
     /// <inheritdoc />
     public async Task<long> PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, string? terminalChannel,
         CancellationToken cancellationToken = default)
     {
+        if (options.Value.DiskGateway)
+        {
+            var policy = await policies!.GetAsync(diagnosticEvent.ProjectId, cancellationToken);
+            if (policy is null) return 0;
+            var isRuntime = diagnosticEvent.Kind == DeploymentDiagnosticKind.Metric || diagnosticEvent.Source is
+                DeploymentDiagnosticSource.DockerContainer or DeploymentDiagnosticSource.AzureContainerApps;
+            if (isRuntime && !policy.RuntimeDiagnosticsEnabled && !(diagnosticEvent.DeploymentId is { } id &&
+                                                                    viewers.HasViewers(diagnosticEvent.ProjectId, id)))
+                return 0;
+            if (options.Value.ManagedService && !policy.ManagedTelemetryConsent) return 0;
+            var receipt = await gateway!.AcceptAsync(redactor.Redact(diagnosticEvent).Event with
+            {
+                EventId = diagnosticEvent.EventId ?? Guid.NewGuid()
+            }, terminalChannel, cancellationToken);
+            return receipt.OrderId;
+        }
+
         var project = await db.Applications.AsNoTracking().Where(p => p.Id == diagnosticEvent.ProjectId)
             .Select(p => new { p.UserId, p.RuntimeDiagnosticsEnabled, p.ManagedTelemetryConsent })
             .SingleOrDefaultAsync(cancellationToken);
@@ -184,7 +203,7 @@ public sealed class DeploymentTelemetryStore(
 
     /// <summary>Merges ordered specialized history, legacy rows and unconfirmed durable events.</summary>
     public async Task<DeploymentTerminalHistory> ReadPageAsync(Guid projectId, Guid deploymentId, long cursor,
-        bool backwards, int limit, CancellationToken cancellationToken)
+        bool backwards, int limit, CancellationToken cancellationToken, string? search = null)
     {
         limit = Math.Clamp(limit, 1, 2000);
         var now = DateTimeOffset.UtcNow;
@@ -197,7 +216,7 @@ public sealed class DeploymentTelemetryStore(
             .Where(d => d.Id == deploymentId && d.CsProject!.AppId == projectId)
             .Select(d => (DateTimeOffset?)d.CreatedAt).SingleOrDefaultAsync(cancellationToken);
         if (tenant == Guid.Empty || deploymentCreatedAt is null) return new DeploymentTerminalHistory([], false);
-        if (!specialized && cursor == 0 && backwards)
+        if (!specialized && cursor == 0 && backwards && string.IsNullOrEmpty(search))
         {
             var history = await postgres.ReadRecentAsync(projectId, deploymentId, limit, cancellationToken);
             return options.Value.Specialized
@@ -217,6 +236,7 @@ public sealed class DeploymentTelemetryStore(
               r.TimestampUtc >= deploymentCreatedAt.Value &&
               (nextDeploymentCreatedAt == null || r.TimestampUtc < nextDeploymentCreatedAt.Value))));
         if (cursor > 0) query = backwards ? query.Where(r => r.OrderId < cursor) : query.Where(r => r.OrderId > cursor);
+        if (!string.IsNullOrEmpty(search)) query = query.Where(r => r.Message.Contains(search));
         var local = await (backwards ? query.OrderByDescending(r => r.OrderId) : query.OrderBy(r => r.OrderId))
             .Take(limit + 1).Select(r => new DeploymentTerminalLog(r.OrderId, r.ProjectId, r.DeploymentId,
                 r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build"), r.Message))
@@ -229,10 +249,30 @@ public sealed class DeploymentTelemetryStore(
         {
             try
             {
-                var remote = await logs.ReadAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
-                    cancellationToken, deploymentCreatedAt);
+                if (options.Value.DiskGateway)
+                {
+                    var pending = await gateway!.ReadPendingAsync(tenant, projectId, deploymentId, cancellationToken);
+                    local.AddRange(pending.Events.Where(e => e.Channel is not null &&
+                                                             (cursor == 0 || (backwards
+                                                                 ? e.OrderId < cursor
+                                                                 : e.OrderId > cursor)) &&
+                                                             (string.IsNullOrEmpty(search) ||
+                                                              e.Event.Message.Contains(search,
+                                                                  StringComparison.Ordinal)))
+                        .Select(e => new DeploymentTerminalLog(e.OrderId, projectId, deploymentId, e.Channel!,
+                            e.Event.Message, e.EventId)));
+                    if (pending.Events.Count > 0) availability = "Recent history is pending storage confirmation.";
+                    if (pending.DroppedEvents > 0 || pending.Truncated)
+                        availability = "Some diagnostics were omitted or pending history exceeds the read limit.";
+                }
+
+                var remote = !string.IsNullOrEmpty(search) && logs is IDeploymentLogSearch searchable
+                    ? await searchable.SearchAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
+                        search, cancellationToken)
+                    : await logs.ReadAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
+                        cancellationToken, deploymentCreatedAt);
                 local.AddRange(remote.Select(e => new DeploymentTerminalLog(e.OrderId, e.Event.ProjectId,
-                    e.Event.DeploymentId, e.Channel!, e.Event.Message)));
+                    e.Event.DeploymentId, e.Channel!, e.Event.Message, e.EventId)));
                 if (await db.DeploymentDiagnosticRecords.AnyAsync(
                         r => r.ProjectId == projectId && r.DeploymentId == deploymentId && r.DeliveryJson != null,
                         cancellationToken))
@@ -253,7 +293,7 @@ public sealed class DeploymentTelemetryStore(
                     .Trim();
         }
 
-        var unique = local.DistinctBy(e => e.OrderId);
+        var unique = local.DistinctBy(e => e.EventId is { } id ? id.ToString("N") : "legacy-" + e.OrderId);
         var ordered = backwards ? unique.OrderByDescending(e => e.OrderId) : unique.OrderBy(e => e.OrderId);
         var page = ordered.Take(limit + 1).ToList();
         var more = page.Count > limit;

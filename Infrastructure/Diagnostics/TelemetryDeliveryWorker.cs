@@ -20,6 +20,7 @@ public sealed class TelemetryDeliveryWorker(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Keep draining legacy database outboxes during migration, even with DiskGateway enabled.
         if (!options.Value.Specialized) return;
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
         do

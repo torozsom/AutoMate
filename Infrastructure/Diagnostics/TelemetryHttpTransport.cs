@@ -95,6 +95,8 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
 public sealed class TelemetryProviderException(int status, TimeSpan? retryAfter)
     : Exception($"Telemetry provider returned HTTP {status}.")
 {
+    public int Status { get; } = status;
+
     /// <summary>Provider-requested delay, bounded by the worker.</summary>
     public TimeSpan? RetryAfter { get; } = retryAfter;
 }

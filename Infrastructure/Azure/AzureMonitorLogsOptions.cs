@@ -21,6 +21,8 @@ public sealed class AzureMonitorLogsOptions
     /// <summary>Maximum number of records returned for one source poll.</summary>
     public int BatchSize { get; set; } = 500;
 
+    public int MaximumPagesPerPoll { get; set; } = 32;
+
     /// <summary>Overlap used to account for delayed log ingestion.</summary>
     public TimeSpan OverlapWindow { get; set; } = TimeSpan.FromMinutes(2);
 

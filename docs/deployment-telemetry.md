@@ -3,14 +3,17 @@
 ## Architecture and compatibility
 
 PostgreSQL owns projects, deployment metadata, configuration references, provider checkpoints and cloud admission.
-`TelemetryStorage:Backend=Postgres` is the default, preserving installations without external services. `LokiMimir`
+Both SelfHosted and SaaS require `TelemetryStorage:Backend=LokiMimir` and `DeliveryMode=DiskGateway`. The private
+Telemetry service persists new raw events on disk; PostgreSQL remains the control plane and daily-summary store. Invalid
+or missing gateway settings fail startup without raw database fallback. See [the rollout guide](saas-telemetry.md).
+`LokiMimir`
 sends
 new terminal output to Loki and numeric CPU/memory observations to Mimir. Existing PostgreSQL logs remain readable until
 their 30-day expiry. Never provision a database per deployment.
 
 `DeploymentTelemetryStore` persists centrally redacted events before live delivery, including runtime observations
 collected during authorized viewing. Enable background collection to continue while the page is closed.
-Specialized records reuse
+Legacy outbox records (created before DiskGateway rollout) reuse
 `deployment_diagnostic_records` as a short-term outbox: immutable row ID, database order cursor, owner identity,
 ingestion
 time, safe event JSON, acceptance flag, byte accounting and buffer deadline. These are not another permanent 30-day
@@ -57,7 +60,8 @@ Build/deployment output is automatic. Background runtime logs/metrics default of
 the
 project page. Host-owned collection continues without a browser; Docker collectors follow consent changes, and Azure
 checks consent each poll. Sampling defaults to 60 seconds. Managed storage additionally needs explicit project consent,
-a disclosed approved region and an approved DPA. Unconsented projects retain the PostgreSQL fallback and do not query or
+a disclosed approved region and an approved DPA. Unconsented managed-service projects reject new telemetry persistence
+without PostgreSQL fallback and do not query or
 write external stores. Revocation stops external delivery; existing external data follows retention. Buffered external
 payloads are discarded with an explicit loss notice on revocation; subsequent output uses PostgreSQL.
 

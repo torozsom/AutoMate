@@ -14,6 +14,8 @@ public sealed record AzureContainerAppRuntimeStreamRequest
     /// <summary>User whose encrypted Azure connection authorizes Monitor Logs queries.</summary>
     public Guid UserId { get; init; }
 
+    public string? ExpectedRevision { get; init; }
+
     /// <summary>Container App deployment configuration.</summary>
     public DeploymentConfigDto Config { get; init; } = new();
 

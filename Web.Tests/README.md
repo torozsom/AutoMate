@@ -12,3 +12,5 @@ notice. Metric display tests check restored numeric units. Browser-wrapper regre
 hidden terminals, history replacement, and disposal using Node's built-in test runner:
 
 `node --test Web.Tests/JavaScript/xterm-wrapper.test.cjs`
+
+ProjectTelemetrySummaryTests verifies overlapping analytics loads use distinct scoped services and dispose both scopes, preventing shared circuit-context concurrency failures.

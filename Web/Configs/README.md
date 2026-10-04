@@ -30,3 +30,7 @@ at startup. [Telemetry hosting](../../docs/deployment-telemetry.md) documents op
 Telemetry startup validation uses `TelemetryStorageOptionsValidator` to identify individual invalid settings without
 exposing their values. Local IDE launches can import the complete pilot settings with
 `deploy/telemetry/Configure-TelemetryDevelopment.ps1`.
+
+Both hosting profiles require LokiMimir/DiskGateway. Web supplies those defaults before binding operator settings and
+rejects PostgresOutbox even when explicitly configured. Endpoint and gateway credentials remain mandatory. Legacy
+PostgreSQL reads and outbox draining continue during migration. See ../../docs/saas-telemetry.md.
