@@ -1,0 +1,119 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using Application.Abstractions.Diagnostics;
+using Infrastructure.Data;
+using Infrastructure.Diagnostics;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 1024 * 1024);
+builder.Services.AddDataProtection();
+
+builder.Services.AddDbContext<AutoMateDbContext>(o => o
+    .UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+    .UseSnakeCaseNamingConvention());
+
+builder.Services.AddOptions<TelemetryStorageOptions>().BindConfiguration("TelemetryStorage")
+    .Validate(o => o.IsValid() && o.DiskGateway, "The telemetry service requires valid DiskGateway settings.")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<DiskSpoolOptions>().BindConfiguration("DiskSpool").ValidateOnStart();
+builder.Services.AddSingleton<DiskTelemetrySpool>();
+builder.Services.AddSingleton<TelemetryAdmissionPolicy>();
+builder.Services.AddSingleton<TelemetryProjectPolicyCache>();
+builder.Services.AddHostedService(s => s.GetRequiredService<DiskTelemetrySpool>());
+builder.Services.AddHostedService<DiskTelemetryDeliveryWorker>();
+builder.Services.AddHostedService<TelemetryDailyAggregationWorker>();
+
+builder.Services.AddHttpClient("DeploymentTelemetry", c => c.Timeout = TimeSpan.FromSeconds(15))
+    .ConfigurePrimaryHttpMessageHandler(sp =>
+    {
+        var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
+        var path = sp.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value.CaCertificatePath;
+        if (!string.IsNullOrEmpty(path))
+        {
+            var policy = new X509ChainPolicy
+            {
+                TrustMode = X509ChainTrustMode.CustomRootTrust,
+                RevocationMode = X509RevocationMode.NoCheck
+            };
+            policy.CustomTrustStore.Add(X509CertificateLoader.LoadCertificateFromFile(path));
+            handler.SslOptions.CertificateChainPolicy = policy;
+        }
+
+        return handler;
+    });
+
+builder.Services.AddSingleton<TelemetryHttpTransport>();
+builder.Services.AddScoped<IDiagnosticRedactor, DiagnosticRedactor>();
+builder.Services.AddScoped<IDeploymentLogWriter, LokiDeploymentLogs>();
+builder.Services.AddScoped<IDeploymentLogQuery, LokiDeploymentLogs>();
+builder.Services.AddScoped<IDeploymentMetricWriter, MimirDeploymentMetrics>();
+builder.Services.AddScoped<IDeploymentMetricQuery, MimirDeploymentMetrics>();
+builder.Services.AddScoped<IDailyDeploymentMetricQuery, MimirDeploymentMetrics>();
+builder.Services.AddScoped<IDeploymentErrorCountQuery, LokiDeploymentLogs>();
+
+var app = builder.Build();
+
+// This private service credential authenticates AutoMate servers, never customer browsers.
+app.Use(async (context, next) =>
+{
+    var expected = context.RequestServices.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value.GatewayToken;
+    var supplied = context.Request.Headers.Authorization.ToString();
+    if (!CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(supplied)),
+            SHA256.HashData(Encoding.UTF8.GetBytes("Bearer " + expected))))
+    {
+        context.Response.StatusCode = 401;
+        return;
+    }
+
+    try
+    {
+        await next(context);
+    }
+    catch (TelemetryProviderException ex)
+    {
+        context.Response.StatusCode = ex.Status;
+    }
+});
+
+app.MapGet("/status",
+    async (DiskTelemetrySpool spool, CancellationToken token) => Results.Ok(await spool.StatusAsync(token)));
+
+app.MapPost("/ingest", async (TelemetryIngestRequest request, TelemetryAdmissionPolicy admission,
+    DiskTelemetrySpool spool,
+    IDiagnosticRedactor redactor, IOptions<TelemetryStorageOptions> options, CancellationToken token) =>
+{
+    var e = request.Event;
+    if (e is null || e.ProjectId == Guid.Empty || e.EventId is null || e.EventId == Guid.Empty ||
+        e.TerminalChannel is null ||
+        e.Message is null || e.Message.Length > 8192 || e.TerminalChannel.Target?.Length > 128 ||
+        request.Channel?.Length > 128 || !Enum.IsDefined(e.TerminalChannel.Kind) ||
+        !Enum.IsDefined(e.Source) || !Enum.IsDefined(e.Severity) || !Enum.IsDefined(e.Kind) ||
+        e.TimestampUtc > DateTimeOffset.UtcNow.AddMinutes(5) ||
+        e.TimestampUtc < DateTimeOffset.UtcNow.AddDays(-30) ||
+        (e.Metrics is { } samples && (samples.Count > 3 || samples.Any(s => !double.IsFinite(s.Value) || s.Value < 0 ||
+                                                                            !MimirDeploymentMetrics.SupportedUnits
+                                                                                .TryGetValue(s.Name, out var unit) ||
+                                                                            unit != s.Unit))))
+        return Results.BadRequest();
+    var project = await admission.GetAsync(e.ProjectId, e.DeploymentId, token);
+    if (project is null || (options.Value.ManagedService && !project.ManagedTelemetryConsent))
+        return Results.StatusCode(403);
+    var receipt = await spool.AppendAsync(project.UserId, redactor.Redact(e).Event, request.Channel, token);
+    return Results.Ok(receipt);
+});
+
+app.MapGet("/pending/{tenant:guid}/{project:guid}/{deployment:guid}", async (Guid tenant, Guid project, Guid deployment,
+    AutoMateDbContext db, DiskTelemetrySpool spool, CancellationToken token) =>
+{
+    if (!await db.Deployments.AnyAsync(d => d.Id == deployment && d.CsProject!.AppId == project &&
+                                            d.CsProject.Application.UserId == tenant, token))
+        return Results.StatusCode(403);
+    return Results.Ok(await spool.PendingAsync(tenant, project, deployment, token));
+});
+
+app.Run();

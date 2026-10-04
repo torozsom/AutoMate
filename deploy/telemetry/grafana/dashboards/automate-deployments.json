@@ -77,7 +77,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "This dashboard reads the configured AutoMate owner's Loki and Mimir stores. Enter project/deployment GUIDs **without hyphens**, or use `.*` for all. Runtime CPU/memory requires owner opt-in in AutoMate. Pending PostgreSQL outbox data appears here only after ingestion. Use **Explore** for custom queries. This UI is for local operators; dashboard filters are not tenant authorization."
+        "content": "This dashboard reads the configured AutoMate owner's Loki and Mimir stores. Enter project/deployment GUIDs **without hyphens**, or use `.*` for all. Runtime CPU/memory requires owner opt-in in AutoMate. Pending disk-buffer data appears here only after ingestion. Use **Explore** for custom queries. This UI is for local operators; dashboard filters are not tenant authorization."
       }
     },
     {
@@ -206,3 +206,4 @@
     }
   ]
 }
+

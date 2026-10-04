@@ -1,0 +1,17 @@
+# Developer-controlled installations only: private Docker networks and loopback ingestion.
+# Combine telemetry/compose.yaml, telemetry/compose.disk.yaml, then self-hosted/docker-compose.yml and this file.
+services:
+  automate:
+    environment:
+      TelemetryStorage__GatewayUrl: http://telemetry:8080
+      TelemetryStorage__LokiUrl: http://loki:3100
+      TelemetryStorage__MetricsWriteUrl: http://mimir:9009/otlp/v1/metrics
+      TelemetryStorage__MetricsQueryUrl: http://mimir:9009/prometheus
+      TelemetryStorage__AllowInsecureDevelopment: "true"
+    networks: [ default, gateway ]
+    depends_on:
+      telemetry: { condition: service_started }
+  telemetry:
+    networks: [ default, gateway, storage ]
+    depends_on:
+      postgres: { condition: service_healthy }

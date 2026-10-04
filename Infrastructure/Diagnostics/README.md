@@ -12,8 +12,7 @@ remains disabled until a separately approved provider, region, consent, and data
 Blank log lines are valid terminal output; state and annotation messages must contain non-whitespace text. Untrusted
 terminal escape sequences and unsafe control characters are removed before storage or delivery.
 The publisher bounds its in-memory queue and each message to 4,096 characters; overflow produces a durable gap marker.
-PostgreSQL
-assigns a unique ordering cursor, and normal terminal replay returns 500 recent events for a deployment. The PostgreSQL
+Legacy PostgreSQL records use database ordering cursors; new DiskGateway records use durable spool positions and independent event IDs, and normal terminal replay returns 500 recent events for a deployment. The PostgreSQL
 fallback retention worker deletes expired records in batches every hour, including at startup; specialized stores use
 their configured compactors, while the delivery worker removes confirmed or expired short-term payloads.
 For records written before deployment correlation was added, replay also recognizes project-owned GitHub Actions and
@@ -55,3 +54,12 @@ Local live numeric metrics are a presentation snapshot: `DockerMetricDelivery` c
 delivers it without waiting for persistence. Only sampled observations enter durable history (60 seconds by default).
 The dispatcher persists those samples without rebroadcasting them over newer live values. Terminal logs retain
 persist-before-delivery semantics.
+
+## Deployment telemetry update
+
+Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployment logs and metrics. PostgreSQL payload
+writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
+gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
+revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
+Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+points.

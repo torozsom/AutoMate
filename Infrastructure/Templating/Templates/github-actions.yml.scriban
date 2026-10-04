@@ -105,6 +105,7 @@ jobs:
             location=${{ "{{" }} env.AZURE_LOCATION {{ "}}" }}
             containerAppName=${{ "{{" }} env.CONTAINER_APP_NAME {{ "}}" }}
             containerImage=${{ "{{" }} env.CONTAINER_IMAGE {{ "}}" }}
+            revisionSuffix=am-${{ "{{" }} github.run_id {{ "}}" }}
             containerRegistryServer={{ registry_server }}
 {{- if use_acr }}
             registryPullIdentityId=${{ "{{" }} secrets.AZURE_ACR_PULL_IDENTITY_ID {{ "}}" }}

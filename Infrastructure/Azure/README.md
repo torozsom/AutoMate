@@ -45,3 +45,12 @@ credentials at execution time and persist rotated credentials through the protec
 are published through redaction to the deployment Build terminal. Numeric core/byte observations
 use Azure Monitor `UsageNanoCores` divided by one billion and `WorkingSetBytes`, rather than parsing display strings.
 See [Microsoft's metric definitions](https://learn.microsoft.com/en-us/azure/container-apps/metrics).
+
+## Deployment telemetry update
+
+Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployment logs and metrics. PostgreSQL payload
+writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
+gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
+revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
+Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+points.

@@ -217,11 +217,17 @@ public sealed class CloudDeploymentOrchestrator(
                     cancellationToken);
                 await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                     $"GitHub Actions workflow completed successfully. Details: {workflowRun.HtmlUrl}");
+                deployment.CloudContainerAppName = config.CloudContainerAppName;
+                deployment.CloudContainerRevision = $"{config.CloudContainerAppName}--am-{workflowRun.Id}";
+                deployment.CloudResourceId =
+                    $"/subscriptions/{Uri.EscapeDataString(request.AzureCredentials.SubscriptionId)}/resourceGroups/{Uri.EscapeDataString(config.CloudResourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(config.CloudContainerAppName)}";
+                await dbContext.SaveChangesAsync(cancellationToken);
                 azureContainerAppRuntimeStreamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
                 {
                     ProjectId = config.ProjectId,
                     DeploymentId = deployment.Id,
                     UserId = request.RequestingUserId,
+                    ExpectedRevision = $"{config.CloudContainerAppName}--am-{workflowRun.Id}",
                     Config = config,
                     AzureCredentials = request.AzureCredentials
                 });

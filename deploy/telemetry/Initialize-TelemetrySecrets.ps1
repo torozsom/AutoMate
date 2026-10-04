@@ -35,10 +35,13 @@ try {
     } finally { $certificate.Dispose() }
 } finally { $rsa.Dispose() }
 $mountDirectory = $resolvedDirectory.Replace('\', '/')
-@("OBJECT_STORAGE_ACCESS_KEY=automate-pilot", "OBJECT_STORAGE_SECRET_KEY=$objectSecret", "TELEMETRY_SECRETS_DIR=$mountDirectory") |
+$ingestionSecret = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+@("OBJECT_STORAGE_ACCESS_KEY=automate-pilot", "OBJECT_STORAGE_SECRET_KEY=$objectSecret", "TELEMETRY_SECRETS_DIR=$mountDirectory", "TELEMETRY_INGEST_TOKEN=$ingestionSecret") |
     Set-Content -LiteralPath (Join-Path $resolvedDirectory 'compose.env') -Encoding ascii
 $authorization = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("automate:$gatewaySecret"))
 @('TelemetryStorage__Backend=LokiMimir', 'TelemetryStorage__LokiUrl=https://localhost:9443/loki',
+  'TelemetryStorage__DeliveryMode=DiskGateway', 'TelemetryStorage__GatewayUrl=http://localhost:9450',
+  'TelemetryStorage__AllowInsecureDevelopment=true', "TelemetryStorage__GatewayToken=$ingestionSecret",
   'TelemetryStorage__MetricsWriteUrl=https://localhost:9443/mimir/otlp/v1/metrics',
   'TelemetryStorage__MetricsQueryUrl=https://localhost:9443/mimir/prometheus',
   "TelemetryStorage__CaCertificatePath=$mountDirectory/tls.crt", "TelemetryStorage__Authorization=Basic $authorization") |

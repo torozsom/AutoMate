@@ -6,7 +6,8 @@ public sealed record DeploymentTerminalLog(
     Guid ProjectId,
     Guid? DeploymentId,
     string TerminalChannel,
-    string Message);
+    string Message,
+    Guid? EventId = null);
 
 /// <summary>A bounded page of terminal history.</summary>
 public sealed record DeploymentTerminalHistory(

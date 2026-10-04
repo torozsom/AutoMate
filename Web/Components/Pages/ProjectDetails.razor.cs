@@ -294,6 +294,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private async Task StopDeploymentAsync()
     {
         if (_app == null) return;
+        if (_app.SourceType != SourceType.Local)
+        {
+            _workflowStatusMessage = "Stop cloud deployments in your cloud provider's portal.";
+            return;
+        }
         if (!DeploymentCapabilities.LocalDeploymentsEnabled)
         {
             _workflowStatusMessage = "Local Docker deployments are disabled for this AutoMate instance.";

@@ -1,5 +1,10 @@
 # Web Tests
 
+Telemetry presentation tests cover resource formatting, weighted daily averages, sparse markers, gaps, independent
+log/metric controls, stale replies and access denial. Static-rendering tests produce provider-fixture previews under
+`.artifacts/metrics-preview` using the actual summary/history components; these are not live deployment data.
+Run client interaction checks with `node --test Web.Tests/JavaScript/telemetry-chart.test.cjs`.
+
 Credential-free tests of the Web composition root and hosting-profile configuration. Tests resolve the dashboard's
 shared cloud dependencies without starting hosted workers or contacting PostgreSQL, Redis, GitHub, or Azure.
 
@@ -12,3 +17,5 @@ notice. Metric display tests check restored numeric units. Browser-wrapper regre
 hidden terminals, history replacement, and disposal using Node's built-in test runner:
 
 `node --test Web.Tests/JavaScript/xterm-wrapper.test.cjs`
+
+ProjectTelemetrySummaryTests verifies overlapping analytics loads use distinct scoped services and dispose both scopes, preventing shared circuit-context concurrency failures.

@@ -436,7 +436,15 @@ public static class ServiceConfiguration
             services.AddHttpClient<ILlmAnalysisProvider, OpenAiAnalysisProvider>()
                 .AddStandardResilienceHandler();
             services.AddSingleton<IValidateOptions<TelemetryStorageOptions>, TelemetryStorageOptionsValidator>();
-            services.AddOptions<TelemetryStorageOptions>().Bind(config.GetSection(TelemetryStorageOptions.SectionName))
+            services.AddOptions<TelemetryStorageOptions>()
+                .Configure(o =>
+                {
+                    o.Backend = "LokiMimir";
+                    o.DeliveryMode = "DiskGateway";
+                })
+                .Bind(config.GetSection(TelemetryStorageOptions.SectionName))
+                .Validate(o => o.DiskGateway,
+                    "AutoMate requires TelemetryStorage:DeliveryMode=DiskGateway in both SelfHosted and SaaS; database payload fallback is disabled.")
                 .ValidateOnStart();
             services.AddHttpClient("DeploymentTelemetry", client => client.Timeout = TimeSpan.FromSeconds(15))
                 .ConfigurePrimaryHttpMessageHandler(sp =>
@@ -459,6 +467,8 @@ public static class ServiceConfiguration
                     return handler;
                 });
             services.AddSingleton<TelemetryHttpTransport>();
+            services.AddSingleton<TelemetryProjectPolicyCache>();
+            services.AddScoped<ITelemetryGateway, TelemetryGatewayClient>();
             services.AddScoped<DeploymentDiagnosticStore>();
             services.AddScoped<DeploymentTelemetryStore>();
             services.AddScoped<IDeploymentDiagnosticStore>(sp => sp.GetRequiredService<DeploymentTelemetryStore>());
@@ -469,6 +479,7 @@ public static class ServiceConfiguration
             services.AddScoped<IDeploymentMetricWriter>(sp => sp.GetRequiredService<MimirDeploymentMetrics>());
             services.AddScoped<IDeploymentMetricQuery>(sp => sp.GetRequiredService<MimirDeploymentMetrics>());
             services.AddScoped<IDeploymentHistoryService, DeploymentHistoryService>();
+            services.AddScoped<IProjectTelemetryAnalytics, ProjectTelemetryAnalyticsService>();
             services.AddHostedService<TelemetryDeliveryWorker>();
             services.AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>();
             services.AddScoped<IDeploymentAnalysisQueue, DeploymentAnalysisQueue>();

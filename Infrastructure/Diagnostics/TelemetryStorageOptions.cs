@@ -9,6 +9,13 @@ public sealed class TelemetryStorageOptions
     /// <summary>Postgres preserves existing installations; LokiMimir enables external delivery.</summary>
     public string Backend { get; set; } = "Postgres";
 
+    /// <summary>DiskGateway bypasses the application database for new telemetry payloads.</summary>
+    public string DeliveryMode { get; set; } = "PostgresOutbox";
+
+    public string GatewayUrl { get; set; } = "";
+    public string GatewayToken { get; set; } = "";
+    public bool DiskGateway => DeliveryMode == "DiskGateway";
+
     /// <summary>Loki base URI including any gateway prefix.</summary>
     public string LokiUrl { get; set; } = "";
 
@@ -74,6 +81,11 @@ public sealed class TelemetryStorageOptions
     {
         if (Backend != "Postgres" && !Specialized)
             yield return "TelemetryStorage:Backend must be Postgres or LokiMimir.";
+        if (DeliveryMode is not ("PostgresOutbox" or "DiskGateway"))
+            yield return "TelemetryStorage:DeliveryMode must be PostgresOutbox or DiskGateway.";
+        if (DiskGateway && (!Specialized || !ValidUri(GatewayUrl) || GatewayToken.Length < 32))
+            yield return
+                "DiskGateway requires LokiMimir, an approved GatewayUrl and a GatewayToken of at least 32 characters.";
         if (BufferHours is < 1 or > 24) yield return "TelemetryStorage:BufferHours must be between 1 and 24.";
         if (BatchSize is < 1 or > 500) yield return "TelemetryStorage:BatchSize must be between 1 and 500.";
         if (TenantBufferBytes <= 0) yield return "TelemetryStorage:TenantBufferBytes must be positive.";

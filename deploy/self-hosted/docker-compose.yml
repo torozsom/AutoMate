@@ -8,6 +8,13 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
       HostingProfile__Mode: SelfHosted
+      TelemetryStorage__Backend: LokiMimir
+      TelemetryStorage__DeliveryMode: DiskGateway
+      TelemetryStorage__GatewayUrl: ${TELEMETRY_GATEWAY_URL:?Configure the private telemetry gateway}
+      TelemetryStorage__GatewayToken: ${TELEMETRY_INGEST_TOKEN:?Configure a private random gateway credential}
+      TelemetryStorage__LokiUrl: ${TELEMETRY_LOKI_URL:?Configure the private Loki endpoint}
+      TelemetryStorage__MetricsWriteUrl: ${TELEMETRY_METRICS_WRITE_URL:?Configure the private Mimir write endpoint}
+      TelemetryStorage__MetricsQueryUrl: ${TELEMETRY_METRICS_QUERY_URL:?Configure the private Mimir query endpoint}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=automate;Username=automate;Password=${POSTGRES_PASSWORD}
       ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD}
       Authentication__GitHub__ClientId: ${AUTH_GITHUB_CLIENT_ID}

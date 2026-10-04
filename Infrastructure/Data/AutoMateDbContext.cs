@@ -103,6 +103,7 @@ public class AutoMateDbContext(
     public DbSet<CloudInstallationBudget> CloudInstallationBudgets => Set<CloudInstallationBudget>();
 
     public DbSet<DeploymentDiagnosticRecord> DeploymentDiagnosticRecords => Set<DeploymentDiagnosticRecord>();
+    public DbSet<DeploymentDailyTelemetry> DeploymentDailyTelemetry => Set<DeploymentDailyTelemetry>();
 
     /// <summary>Specialized telemetry delivery leases and loss accounting.</summary>
     public DbSet<TelemetryTenantState> TelemetryTenantStates => Set<TelemetryTenantState>();
@@ -144,6 +145,15 @@ public class AutoMateDbContext(
         ConfigureGitHubWorkflowCheckpoints(modelBuilder);
         ConfigureAzureContainerAppLogCheckpoints(modelBuilder);
         ConfigureDeploymentDiagnosticsAndAnalyses(modelBuilder);
+        var daily = modelBuilder.Entity<DeploymentDailyTelemetry>();
+        daily.HasIndex(d => new { d.DeploymentId, d.DayUtc, d.Container, d.Metric }).IsUnique();
+        daily.HasIndex(d => new { d.UserId, d.ProjectId, d.DayUtc });
+        daily.Property(d => d.Container).HasMaxLength(128);
+        daily.Property(d => d.Metric).HasMaxLength(64);
+        daily.Property(d => d.Unit).HasMaxLength(32);
+        daily.HasOne<Deployment>().WithMany().HasForeignKey(d => d.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Deployment>().Property(d => d.CloudResourceId).HasMaxLength(1024);
+        modelBuilder.Entity<Deployment>().Property(d => d.CloudContainerAppName).HasMaxLength(200);
     }
 
     /// <summary>Indexes durable admission and protects deployment configuration snapshots.</summary>

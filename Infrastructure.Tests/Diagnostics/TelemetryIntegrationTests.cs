@@ -17,6 +17,72 @@ namespace Infrastructure.Tests.Diagnostics;
 /// <summary>Real PostgreSQL/Loki/Mimir acceptance tests against the isolated Compose override.</summary>
 public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
 {
+    [TelemetryIntegrationFact]
+    public async Task Disk_receipts_recover_and_reach_real_stores_without_database_payloads()
+    {
+        var settings = TelemetryStorageTests.Specialized();
+        settings.DeliveryMode = "DiskGateway";
+        using var services = Services(settings);
+        var seeded = await SeedAsync(services);
+        var directory = Path.Combine(Path.GetTempPath(), "automate-integration-spool-" + Guid.NewGuid().ToString("N"));
+
+        DiskTelemetrySpool Create()
+        {
+            return new DiskTelemetrySpool(Options.Create(new DiskSpoolOptions { Directory = directory }),
+                Options.Create(settings), NullLogger<DiskTelemetrySpool>.Instance);
+        }
+
+        try
+        {
+            using (var spool = Create())
+            {
+                await spool.StartAsync(default);
+                await spool.AppendAsync(seeded.Owner,
+                    Event(seeded, "durable disk log") with { EventId = Guid.NewGuid() }, "build", default);
+                await spool.AppendAsync(seeded.Owner, Event(seeded, "metrics") with
+                {
+                    EventId = Guid.NewGuid(),
+                    Kind = DeploymentDiagnosticKind.Metric,
+                    TerminalChannel = new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, "web"),
+                    Metrics = [new DeploymentMetricSample("automate_cpu_usage_cores", 1.25, "cores")]
+                }, null, default);
+                await spool.StopAsync(default);
+            }
+
+            using var recovered = Create();
+            await recovered.StartAsync(default);
+            var worker = new DiskTelemetryDeliveryWorker(recovered, services.GetRequiredService<IServiceScopeFactory>(),
+                Options.Create(settings), NullLogger<DiskTelemetryDeliveryWorker>.Instance);
+            for (var attempt = 0; attempt < 30; attempt++)
+            {
+                foreach (var path in await recovered.SegmentPathsAsync(default))
+                    await worker.DeliverAsync(path, default);
+                if (Directory.GetFiles(directory, "*.segment").Length == 0) break;
+                await Task.Delay(1000);
+            }
+
+            Assert.Empty(Directory.GetFiles(directory, "*.segment"));
+            await using var scope = services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+            Assert.False(await db.DeploymentDiagnosticRecords.AnyAsync(r => r.ProjectId == seeded.Project));
+            var logs = await scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>()
+                .ReadAsync(seeded.Owner, seeded.Project, seeded.Deployment, 0, false, 10, default);
+            Assert.Single(logs, e => e.Event.Message == "durable disk log");
+            var daily = await scope.ServiceProvider.GetRequiredService<MimirDeploymentMetrics>()
+                .ReadDailyAsync(seeded.Owner, seeded.Project, seeded.Deployment, DateTimeOffset.UtcNow.AddMinutes(-10),
+                    DateTimeOffset.UtcNow, default);
+            Assert.Contains(daily,
+                row => row.Name == "automate_cpu_usage_cores" && row.SampleCount == 1 && row.Sum == 1.25);
+            Assert.Empty(await scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>()
+                .ReadAsync(Guid.NewGuid(), seeded.Project, seeded.Deployment, 0, false, 10, default));
+            await recovered.StopAsync(default);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+        }
+    }
+
     /// <summary>Applies the actual schema and verifies replay before and after query visibility.</summary>
     [TelemetryIntegrationFact]
     public async Task Real_stores_replay_redacted_logs_and_numeric_metrics_after_buffer_removal()
@@ -268,6 +334,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     {
         var options = Options.Create(settings ?? TelemetryStorageTests.Specialized());
         var services = new ServiceCollection().AddLogging()
+            .AddSingleton<TelemetryProjectPolicyCache>()
             .AddSingleton<TimeProvider>(TimeProvider.System)
             .AddSingleton<IDeploymentRuntimeViewers, DeploymentRuntimeViewers>()
             .AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider())

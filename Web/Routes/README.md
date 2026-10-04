@@ -18,3 +18,12 @@ Infrastructure types are registered only in Web/Configs.
 - [Solution navigation map](../../.agents/navigation.md)
 
 `Endpoints/DeploymentHistoryEndpoint.cs` provides owner-authorized cursor log pages and bounded metric-range APIs.
+
+## Deployment telemetry update
+
+Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployment logs and metrics. PostgreSQL payload
+writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
+gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
+revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
+Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+points.

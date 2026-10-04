@@ -11,8 +11,20 @@ public sealed class DeploymentHistoryService(
     AutoMateDbContext db,
     DeploymentTelemetryStore store,
     IDeploymentMetricQuery metrics,
-    IOptions<TelemetryStorageOptions> options) : IDeploymentHistoryService
+    IOptions<TelemetryStorageOptions> options,
+    ITelemetryGateway? gateway = null) : IDeploymentHistoryService
 {
+    public async Task<TelemetryLogPage> ReadLogsV2Async(Guid user, Guid project, Guid deployment, string? cursor,
+        bool backwards, int limit, string? search = null, CancellationToken token = default)
+    {
+        await AuthorizeAsync(user, project, deployment, token);
+        if (search?.Length > 256) throw new ArgumentException("Log search is limited to 256 characters.");
+        var history = await store.ReadPageAsync(project, deployment,
+            TelemetryHistoryCursor.Decode(cursor, project, deployment),
+            backwards, limit, token, search);
+        return TelemetryHistoryCursor.Page(history, project, deployment);
+    }
+
     /// <inheritdoc />
     public async Task<DeploymentTelemetryPreferences> GetPreferencesAsync(Guid userId, Guid projectId,
         CancellationToken cancellationToken = default)
@@ -83,6 +95,33 @@ public sealed class DeploymentHistoryService(
             .Select(r => new { r.TimestampUtc, r.MetricSamplesJson, r.SourceIdentityJson, r.DeliveryJson, r.Cursor })
             .ToListAsync(cancellationToken);
         var interval = Math.Max(60, (int)Math.Ceiling((end - start).TotalSeconds / maximumPoints));
+        if (options.Value.DiskGateway)
+            try
+            {
+                var pending = await gateway!.ReadPendingAsync(userId, projectId, deploymentId, cancellationToken);
+                var buffered = pending.Events.Where(e => e.Event.TimestampUtc >= start && e.Event.TimestampUtc <= end)
+                    .SelectMany(e => (e.Event.Metrics ?? []).Select(m => new
+                    {
+                        Sample = m,
+                        Container = e.Event.TerminalChannel.Target ?? "unknown",
+                        Time = end.AddSeconds(-Math.Floor((end - e.Event.TimestampUtc).TotalSeconds / interval) *
+                                              interval)
+                    }))
+                    .GroupBy(p => (p.Container, p.Sample.Name, p.Sample.Unit, p.Time))
+                    .Select(g => new DeploymentMetricPoint(g.Key.Container, g.Key.Name, g.Key.Unit, g.Key.Time,
+                        g.Average(p => p.Sample.Value), g.Min(p => p.Sample.Value), g.Max(p => p.Sample.Value)))
+                    .ToArray();
+                remote = buffered.Concat(remote).DistinctBy(p => (p.Container, p.Name, p.Timestamp)).ToArray();
+                if (buffered.Length > 0)
+                    availability = "Recent metric intervals are pending ingestion and may be incomplete.";
+                if (pending.DroppedEvents > 0 || pending.Truncated)
+                    availability = "Some diagnostics were omitted or pending history exceeds the read limit.";
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                availability = "Pending metric storage is unavailable; confirmed samples are shown.";
+            }
+
         if (rows.Count > 10000)
         {
             rows.RemoveAt(rows.Count - 1);

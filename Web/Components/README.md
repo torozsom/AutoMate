@@ -1,5 +1,25 @@
 # Components
 
+## Telemetry presentation
+
+Project details groups daily analytics with live container utilization in Metrics. Deployment history opens with
+container-scoped resource summaries and a separate Logs card. Charts and numeric tables are collapsed by default;
+range changes preserve log paging and channels. Independent asynchronous scopes isolate history and analytics database
+reads, and cancelled/stale responses cannot overwrite newer selections.
+
+`Shared/TelemetryChart.razor` renders labeled SVG charts, visible isolated observations and gaps. Its local
+`wwwroot/js/telemetry-chart.js` module handles pointer/touch and arrow-key inspection without server roundtrips,
+maintains legible axis text when resized, and disposes listeners/observers. Shared presentation styles use AutoMate's
+light/dark theme tokens. `Shared/TelemetryPresentation.cs` owns friendly names, binary memory units, sub-core precision,
+rounded axes and sample-weighted daily averages. Historical summaries average returned interval aggregates; raw sample
+counts are unavailable there. Memory capacity remains supporting text rather than flattening the usage chart.
+
+Collection consent remains explicit; retention/sampling help is collapsed. No storage/API/schema changes are involved.
+Rendering fixtures in Web.Tests generate ignored `.artifacts/metrics-preview` HTML for browser checks without OAuth.
+
+Project details offers Stop only for local sources. Remote cloud deployments must be stopped in the provider portal;
+the handler also rejects remote sources so their relative project paths never enter the local filesystem scanner.
+
 Blazor components and their presentation-specific code-behind files.
 The project details page restores bounded terminal history for the latest deployment after joining its authorized
 SignalR group, merges buffered live events by database cursor, and repeats that handshake after reconnecting.
@@ -44,3 +64,14 @@ Runtime logs and metrics collected while viewing are saved for 30-day replay. Th
 collection while the page is closed. Metric history defaults to 60-second sampling; local live cards update with each
 Docker stats observation (normally every 1–2 seconds). The metric cards restore the latest
 saved numeric snapshot while awaiting live updates. `DeploymentMetricDisplay` formats numeric units for the cards.
+
+## Deployment telemetry update
+
+Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployment logs and metrics. PostgreSQL payload
+writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
+gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
+revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
+Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+points.
+
+ProjectTelemetrySummary receives the already resolved owner from ProjectDetails and creates a separate dependency scope for each analytics load. This prevents its EF queries from sharing the parent's circuit context during overlapping rendering/history loads; the application service still checks ownership.

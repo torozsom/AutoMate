@@ -254,11 +254,17 @@ public sealed class CloudRunMonitor(
                 try
                 {
                     var azure = await azureCredentials.GetAsync(run.UserId, cancellationToken);
+                    deployment.CloudContainerAppName = snapshot.Config.CloudContainerAppName;
+                    deployment.CloudContainerRevision = $"{snapshot.Config.CloudContainerAppName}--am-{workflow.Id}";
+                    deployment.CloudResourceId =
+                        $"/subscriptions/{Uri.EscapeDataString(azure.SubscriptionId)}/resourceGroups/{Uri.EscapeDataString(snapshot.Config.CloudResourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(snapshot.Config.CloudContainerAppName)}";
+                    await dbContext.SaveChangesAsync(cancellationToken);
                     azureStreamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
                     {
                         ProjectId = run.ProjectId,
                         DeploymentId = deployment.Id,
                         UserId = run.UserId,
+                        ExpectedRevision = $"{snapshot.Config.CloudContainerAppName}--am-{workflow.Id}",
                         Config = snapshot.Config,
                         AzureCredentials = azure
                     });

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Application.Abstractions.GitHub;
 using Application.Orchestration;
+using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,9 +24,47 @@ public sealed class HostingProfileRegistrationTests
         using var services = builder.Services.BuildServiceProvider();
         using var scope = services.CreateScope();
 
+        var storage = services.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value;
+        Assert.True(storage.DiskGateway);
+        Assert.True(storage.Specialized);
+        services.GetRequiredService<IStartupValidator>().Validate();
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IGitHubAppCredentials>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>());
+    }
+
+    /// <summary>A missing self-hosted gateway fails validation instead of enabling an implicit database fallback.</summary>
+    [Fact]
+    public void SelfHosted_requires_gateway_configuration()
+    {
+        var builder = CreateBuilder("SelfHosted");
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            { ["TelemetryStorage:GatewayUrl"] = "" });
+        builder.AddApplicationServices();
+        using var services = builder.Services.BuildServiceProvider();
+        var failure =
+            Assert.Throws<OptionsValidationException>(() =>
+                services.GetRequiredService<IStartupValidator>().Validate());
+        Assert.Contains("GatewayUrl", failure.Message);
+    }
+
+    /// <summary>Self-hosted startup cannot silently restore raw PostgreSQL payload writes.</summary>
+    [Theory]
+    [InlineData("Postgres", "PostgresOutbox")]
+    [InlineData("LokiMimir", "PostgresOutbox")]
+    public void SelfHosted_rejects_database_payload_persistence(string backend, string deliveryMode)
+    {
+        var builder = CreateBuilder("SelfHosted");
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["TelemetryStorage:Backend"] = backend,
+            ["TelemetryStorage:DeliveryMode"] = deliveryMode
+        });
+        builder.AddApplicationServices();
+        using var services = builder.Services.BuildServiceProvider();
+        var failure = Assert.Throws<OptionsValidationException>(() =>
+            services.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value);
+        Assert.Contains("both SelfHosted and SaaS", failure.Message);
     }
 
     /// <summary>SaaS still rejects missing GitHub App secrets during startup validation.</summary>
@@ -77,7 +116,12 @@ public sealed class HostingProfileRegistrationTests
             ["Authentication:GitHub:ClientId"] = "test-client",
             ["Authentication:GitHub:ClientSecret"] = "test-secret",
             ["Authentication:Microsoft:ClientId"] = "test-client",
-            ["Authentication:Microsoft:ClientSecret"] = "test-secret"
+            ["Authentication:Microsoft:ClientSecret"] = "test-secret",
+            ["TelemetryStorage:GatewayUrl"] = "https://telemetry.example.invalid",
+            ["TelemetryStorage:GatewayToken"] = "test-only-credential-not-for-production",
+            ["TelemetryStorage:LokiUrl"] = "https://logs.example.invalid",
+            ["TelemetryStorage:MetricsWriteUrl"] = "https://metrics.example.invalid/otlp/v1/metrics",
+            ["TelemetryStorage:MetricsQueryUrl"] = "https://metrics.example.invalid/prometheus"
         });
         return builder;
     }

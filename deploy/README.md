@@ -7,9 +7,13 @@ All checked-in hosting files live here. Run the commands below from the reposito
 | `docker-compose.yml` | PostgreSQL and Redis for local development with `dotnet run`                              |
 | `self-hosted/`       | Containerized AutoMate with access to a developer-controlled project directory and Docker |
 | `saas/`              | Public-service hosting profile and configuration guidance                                 |
-| `telemetry/`         | Optional Loki/Mimir storage and authenticated TLS gateway                                 |
+| `telemetry/`         | Required Loki/Mimir storage, durable disk gateway and authenticated TLS access            |
 
 ## Local development
+
+For the complete cold-start sequence, including the required disk gateway and Grafana,
+see [local development](../docs/local-development.md). Private application settings are imported with
+Configure-LocalDevelopment.ps1; .env files are not loaded automatically by ASP.NET Core.
 
 Copy `deploy/.env.example` to `deploy/.env` if you do not already have local credentials. Configure `DB_USER` and
 `DB_PASSWORD`, then start the dependencies:
@@ -44,3 +48,7 @@ credentials moved from `.docker/.env` remain private in `deploy/.env`; only `.en
 Telemetry credentials, certificates, and working test artifacts remain in the ignored root `.telemetry/` directory.
 Its initialization script resolves that directory relative to its own location, independently of the shell's working
 directory.
+
+Deployment telemetry is required in both hosting profiles, including local Web development. Configure the DiskGateway
+and start the separate Telemetry service before starting Web; the application does not select raw PostgreSQL persistence
+when configuration or storage is unavailable. See self-hosted/README.md and ../docs/saas-telemetry.md.

@@ -89,7 +89,10 @@ public sealed class LogHubCancellationTests
         public Func<MethodInfo?, object?[]?, object?> Handler { get; set; } = null!;
 
         /// <inheritdoc />
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => Handler(targetMethod, args);
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            return Handler(targetMethod, args);
+        }
     }
 
     /// <summary>A connection with a controllable disconnect token.</summary>
@@ -97,17 +100,25 @@ public sealed class LogHubCancellationTests
     {
         /// <inheritdoc />
         public override string ConnectionId => "test-connection";
+
         /// <inheritdoc />
         public override string? UserIdentifier => null;
+
         /// <inheritdoc />
         public override ClaimsPrincipal? User => null;
+
         /// <inheritdoc />
         public override IDictionary<object, object?> Items { get; } = new Dictionary<object, object?>();
+
         /// <inheritdoc />
         public override IFeatureCollection Features { get; } = new FeatureCollection();
+
         /// <inheritdoc />
         public override CancellationToken ConnectionAborted => disconnected;
+
         /// <inheritdoc />
-        public override void Abort() { }
+        public override void Abort()
+        {
+        }
     }
 }

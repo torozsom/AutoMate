@@ -13,10 +13,11 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
 
     public async Task<AzureMonitorLogQueryResult> QueryAsync(string resourceId, string accessToken,
         AzureContainerAppLogSource source, string containerAppName, DateTimeOffset fromUtc, int batchSize,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, string? revision = null, DateTimeOffset? afterTimestamp = null,
+        string? afterHash = null)
     {
         var uri = $"{Endpoint}{resourceId}/query";
-        var query = CreateQuery(source, containerAppName, fromUtc, batchSize);
+        var query = CreateQuery(source, containerAppName, fromUtc, batchSize, revision, afterTimestamp, afterHash);
         using var request = new HttpRequestMessage(HttpMethod.Post, uri)
         {
             Content = new StringContent(JsonSerializer.Serialize(new { query }), Encoding.UTF8, "application/json")
@@ -57,7 +58,8 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
             if (!DateTimeOffset.TryParse(timestampText, out var timestamp)) continue;
             records.Add(new AzureMonitorLogRecord(timestamp.ToUniversalTime(), GetValue(values, indexes, "Message"),
                 GetValue(values, indexes, "ContainerName"), GetValue(values, indexes, "RevisionName"),
-                GetValue(values, indexes, "Stream"), GetValue(values, indexes, "SourceTable")));
+                GetValue(values, indexes, "Stream"), GetValue(values, indexes, "SourceTable"),
+                GetValue(values, indexes, "CursorHash") is { Length: > 0 } hash ? hash : null));
         }
 
         return records;
@@ -72,7 +74,7 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
     }
 
     private static string CreateQuery(AzureContainerAppLogSource source, string containerAppName,
-        DateTimeOffset fromUtc, int batchSize)
+        DateTimeOffset fromUtc, int batchSize, string? revision, DateTimeOffset? afterTimestamp, string? afterHash)
     {
         var appName = containerAppName.Replace("'", "''", StringComparison.Ordinal);
         var from = fromUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
@@ -87,10 +89,19 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
                 (ContainerAppSystemLogs_CL | where ContainerAppName_s == '{{appName}}' | project TimeGenerated, Message=case(isnotempty(tostring(column_ifexists("Log_s", ""))), tostring(column_ifexists("Log_s", "")), isnotempty(tostring(column_ifexists("Message_s", ""))), tostring(column_ifexists("Message_s", "")), tostring(column_ifexists("Reason_s", ""))), ContainerName=tostring(column_ifexists("ContainerName_s", "")), RevisionName=tostring(column_ifexists("RevisionName_s", "")), Stream="system", SourceTable="ContainerAppSystemLogs_CL")
                 """;
 
+        var revisionFilter = string.IsNullOrWhiteSpace(revision)
+            ? ""
+            : "| where RevisionName == '" + revision.Replace("'", "''", StringComparison.Ordinal) + "'";
+        var cursorFilter = afterTimestamp is null
+            ? ""
+            : $"| where TimeGenerated > datetime({afterTimestamp.Value.UtcDateTime:O}) or (TimeGenerated == datetime({afterTimestamp.Value.UtcDateTime:O}) and CursorHash > '{afterHash ?? ""}')";
         return $$"""
                  union isfuzzy=true {{branches}}
                  | where TimeGenerated >= datetime({{from}})
-                 | order by TimeGenerated asc, Message asc
+                 {{revisionFilter}}
+                 | extend CursorHash=hash_sha256(strcat(format_datetime(TimeGenerated, 'yyyy-MM-ddTHH:mm:ss.fffffff'), '+00:00\n', SourceTable, '\n', Message, '\n', ContainerName, '\n', RevisionName, '\n', Stream))
+                 {{cursorFilter}}
+                 | order by TimeGenerated asc, CursorHash asc
                  | take {{safeBatchSize}}
                  """;
     }
@@ -108,7 +119,8 @@ internal sealed record AzureMonitorLogRecord(
     string ContainerName,
     string RevisionName,
     string Stream,
-    string SourceTable);
+    string SourceTable,
+    string? CursorHash = null);
 
 internal sealed record AzureMonitorLogQueryResult(IReadOnlyList<AzureMonitorLogRecord> Records, string? FailureReason)
 {

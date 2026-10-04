@@ -1,5 +1,30 @@
 # Local telemetry and Grafana
 
+## User → project → deployment navigation
+
+With PostgreSQL, the telemetry stack and Grafana running, use PowerShell 7:
+
+```powershell
+./deploy/telemetry/Sync-GrafanaHierarchy.ps1
+```
+
+Open [AutoMate user project deployment](http://localhost:3000/d/automate-hierarchy), also available under
+**Dashboards → AutoMate**. Select **User**, then **Project**, then **Deployment**. Projects have names;
+deployments have UTC creation times, short IDs and statuses. All remains inside the selected user's tenant.
+Choose the dashboard time range containing the deployment's observations. CPU/memory requires runtime collection.
+
+The script provisions fixed-tenant Loki/Mimir data sources for every current user and a PostgreSQL metadata catalog
+with a dedicated read-only account. The catalog exposes only usernames, project/deployment IDs, names, times and
+statuses through views; it cannot access base application tables. PostgreSQL is used for navigation only, not raw
+log or metric storage. This includes projects and deployments with no metric samples. Project/deployment lists update
+on dashboard reload. Rerun the script after adding users or recreating PostgreSQL; it preserves existing Grafana login
+credentials and reloads provisioning through Grafana's API without restarting storage or AutoMate.
+
+This is a private, loopback-only **operator** dashboard, not customer authorization. The operator can inspect every
+provisioned tenant. No new Prometheus server or Grafana plugin is required. Database catalog changes are local operator
+setup, not an EF migration. The default database endpoint is `host.docker.internal:5432`; override `-PostgresAddress`
+for a different local Docker setup. The metadata connection disables database TLS for local development only.
+
 The base `compose.yaml` hosts Loki, Mimir, SeaweedFS, and the TLS gateway. See
 [storage setup and retention](../../docs/deployment-telemetry.md) for initializing the base stack.
 
@@ -79,3 +104,20 @@ arrive on a 60-second sampling interval. Choose the time range containing those 
 
 To select another local tenant, rerun initialization with its owner GUID, then restart Grafana. Existing credentials
 remain unchanged. This changes the account scope of the entire local operator UI, including saved dashboards.
+
+## Deployment telemetry update
+
+Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployment logs and metrics. PostgreSQL payload
+writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
+gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
+revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
+Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+points.
+
+For both self-hosted development and SaaS, start the disk service by also including compose.disk.yaml with --build. Set
+TELEMETRY_DATABASE_CONNECTION in the private compose.env to a database hostname reachable from the telemetry container
+(for Docker Desktop host development, host.docker.internal). New initialization generates the ingestion token;
+Configure-TelemetryDevelopment.ps1 upgrades an older pilot's compose.env token and imports DiskGateway into Web user
+secrets. Import before starting the service so an upgraded pilot has its token. The development ingestion URL is
+loopback http://localhost:9450; Loki/Mimir query endpoints continue to verify their TLS certificate. See
+../self-hosted/README.md for the complete self-hosted Compose command.
