@@ -84,6 +84,8 @@ PostgreSQL log/metric writer or fallback is introduced by local Docker diagnosti
 
 Durable ingestion and background dispatch carry GUID-only deployment/project ILogger scopes. Storage/delivery/notice
 failure logs expose the failure type without attaching raw exceptions, which may contain provider or database payloads.
+Successful dispatch never copies terminal messages into platform logs, including legacy delivery modes. Redaction is
+pattern-based, so arbitrary private text must remain confined to authorized tenant storage and presentation.
 Redaction already emits only counts and finite source/kind values. New platform audit events never duplicate diagnostic
 payloads; existing disk gateway and Loki/Mimir storage paths remain unchanged. Real SDK failure exports are tested in
 `Web.Tests/OperationalLoggingTests.cs`; Web/Observability now enforces the platform logging/trace boundary.

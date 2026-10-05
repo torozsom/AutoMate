@@ -290,12 +290,8 @@ public sealed class DeploymentDiagnosticDispatcher(
 
             if (orderId == 0) return;
             if (orderId > 0)
-            {
                 AutoMateTelemetry.EventsPersisted.Add(1, TelemetryTags.Create(diagnosticEvent));
-                // Deployment payloads have their own tenant storage; don't duplicate them into platform logging.
-                if (!scope.ServiceProvider.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value.DiskGateway)
-                    LogDiagnostic(diagnosticEvent);
-            }
+            // Diagnostic payloads belong only in tenant storage and presentation, including legacy delivery modes.
         }
         catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
         {
@@ -394,34 +390,6 @@ public sealed class DeploymentDiagnosticDispatcher(
         };
     }
 
-    private void LogDiagnostic(DeploymentDiagnosticEvent diagnosticEvent)
-    {
-        using var scope = logger.BeginScope(new Dictionary<string, object?>
-        {
-            ["ProjectId"] = diagnosticEvent.ProjectId,
-            ["DeploymentId"] = diagnosticEvent.DeploymentId,
-            ["DiagnosticSource"] = diagnosticEvent.Source,
-            ["DiagnosticComponent"] = diagnosticEvent.SourceIdentity?.Component,
-            ["DiagnosticKind"] = diagnosticEvent.Kind,
-            ["TraceId"] = diagnosticEvent.TraceId
-        });
-        logger.Log(MapLogLevel(diagnosticEvent.Severity), "Deployment diagnostic: {DiagnosticMessage}",
-            diagnosticEvent.Message);
-    }
-
-    private static LogLevel MapLogLevel(DeploymentDiagnosticSeverity severity)
-    {
-        return severity switch
-        {
-            DeploymentDiagnosticSeverity.Trace => LogLevel.Trace,
-            DeploymentDiagnosticSeverity.Debug => LogLevel.Debug,
-            DeploymentDiagnosticSeverity.Information => LogLevel.Information,
-            DeploymentDiagnosticSeverity.Warning => LogLevel.Warning,
-            DeploymentDiagnosticSeverity.Error => LogLevel.Error,
-            DeploymentDiagnosticSeverity.Critical => LogLevel.Critical,
-            _ => LogLevel.Information
-        };
-    }
 }
 
 /// <summary>Finite diagnostic metric dimensions, excluding identity and external strings.</summary>

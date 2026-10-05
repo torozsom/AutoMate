@@ -29,8 +29,8 @@ public sealed class DiagnosticDeliveryTests
         await worker.StartAsync(CancellationToken.None);
         try
         {
-            await publisher.PublishAsync(Event("first"));
-            await publisher.PublishAsync(Event("password=private-value"));
+            await publisher.PublishAsync(Event() with { Message = "first" });
+            await publisher.PublishAsync(Event() with { Message = "password=private-value" });
             await live.Recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Contains(live.Delivered, log => log.Message == "password=[REDACTED]");
             Assert.DoesNotContain(store.Saved, e => e.Message.Contains("private-value", StringComparison.Ordinal));
@@ -51,14 +51,14 @@ public sealed class DiagnosticDeliveryTests
         var live = new TestLive { StallNext = true };
         await using var services = Services(store, live);
         var publisher = Publisher(services);
-        Assert.True(await publisher.PublishDurablyAsync(Event("password=private-value"), CancellationToken.None));
+        Assert.True(await publisher.PublishDurablyAsync(Event() with { Message = "password=private-value" }, CancellationToken.None));
         var saved = Assert.Single(store.Saved);
         Assert.Equal("password=[REDACTED]", saved.Message);
         Assert.NotNull(saved.TraceId);
         Assert.NotNull(saved.SpanId);
         Assert.NotNull(saved.EventId);
         store.Failure = "storage-timeout";
-        Assert.False(await publisher.PublishDurablyAsync(Event("retry later"), CancellationToken.None));
+        Assert.False(await publisher.PublishDurablyAsync(Event() with { Message = "retry later" }, CancellationToken.None));
         Assert.Single(store.Saved);
     }
 
@@ -69,7 +69,7 @@ public sealed class DiagnosticDeliveryTests
         var store = new TestStore { Failure = "storage-timeout" };
         await using var services = Services(store, new TestLive());
         using var canceled = new CancellationTokenSource();
-        var pending = Publisher(services).PublishDurablyAsync(Event("cancel"), canceled.Token);
+        var pending = Publisher(services).PublishDurablyAsync(Event() with { Message = "cancel" }, canceled.Token);
         await store.Entered.Task;
         canceled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
@@ -97,7 +97,7 @@ public sealed class DiagnosticDeliveryTests
         await worker.StartAsync(CancellationToken.None);
         try
         {
-            await publisher.PublishAsync(Event("password=private-value"));
+            await publisher.PublishAsync(Event() with { Message = "password=private-value" });
             await live.Recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var saved = Assert.Single(store.Saved);
             Assert.Equal(saved.TraceId, store.DispatchTrace);
@@ -123,7 +123,7 @@ public sealed class DiagnosticDeliveryTests
         var live = new TestLive();
         await using var services = Services(store, live);
         var publisher = Publisher(services);
-        var original = Event("build") with { EventId = Guid.NewGuid() };
+        var original = Event() with { Message = "build", EventId = Guid.NewGuid() };
         for (var index = 0; index < 513; index++) await publisher.PublishAsync(original);
         using var worker = new DeploymentDiagnosticDispatcher(publisher, live,
             services.GetRequiredService<IServiceScopeFactory>(), NullLogger<DeploymentDiagnosticDispatcher>.Instance);
@@ -148,7 +148,7 @@ public sealed class DiagnosticDeliveryTests
         return new ServiceCollection().AddSingleton<IDeploymentDiagnosticStore>(store)
             .AddSingleton<ILogStreamer>(live)
             .AddSingleton<IOptions<TelemetryStorageOptions>>(Options.Create(new TelemetryStorageOptions
-                { Backend = "LokiMimir", DeliveryMode = "DiskGateway" })).BuildServiceProvider();
+            { Backend = "LokiMimir", DeliveryMode = "DiskGateway" })).BuildServiceProvider();
     }
 
     /// <summary>Uses short production-supported deadlines for failure scenarios.</summary>
@@ -160,11 +160,11 @@ public sealed class DiagnosticDeliveryTests
             NullLogger<DeploymentDiagnosticPublisher>.Instance, services.GetRequiredService<IServiceScopeFactory>());
     }
 
-    /// <summary>Builds a correlated build observation with a stable terminal route.</summary>
-    private static DeploymentDiagnosticEvent Event(string message)
+    /// <summary>Builds non-sensitive routing metadata; each test assigns its untrusted message separately.</summary>
+    private static DeploymentDiagnosticEvent Event()
     {
         return new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(), DeploymentDiagnosticSource.DockerCompose,
-            DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, message,
+            DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, "fixture",
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
     }
 
