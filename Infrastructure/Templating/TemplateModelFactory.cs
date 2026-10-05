@@ -34,6 +34,7 @@ internal static class TemplateModelFactory
             main_project_folder = mainProject.Folder,
 
             // docker-compose configuration
+            automate_project_id = config.ProjectId.ToString("N"),
             exposed_port = config.ExposedPort,
             environment_name = config.EnvironmentName,
             requires_db = databasesForTemplate.Count > 0,

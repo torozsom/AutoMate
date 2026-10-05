@@ -64,8 +64,8 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
             await context.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation(
-                "[ApplicationService] Successfully added C# project '{CsProjectName}' to project '{ProjectName}'.",
-                input.CsProjectName, input.ProjectName);
+                "Local project configuration saved for project {ProjectId}, user {UserId}.",
+                app.Id, userId);
             return true;
         }
         catch (DbUpdateException ex)
@@ -100,12 +100,13 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
                 return false;
             }
 
-            context.Applications.Add(CreateRemoteApplication(input));
+            var app = CreateRemoteApplication(input);
+            context.Applications.Add(app);
             await context.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation(
-                "[ApplicationService] Successfully added GitHub project '{AppName}' for user {UserId}.",
-                input.AppName,
+                "GitHub project saved for project {ProjectId}, user {UserId}.",
+                app.Id,
                 input.UserId);
             return true;
         }
@@ -170,15 +171,41 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
             .FirstOrDefaultAsync(a => a.Id == appId && a.UserId == userId, cancellationToken);
     }
 
+    /// <inheritdoc />
     public async Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, bool consented,
         CancellationToken cancellationToken = default)
     {
         var configuration = await context.Applications.Where(item => item.Id == appId && item.UserId == userId)
             .SelectMany(item => item.CsProjects).Select(item => item.Configuration)
             .FirstOrDefaultAsync(item => item != null, cancellationToken);
-        if (configuration is null) return false;
+        if (configuration is null)
+        {
+            logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId, userId);
+            return false;
+        }
         configuration.AiDiagnosticEgressConsented = consented;
         await context.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",
+            appId, userId, consented ? "enabled" : "disabled");
+        return true;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, Guid csProjectId, bool consented,
+        CancellationToken cancellationToken = default)
+    {
+        var configuration = await context.Applications.Where(item => item.Id == appId && item.UserId == userId)
+            .SelectMany(item => item.CsProjects).Where(item => item.Id == csProjectId)
+            .Select(item => item.Configuration).FirstOrDefaultAsync(cancellationToken);
+        if (configuration is null)
+        {
+            logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId, userId);
+            return false;
+        }
+        configuration.AiDiagnosticEgressConsented = consented;
+        await context.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",
+            appId, userId, consented ? "enabled" : "disabled");
         return true;
     }
 

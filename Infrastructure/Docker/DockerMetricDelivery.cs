@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Logging;
+using Application.Diagnostics;
 using Infrastructure.Diagnostics;
 using Microsoft.Extensions.Logging;
 
@@ -34,16 +36,25 @@ internal sealed class DockerMetricDelivery(
             Metrics: DeploymentMetricNormalizer.Docker(metrics.Cpu, metrics.Memory));
         var safe = redactor.Redact(observation).Event;
         if (viewers.HasViewers(projectId, deploymentId))
+        {
+            var startedAt = Stopwatch.GetTimestamp();
             try
             {
                 await live.StreamContainerMetricsAsync(projectId, container, safe.Attributes!["cpu"],
-                    safe.Attributes["memory"]);
+                    safe.Attributes["memory"], token);
+                AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(safe));
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(safe));
                 logger.LogWarning("Live Docker metric delivery unavailable for project {ProjectId}: {FailureType}.",
                     projectId, exception.GetType().Name);
             }
+            finally
+            {
+                DeploymentDiagnosticPublisher.RecordSinkDuration(safe, "delivery", startedAt);
+            }
+        }
 
         if (now < _nextHistorySample) return;
         _nextHistorySample = now.AddSeconds(historySampleSeconds);

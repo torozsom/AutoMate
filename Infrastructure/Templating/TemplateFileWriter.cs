@@ -26,7 +26,7 @@ internal sealed class TemplateFileWriter(ILogger logger)
                 Directory.CreateDirectory(outputDir);
 
             await File.WriteAllTextAsync(outputPath, file.Content, cancellationToken);
-            logger.LogInformation("[TemplateService] Generated file saved: {OutputPath}", outputPath);
+            logger.LogInformation("Deployment artifact saved: {OutputFile}.", Path.GetFileName(file.Path));
         }
     }
 }

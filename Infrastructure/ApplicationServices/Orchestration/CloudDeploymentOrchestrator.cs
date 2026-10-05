@@ -3,6 +3,7 @@ using Application.Abstractions.Diagnostics;
 using Application.Abstractions.GitHub;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Templating;
+using Application.Diagnostics;
 using Domain.DTO;
 using Domain.Entities;
 using Domain.Enums;
@@ -64,9 +65,8 @@ public sealed class CloudDeploymentOrchestrator(
         config.IsCloudDeployment = true;
         CloudDeploymentDefaults.Apply(config);
 
-        logger.LogInformation(
-            "[CloudDeploymentOrchestrator] Starting cloud deployment preparation for project '{ProjectName}'...",
-            config.ProjectName);
+        using var projectScope = OperationalLog.BeginCorrelation(logger, projectId: config.ProjectId);
+        logger.LogInformation("Starting cloud deployment preparation.");
 
         var csProject = await _csProjectResolver.GetOrCreateAsync(request, cancellationToken);
         config.CsProjectId = csProject.Id;
@@ -84,12 +84,12 @@ public sealed class CloudDeploymentOrchestrator(
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        using var deploymentScope = OperationalLog.BeginCorrelation(logger, deployment.Id);
         statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
-        await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
-            $"Starting cloud deployment preparation for {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}.");
-
         try
         {
+            await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
+                $"Starting cloud deployment preparation for {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}.");
             // Self-hosted queued requests can contain an expired login token by the time a launch starts.
             if (saasRun is null)
                 request = request with
@@ -238,9 +238,7 @@ public sealed class CloudDeploymentOrchestrator(
                     "GitHub Actions workflow is still queued or running. Refresh the project details page for the latest persisted status.");
             }
 
-            logger.LogInformation(
-                "[CloudDeploymentOrchestrator] Cloud deployment files committed to {Owner}/{Repo}@{Branch}. Commit: {Sha}",
-                request.RepositoryOwner, request.RepositoryName, request.BranchName, commitSha);
+            logger.LogInformation("Cloud deployment files committed.");
 
             return deployment;
         }
@@ -249,17 +247,15 @@ public sealed class CloudDeploymentOrchestrator(
             try
             {
                 await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
-                    $"Cloud deployment preparation failed: {ex.Message}");
+                    "Cloud deployment preparation failed. Verify provider access and deployment configuration.");
             }
             catch (Exception diagnosticError)
             {
-                logger.LogWarning(diagnosticError, "Could not publish cloud failure for deployment {DeploymentId}.",
-                    deployment.Id);
+                logger.LogWarning("Could not publish cloud failure for deployment {DeploymentId}: {FailureType}.",
+                    deployment.Id, diagnosticError.GetType().Name);
             }
 
-            logger.LogError(ex,
-                "[CloudDeploymentOrchestrator] Cloud deployment preparation failed for project '{ProjectName}'.",
-                config.ProjectName);
+            logger.LogError("Cloud deployment preparation failed: {FailureType}.", ex.GetType().Name);
 
             if (saasRun is null)
             {

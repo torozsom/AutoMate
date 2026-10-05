@@ -41,7 +41,8 @@ public sealed class CloudDeploymentScheduler(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "SaaS cloud admission failed; retrying after a bounded pause.");
+                logger.LogError("SaaS cloud admission failed; retrying after a bounded pause. Failure {FailureType}.",
+                    ex.GetType().Name);
                 await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
             }
         }
@@ -65,7 +66,8 @@ public sealed class CloudDeploymentScheduler(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Cloud launch {RunId} stopped unexpectedly; its lease will recover.", runId);
+            logger.LogError("Cloud launch {RunId} stopped unexpectedly; its lease will recover. Failure {FailureType}.",
+                runId, ex.GetType().Name);
         }
         finally
         {
@@ -79,8 +81,9 @@ public sealed class CloudDeploymentScheduler(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Lease renewal failed for cloud launch {RunId}; the run will recover.",
-                    runId);
+                logger.LogWarning(
+                    "Lease renewal failed for cloud launch {RunId}; the run will recover. Failure {FailureType}.",
+                    runId, ex.GetType().Name);
             }
         }
     }

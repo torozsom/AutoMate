@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
+using Application.Diagnostics;
 using Domain.DTO;
 using Domain.Entities;
 using Domain.Enums;
@@ -85,7 +86,8 @@ public sealed class AzureContainerAppRuntimeStreamer(
             {
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 deadline.CancelAfter(TimeSpan.FromSeconds(45));
-                await PollTargetAsync(target, deadline.Token);
+                await DeploymentTracing.RunAsync(DeploymentOperation.AzurePoll, target.ProjectId, target.DeploymentId,
+                    ct, () => PollTargetAsync(target, deadline.Token));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -93,8 +95,8 @@ public sealed class AzureContainerAppRuntimeStreamer(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Azure runtime monitoring failed for deployment {DeploymentId}.",
-                    target.DeploymentId);
+                logger.LogError("Azure runtime monitoring failed for deployment {DeploymentId}. Failure {FailureType}.",
+                    target.DeploymentId, ex.GetType().Name);
                 await PublishIssueOnceAsync(target, "coordinator",
                     "Azure runtime monitoring encountered a recoverable error.",
                     ct);
@@ -201,8 +203,11 @@ public sealed class AzureContainerAppRuntimeStreamer(
                     DeploymentDiagnosticStream.System, state.LatestRevision)), cancellationToken);
         }
 
-        var metrics = await _containerAppClient.GetMetricsAsync(target.ResourceId, target.AzureCredentials.AccessToken,
-            cancellationToken, target.ExpectedRevision);
+        var metrics = await DeploymentTracing.RunAsync(DeploymentOperation.AzureMetrics, target.ProjectId,
+            target.DeploymentId,
+            cancellationToken, () => _containerAppClient.GetMetricsAsync(target.ResourceId,
+                target.AzureCredentials.AccessToken,
+                cancellationToken, target.ExpectedRevision));
         if (metrics != null)
             await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
                     DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
@@ -238,9 +243,11 @@ public sealed class AzureContainerAppRuntimeStreamer(
         for (var page = 0; page < Math.Clamp(settings.MaximumPagesPerPoll, 1, 100); page++)
         {
             if (string.IsNullOrWhiteSpace(target.ExpectedRevision)) return;
-            var result = await _monitorLogsClient.QueryAsync(target.ResourceId, accessToken, source,
-                target.ContainerAppName, from, settings.BatchSize, cancellationToken, target.ExpectedRevision,
-                checkpoint.LastTimestamp, checkpoint.LastTieBreaker);
+            var result = await DeploymentTracing.RunAsync(DeploymentOperation.AzureLogs, target.ProjectId,
+                target.DeploymentId,
+                cancellationToken, () => _monitorLogsClient.QueryAsync(target.ResourceId, accessToken, source,
+                    target.ContainerAppName, from, settings.BatchSize, cancellationToken, target.ExpectedRevision,
+                    checkpoint.LastTimestamp, checkpoint.LastTieBreaker), result => result.IsSuccess);
             if (!result.IsSuccess)
             {
                 await PublishIssueOnceAsync(target, sourceName, result.FailureReason!, cancellationToken);
@@ -252,7 +259,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
                          StringComparer.Ordinal))
             {
                 var tieBreaker = CreateTieBreaker(record);
-                if (!IsAfterCheckpoint(record.TimestampUtc, tieBreaker, checkpoint)) continue;
+                if (!IsAfterCheckpoint(record.TimestampUtc, tieBreaker, checkpoint))
+                {
+                    AutoMateTelemetry.DiagnosticDuplicates.Add(1,
+                        new KeyValuePair<string, object?>("deployment.source", "AzureContainerApps"));
+                    continue;
+                }
 
                 if (record.RevisionName != target.ExpectedRevision) continue;
                 var eventId =
@@ -316,6 +328,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
     {
         var key = $"{target.DeploymentId:N}:{issue}";
         if (!_reportedIssues.TryAdd(key, message)) return;
+        if (issue is "token" or "console" or "system" or "coordinator")
+            AutoMateTelemetry.CollectorErrors.Add(1,
+                new KeyValuePair<string, object?>("deployment.source", "AzureContainerApps"));
         await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
             DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Annotation,
             DeploymentDiagnosticSeverity.Warning, DateTimeOffset.UtcNow, $"[Azure runtime] {message}",
@@ -327,7 +342,10 @@ public sealed class AzureContainerAppRuntimeStreamer(
 
     private void ClearIssue(ContainerAppStreamTarget target, string issue)
     {
-        _reportedIssues.TryRemove($"{target.DeploymentId:N}:{issue}", out _);
+        if (_reportedIssues.TryRemove($"{target.DeploymentId:N}:{issue}", out _) &&
+            issue is "token" or "console" or "system")
+            AutoMateTelemetry.CollectorReconnects.Add(1,
+                new KeyValuePair<string, object?>("deployment.source", "AzureContainerApps"));
     }
 
     private static bool IsAfterCheckpoint(DateTimeOffset timestamp, string tieBreaker,

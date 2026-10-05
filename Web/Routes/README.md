@@ -1,6 +1,8 @@
 # Routes
 
 Minimal API endpoint contracts and endpoint implementations.
+Login attempts/outcomes and authenticated logout are audited by their originating endpoint modules. Successful events
+retain the internal user GUID without email/password or cookie data. Routed requests also cross RequestAuditMiddleware.
 The SaaS-only GitHub App webhook endpoint accepts bounded HTTPS POST bodies and delegates signature verification and
 minimal metadata persistence to Infrastructure.
 
@@ -27,3 +29,28 @@ gateway confirms durable checksummed writes before cloud checkpoints advance. Te
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
 Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
 points.
+
+`Endpoints/DeploymentAnalysisEndpoint.cs` maps `DELETE /api/deployments/{deploymentId}/analyses/{analysisId}`.
+It resolves the owner from the authenticated principal using `IUserService`, requires a valid antiforgery cookie/token
+(the default `RequestVerificationToken` header or `__RequestVerificationToken` form field), and calls the Application
+analysis deletion port. Responses: 204 deleted, 404 missing/foreign, 409 unexpired queued/running, 400 invalid
+antiforgery.
+An authenticated owner may delete results with AI disabled; rendered deletion controls remain M7 work.
+
+`Endpoints/DeploymentAnalysisEndpoint.cs` maps `DELETE /api/deployments/{deploymentId}/analyses/{analysisId}`.
+It resolves the owner from the authenticated principal using `IUserService`, requires a valid antiforgery cookie/token
+(the default `RequestVerificationToken` header or `__RequestVerificationToken` form field), and calls the Application
+analysis deletion port. Responses: 204 deleted, 404 missing/foreign, 409 unexpired queued/running, 400 invalid
+antiforgery.
+An authenticated owner may delete results with AI disabled; rendered deletion controls remain M7 work.
+
+Local login emits fixed authentication completion/denial events without email, password, user or returned error text.
+Endpoint authorization challenges/forbids are audited by the Web composition-root handler while retaining framework
+responses. See `Application/Diagnostics/README.md` for the fixed event contract and the remaining M5 global audit.
+
+POST /api/deployments/{deploymentId}/analyses/{analysisId}/cancel requires authentication and a valid antiforgery
+cookie/token, resolves owner identity through IUserService and calls IDeploymentAnalysisService.CancelAsync. Responses:
+204 canceled/already canceled, 404 missing/foreign/expired, 409 already completed/failed/skipped, 400 invalid
+antiforgery,
+and 403 unresolved owner. Cancellation is available with AI disabled. It does not delete results or alter deployments;
+rendered controls remain M7 work.

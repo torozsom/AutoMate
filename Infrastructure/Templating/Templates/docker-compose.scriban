@@ -1,6 +1,12 @@
 services:
   web:
     container_name: {{ project_slug }}-web
+    labels:
+      io.automate.owner: "AutoMate"
+      io.automate.project: "{{ automate_project_id }}"
+      io.automate.deployment: "${AUTOMATE_DEPLOYMENT_ID:-unassigned}"
+      io.automate.service: "web"
+      io.automate.scope: "deployment"
     build:
       context: ..
       dockerfile: .automate/Dockerfile
@@ -42,6 +48,11 @@ services:
   {{- for db in databases }}
   {{ app_slug }}-{{ db.container_suffix }}:
     container_name: {{ app_slug }}-{{ db.container_suffix }}
+    labels:
+      io.automate.owner: "AutoMate"
+      io.automate.project: "{{ automate_project_id }}"
+      io.automate.service: "{{ db.container_suffix }}"
+      io.automate.scope: "project"
     {{- if db.type == 'PostgreSQL' }}
     image: postgres:15-alpine
     environment:

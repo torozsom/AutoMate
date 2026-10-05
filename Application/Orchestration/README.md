@@ -6,7 +6,8 @@ exposes queued age and cloud phase without credentials. `CloudSaasOptions` contr
 monitoring is separate from the launch lease. See [SaaS operations](../../docs/saas-cloud-deployments.md).
 The in-process scheduler admits a CPU-aware number of local Docker builds (at least two) and four cloud deployments
 concurrently by default.
-One stop operation may run beside builds. Jobs for the same project stay ordered without occupying a lane while waiting;
+Up to four independent stop operations may run beside builds, so a slow stop does not block every other project.
+Jobs for the same project stay ordered without occupying a lane while waiting;
 local jobs also wait for a conflicting Compose name or host port, and cloud jobs sharing a repository branch stay
 ordered.
 The queue accepts at most 100 waiting jobs and rejects excess requests with a clear error. It remains in memory, so
@@ -17,6 +18,8 @@ AutoMate build cap, or an explicit limit from 1–1024. Docker still consumes ho
 log/diagnostic resources for every active build. `MaxCloudDeployments` accepts 1–16 and `MaxQueuedJobs` accepts
 1–1000. Use environment variables with `DeploymentConcurrency__` prefixes when appropriate.
 Only job type, project ID, lane, and timing are logged; queued credentials are never included in scheduler telemetry.
+The queue records successful admission under its own source module before state notifications. Start/completion and
+persisted deployment-status records distinguish accepted requests from running or completed work.
 
 Self-hosted cloud jobs obtain fresh Azure ARM credentials when execution starts, rather than reusing the login token
 captured when queued. Preparation failures are saved as redacted deployment output. Cloud application status remains
@@ -48,3 +51,6 @@ Application/Abstractions.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+Scheduler and status-subscriber failures log named failure types without exception objects. Subscriber isolation, status
+notifications, queue bounds and cancellation behavior remain unchanged.

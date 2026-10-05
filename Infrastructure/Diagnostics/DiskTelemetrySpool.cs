@@ -27,6 +27,10 @@ public sealed class DiskTelemetrySpool : BackgroundService
     private readonly Dictionary<Guid, PendingIndex> _pending = [];
     private readonly Channel<PendingWrite> _queue = Channel.CreateBounded<PendingWrite>(8192);
     private readonly Dictionary<Guid, (DateTimeOffset Start, long Bytes)> _rates = [];
+
+    /// <summary>Shared masking policy applied before diagnostic payloads enter the spool queue.</summary>
+    private readonly IDiagnosticRedactor _redactor;
+
     private readonly Dictionary<string, DateTimeOffset> _segments = [];
     private readonly Dictionary<Guid, Dictionary<string, DateTimeOffset>> _series = [];
     private readonly Dictionary<Guid, long> _tenantBytes = [];
@@ -35,8 +39,9 @@ public sealed class DiskTelemetrySpool : BackgroundService
     private long _lastOrder;
     private FileStream? _writerLock;
 
+    /// <summary>Creates the single writer with mandatory queue-admission redaction.</summary>
     public DiskTelemetrySpool(IOptions<DiskSpoolOptions> spool, IOptions<TelemetryStorageOptions> limits,
-        ILogger<DiskTelemetrySpool> logger)
+        ILogger<DiskTelemetrySpool> logger, IDiagnosticRedactor redactor)
     {
         if (!Path.IsPathFullyQualified(spool.Value.Directory))
             throw new InvalidOperationException("DiskSpool:Directory must be an absolute persistent-volume path.");
@@ -44,6 +49,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
         _limits = limits.Value;
         _batchSize = Math.Clamp(spool.Value.BatchSize, 1, 100);
         _logger = logger;
+        _redactor = redactor;
     }
 
     public override async Task StartAsync(CancellationToken cancellationToken)
@@ -91,9 +97,12 @@ public sealed class DiskTelemetrySpool : BackgroundService
         await base.StartAsync(cancellationToken);
     }
 
+    /// <summary>Snapshots and redacts payloads before admission, preserving identity and durable receipt semantics.</summary>
     public async Task<DeploymentLogEnvelope> AppendAsync(Guid tenant, DeploymentDiagnosticEvent diagnosticEvent,
         string? channel, CancellationToken token)
     {
+        diagnosticEvent = _redactor.Redact(diagnosticEvent).Event;
+        channel = channel is null ? null : _redactor.RedactText(channel, 128);
         if (diagnosticEvent.EventId is null || diagnosticEvent.EventId == Guid.Empty)
             diagnosticEvent = diagnosticEvent with { EventId = Guid.NewGuid() };
         var completion =
@@ -241,6 +250,10 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }
     }
 
+    /// <summary>
+    ///     Verifies immutable disk bytes, then applies current masking to backlog delivery/replay without rewriting
+    ///     files.
+    /// </summary>
     public IReadOnlyList<DeploymentLogEnvelope> ReadSegment(string path)
     {
         if (!string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), _directory,
@@ -251,8 +264,14 @@ public sealed class DiskTelemetrySpool : BackgroundService
         if (segment.Version != 1 || segment.Checksum !=
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(segment.Payload))))
             throw new InvalidDataException("Telemetry segment checksum/version mismatch.");
-        return JsonSerializer.Deserialize<DeploymentLogEnvelope[]>(segment.Payload, TelemetryHttpTransport.Json) ??
-               throw new InvalidDataException("Invalid telemetry segment.");
+        var events =
+            JsonSerializer.Deserialize<DeploymentLogEnvelope[]>(segment.Payload, TelemetryHttpTransport.Json) ??
+            throw new InvalidDataException("Invalid telemetry segment.");
+        return events.Select(envelope => envelope with
+        {
+            Event = _redactor.Redact(envelope.Event).Event,
+            Channel = envelope.Channel is null ? null : _redactor.RedactText(envelope.Channel, 128)
+        }).ToArray();
     }
 
     public async Task PurgeExpiredAsync(CancellationToken token)

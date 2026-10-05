@@ -1,52 +1,23 @@
 using System.Text;
-using System.Text.Json;
 using Application.Abstractions.Diagnostics;
-using Domain.Entities;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Stores already-redacted diagnostics and creates bounded analysis context from them.</summary>
-public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDeploymentDiagnosticStore
+/// <summary>Reads and expires legacy PostgreSQL diagnostics; new payload writes are prohibited.</summary>
+public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext, IDiagnosticRedactor redactor)
+    : IDeploymentDiagnosticStore
 {
-    private static readonly TimeSpan Retention = TimeSpan.FromDays(30);
-
-    public async Task<long> PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, string? terminalChannel,
+    /// <inheritdoc />
+    public Task<long> PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, string? terminalChannel,
         CancellationToken cancellationToken = default)
     {
-        var record = new DeploymentDiagnosticRecord
-        {
-            DeploymentId = diagnosticEvent.DeploymentId,
-            ProjectId = diagnosticEvent.ProjectId,
-            TimestampUtc = diagnosticEvent.TimestampUtc,
-            Source = diagnosticEvent.Source.ToString(),
-            Kind = diagnosticEvent.Kind.ToString(),
-            Severity = diagnosticEvent.Severity.ToString(),
-            Message = diagnosticEvent.Message,
-            TerminalChannel = terminalChannel,
-            MetricSamplesJson = diagnosticEvent.Metrics is null
-                ? null
-                : JsonSerializer.Serialize(diagnosticEvent.Metrics),
-            SourceIdentityJson = diagnosticEvent.SourceIdentity is null
-                ? null
-                : JsonSerializer.Serialize(diagnosticEvent.SourceIdentity),
-            AttributesJson = diagnosticEvent.Attributes is null
-                ? null
-                : JsonSerializer.Serialize(diagnosticEvent.Attributes),
-            TraceId = diagnosticEvent.TraceId,
-            SpanId = diagnosticEvent.SpanId,
-            Sequence = diagnosticEvent.Sequence,
-            Cursor = diagnosticEvent.Kind == DeploymentDiagnosticKind.Metric
-                ? diagnosticEvent.TerminalChannel.Target
-                : diagnosticEvent.Cursor,
-            ExpiresAt = DateTimeOffset.UtcNow.Add(Retention)
-        };
-        dbContext.DeploymentDiagnosticRecords.Add(record);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return record.OrderId;
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new InvalidOperationException("New diagnostic payloads require the Loki/Mimir disk gateway.");
     }
 
+    /// <inheritdoc />
     public async Task<DeploymentTerminalHistory> ReadRecentAsync(Guid projectId, Guid deploymentId, int limit,
         CancellationToken cancellationToken = default)
     {
@@ -74,12 +45,19 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
             .OrderByDescending(item => item.OrderId)
             .Take(boundedLimit + 1)
             .Select(item => new DeploymentTerminalLog(item.OrderId, item.ProjectId, item.DeploymentId,
-                item.TerminalChannel ?? (item.Source == "GitHubActions" ? "github-actions" : "build"), item.Message))
+                item.TerminalChannel ?? (item.Source == "GitHubActions" ? "github-actions" : "build"), item.Message,
+                null, null, item.Severity == "Critical" ? DeploymentDiagnosticSeverity.Critical :
+                item.Severity == "Error" ? DeploymentDiagnosticSeverity.Error :
+                item.Severity == "Warning" ? DeploymentDiagnosticSeverity.Warning :
+                item.Severity == "Information" ? DeploymentDiagnosticSeverity.Information :
+                item.Severity == "Debug" ? DeploymentDiagnosticSeverity.Debug :
+                item.Severity == "Trace" ? DeploymentDiagnosticSeverity.Trace : null,
+                item.TimestampUtc, null, null, item.TraceId, item.SpanId, item.Sequence))
             .ToListAsync(cancellationToken);
         var earlierOmitted = rows.Count > boundedLimit;
         if (earlierOmitted) rows.RemoveAt(rows.Count - 1);
         rows.Reverse();
-        return new DeploymentTerminalHistory(rows, earlierOmitted);
+        return new DeploymentTerminalHistory(rows.Select(redactor.RedactTerminal).ToArray(), earlierOmitted);
     }
 
     /// <inheritdoc />
@@ -94,11 +72,24 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
                            item.OrderId > afterOrderId)
             .OrderBy(item => item.OrderId).Take(boundedLimit + 1)
             .Select(item => new DeploymentTerminalLog(item.OrderId, item.ProjectId, item.DeploymentId,
-                item.TerminalChannel!, item.Message))
+                item.TerminalChannel!, item.Message, null, null, item.Severity == "Critical"
+                    ? DeploymentDiagnosticSeverity.Critical
+                    : item.Severity == "Error"
+                        ? DeploymentDiagnosticSeverity.Error
+                        : item.Severity == "Warning"
+                            ? DeploymentDiagnosticSeverity.Warning
+                            : item.Severity == "Information"
+                                ? DeploymentDiagnosticSeverity.Information
+                                : item.Severity == "Debug"
+                                    ? DeploymentDiagnosticSeverity.Debug
+                                    : item.Severity == "Trace"
+                                        ? DeploymentDiagnosticSeverity.Trace
+                                        : null,
+                item.TimestampUtc, null, null, item.TraceId, item.SpanId, item.Sequence))
             .ToListAsync(cancellationToken);
         var moreAvailable = rows.Count > boundedLimit;
         if (moreAvailable) rows.RemoveAt(rows.Count - 1);
-        return new DeploymentTerminalHistory(rows, moreAvailable);
+        return new DeploymentTerminalHistory(rows.Select(redactor.RedactTerminal).ToArray(), moreAvailable);
     }
 
     public async Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default)
@@ -115,11 +106,13 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
             .ExecuteDeleteAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
     public async Task<string> BuildContextAsync(Guid deploymentId, int maximumCharacters,
         CancellationToken cancellationToken = default)
     {
+        var now = DateTimeOffset.UtcNow;
         var records = await dbContext.DeploymentDiagnosticRecords.AsNoTracking()
-            .Where(item => item.DeploymentId == deploymentId && item.ExpiresAt > DateTimeOffset.UtcNow)
+            .Where(item => item.DeploymentId == deploymentId && item.ExpiresAt > now)
             .OrderByDescending(item => item.Severity == "Critical").ThenByDescending(item => item.Severity == "Error")
             .ThenByDescending(item => item.TimestampUtc).Take(300).ToListAsync(cancellationToken);
         var context = new StringBuilder();
@@ -130,6 +123,6 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext) : IDe
             context.Append(line);
         }
 
-        return context.ToString();
+        return redactor.RedactText(context.ToString(), maximumCharacters);
     }
 }

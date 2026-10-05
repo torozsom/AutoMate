@@ -32,7 +32,7 @@ public sealed class DisabledDockerService : IDockerService
     }
 
     public Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, Guid? deploymentId = null)
     {
         return Task.FromException<bool>(Disabled());
     }

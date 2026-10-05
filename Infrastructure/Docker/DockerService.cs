@@ -1,12 +1,12 @@
-using System.Buffers;
 using System.Runtime.InteropServices;
-using System.Text;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Logging;
+using Application.Diagnostics;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using Infrastructure.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -15,7 +15,7 @@ namespace Infrastructure.Docker;
 /// <summary>
 ///     Coordinates Docker daemon operations used by local deployments and runtime log streaming.
 /// </summary>
-public sealed class DockerService : IDockerService, IDisposable
+public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDisposable
 {
     /// <summary>
     ///     Helper for packaging Docker build contexts while honoring .dockerignore rules.
@@ -26,6 +26,12 @@ public sealed class DockerService : IDockerService, IDisposable
     ///     Docker daemon client used for direct Docker Engine operations.
     /// </summary>
     private readonly DockerClient _client;
+
+    /// <summary>Timestamp source for compatibility stream registrations.</summary>
+    private readonly TimeProvider _clock;
+
+    /// <summary>Owns normalized, bounded and reconnecting subscriptions.</summary>
+    private readonly DockerDiagnosticCollector _collector;
 
     /// <summary>
     ///     Helper for Docker CLI operations that are not covered by Docker.DotNet.
@@ -42,6 +48,9 @@ public sealed class DockerService : IDockerService, IDisposable
     /// </summary>
     private readonly DockerOptions _options;
 
+    /// <summary>Protects legacy SDK build progress before host logging.</summary>
+    private readonly IDiagnosticRedactor _redactor;
+
     /// <summary>
     ///     Tracks whether the Docker client has already been disposed.
     /// </summary>
@@ -52,10 +61,13 @@ public sealed class DockerService : IDockerService, IDisposable
     /// </summary>
     public DockerService(ILogger<DockerService> logger, IDeploymentDiagnosticPublisher diagnostics,
         IOptions<DockerOptions> options, IOptions<TelemetryStorageOptions> telemetry,
-        ILogStreamer live, IDiagnosticRedactor redactor, IDeploymentRuntimeViewers viewers, TimeProvider clock)
+        ILogStreamer live, IDiagnosticRedactor redactor, IDeploymentRuntimeViewers viewers, TimeProvider clock,
+        IServiceScopeFactory scopes)
     {
         _logger = logger;
         _options = options.Value;
+        _clock = clock;
+        _redactor = redactor;
 
         var dockerUri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? new Uri(_options.WindowsDockerUri)
@@ -65,6 +77,7 @@ public sealed class DockerService : IDockerService, IDisposable
         _buildContextArchive = new DockerBuildContextArchive(_options, _logger);
         _dockerCli = new DockerCli(_options, diagnostics, _logger, telemetry.Value.RuntimeSampleSeconds,
             live, redactor, viewers, clock);
+        _collector = new DockerDiagnosticCollector(_client, diagnostics, redactor, clock, _logger, scopes);
     }
 
     /// <inheritdoc />
@@ -79,6 +92,30 @@ public sealed class DockerService : IDockerService, IDisposable
     }
 
     /// <inheritdoc />
+    public Task MonitorDaemonAsync(DockerDeploymentTarget target, Action subscribed,
+        CancellationToken cancellationToken)
+    {
+        return _collector.MonitorDaemonAsync(target, subscribed, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task MonitorContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
+        CancellationToken cancellationToken)
+    {
+        return _collector.MonitorContainerAsync(target, container, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task MonitorMetricsAsync(DockerDeploymentTarget target, DockerContainerTarget container,
+        CancellationToken cancellationToken)
+    {
+        var id = await _collector.VerifyContainerAsync(target, container, cancellationToken);
+        if (id is not null)
+            await _dockerCli.StreamContainerMetricsAsync(id, target.ProjectId, target.DeploymentId, container.Channel,
+                cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> PingAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -88,7 +125,7 @@ public sealed class DockerService : IDockerService, IDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "[DockerService] Docker daemon is not responsive during ping.");
+            _logger.LogWarning("Docker daemon ping unavailable: {FailureType}.", ex.GetType().Name);
             return false;
         }
     }
@@ -97,12 +134,12 @@ public sealed class DockerService : IDockerService, IDisposable
     public async Task<bool> BuildImageAsync(string sourcePath, string imageTag,
         CancellationToken cancellationToken = default)
     {
+        using var activity = DeploymentTracing.Start(DeploymentOperation.DockerBuild);
         var tempTarFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.tar");
 
         try
         {
-            _logger.LogInformation("[DockerService] Building Docker image '{ImageTag}' from: {SourcePath}", imageTag,
-                sourcePath);
+            _logger.LogInformation("Building Docker image.");
 
             await _buildContextArchive.CreateAsync(sourcePath, tempTarFilePath, cancellationToken);
 
@@ -110,30 +147,36 @@ public sealed class DockerService : IDockerService, IDisposable
                 FileShare.Read, 81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
 
             var buildParameters = new ImageBuildParameters { Tags = [imageTag] };
-            var buildProgress = new DockerBuildProgress(_logger);
+            var buildProgress = new DockerBuildProgress(_logger, _redactor);
 
             await _client.Images.BuildImageFromDockerfileAsync(
                 buildParameters,
                 fileStream,
                 null,
                 null,
-                new Progress<JSONMessage>(buildProgress.Handle),
+                buildProgress,
                 cancellationToken);
 
             if (!buildProgress.HasError)
-                _logger.LogInformation("[DockerService] Docker image '{ImageTag}' built successfully.", imageTag);
+                _logger.LogInformation("Docker image built successfully.");
 
+            DeploymentTracing.Finish(activity,
+                buildProgress.HasError ? DeploymentTraceOutcome.Failed : DeploymentTraceOutcome.Completed);
             return !buildProgress.HasError;
         }
         catch (OperationCanceledException ex)
         {
-            _logger.LogWarning("[DockerService] Build operation cancelled for image '{ImageTag}', " +
-                               "Exception: {ExceptionMessage}", imageTag, ex.Message);
+            DeploymentTracing.Finish(activity,
+                cancellationToken.IsCancellationRequested
+                    ? DeploymentTraceOutcome.Canceled
+                    : DeploymentTraceOutcome.Failed);
+            _logger.LogWarning("Docker image build canceled: {FailureType}.", ex.GetType().Name);
             return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DockerService] Error building Docker image '{ImageTag}'.", imageTag);
+            DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Failed);
+            _logger.LogError("Docker image build unavailable: {FailureType}.", ex.GetType().Name);
             return false;
         }
         finally
@@ -150,9 +193,8 @@ public sealed class DockerService : IDockerService, IDisposable
         {
             var actualContainerPort = containerPort == 8080 ? _options.DefaultContainerPort : containerPort;
 
-            _logger.LogInformation(
-                "[DockerService] Starting container '{ContainerName}' (Image: {ImageTag}, Port: {HostPort}->{ContainerPort})",
-                containerName, imageTag, hostPort, actualContainerPort);
+            _logger.LogInformation("Starting Docker container with port {HostPort} mapped to {ContainerPort}.",
+                hostPort, actualContainerPort);
 
             var createParams =
                 DockerContainerParameters.Create(imageTag, containerName, hostPort, actualContainerPort, envVarsJson);
@@ -165,25 +207,21 @@ public sealed class DockerService : IDockerService, IDisposable
 
             if (started)
             {
-                _logger.LogInformation(
-                    "[DockerService] Container '{ContainerName}' ({ContainerId}) started successfully.", containerName,
-                    containerId[..8]);
+                _logger.LogInformation("Docker container started successfully.");
                 return containerId;
             }
 
-            _logger.LogWarning("[DockerService] Container '{ContainerName}' was created but failed to start.",
-                containerName);
+            _logger.LogWarning("Docker container was created but failed to start.");
             return null;
         }
         catch (OperationCanceledException ex)
         {
-            _logger.LogWarning("[DockerService] Start operation cancelled for container '{ContainerName}'." +
-                               "Exception: {ExceptionMessage}", containerName, ex.Message);
+            _logger.LogWarning("Docker container start canceled: {FailureType}.", ex.GetType().Name);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[DockerService] Error starting container '{ContainerName}'.", containerName);
+            _logger.LogError("Docker container start unavailable: {FailureType}.", ex.GetType().Name);
             return null;
         }
     }
@@ -194,9 +232,8 @@ public sealed class DockerService : IDockerService, IDisposable
         CancellationToken cancellationToken = default)
     {
         var safeProjectName = DockerNameNormalizer.NormalizeProjectName(projectName);
-        _logger.LogInformation(
-            "[DockerService] Starting 'docker compose up -d' for project '{ProjectName}' in {Directory}",
-            safeProjectName, workingDir);
+        _logger.LogInformation("Starting Docker Compose up for project {ProjectId}, deployment {DeploymentId}.",
+            projectId, deploymentId);
 
         return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, deploymentId, cancellationToken,
             "up", "-d", "--build");
@@ -204,14 +241,13 @@ public sealed class DockerService : IDockerService, IDisposable
 
     /// <inheritdoc />
     public async Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, Guid? deploymentId = null)
     {
         var safeProjectName = DockerNameNormalizer.NormalizeProjectName(projectName);
-        _logger.LogInformation(
-            "[DockerService] Starting 'docker compose down' for project '{ProjectName}' in {Directory}",
-            safeProjectName, workingDir);
+        _logger.LogInformation("Starting Docker Compose down for project {ProjectId}, deployment {DeploymentId}.",
+            projectId, deploymentId);
 
-        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, null, cancellationToken,
+        return await _dockerCli.RunComposeAsync(workingDir, safeProjectName, projectId, deploymentId, cancellationToken,
             "down");
     }
 
@@ -222,61 +258,13 @@ public sealed class DockerService : IDockerService, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task StreamContainerLogsAsync(string containerName, Guid projectId, Guid deploymentId,
-        string containerSuffixOrTabId,
-        CancellationToken cancellationToken)
+    public Task StreamContainerLogsAsync(string containerName, Guid projectId, Guid deploymentId,
+        string containerSuffixOrTabId, CancellationToken cancellationToken)
     {
-        try
-        {
-            _logger.LogInformation("[DockerService] Starting to stream logs for container '{ContainerName}'",
-                containerName);
-
-            var logParams = new ContainerLogsParameters
-            {
-                ShowStdout = true,
-                ShowStderr = true,
-                Follow = true,
-                Tail = "100"
-            };
-
-            using var multiplexedStream =
-                await _client.Containers.GetContainerLogsAsync(containerName, false, logParams, cancellationToken);
-
-            var buffer = ArrayPool<byte>.Shared.Rent(8192);
-
-            try
-            {
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    var readResult =
-                        await multiplexedStream.ReadOutputAsync(buffer, 0, buffer.Length, cancellationToken);
-                    if (readResult.EOF)
-                        break;
-
-                    if (readResult.Count > 0)
-                    {
-                        var logLine = Encoding.UTF8.GetString(buffer, 0, readResult.Count);
-                        await _dockerCli.StreamContainerLogAsync(projectId, deploymentId, containerSuffixOrTabId,
-                            logLine);
-                    }
-                }
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
-        }
-        catch (OperationCanceledException ex)
-        {
-            _logger.LogInformation(
-                "[DockerService] Stopped streaming logs for container '{ContainerName}' (cancelled)," +
-                "exception: {Exception}.", containerName, ex.Message);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[DockerService] Error streaming logs for container '{ContainerName}'.",
-                containerName);
-        }
+        var container =
+            new DockerContainerTarget(containerName, containerSuffixOrTabId, containerSuffixOrTabId != "web");
+        var target = new DockerDeploymentTarget(projectId, deploymentId, "", [container], _clock.GetUtcNow());
+        return _collector.MonitorContainerAsync(target, container, cancellationToken);
     }
 
     /// <inheritdoc />

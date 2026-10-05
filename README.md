@@ -327,3 +327,18 @@ Future improvements may include richer Azure subscription selection, deployment 
 PostgreSQL remains the default. Optional Loki/Mimir storage separates terminal logs and numeric metrics while preserving
 reload replay and historical deployment views. Runtime collection is owner opt-in. See
 [configuration, quotas and the self-managed pilot](docs/deployment-telemetry.md).
+
+### AI diagnostic result foundation
+
+AI remains disabled by default. Provider output is structurally validated, bounded and centrally redacted before
+analysis-result persistence/readback. Actual model IDs, prompt/schema versions and optional usage/cost metadata accompany
+owner-authorized results; unknown provenance remains empty. See [AI result policy](Application/Ai/README.md),
+[adapter/worker behavior](Infrastructure/Ai/README.md) and [implementation progress](Web/PLAN.md).
+The analysis-only `AddAiAnalysisResultProvenance` migration must be applied through the normal upgrade workflow.
+New deployment logs/metrics continue to use the private disk gateway and Loki/Mimir. Analysis metadata expires after
+90 days with bounded startup/hourly cleanup and owner-authorized deletion; active cancellation, broader data safety and
+production queue/egress hardening remain planned work.
+
+AutoMate's platform OpenTelemetry logs now include fixed security/analysis audit events, GUID correlation scopes and
+uniform service/environment/version/hosting-profile resources. See [platform observability](Application/Diagnostics/README.md)
+for coverage and remaining global redaction work. Deployment log/metric persistence continues through Loki/Mimir.

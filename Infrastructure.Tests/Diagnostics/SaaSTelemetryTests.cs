@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Application.Abstractions.Diagnostics;
 using Domain.Entities;
 using Domain.Enums;
@@ -15,6 +16,96 @@ namespace Infrastructure.Tests.Diagnostics;
 
 public sealed class SaaSTelemetryTests
 {
+    /// <summary>History applies current masking to old/provider records while retaining durable ordering and authorization.</summary>
+    [Theory]
+    [InlineData("legacy-recent")]
+    [InlineData("legacy-forward")]
+    [InlineData("loki")]
+    public async Task Historical_payloads_are_redacted_on_read_without_rewriting_storage(string source)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var logs = new EmptyLogs();
+        if (source == "loki")
+        {
+            var e = fixture.Event() with
+            {
+                Message = "{\"api-key\":\"private-value\"}",
+                TraceId = "1234567890abcdef1234567890abcdef",
+                SpanId = "1234567890abcdef",
+                Sequence = 42
+            };
+            logs.Events =
+            [
+                new DeploymentLogEnvelope(e.EventId!.Value, fixture.User, 17,
+                    DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, "web")
+            ];
+        }
+        else
+        {
+            fixture.Db.DeploymentDiagnosticRecords.Add(new DeploymentDiagnosticRecord
+            {
+                ProjectId = fixture.Project,
+                DeploymentId = fixture.Deployment,
+                OrderId = 17,
+                TimestampUtc = DateTimeOffset.UtcNow,
+                ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
+                Source = "DockerContainer",
+                Kind = "Log",
+                Severity = "Information",
+                TraceId = "1234567890abcdef1234567890abcdef",
+                SpanId = "1234567890abcdef",
+                Sequence = 42,
+                TerminalChannel = "web",
+                Message = "{\"api-key\":\"private-value\"}"
+            });
+            await fixture.Db.SaveChangesAsync();
+        }
+
+        var options = Options.Create(source == "loki"
+            ? new TelemetryStorageOptions { Backend = "LokiMimir" }
+            : new TelemetryStorageOptions());
+        var store = new DeploymentTelemetryStore(fixture.Db,
+            new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), logs, options,
+            new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
+            new DeploymentRuntimeViewers(TimeProvider.System));
+        var history = new DeploymentHistoryService(fixture.Db, store, new EmptyMetrics(), options);
+        var page = await history.ReadLogsAsync(fixture.User, fixture.Project, fixture.Deployment,
+            source == "legacy-forward" ? 1 : 0, source != "legacy-forward", 500);
+        var delivered = Assert.Single(page.Events);
+        Assert.Equal(17, delivered.OrderId);
+        Assert.Equal("web", delivered.TerminalChannel);
+        Assert.DoesNotContain("private-value", delivered.Message);
+        Assert.Contains("[REDACTED]", delivered.Message);
+        Assert.NotNull(delivered.TimestampUtc);
+        Assert.Equal(DeploymentDiagnosticSeverity.Information, delivered.Severity);
+        Assert.Equal("1234567890abcdef1234567890abcdef", delivered.TraceId);
+        Assert.Equal(42, delivered.Sequence);
+        if (source != "loki")
+            Assert.Contains("private-value", (await fixture.Db.DeploymentDiagnosticRecords.SingleAsync()).Message);
+        else
+            Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
+    }
+
+    /// <summary>Neither legacy backend nor outbox mode allows new payload rows when called directly.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Direct_legacy_backend_modes_cannot_create_new_diagnostics(bool specialized)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var settings = specialized ? TelemetryStorageTests.Specialized() : new TelemetryStorageOptions();
+        var store = new DeploymentTelemetryStore(fixture.Db,
+            new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()),
+            new EmptyLogs(), Options.Create(settings), new DiagnosticRedactor(),
+            NullLogger<DeploymentTelemetryStore>.Instance,
+            new DeploymentRuntimeViewers(TimeProvider.System));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.PersistAsync(fixture.Event(), "password=private-channel"));
+        Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
+        Assert.Empty(await fixture.Db.TelemetryTenantStates.ToListAsync());
+    }
+
+    /// <summary>Disk receipt success/failure never creates a PostgreSQL diagnostic fallback.</summary>
     [Fact]
     public async Task Disk_gateway_persistence_never_inserts_diagnostic_rows_and_failure_never_falls_back()
     {
@@ -24,7 +115,8 @@ public sealed class SaaSTelemetryTests
             Options.Create(new TelemetryStorageOptions { Backend = "LokiMimir", DeliveryMode = "DiskGateway" });
         using var policies =
             new TelemetryProjectPolicyCache(fixture.Services.GetRequiredService<IServiceScopeFactory>());
-        var store = new DeploymentTelemetryStore(fixture.Db, new DeploymentDiagnosticStore(fixture.Db), new EmptyLogs(),
+        var store = new DeploymentTelemetryStore(fixture.Db,
+            new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), new EmptyLogs(),
             options,
             new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
             new DeploymentRuntimeViewers(TimeProvider.System), gateway, policies);
@@ -45,24 +137,28 @@ public sealed class SaaSTelemetryTests
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
     }
 
+    /// <summary>Foreign ownership is denied before provider history or analytics queries.</summary>
     [Fact]
     public async Task Cross_owner_history_and_analytics_are_denied_before_provider_queries()
     {
         await using var fixture = await Fixture.CreateAsync();
         var options = Options.Create(new TelemetryStorageOptions());
         var logs = new EmptyLogs();
-        var store = new DeploymentTelemetryStore(fixture.Db, new DeploymentDiagnosticStore(fixture.Db), logs, options,
+        var store = new DeploymentTelemetryStore(fixture.Db,
+            new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), logs, options,
             new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
             new DeploymentRuntimeViewers(TimeProvider.System));
         var history = new DeploymentHistoryService(fixture.Db, store, new EmptyMetrics(), options);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => history.ReadLogsV2Async(Guid.NewGuid(),
             fixture.Project,
             fixture.Deployment, null, true, 500));
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => new ProjectTelemetryAnalyticsService(fixture.Db)
-            .ReadAsync(Guid.NewGuid(), fixture.Project, DateTimeOffset.UtcNow.AddDays(-7), DateTimeOffset.UtcNow));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            new ProjectTelemetryAnalyticsService(fixture.Db, new DiagnosticRedactor())
+                .ReadAsync(Guid.NewGuid(), fixture.Project, DateTimeOffset.UtcNow.AddDays(-7), DateTimeOffset.UtcNow));
         Assert.Equal(0, logs.Reads);
     }
 
+    /// <summary>Daily calculations and expiry survive label masking and safe legacy readback.</summary>
     [Fact]
     public async Task Aggregation_replaces_daily_rows_keeps_counts_and_removes_expired_summaries()
     {
@@ -84,7 +180,8 @@ public sealed class SaaSTelemetryTests
             .AddSingleton<IDailyDeploymentMetricQuery>(daily).AddSingleton<IDeploymentErrorCountQuery>(daily)
             .BuildServiceProvider();
         var worker = new TelemetryDailyAggregationWorker(fixture.Services.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new TelemetryStorageOptions()), NullLogger<TelemetryDailyAggregationWorker>.Instance);
+            Options.Create(new TelemetryStorageOptions()), NullLogger<TelemetryDailyAggregationWorker>.Instance,
+            new DiagnosticRedactor());
         await worker.AggregateOnceAsync(default);
         daily.Sum = 25;
         await worker.AggregateOnceAsync(default);
@@ -94,8 +191,14 @@ public sealed class SaaSTelemetryTests
         var cpu = Assert.Single(rows, r => r.Metric == "automate_cpu_usage_cores" && r.DayUtc == day);
         Assert.Equal(10, cpu.SampleCount);
         Assert.Equal(25, cpu.Sum);
-        var analytics = await new ProjectTelemetryAnalyticsService(fixture.Db).ReadAsync(fixture.User, fixture.Project,
+        Assert.Equal("password=[REDACTED]", cpu.Container);
+        cpu.Container = "password=legacy-private-label";
+        await fixture.Db.SaveChangesAsync();
+        var analytics = await new ProjectTelemetryAnalyticsService(fixture.Db, new DiagnosticRedactor()).ReadAsync(
+            fixture.User, fixture.Project,
             day.AddDays(-7), DateTimeOffset.UtcNow);
+        Assert.DoesNotContain("legacy-private-label", JsonSerializer.Serialize(analytics));
+        Assert.Equal("password=legacy-private-label", cpu.Container);
         Assert.Equal(2.5, analytics.Daily.Single(d => d.Metric == cpu.Metric && d.DayUtc == day).Average);
         Assert.True(analytics.Daily.Single(d => d.Metric == "observed_log_errors" && d.DayUtc == day).Incomplete);
     }
@@ -204,6 +307,9 @@ public sealed class SaaSTelemetryTests
 
     private sealed class EmptyLogs : IDeploymentLogQuery
     {
+        /// <summary>Synthetic provider records returned by history privacy scenarios.</summary>
+        public IReadOnlyList<DeploymentLogEnvelope> Events { get; set; } = [];
+
         public int Reads { get; private set; }
 
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
@@ -211,7 +317,7 @@ public sealed class SaaSTelemetryTests
             bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null)
         {
             Reads++;
-            return Task.FromResult<IReadOnlyList<DeploymentLogEnvelope>>([]);
+            return Task.FromResult(Events);
         }
 
         public Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken token)
@@ -242,7 +348,8 @@ public sealed class SaaSTelemetryTests
             DateTimeOffset start, DateTimeOffset end, CancellationToken token)
         {
             return Task.FromResult<IReadOnlyList<DailyMetricStatistics>>([
-                new DailyMetricStatistics("web", "automate_cpu_usage_cores", "cores", 10, Sum, 1, 3)
+                new DailyMetricStatistics("password=private-container", "automate_cpu_usage_cores", "cores", 10, Sum, 1,
+                    3)
             ]);
         }
 

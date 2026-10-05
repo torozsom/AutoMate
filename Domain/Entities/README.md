@@ -30,3 +30,25 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 
 `TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state. Application runtime
 and managed-egress preferences are explicit default-off consent fields.
+
+`AiDeploymentAnalysis` stores validated/redacted analysis guidance with optional requested/returned model provenance,
+explicit model revision, prompt/result schema versions, token counts and decimal cost/currency metadata. Legacy optional
+metadata remains null. It holds analysis results, not new diagnostic log or metric payloads.
+
+DeploymentAnalysisWorkItem stores analysis identity, latest claim time, nullable lease token/expiry, acquisition count
+and terminal completion time. It contains no diagnostic context, log payloads or metric samples.
+
+DeploymentAnalysisWorkItem additionally stores ProviderRetryCount and nullable NextAttemptAt. A scheduled retry resets
+AttemptCount for its separately bounded interruption recovery. These are queue scheduling metadata, never payloads.
+
+Owner cancellation preserves analysis identity/timestamps, marks its state Cancelled and atomically retires unfinished
+work by completing it and clearing lease/future retry metadata. Deployment state and diagnostic history are unchanged.
+
+AiAnalysisRequest holds metadata-only admission receipts: project/deployment/analysis GUIDs, bounded request key, UTC
+admission day, ConsumesQuota and ninety-day expiry. Only Project has a cascading foreign key. Result/deployment deletion
+therefore preserves quota/idempotency history; project deletion removes it. Context, result text and payloads are
+excluded.
+
+FailedDeploymentAnalysisEvent stores only DeploymentId (primary key/FK), CreatedAt and nullable CompletedAt. Database
+capture creates at most one marker per deployment; completion survives result/receipt retention and deletion. Deployment
+deletion cascades the marker. It contains neither diagnostic context nor log/metric samples.

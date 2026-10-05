@@ -14,6 +14,27 @@ namespace Infrastructure.Tests.Orchestration;
 
 public sealed class DeploymentJobWorkerTests
 {
+    /// <summary>A slow stop cannot monopolize admission for unrelated projects; the stop lane remains bounded.</summary>
+    [Fact]
+    public async Task Independent_stops_progress_while_the_first_stop_is_waiting()
+    {
+        await using var harness = new Harness();
+        harness.Tracker.HoldStops = true;
+        var projects = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToArray();
+        foreach (var (project, index) in projects.Select((project, index) => (project, index)))
+            await harness.Queue.EnqueueAsync(new StopLocalDeploymentJob(project, $"stop-{index}", "web.csproj"));
+        await harness.Worker.StartAsync(CancellationToken.None);
+        var started = await harness.ReadStartsAsync(4);
+        started.Should().OnlyContain(item => item.Kind == "stop");
+        harness.Queue.GetProjectState(projects[4]).QueuedStops.Should().Be(1);
+        harness.Tracker.Release(projects[1]);
+        (await harness.ReadStartAsync()).ProjectId.Should().Be(projects[4]);
+        harness.Queue.GetProjectState(projects[0]).ActiveStops.Should().Be(1);
+        foreach (var project in projects) harness.Tracker.Release(project);
+        foreach (var project in projects)
+            await harness.WaitForStateAsync(project, state => state.QueuedStops == 0 && state.ActiveStops == 0);
+    }
+
     [Fact]
     public async Task Starts_two_local_builds_and_a_cloud_job_without_waiting_for_completion()
     {
@@ -57,7 +78,8 @@ public sealed class DeploymentJobWorkerTests
     {
         await using var harness = new Harness(new DeploymentConcurrencyOptions
         {
-            MaxLocalBuilds = 1, MaxCloudDeployments = 2
+            MaxLocalBuilds = 1,
+            MaxCloudDeployments = 2
         });
         var locals = Enumerable.Range(1, 2).Select(_ => Guid.NewGuid()).ToArray();
         var clouds = Enumerable.Range(1, 3).Select(_ => Guid.NewGuid()).ToArray();
@@ -200,7 +222,8 @@ public sealed class DeploymentJobWorkerTests
         return new CloudDeploymentJob(new CloudDeploymentRequestDto
         {
             Config = new DeploymentConfigDto { ProjectId = projectId, ProjectName = repository },
-            RepositoryOwner = "owner", RepositoryName = repository
+            RepositoryOwner = "owner",
+            RepositoryName = repository
         });
     }
 
@@ -262,6 +285,10 @@ public sealed class DeploymentJobWorkerTests
     private sealed class Tracker
     {
         private readonly ConcurrentDictionary<Guid, TaskCompletionSource> _gates = new();
+
+        /// <summary>Holds stop tasks to model slow Docker/collector cleanup.</summary>
+        public bool HoldStops { get; set; }
+
         public HashSet<Guid> FailProjects { get; } = [];
         public Channel<Start> Started { get; } = Channel.CreateUnbounded<Start>();
 
@@ -298,6 +325,7 @@ public sealed class DeploymentJobWorkerTests
             CancellationToken cancellationToken = default)
         {
             await tracker.Started.Writer.WriteAsync(new Start(projectId, "stop", _scopeId), cancellationToken);
+            if (tracker.HoldStops) await tracker.WaitAsync(projectId, cancellationToken);
         }
     }
 

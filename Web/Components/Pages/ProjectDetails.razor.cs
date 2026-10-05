@@ -4,15 +4,18 @@ using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
+using Application.Ai;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Application.Orchestration;
 using Domain.DTO;
+using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
 using Web.Components.Shared;
 using Web.Hubs;
 
@@ -52,7 +55,25 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
 
+    /// <summary>Serializes owner analysis actions.</summary>
+    private bool _analysisBusy;
+
+    /// <summary>Prevents late analysis reads/actions from publishing after page disposal.</summary>
+    private bool _analysisDisposed;
+
     private string? _analysisMessage;
+
+    /// <summary>Independent analysis polling, unaffected by terminal/cloud catch-up failures.</summary>
+    private Task? _analysisPollTask;
+
+    /// <summary>Monotonic read/action generation rejects responses overtaken by newer page operations.</summary>
+    private long _analysisReadVersion;
+
+    /// <summary>Deployment scope of the retained request identity.</summary>
+    private Guid? _analysisRequestDeploymentId;
+
+    /// <summary>Stable admission identity retained after an uncertain response.</summary>
+    private Guid? _analysisRequestId;
 
 
     /// A nullable variable to hold the app details fetched from the database.
@@ -111,6 +132,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     private long _lastTerminalOrderId;
 
+    /// <summary>Latest owner-visible analysis for the current deployment.</summary>
     private DeploymentAnalysisView? _latestAnalysis;
 
     /// <summary>Bounds saved metric recovery while waiting for the first live sample.</summary>
@@ -143,6 +165,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
     private string? _workflowUrl;
+
+    /// <summary>Fresh operator enablement for presentation; server admission still enforces all policy.</summary>
+    [Inject]
+    private IOptionsMonitor<AiAnalysisOptions> AnalysisOptions { get; set; } = null!;
 
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
@@ -199,16 +225,24 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject]
     private ILogger<ProjectDetails> Logger { get; set; } = null!;
 
-    [Inject] private IDeploymentAnalysisService DeploymentAnalysisService { get; set; } = null!;
-
-
     /// <summary>
     ///     Disposes of the component by leaving the SignalR group
     ///     associated with the project and disposing of the hub connection.
     /// </summary>
     public async ValueTask DisposeAsync()
     {
+        _analysisDisposed = true;
+        _analysisReadVersion++;
         await _cloudPollCancellation.CancelAsync();
+        if (_analysisPollTask is not null)
+            try
+            {
+                await _analysisPollTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
         if (_cloudPollTask is not null)
             try
             {
@@ -299,6 +333,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _workflowStatusMessage = "Stop cloud deployments in your cloud provider's portal.";
             return;
         }
+
         if (!DeploymentCapabilities.LocalDeploymentsEnabled)
         {
             _workflowStatusMessage = "Local Docker deployments are disabled for this AutoMate instance.";
@@ -319,7 +354,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to queue stop deployment for project {ProjectId}", ProjectId);
+            Logger.LogError("Failed to queue stop deployment for project {ProjectId} Failure {FailureType}.", ProjectId,
+                ex?.GetType().Name);
             _isStopping = false;
             StateHasChanged();
         }
@@ -390,9 +426,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to queue deployment for project {ProjectId}", finalConfig.ProjectId);
-            _workflowStatusMessage = ex is InvalidOperationException
-                ? ex.Message
+            Logger.LogError("Failed to queue deployment for project {ProjectId} Failure {FailureType}.",
+                finalConfig.ProjectId, ex?.GetType().Name);
+            _workflowStatusMessage = ex is InvalidOperationException &&
+                                     ex.Message == "The deployment queue is full. Try again after a job starts."
+                ? "The deployment queue is full. Try again after a job starts."
                 : "AutoMate could not queue this deployment. Try again shortly.";
             _isDeploying = false;
             StateHasChanged();
@@ -460,8 +498,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to queue cloud deployment for project {ProjectId}", finalConfig.ProjectId);
-            _workflowStatusMessage = $"Cloud deployment failed to queue: {ex.Message}";
+            Logger.LogError("Failed to queue cloud deployment for project {ProjectId} Failure {FailureType}.",
+                finalConfig.ProjectId, ex?.GetType().Name);
+            _workflowStatusMessage = "Cloud deployment failed to queue. Verify provider access and try again shortly.";
             _isDeploying = false;
             StateHasChanged();
         }
@@ -493,6 +532,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
 
             await RefreshLatestAnalysisAsync();
+            if (_app is not null) _analysisPollTask = PollAnalysisAsync(_cloudPollCancellation.Token);
             if (_app is not null && _cloudPollTask is null)
                 _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
 
@@ -513,6 +553,50 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         await UpdateWebHostPortAsync();
 
         _isLoading = false;
+    }
+
+    /// <summary>
+    ///     Refreshes persisted analysis on the renderer dispatcher; failures preserve the last saved view and retry next
+    ///     tick.
+    /// </summary>
+    private async Task PollAnalysisAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        while (await timer.WaitForNextTickAsync(cancellationToken))
+            await PollAnalysisOnceAsync(cancellationToken);
+    }
+
+    /// <summary>Runs one dispatcher-bound read and fences failure feedback against newer page actions.</summary>
+    private Task PollAnalysisOnceAsync(CancellationToken cancellationToken)
+    {
+        return InvokeAsync(async () =>
+        {
+            if (_analysisDisposed || _analysisBusy || cancellationToken.IsCancellationRequested ||
+                GetLatestDeployment() is null) return;
+            const string unavailable =
+                "Automatic refresh is temporarily unavailable. Saved status may be out of date; use Refresh analysis.";
+            var version = _analysisReadVersion + 1;
+            var owner = _currentUserId;
+            var deploymentId = GetLatestDeployment()!.Id;
+            try
+            {
+                if (await RefreshLatestAnalysisAsync(cancellationToken))
+                {
+                    if (_analysisMessage == unavailable) _analysisMessage = null;
+                    StateHasChanged();
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception)
+            {
+                if (_analysisDisposed || cancellationToken.IsCancellationRequested || version != _analysisReadVersion ||
+                    owner != _currentUserId || deploymentId != GetLatestDeployment()?.Id) return;
+                _analysisMessage = unavailable;
+                StateHasChanged();
+            }
+        });
     }
 
     /// <summary>Confirms replay progress for self-hosted pages without depending on live-delivery order.</summary>
@@ -568,7 +652,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "SaaS cloud status refresh failed for {ProjectId}.", ProjectId);
+                Logger.LogWarning("SaaS cloud status refresh failed for {ProjectId}. Failure {FailureType}.", ProjectId,
+                    ex?.GetType().Name);
             }
             finally
             {
@@ -701,35 +786,196 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>Requests through an isolated owner-authorized scope, retaining a stable ID only when the outcome is uncertain.</summary>
     private async Task RequestAnalysisAsync()
     {
         var deployment = GetLatestDeployment();
-        if (deployment is null) return;
-        var result = await DeploymentAnalysisService.RequestManualAsync(_currentUserId, deployment.Id);
-        _analysisMessage = result.Message;
-        _latestAnalysis = result.Analysis ??
-                          await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
-    }
-
-    private async Task SetAiConsentAsync(ChangeEventArgs args)
-    {
-        var consented = args.Value is bool value && value;
-        if (await ApplicationService.SetAiDiagnosticEgressConsentAsync(ProjectId, _currentUserId, consented))
+        if (_analysisDisposed || _analysisBusy || deployment?.Status != DeploymentStatus.Failed ||
+            !AnalysisOptions.CurrentValue.Enabled || !HasAnalysisConsent()) return;
+        _analysisBusy = true;
+        var version = ++_analysisReadVersion;
+        var token = _cloudPollCancellation.Token;
+        if (_analysisRequestDeploymentId != deployment.Id || _analysisRequestId is null)
         {
-            var configuration = GetPrimaryWebProject()?.Configuration;
-            if (configuration is not null) configuration.AiDiagnosticEgressConsented = consented;
-            _analysisMessage = consented
-                ? "AI diagnostic egress enabled for this project."
-                : "AI diagnostic egress disabled.";
+            _analysisRequestDeploymentId = deployment.Id;
+            _analysisRequestId = Guid.NewGuid();
+        }
+
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var analyses = scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>();
+            var result =
+                await analyses.RequestManualAsync(_currentUserId, deployment.Id, _analysisRequestId.Value, token);
+            _analysisRequestId = null;
+            if (_analysisDisposed || token.IsCancellationRequested || version != _analysisReadVersion ||
+                GetLatestDeployment()?.Id != deployment.Id) return;
+            _analysisMessage = result.Message;
+            var view = result.Analysis ?? await analyses.GetLatestAsync(_currentUserId, deployment.Id, token);
+            if (!_analysisDisposed && !token.IsCancellationRequested && version == _analysisReadVersion &&
+                GetLatestDeployment()?.Id == deployment.Id) _latestAnalysis = view;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            if (!_analysisDisposed && version == _analysisReadVersion)
+                _analysisMessage = "Analysis request could not be confirmed. Refresh or retry to check its status.";
+        }
+        finally
+        {
+            _analysisBusy = false;
         }
     }
 
-    private async Task RefreshLatestAnalysisAsync()
+    /// <summary>Reads consent for the actual current deployment, rather than another C# project's configuration.</summary>
+    private bool HasAnalysisConsent()
     {
+        return GetAnalysisProject()?.Configuration?.AiDiagnosticEgressConsented == true;
+    }
+
+    /// <summary>Resolves only the current deployment's C# project, never another configured project.</summary>
+    private CsProject? GetAnalysisProject()
+    {
+        return _app?.CsProjects.FirstOrDefault(project => project.Id == GetLatestDeployment()?.CsProjectId);
+    }
+
+    /// <summary>Refreshes owner-visible persisted state with fixed failure guidance and duplicate-action suppression.</summary>
+    private async Task RefreshAnalysisFromUiAsync()
+    {
+        if (_analysisDisposed || _analysisBusy) return;
+        _analysisBusy = true;
+        var version = _analysisReadVersion + 1;
+        try
+        {
+            if (await RefreshLatestAnalysisAsync()) _analysisMessage = "Analysis status refreshed.";
+        }
+        catch (OperationCanceledException) when (_analysisDisposed)
+        {
+        }
+        catch (Exception)
+        {
+            if (!_analysisDisposed && version == _analysisReadVersion)
+                _analysisMessage = "Analysis status is temporarily unavailable. Try refreshing again.";
+        }
+        finally
+        {
+            _analysisBusy = false;
+        }
+    }
+
+    /// <summary>Persists explicit consent for the exact owner project using an isolated scope and stale-action fences.</summary>
+    private async Task SetAiConsentAsync(bool consented)
+    {
+        var project = GetAnalysisProject();
+        if (_analysisDisposed || _analysisBusy || project?.Configuration is null) return;
+        var appId = ProjectId;
+        var owner = _currentUserId;
+        var projectId = project.Id;
+        var deploymentId = GetLatestDeployment()!.Id;
+        var version = ++_analysisReadVersion;
+        var token = _cloudPollCancellation.Token;
+        _analysisBusy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var apps = scope.ServiceProvider.GetRequiredService<IApplicationService>();
+            var saved = await apps.SetAiDiagnosticEgressConsentAsync(appId, owner, projectId, consented, token);
+            if (!IsCurrentAnalysisAction(version, owner, deploymentId, token) || ProjectId != appId) return;
+            if (saved && GetAnalysisProject() is { Configuration: { } configuration } current &&
+                current.Id == projectId)
+            {
+                configuration.AiDiagnosticEgressConsented = consented;
+                _analysisMessage = consented
+                    ? "Diagnostic data egress consent saved for this deployment's project."
+                    : "Diagnostic data egress consent revoked. Use Cancel analysis to stop queued or running work.";
+            }
+            else
+            {
+                _analysisMessage = "Consent could not be saved. Refresh the project and try again.";
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            if (IsCurrentAnalysisAction(version, owner, deploymentId, token))
+                _analysisMessage = "Consent change could not be confirmed. Refresh the project before trying again.";
+        }
+        finally
+        {
+            _analysisBusy = false;
+        }
+    }
+
+    /// <summary>Cancels the exact visible active analysis; persisted readback handles completion races and retry uncertainty.</summary>
+    private async Task CancelAnalysisAsync()
+    {
+        var deploymentId = GetLatestDeployment()?.Id;
+        var analysis = _latestAnalysis;
+        if (_analysisDisposed || _analysisBusy || deploymentId is null || analysis?.DeploymentId != deploymentId ||
+            analysis.Status is not (AiAnalysisStatus.Queued or AiAnalysisStatus.Running)) return;
+        var owner = _currentUserId;
+        var version = ++_analysisReadVersion;
+        var token = _cloudPollCancellation.Token;
+        _analysisBusy = true;
+        try
+        {
+            await using var scope = ScopeFactory.CreateAsyncScope();
+            var analyses = scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>();
+            var outcome = await analyses.CancelAsync(owner, deploymentId.Value, analysis.Id, token);
+            if (!IsCurrentAnalysisAction(version, owner, deploymentId.Value, token)) return;
+            _analysisMessage = outcome switch
+            {
+                DeploymentAnalysisCancellationResult.Cancelled => "Analysis canceled.",
+                DeploymentAnalysisCancellationResult.AlreadyFinished =>
+                    "Analysis already finished; its saved result is preserved.",
+                _ => "Analysis is no longer available."
+            };
+            var view = await analyses.GetLatestAsync(owner, deploymentId.Value, token);
+            if (IsCurrentAnalysisAction(version, owner, deploymentId.Value, token)) _latestAnalysis = view;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            if (IsCurrentAnalysisAction(version, owner, deploymentId.Value, token))
+                _analysisMessage = "Cancellation could not be confirmed. Refresh or retry to check its status.";
+        }
+        finally
+        {
+            _analysisBusy = false;
+        }
+    }
+
+    /// <summary>Rejects action feedback or readback after a newer action, owner/deployment change or page disposal.</summary>
+    private bool IsCurrentAnalysisAction(long version, Guid owner, Guid deploymentId, CancellationToken token)
+    {
+        return !_analysisDisposed && !token.IsCancellationRequested && version == _analysisReadVersion &&
+               owner == _currentUserId && GetLatestDeployment()?.Id == deploymentId;
+    }
+
+    /// <summary>Uses an isolated read scope and omits late responses if the current deployment changed.</summary>
+    private async Task<bool> RefreshLatestAnalysisAsync(CancellationToken cancellationToken = default)
+    {
+        if (_analysisDisposed) return false;
+        var token = cancellationToken.CanBeCanceled ? cancellationToken : _cloudPollCancellation.Token;
+        var version = ++_analysisReadVersion;
+        var owner = _currentUserId;
         var deployment = GetLatestDeployment();
-        _latestAnalysis = deployment is null
+        var deploymentId = deployment?.Id;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var analyses = scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>();
+        var result = deployment is null
             ? null
-            : await DeploymentAnalysisService.GetLatestAsync(_currentUserId, deployment.Id);
+            : await analyses.GetLatestAsync(owner, deploymentId!.Value, token);
+        if (_analysisDisposed || token.IsCancellationRequested || version != _analysisReadVersion ||
+            owner != _currentUserId || GetLatestDeployment()?.Id != deploymentId) return false;
+        _latestAnalysis = result;
+        return true;
     }
 
 
@@ -982,7 +1228,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             // Report transient disconnects while keeping the current terminal contents intact.
             _hubConnection.Reconnecting += exception =>
             {
-                Logger.LogWarning(exception, "Log hub connection is reconnecting for project {ProjectId}.", ProjectId);
+                Logger.LogWarning("Log hub connection is reconnecting for project {ProjectId}. Failure {FailureType}.",
+                    ProjectId, exception?.GetType().Name);
                 return Task.CompletedTask;
             };
 
@@ -1001,9 +1248,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 }
                 catch (Exception exception)
                 {
-                    Logger.LogWarning(exception,
-                        "Log hub connection could not rejoin the project group for project {ProjectId}.",
-                        ProjectId);
+                    Logger.LogWarning(
+                        "Log hub connection could not rejoin the project group for project {ProjectId}. Failure {FailureType}.",
+                        ProjectId, exception?.GetType().Name);
                     await InvokeAsync(async () =>
                     {
                         _terminalReplayPending = false;
@@ -1055,7 +1302,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Failed to start SignalR connection for project {ProjectId}", ProjectId);
+                Logger.LogError("Failed to start SignalR connection for project {ProjectId} Failure {FailureType}.",
+                    ProjectId, ex?.GetType().Name);
                 _terminalReplayPending = false;
                 await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
             }
@@ -1190,7 +1438,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _ when _dbTerminals.TryGetValue(terminalLog.TerminalChannel, out var databaseTerminal) => databaseTerminal,
             _ => null
         };
-        if (terminal is not null) await terminal.WriteAsync(terminalLog.Message);
+        if (terminal is not null) await terminal.WriteAsync(DeploymentTerminalPresentation.Format(terminalLog));
     }
 
     private Task WriteTerminalNoticeAsync(string message)

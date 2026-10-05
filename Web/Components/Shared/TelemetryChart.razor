@@ -1,10 +1,10 @@
 @using System.Globalization
-@using Microsoft.JSInterop
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 
 <article class="telemetry-chart" @ref="_root">
-    <div class="telemetry-chart-heading"><h3>@Title</h3><span>@(Metric == TelemetryPresentation.Cpu ? "cores · UTC" : "UTC")</span></div>
+    <div class="telemetry-chart-heading"><h3>@Title</h3>
+        <span>@(Metric == TelemetryPresentation.Cpu ? "cores · UTC" : "UTC")</span></div>
     @if (Points.Count == 0)
     {
         <div class="telemetry-chart-empty">No observations in this period.</div>
@@ -18,8 +18,11 @@
             @for (var tick = 0; tick <= 4; tick++)
             {
                 var y = 205 - tick * 43;
-                <g><line x1="100" x2="455" y1="@y" y2="@y" class="telemetry-grid-line"/>
-                    <text x="90" y="@(y + 4)" text-anchor="end" class="telemetry-axis-label">@TelemetryPresentation.Format(maximum * tick / 4, Metric).Replace(" cores", "")</text></g>
+                <g>
+                    <line x1="100" x2="455" y1="@y" y2="@y" class="telemetry-grid-line"/>
+                    <text x="90" y="@(y + 4)" text-anchor="end"
+                          class="telemetry-axis-label">@TelemetryPresentation.Format(maximum * tick / 4, Metric).Replace(" cores", "")</text>
+                </g>
             }
             @for (var index = 0; index < ordered.Length; index++)
             {
@@ -28,43 +31,80 @@
                 var y = 205 - 172 * point.Average / maximum;
                 if (index > 0 && point.Timestamp - ordered[index - 1].Timestamp <= Gap)
                 {
-                    <line x1="@Number(X(ordered[index - 1].Timestamp))" y1="@Number(205 - 172 * ordered[index - 1].Average / maximum)"
+                    <line x1="@Number(X(ordered[index - 1].Timestamp))"
+                          y1="@Number(205 - 172 * ordered[index - 1].Average / maximum)"
                           x2="@Number(x)" y2="@Number(y)" class="telemetry-series-line"/>
                 }
+
                 <circle cx="@Number(x)" cy="@Number(y)" r="4" class="telemetry-point"
                         data-detail="@Detail(point)"><title>@Detail(point)</title></circle>
             }
-            <g><text x="100" y="235" class="telemetry-axis-label">@Start.ToString("MMM d", CultureInfo.CurrentCulture)</text>
-                <text x="455" y="235" text-anchor="end" class="telemetry-axis-label">@End.ToString("MMM d", CultureInfo.CurrentCulture)</text></g>
+            <g>
+                <text x="100" y="235"
+                      class="telemetry-axis-label">@Start.ToString("MMM d", CultureInfo.CurrentCulture)</text>
+                <text x="455" y="235" text-anchor="end"
+                      class="telemetry-axis-label">@End.ToString("MMM d", CultureInfo.CurrentCulture)</text>
+            </g>
         </svg>
-        <p class="telemetry-chart-inspection" aria-live="polite" data-inspection>Hover or tap a point; use arrow keys when the chart is focused.</p>
-        @if (Points.Count == 1) { <p class="telemetry-chart-note">One observation—insufficient data for a trend.</p> }
+        <p class="telemetry-chart-inspection" aria-live="polite" data-inspection>Hover or tap a point; use arrow keys
+            when the chart is focused.</p>
+        @if (Points.Count == 1)
+        {
+            <p class="telemetry-chart-note">One observation—insufficient data for a trend.</p>
+        }
     }
 </article>
 
 @code {
+
     /// <summary>Human-readable chart heading.</summary>
-    [Parameter] public string Title { get; set; } = "";
+    [Parameter]
+    public string Title { get; set; } = "";
+
     /// <summary>Metric key determining value units.</summary>
-    [Parameter] public string Metric { get; set; } = "";
+    [Parameter]
+    public string Metric { get; set; } = "";
+
     /// <summary>Observed points; missing intervals are not included.</summary>
-    [Parameter] public IReadOnlyList<TelemetryChartPoint> Points { get; set; } = [];
+    [Parameter]
+    public IReadOnlyList<TelemetryChartPoint> Points { get; set; } = [];
+
     /// <summary>Inclusive displayed interval start.</summary>
-    [Parameter] public DateTimeOffset Start { get; set; }
+    [Parameter]
+    public DateTimeOffset Start { get; set; }
+
     /// <summary>Displayed interval end.</summary>
-    [Parameter] public DateTimeOffset End { get; set; }
+    [Parameter]
+    public DateTimeOffset End { get; set; }
+
     /// <summary>Maximum contiguous observation spacing.</summary>
-    [Parameter] public TimeSpan Gap { get; set; } = TimeSpan.FromDays(1);
+    [Parameter]
+    public TimeSpan Gap { get; set; } = TimeSpan.FromDays(1);
+
     /// <summary>DOM host for local pointer and keyboard interaction.</summary>
     private ElementReference _root;
+
     /// <summary>Imported local interaction module.</summary>
     private IJSObjectReference? _module;
+
     /// <summary>Maps a timestamp to a padded chart coordinate.</summary>
-    private double X(DateTimeOffset timestamp) => 105 + 345 * Math.Clamp((timestamp - Start).TotalSeconds / Math.Max(1, (End - Start).TotalSeconds), 0, 1);
+    private double X(DateTimeOffset timestamp)
+    {
+        return 105 + 345 * Math.Clamp((timestamp - Start).TotalSeconds / Math.Max(1, (End - Start).TotalSeconds), 0, 1);
+    }
+
     /// <summary>Produces culture-independent SVG numeric attributes.</summary>
-    private static string Number(double number) => number.ToString("0.###", CultureInfo.InvariantCulture);
+    private static string Number(double number)
+    {
+        return number.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
     /// <summary>Accessible observation details shared by tooltips and keyboard inspection.</summary>
-    private string Detail(TelemetryChartPoint point) => $"{point.Timestamp:u} · Average {TelemetryPresentation.Format(point.Average, Metric)} · Min {TelemetryPresentation.Format(point.Minimum, Metric)} · Max {TelemetryPresentation.Format(point.Maximum, Metric)}";
+    private string Detail(TelemetryChartPoint point)
+    {
+        return $"{point.Timestamp:u} · Average {TelemetryPresentation.Format(point.Average, Metric)} · Min {TelemetryPresentation.Format(point.Minimum, Metric)} · Max {TelemetryPresentation.Format(point.Maximum, Metric)}";
+    }
+
     /// <inheritdoc />
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -72,11 +112,19 @@
         _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/telemetry-chart.js");
         await _module.InvokeVoidAsync("attach", _root);
     }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
         if (_module is null) return;
-        try { await _module.InvokeVoidAsync("detach", _root); await _module.DisposeAsync(); }
-        catch (JSDisconnectedException) { }
+        try
+        {
+            await _module.InvokeVoidAsync("detach", _root);
+            await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
     }
+
 }

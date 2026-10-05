@@ -29,7 +29,8 @@ public sealed class DeploymentDiagnosticRetentionService(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                logger.LogWarning(exception, "Expired deployment diagnostic cleanup failed.");
+                logger.LogWarning("Expired deployment diagnostic cleanup failed. Failure {FailureType}.",
+                    exception.GetType().Name);
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.GitHub;
+using Application.Diagnostics;
 using Domain.DTO;
 using Domain.Entities;
 using Domain.Enums;
@@ -41,28 +42,41 @@ internal sealed class GitHubWorkflowMonitor(
     public async Task ObserveWorkflowRunAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, CancellationToken cancellationToken)
     {
-        await StreamRunAsync(request, deployment, run, cancellationToken);
-        if (string.Equals(run.Status, "completed", StringComparison.OrdinalIgnoreCase))
-            await ReconcileFinalLogsAsync(request, deployment, run, cancellationToken);
+        await DeploymentTracing.RunAsync(DeploymentOperation.GitHubObserve, request.Config.ProjectId, deployment.Id,
+            cancellationToken, async () =>
+            {
+                await StreamRunAsync(request, deployment, run, cancellationToken);
+                if (string.Equals(run.Status, "completed", StringComparison.OrdinalIgnoreCase))
+                    await ReconcileFinalLogsAsync(request, deployment, run, cancellationToken);
+            });
     }
 
     /// <summary>Polls the matched run until terminal state, publishing progress before completed-run logs.</summary>
     public async Task<GitHubWorkflowRunDto?> PollWorkflowRunAsync(CloudDeploymentRequestDto request,
         Deployment deployment, string commitSha, CancellationToken cancellationToken)
     {
+        using var activity = AutoMateTelemetry.Deployments.StartActivity("github.workflow.poll");
+        activity?.SetTag("deployment.project.id", request.Config.ProjectId);
+        activity?.SetTag("deployment.id", deployment.Id);
         GitHubWorkflowRunDto? latestRun = null;
+        var recovering = false;
 
         for (var attempt = 0; attempt < _maxWorkflowPollAttempts; attempt++)
         {
             GitHubWorkflowRunDto? run;
             try
             {
-                run = await gitHubService.GetLatestWorkflowRunAsync(request.GitHubAccessToken,
-                    request.RepositoryOwner, request.RepositoryName, request.WorkflowFileName, request.BranchName,
-                    commitSha, cancellationToken);
+                run = await DeploymentTracing.RunAsync(DeploymentOperation.GitHubPoll, request.Config.ProjectId,
+                    deployment.Id,
+                    cancellationToken, () => gitHubService.GetLatestWorkflowRunAsync(request.GitHubAccessToken,
+                        request.RepositoryOwner, request.RepositoryName, request.WorkflowFileName, request.BranchName,
+                        commitSha, cancellationToken));
             }
             catch (HttpRequestException)
             {
+                recovering = true;
+                AutoMateTelemetry.CollectorErrors.Add(1,
+                    new KeyValuePair<string, object?>("deployment.source", "GitHubActions"));
                 await PublishAsync(deployment.Id, request.Config.ProjectId,
                     "GitHub Actions workflow polling failed; AutoMate will retry on the next poll.\r\n",
                     DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning, null, cancellationToken);
@@ -74,6 +88,13 @@ internal sealed class GitHubWorkflowMonitor(
             {
                 await Task.Delay(_workflowPollDelay, cancellationToken);
                 continue;
+            }
+
+            if (recovering)
+            {
+                AutoMateTelemetry.CollectorReconnects.Add(1,
+                    new KeyValuePair<string, object?>("deployment.source", "GitHubActions"));
+                recovering = false;
             }
 
             latestRun = run;
@@ -89,6 +110,8 @@ internal sealed class GitHubWorkflowMonitor(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                AutoMateTelemetry.CollectorErrors.Add(1,
+                    new KeyValuePair<string, object?>("deployment.source", "GitHubActions"));
                 logger.LogWarning(
                     "GitHub workflow diagnostic collection failed for run {RunId} ({FailureType}); workflow result polling continues.",
                     run.Id, ex.GetType().Name);
@@ -107,6 +130,7 @@ internal sealed class GitHubWorkflowMonitor(
                         run.Id, ex.GetType().Name);
                 }
 
+                DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
                 return run;
             }
 
@@ -116,6 +140,7 @@ internal sealed class GitHubWorkflowMonitor(
         await PublishAsync(deployment.Id, request.Config.ProjectId,
             "GitHub workflow monitoring timed out after 60 minutes.\r\n",
             DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning, null, cancellationToken);
+        DeploymentTracing.Finish(activity, DeploymentTraceOutcome.TimedOut);
         return latestRun;
     }
 
@@ -160,11 +185,16 @@ internal sealed class GitHubWorkflowMonitor(
         IReadOnlyList<GitHubWorkflowJobDto> jobs;
         try
         {
-            jobs = await gitHubService.GetWorkflowJobsAsync(request.GitHubAccessToken, request.RepositoryOwner,
-                request.RepositoryName, run.Id, cancellationToken);
+            jobs = await DeploymentTracing.RunAsync(DeploymentOperation.GitHubJobs, request.Config.ProjectId,
+                deployment.Id,
+                cancellationToken, () => gitHubService.GetWorkflowJobsAsync(request.GitHubAccessToken,
+                    request.RepositoryOwner,
+                    request.RepositoryName, run.Id, cancellationToken));
         }
         catch (HttpRequestException)
         {
+            AutoMateTelemetry.CollectorErrors.Add(1,
+                new KeyValuePair<string, object?>("deployment.source", "GitHubActions"));
             await PublishAsync(deployment.Id, request.Config.ProjectId,
                 "GitHub Actions job discovery failed; AutoMate will retry on the next poll.\r\n",
                 DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning,
@@ -241,8 +271,10 @@ internal sealed class GitHubWorkflowMonitor(
         GitHubWorkflowRunDto run, GitHubWorkflowJobDto job, GitHubWorkflowJobCheckpoint checkpoint,
         CancellationToken cancellationToken)
     {
-        var download = await gitHubService.DownloadWorkflowJobLogsAsync(request.GitHubAccessToken,
-            request.RepositoryOwner, request.RepositoryName, job.Id, cancellationToken);
+        var download = await DeploymentTracing.RunAsync(DeploymentOperation.GitHubLogs, request.Config.ProjectId,
+            deployment.Id,
+            cancellationToken, () => gitHubService.DownloadWorkflowJobLogsAsync(request.GitHubAccessToken,
+                request.RepositoryOwner, request.RepositoryName, job.Id, cancellationToken));
         checkpoint.LogAvailability = download.Availability;
         checkpoint.LastLogCheckedAt = DateTimeOffset.UtcNow;
 
@@ -269,6 +301,9 @@ internal sealed class GitHubWorkflowMonitor(
         var prefixMatches = prefixCount == previousCount &&
                             (previousCount == 0 || string.Equals(checkpoint.LastLogPrefixHash, prefixHash,
                                 StringComparison.Ordinal));
+        if (prefixMatches && previousCount > 0)
+            AutoMateTelemetry.DiagnosticDuplicates.Add(previousCount,
+                new KeyValuePair<string, object?>("deployment.source", "GitHubActions"));
 
         if (previousCount > 0 && !prefixMatches)
         {
@@ -313,8 +348,10 @@ internal sealed class GitHubWorkflowMonitor(
             return;
         }
 
-        var archiveEntries = await gitHubService.DownloadWorkflowRunLogEntriesAsync(request.GitHubAccessToken,
-            request.RepositoryOwner, request.RepositoryName, run.Id, cancellationToken);
+        var archiveEntries = await DeploymentTracing.RunAsync(DeploymentOperation.GitHubLogs, request.Config.ProjectId,
+            deployment.Id,
+            cancellationToken, () => gitHubService.DownloadWorkflowRunLogEntriesAsync(request.GitHubAccessToken,
+                request.RepositoryOwner, request.RepositoryName, run.Id, cancellationToken));
         if (archiveEntries.Count == 0)
         {
             await PublishAsync(deployment.Id, request.Config.ProjectId,

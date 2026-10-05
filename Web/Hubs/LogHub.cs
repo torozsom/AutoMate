@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Application.Abstractions.Diagnostics;
 using Application.Data.Apps;
+using Application.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR;
@@ -37,9 +38,14 @@ public sealed class LogHub(
     public async Task<DeploymentTerminalHistory> JoinProjectGroup(Guid projectId, Guid? deploymentId,
         string secureToken, long afterOrderId = 0)
     {
+        using var activity = DeploymentTracing.Start(DeploymentOperation.SignalRJoin, projectId, deploymentId);
+        using var correlation = OperationalLog.BeginCorrelation(logger, deploymentId, projectId: projectId);
         var empty = new DeploymentTerminalHistory([], false);
         if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(secureToken))
+        {
+            DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Denied);
             throw new HubException("Invalid log subscription.");
+        }
 
         try
         {
@@ -64,26 +70,45 @@ public sealed class LogHub(
 
             await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
                 Context.ConnectionAborted);
-            if (!deploymentId.HasValue) return empty;
+            if (!deploymentId.HasValue)
+            {
+                DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
+                return empty;
+            }
+
             // Only a latest deployment can collect live output; historical subscriptions remain read-only.
             if (app.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt)?.Id == deploymentId)
                 viewers.Renew(Context.ConnectionId, projectId, deploymentId.Value);
-            return afterOrderId > 0
-                ? await diagnosticStore.ReadAfterAsync(projectId, deploymentId.Value, afterOrderId, 500,
-                    Context.ConnectionAborted)
-                : await diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500,
-                    Context.ConnectionAborted);
+            var history = await DeploymentTracing.RunAsync(DeploymentOperation.SignalRReplay, projectId, deploymentId,
+                Context.ConnectionAborted, () => afterOrderId > 0
+                    ? diagnosticStore.ReadAfterAsync(projectId, deploymentId.Value, afterOrderId, 500,
+                        Context.ConnectionAborted)
+                    : diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500, Context.ConnectionAborted));
+            DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
+            return history;
         }
         catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
         {
+            DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Canceled);
             // A reload/navigation can disconnect while replay is awaiting storage. No replay cursor was confirmed.
             logger.LogDebug("Log replay canceled because the project connection closed.");
             return new DeploymentTerminalHistory([], false, CanAdvanceCursor: false);
         }
-        catch (CryptographicException ex)
+        catch (CryptographicException)
         {
-            logger.LogDebug(ex, "Rejected log hub group join because the secure token was invalid or expired.");
+            DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Denied);
+            logger.LogDebug("Rejected log hub group join because the secure token was invalid or expired.");
             throw new HubException("Invalid log subscription.");
+        }
+        catch (HubException)
+        {
+            DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Denied);
+            throw;
+        }
+        catch (Exception)
+        {
+            DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Failed);
+            throw;
         }
     }
 
@@ -97,8 +122,9 @@ public sealed class LogHub(
             return;
 
         viewers.Remove(Context.ConnectionId, projectId);
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
-            Context.ConnectionAborted);
+        await DeploymentTracing.RunAsync(DeploymentOperation.SignalRLeave, projectId, null, Context.ConnectionAborted,
+            () => Groups.RemoveFromGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
+                Context.ConnectionAborted));
     }
 
     /// <inheritdoc />

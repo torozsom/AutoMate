@@ -60,18 +60,11 @@ internal sealed class AzureFederatedCredentialService(
     private async Task WaitForReadinessAsync(UserAssignedIdentityResource identity, string credentialName,
         string subject, string accessToken, CancellationToken cancellationToken)
     {
-        string? lastIssuer = null;
-        string? lastSubject = null;
-        string? lastAudiences = null;
-
         for (var attempt = 1; attempt <= FederatedCredentialReadinessAttempts; attempt++)
         {
             try
             {
                 var credential = await GetPropertiesAsync(identity, credentialName, accessToken, cancellationToken);
-                lastIssuer = credential.Issuer;
-                lastSubject = credential.Subject;
-                lastAudiences = string.Join(", ", credential.Audiences);
 
                 if (string.Equals(credential.Issuer, AzureConstants.GitHubTokenIssuer, StringComparison.Ordinal) &&
                     string.Equals(credential.Subject, subject, StringComparison.Ordinal) &&
@@ -80,15 +73,13 @@ internal sealed class AzureFederatedCredentialService(
             }
             catch (HttpRequestException ex)
             {
-                logger.LogDebug(ex,
-                    "[AzureDeploymentOrchestrator] Federated credential {CredentialName} was not readable on attempt {Attempt}.",
-                    credentialName, attempt);
+                logger.LogDebug("Azure federated credential was not readable on attempt {Attempt}: {FailureType}.",
+                    attempt, ex.GetType().Name);
             }
             catch (JsonException ex)
             {
-                logger.LogDebug(ex,
-                    "[AzureDeploymentOrchestrator] Federated credential {CredentialName} was not readable on attempt {Attempt}.",
-                    credentialName, attempt);
+                logger.LogDebug("Azure federated credential was not readable on attempt {Attempt}: {FailureType}.",
+                    attempt, ex.GetType().Name);
             }
 
             if (attempt < FederatedCredentialReadinessAttempts)
@@ -96,10 +87,8 @@ internal sealed class AzureFederatedCredentialService(
         }
 
         logger.LogWarning(
-            "[AzureDeploymentOrchestrator] Federated credential {CredentialName} was created, but ARM did not read back the expected OIDC issuer/subject/audience before the local readiness timeout. Continuing because Azure may still be propagating the credential. Expected issuer: {ExpectedIssuer}. Actual issuer: {ActualIssuer}. Expected subject: {ExpectedSubject}. Actual subject: {ActualSubject}. Expected audience: {ExpectedAudience}. Actual audiences: {ActualAudiences}.",
-            credentialName, AzureConstants.GitHubTokenIssuer, lastIssuer ?? "<unavailable>", subject,
-            lastSubject ?? "<unavailable>", AzureConstants.AzureTokenExchangeAudience,
-            lastAudiences ?? "<unavailable>");
+            "Azure federated credential readiness check timed out after {AttemptCount} attempts; continuing while Azure propagates the credential.",
+            FederatedCredentialReadinessAttempts);
     }
 
     /// <summary>

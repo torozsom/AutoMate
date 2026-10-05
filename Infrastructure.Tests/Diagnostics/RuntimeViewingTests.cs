@@ -7,6 +7,7 @@ using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -64,15 +65,23 @@ public sealed class RuntimeViewingTests
         await db.Database.EnsureCreatedAsync();
         var app = new Domain.Entities.Application
         {
-            Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local,
+            Name = "sample",
+            SourcePathOrUrl = "C:/sample",
+            SourceType = SourceType.Local,
             User = new LocalUser { Username = "test", Email = "test@example.invalid" }
         };
         db.Applications.Add(app);
         await db.SaveChangesAsync();
         var viewers = new DeploymentRuntimeViewers(TimeProvider.System);
-        var store = new DeploymentTelemetryStore(db, new DeploymentDiagnosticStore(db), new UnusedQuery(),
-            Options.Create(new TelemetryStorageOptions()), new DiagnosticRedactor(),
-            NullLogger<DeploymentTelemetryStore>.Instance, viewers);
+        using var services = new ServiceCollection().AddSingleton(db).BuildServiceProvider();
+        using var policies = new TelemetryProjectPolicyCache(services.GetRequiredService<IServiceScopeFactory>());
+        var gateway = new RecordingGateway();
+        var settings = Options.Create(new TelemetryStorageOptions
+            { Backend = "LokiMimir", DeliveryMode = "DiskGateway" });
+        var store = new DeploymentTelemetryStore(db, new DeploymentDiagnosticStore(db, new DiagnosticRedactor()),
+            new UnusedQuery(),
+            settings, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance, viewers, gateway,
+            policies);
         var deployment = Guid.NewGuid();
         db.Deployments.Add(new Deployment
         {
@@ -86,8 +95,6 @@ public sealed class RuntimeViewingTests
         (await store.PersistAsync(log, "web")).Should().Be(0);
         viewers.Renew("owner", app.Id, deployment);
         await store.PersistAsync(log, "web");
-        // SQLite has no PostgreSQL ordering sequence; advance its test row before inserting the next event.
-        await db.Database.ExecuteSqlRawAsync("UPDATE DeploymentDiagnosticRecords SET OrderId = 1");
         (await store.PersistAsync(log with { DeploymentId = Guid.NewGuid() }, "web")).Should().Be(0);
         var metric = log with
         {
@@ -96,14 +103,44 @@ public sealed class RuntimeViewingTests
             Metrics = [new DeploymentMetricSample("automate_cpu_usage_cores", 0.25, "cores")]
         };
         await store.PersistAsync(metric, null);
-        await db.Database.ExecuteSqlRawAsync("UPDATE DeploymentDiagnosticRecords SET OrderId = 2 WHERE OrderId = 0");
-        (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(2);
+        gateway.Count.Should().Be(2);
+        (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(0);
         viewers.Remove("owner");
         (await store.PersistAsync(log, "web")).Should().Be(0);
         app.RuntimeDiagnosticsEnabled = true;
         await db.SaveChangesAsync();
-        await store.PersistAsync(log, "web");
-        (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(3);
+        using var refreshedPolicies =
+            new TelemetryProjectPolicyCache(services.GetRequiredService<IServiceScopeFactory>());
+        var backgroundStore = new DeploymentTelemetryStore(db,
+            new DeploymentDiagnosticStore(db, new DiagnosticRedactor()), new UnusedQuery(),
+            settings, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance, viewers, gateway,
+            refreshedPolicies);
+        await backgroundStore.PersistAsync(log, "web");
+        gateway.Count.Should().Be(3);
+        (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(0);
+    }
+
+    /// <summary>Tracks confirmed disk-gateway submissions; no PostgreSQL payload or ordering sequence is used.</summary>
+    private sealed class RecordingGateway : ITelemetryGateway
+    {
+        /// <summary>Number of accepted observations.</summary>
+        public int Count { get; private set; }
+
+        /// <inheritdoc />
+        public Task<DeploymentLogEnvelope> AcceptAsync(DeploymentDiagnosticEvent e, string? channel,
+            CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(new DeploymentLogEnvelope(e.EventId!.Value, Guid.NewGuid(), ++Count,
+                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, channel));
+        }
+
+        /// <inheritdoc />
+        public Task<TelemetryPendingHistory> ReadPendingAsync(Guid tenant, Guid project, Guid deployment,
+            CancellationToken token)
+        {
+            return Task.FromResult(new TelemetryPendingHistory([], 0));
+        }
     }
 
     /// <summary>Deterministic lease clock.</summary>

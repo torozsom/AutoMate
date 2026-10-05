@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.GitHub;
 using Application.Orchestration;
@@ -20,6 +22,14 @@ public sealed class GitHubWorkflowMonitorTests
     [Fact]
     public async Task Completed_run_logs_follow_live_job_and_step_progress()
     {
+        var spans = new ConcurrentQueue<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "AutoMate.Deployments",
+            Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = spans.Enqueue
+        };
+        ActivitySource.AddActivityListener(listener);
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
@@ -62,6 +72,18 @@ public sealed class GitHubWorkflowMonitorTests
 
         var run = await monitor.PollWorkflowRunAsync(request, deployment, "commit", CancellationToken.None);
 
+        var ownedSpans = spans.Where(span => Equals(span.GetTagItem("deployment.id"), deployment.Id)).ToArray();
+        Assert.Contains(ownedSpans,
+            span => span.OperationName == "github.workflow.query" && span.Status == ActivityStatusCode.Ok);
+        Assert.Contains(ownedSpans, span => span.OperationName == "github.jobs.query");
+        Assert.Contains(ownedSpans, span => span.OperationName == "github.logs.download");
+        Assert.Single(ownedSpans.Select(span => span.TraceId).Distinct());
+        Assert.All(ownedSpans, span =>
+        {
+            Assert.Equal(request.Config.ProjectId, span.GetTagItem("deployment.project.id"));
+            Assert.Empty(span.Events);
+            Assert.Null(span.StatusDescription);
+        });
         run!.Status.Should().Be("completed");
         github.JobLogRequests.Should().Be(1);
         github.JobLogRequestedAfterCompletedRun.Should().BeTrue();
@@ -91,6 +113,12 @@ public sealed class GitHubWorkflowMonitorTests
     /// <summary>Leaves test diagnostics unchanged so ordering can be asserted directly.</summary>
     private sealed class PassThroughRedactor : IDiagnosticRedactor
     {
+        /// <inheritdoc />
+        public string RedactText(string value, int maximumCharacters = 4096)
+        {
+            return value;
+        }
+
         /// <inheritdoc />
         public RedactionResult Redact(DeploymentDiagnosticEvent diagnosticEvent)
         {

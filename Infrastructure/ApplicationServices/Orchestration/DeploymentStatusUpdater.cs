@@ -25,12 +25,15 @@ internal sealed class DeploymentStatusUpdater(
         {
             deployment.Status = status;
             await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Deployment status persisted for project {ProjectId}, deployment {DeploymentId}: {Status}.",
+                projectId, deployment.Id, status);
             statusNotifier.NotifyStatusChanged(projectId, status);
         }
         catch (DbUpdateException ex)
         {
-            logger.LogCritical(ex, "[{LogSource}] CRITICAL: Failed to update deployment status to '{Status}' " +
-                                   "for Deployment ID {Id}.", logSource, status, deployment.Id);
+            logger.LogCritical(
+                "[{LogSource}] Failed to update deployment status {Status} for Deployment ID {Id}. Failure {FailureType}.",
+                logSource, status, deployment.Id, ex.GetType().Name);
         }
     }
 
@@ -42,6 +45,8 @@ internal sealed class DeploymentStatusUpdater(
     {
         deployment.Status = status;
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Deployment status persisted for project {ProjectId}, deployment {DeploymentId}: {Status}.",
+            projectId, deployment.Id, status);
         statusNotifier.NotifyStatusChanged(projectId, status);
     }
 }

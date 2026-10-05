@@ -24,9 +24,16 @@ public sealed class TelemetryPresentationTests
     public void Daily_points_weight_observations_without_filling_gaps()
     {
         var date = new DateTimeOffset(2026, 10, 4, 0, 0, 0, TimeSpan.Zero);
-        DeploymentAnalyticsRow Row(DateTimeOffset day, long count, double? value) =>
-            new(Guid.NewGuid(), day, "web", TelemetryPresentation.Cpu, "cores", count, value, value, value, 0, true, day);
-        var rows = new[] { Row(date, 1, .01), Row(date, 9, .03), Row(date.AddDays(2), 1, 0), Row(date.AddDays(1), 0, null) };
+
+        DeploymentAnalyticsRow Row(DateTimeOffset day, long count, double? value)
+        {
+            return new DeploymentAnalyticsRow(Guid.NewGuid(), day, "web", TelemetryPresentation.Cpu, "cores", count,
+                value, value, value, 0,
+                true, day);
+        }
+
+        var rows = new[]
+            { Row(date, 1, .01), Row(date, 9, .03), Row(date.AddDays(2), 1, 0), Row(date.AddDays(1), 0, null) };
         var points = TelemetryPresentation.DailyPoints(rows);
         Assert.Equal(2, points.Count);
         Assert.Equal(.028, points[0].Average, 8);
@@ -42,7 +49,8 @@ public sealed class TelemetryPresentationTests
     [InlineData(.012)]
     public void Sparse_cpu_axes_are_nonzero_and_preserve_scale(double value)
     {
-        var maximum = TelemetryPresentation.AxisMaximum([new(DateTimeOffset.UtcNow, value, value, value)]);
+        var maximum =
+            TelemetryPresentation.AxisMaximum([new TelemetryChartPoint(DateTimeOffset.UtcNow, value, value, value)]);
         Assert.True(maximum > 0);
         Assert.True(maximum >= value);
         Assert.True(maximum < 1);

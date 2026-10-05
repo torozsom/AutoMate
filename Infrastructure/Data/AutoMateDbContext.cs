@@ -110,6 +110,12 @@ public class AutoMateDbContext(
 
     public DbSet<AiDeploymentAnalysis> AiDeploymentAnalyses => Set<AiDeploymentAnalysis>();
 
+    /// <summary>Durable metadata-only admission receipts independent of result deletion.</summary>
+    public DbSet<AiAnalysisRequest> AiAnalysisRequests => Set<AiAnalysisRequest>();
+
+    /// <summary>Transactional failure wakeups, containing no diagnostic payloads.</summary>
+    public DbSet<FailedDeploymentAnalysisEvent> FailedDeploymentAnalysisEvents => Set<FailedDeploymentAnalysisEvent>();
+
     public DbSet<DeploymentAnalysisWorkItem> DeploymentAnalysisWorkItems => Set<DeploymentAnalysisWorkItem>();
 
     /// <summary>Durable checkpoints for GitHub Actions diagnostic streaming.</summary>
@@ -398,14 +404,36 @@ public class AutoMateDbContext(
         analysis.HasIndex(item => item.ExpiresAt);
         analysis.Property(item => item.Provider).HasMaxLength(100).IsRequired();
         analysis.Property(item => item.Model).HasMaxLength(100).IsRequired();
+        analysis.Property(item => item.RequestedModel).HasMaxLength(100);
+        analysis.Property(item => item.ModelVersion).HasMaxLength(100);
+        analysis.Property(item => item.PromptVersion).HasMaxLength(100);
+        analysis.Property(item => item.EstimatedCost).HasPrecision(18, 8);
+        analysis.Property(item => item.CostCurrency).HasMaxLength(3);
         analysis.Property(item => item.IdempotencyKey).HasMaxLength(128).IsRequired();
         analysis.Property(item => item.FailureCode).HasMaxLength(100);
         analysis.HasOne(item => item.Deployment).WithMany(deployment => deployment.AiAnalyses)
             .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
 
+        var receipt = modelBuilder.Entity<AiAnalysisRequest>();
+        receipt.HasIndex(item => item.RequestKey).IsUnique();
+        receipt.HasIndex(item => new { item.ProjectId, item.AdmissionDay, item.ConsumesQuota });
+        receipt.HasIndex(item => item.ExpiresAt);
+        receipt.Property(item => item.RequestKey).HasMaxLength(128).IsRequired();
+        receipt.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        var failure = modelBuilder.Entity<FailedDeploymentAnalysisEvent>();
+        failure.HasKey(item => item.DeploymentId);
+        failure.HasIndex(item => new { item.CompletedAt, item.CreatedAt });
+        failure.HasOne(item => item.Deployment).WithOne()
+            .HasForeignKey<FailedDeploymentAnalysisEvent>(item => item.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         var work = modelBuilder.Entity<DeploymentAnalysisWorkItem>();
         work.HasIndex(item => item.AnalysisId).IsUnique();
-        work.HasIndex(item => new { item.CompletedAt, item.ClaimedAt });
+        work.HasIndex(item => new { item.CompletedAt, item.NextAttemptAt, item.LeaseUntil, item.CreatedAt });
+        work.Property(item => item.AttemptCount).HasDefaultValue(0);
+        work.Property(item => item.ProviderRetryCount).HasDefaultValue(0);
         work.HasOne(item => item.Analysis).WithOne().HasForeignKey<DeploymentAnalysisWorkItem>(item => item.AnalysisId)
             .OnDelete(DeleteBehavior.Cascade);
     }

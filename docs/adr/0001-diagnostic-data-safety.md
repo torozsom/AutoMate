@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted on 2026-10-02. SaaS delivery buffers and aggregate retention are superseded
-by [ADR 0002](0002-saas-telemetry-disk-spool.md): raw SaaS telemetry uses disk segments, and daily numeric aggregates
+Accepted on 2026-10-02. Delivery buffers in both hosting profiles and aggregate retention are superseded
+by [ADR 0002](0002-saas-telemetry-disk-spool.md): deployment telemetry uses disk segments, and daily numeric aggregates
 may be retained for 365 days. The 30-day raw-data/redaction/security decisions continue to apply.
 
 ## Decisions
@@ -41,3 +41,46 @@ The controls address credential and PII exfiltration, log-borne prompt injection
 provider outage, abuse, rate/cost exposure, slow consumers, and exporter or persistence failure. External log text is
 untrusted. Secrets in tracked configuration are prohibited; any previously exposed credential must be revoked and
 rotated outside this repository.
+
+## Analysis result retention and deletion
+
+Validated analysis results/metadata expire under ResultRetentionDays (1–90 days, default 90) after admission. Query
+access and queue eligibility end immediately
+at expiry. Startup/hourly bounded cleanup removes expired results and their work items, including while AI is disabled.
+Owners may immediately delete terminal or expired results; unexpired queued/running work awaits M6 cancellation support.
+No diagnostic context snapshots are persisted. Analysis deletion preserves deployment metadata and existing Loki/Mimir
+retention. Remote responses already in flight are discarded after expiry/deletion. Operators must apply the same expiry
+and explicit deletion policy to recoverable backups and restore procedures; this repository does not configure backups.
+
+## Queue and SDK export enforcement (M5)
+
+Diagnostic queues admit detached redacted events; the disk spool enforces this itself for direct and HTTP callers.
+Checksums are validated against acknowledged bytes before current-policy masking is applied to delivery/replay. Files
+are not rewritten during this readback. Analysis work rows contain identifiers/claim metadata, not diagnostic context.
+Ownership/consent caches contain short-lived projections. Operational deployment inputs retain required secrets in
+process and use the existing protected token-free snapshot converter for durable SaaS configuration; repository cache
+DTOs support repository UI behavior. These operational data categories are not approved telemetry/provider context.
+
+Web metric views drop unknown instruments and external HTTP dimensions, retain reviewed finite operational/runtime
+labels, and disable exemplars. Resource detection imports exactly four approved fields with bounded masked labels,
+excluding arbitrary environment attributes. Custom enrichment or providers bypassing these registrations require their
+own review; the supported SDK boundary is not a universal guarantee for arbitrary host/plugin code. Bounded evidence
+context and JSON data/fixed-instruction controls are implemented in M5; final provider/tenant/region
+egress approval remains open. Exact reference membership does not establish diagnosis correctness.
+
+The M5 context worker keeps selected JSON and a detached read-only evidence catalog in memory, revalidates model
+references before result persistence, and rechecks expiry before invocation/publication. Context limits charge encoded
+UTF-8 input bytes conservatively as token units; full-request/provider token accounting remains separate. No token-count
+network egress or diagnostic snapshot storage is introduced.
+
+## M5 egress enforcement (2026-10-05)
+
+Runtime enforcement now requires explicit operator provider/US-or-EU processing approval, a matching regional endpoint,
+an approved owner-account tenant, all current diagnostic categories and fresh project consent before provider calls.
+The independent egress switch remains false; no provider, DPA, account, model or processing geography is approved here.
+Startup validation rejects requested egress without approvals. Workers check consent before/after context construction;
+the real adapter requires deployment scope and checks again without redirects/automatic HTTP retries. Reloadable
+configuration denies later calls, but cannot recall in-flight transmission. ResultRetentionDays may shorten new-result
+expiry from the default 90 days to at least one day, without extending existing records or changing diagnostic
+retention.
+The onboarding guide documents provider data-control limitations and operator verification responsibilities.

@@ -15,6 +15,9 @@ public sealed class OpenTelemetryOptions
     /// <summary>Enables console export, intended for development and local diagnostics.</summary>
     public bool ExportConsole { get; init; }
 
-    /// <summary>Optional OTLP collector endpoint. Authentication is supplied outside tracked configuration.</summary>
+    /// <summary>
+    ///     Optional absolute HTTP(S) collector URL without URL credentials, query or fragment; authentication belongs in
+    ///     protected exporter configuration.
+    /// </summary>
     public string? OtlpEndpoint { get; init; }
 }

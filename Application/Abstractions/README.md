@@ -15,3 +15,7 @@ Application/Abstractions.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+Docker's `LocalDockerDiagnostics.cs` ports register immutable, non-secret ownership inventories and supervise daemon,
+container-output and metrics sources without exposing Docker SDK models. `IDockerService` retains compatibility entry
+points; Compose down accepts an optional deployment ID for correlated stop diagnostics.

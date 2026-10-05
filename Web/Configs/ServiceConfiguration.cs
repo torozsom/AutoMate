@@ -28,6 +28,7 @@ using Infrastructure.Diagnostics;
 using Infrastructure.Docker;
 using Infrastructure.Email;
 using Infrastructure.GitHub;
+using Infrastructure.Observability;
 using Infrastructure.Scanner;
 using Infrastructure.Templating;
 using Microsoft.AspNetCore.Authentication;
@@ -41,9 +42,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Web.Extensions;
+using Web.Observability;
 using Web.Services;
 
 namespace Web.Configs;
@@ -306,8 +307,13 @@ public static class ServiceConfiguration
         {
             builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
             builder.Services.Configure<DockerOptions>(builder.Configuration.GetSection(DockerOptions.SectionName));
-            builder.Services.Configure<DeploymentDiagnosticOptions>(
-                builder.Configuration.GetSection(DeploymentDiagnosticOptions.SectionName));
+            builder.Services.AddOptions<DeploymentDiagnosticOptions>()
+                .Bind(builder.Configuration.GetSection(DeploymentDiagnosticOptions.SectionName))
+                .Validate(options => options.BufferCapacity is >= 16 and <= 16_384 &&
+                                     options.PersistenceTimeoutSeconds is >= 1 and <= 60 &&
+                                     options.DeliveryTimeoutSeconds is >= 1 and <= 30,
+                    "DeploymentDiagnostics buffer capacity or sink deadlines are outside their supported ranges.")
+                .ValidateOnStart();
             builder.Services.Configure<GitHubWorkflowMonitoringOptions>(
                 builder.Configuration.GetSection(GitHubWorkflowMonitoringOptions.SectionName));
             builder.Services.AddOptions<DeploymentConcurrencyOptions>()
@@ -329,10 +335,41 @@ public static class ServiceConfiguration
                 .ValidateOnStart();
             builder.Services.AddOptions<GitHubAppOptions>()
                 .Bind(builder.Configuration.GetSection(GitHubAppOptions.SectionName));
-            builder.Services.Configure<OpenTelemetryOptions>(
-                builder.Configuration.GetSection(OpenTelemetryOptions.SectionName));
-            builder.Services.Configure<AiAnalysisOptions>(
-                builder.Configuration.GetSection(AiAnalysisOptions.SectionName));
+            builder.Services.AddSingleton<IValidateOptions<OpenTelemetryOptions>, OpenTelemetryOptionsValidator>();
+            builder.Services.AddOptions<OpenTelemetryOptions>()
+                .Bind(builder.Configuration.GetSection(OpenTelemetryOptions.SectionName))
+                .ValidateOnStart();
+            builder.Services.AddOptions<AiAnalysisOptions>()
+                .Bind(builder.Configuration.GetSection(AiAnalysisOptions.SectionName))
+                .Validate<AnalysisProviderCatalog>(
+                    (settings, catalog) => !settings.ProviderEgressEnabled || catalog.IsConfigured(settings),
+                    "AI egress requires explicit provider, tenant, category and matching regional processing approvals with bounded context and retention.")
+                .Validate(settings => settings.TimeoutSeconds is >= 5 and <= 300,
+                    "AiAnalysis:TimeoutSeconds must be 5–300 seconds.")
+                .Validate(settings => settings.MaximumOutputTokens is >= 1 and <= 8192,
+                    "AiAnalysis:MaximumOutputTokens must be 1–8,192 tokens.")
+                .Validate(settings => settings.MaximumContextCharacters is >= 1 and <= 131072 &&
+                                      settings.MaximumContextBytes is >= 1 and <= 131072 &&
+                                      settings.MaximumContextTokens is >= 1 and <= 131072,
+                    "AiAnalysis context character, encoded byte and conservative token limits must each be 1–131,072.")
+                .Validate(settings => settings.ResultRetentionDays is >= 1 and <= 90,
+                    "AiAnalysis:ResultRetentionDays must be 1–90 days.")
+                .Validate(
+                    settings => settings.LeaseDurationSeconds is >= 30 and <= 900 &&
+                                settings.MaximumRecoveryAttempts is >= 1 and <= 10,
+                    "AI queue lease lifetime must be 30–900 seconds and recovery attempts must be 1–10.")
+                .Validate(settings => settings.MaximumProviderRetries is >= 0 and <= 5 &&
+                                      settings.RetryBaseDelaySeconds is >= 1 and <= 300 &&
+                                      settings.RetryMaximumDelaySeconds is >= 5 and <= 3600 &&
+                                      settings.RetryBaseDelaySeconds <= settings.RetryMaximumDelaySeconds,
+                    "AI retries must be 0–5, with a 1–300 second base delay no greater than the 5–3,600 second maximum delay.")
+                .Validate(settings => settings.DailyProjectLimit is >= 0 and <= 1000,
+                    "AI daily project admission limit must be 0–1,000.")
+                .Validate(
+                    settings => settings.MaximumConcurrency is >= 1
+                        and <= AiAnalysisOptions.MaximumSupportedConcurrency,
+                    "AI worker concurrency must be 1–16 per application instance; changes require restart.")
+                .ValidateOnStart();
             builder.Services.Configure<AzureMonitorLogsOptions>(options =>
             {
                 var tenant = GetMicrosoftAuthorityTenant(builder.Configuration["Authentication:Microsoft:TenantId"]);
@@ -365,41 +402,53 @@ public static class ServiceConfiguration
             var options = builder.Configuration.GetSection(OpenTelemetryOptions.SectionName)
                 .Get<OpenTelemetryOptions>() ?? new OpenTelemetryOptions();
             var exportConsole = options.ExportConsole;
-            var hasOtlpEndpoint = Uri.TryCreate(options.OtlpEndpoint, UriKind.Absolute, out var otlpEndpoint);
+            var hasOtlpEndpoint =
+                OpenTelemetryOptionsValidator.TryGetCollectorEndpoint(options.OtlpEndpoint, out var otlpEndpoint);
             var serviceVersion = typeof(ServiceConfiguration).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+            builder.Services.AddSafePlatformLogging();
 
             builder.Logging.AddOpenTelemetry(logging =>
             {
                 logging.IncludeFormattedMessage = true;
                 logging.IncludeScopes = true;
+                logging.AddProcessor(services =>
+                    new SafeLogProcessor(services.GetRequiredService<PlatformTelemetryPolicy>()));
                 if (exportConsole) logging.AddConsoleExporter();
                 if (hasOtlpEndpoint) logging.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
             });
 
             builder.Services.AddOpenTelemetry()
-                .ConfigureResource(resource => resource
-                    .AddService(options.ServiceName, serviceVersion: serviceVersion)
-                    .AddAttributes([
-                        new KeyValuePair<string, object>("deployment.environment",
-                            options.Environment ?? builder.Environment.EnvironmentName)
-                    ]))
+                .ConfigureResource(resource => resource.Clear().AddDetector(services => new SafeResourceDetector(
+                    services.GetRequiredService<IDiagnosticRedactor>(), options.ServiceName,
+                    options.Environment ?? builder.Environment.EnvironmentName, serviceVersion,
+                    string.Equals(builder.Configuration["HostingProfile:Mode"]?.Trim(), "SaaS",
+                        StringComparison.OrdinalIgnoreCase)
+                        ? "SaaS"
+                        : "SelfHosted")))
                 .WithTracing(tracing =>
                 {
+                    tracing.AddProcessor(services =>
+                        new SafeTraceProcessor(services.GetRequiredService<PlatformTelemetryPolicy>()));
                     tracing.AddAspNetCoreInstrumentation();
                     tracing.AddHttpClientInstrumentation();
                     tracing.AddEntityFrameworkCoreInstrumentation();
                     tracing.AddSource(AutoMateTelemetry.Deployments.Name);
                     tracing.AddSource(AutoMateTelemetry.Security.Name);
+                    tracing.AddSource(AnalysisTelemetry.Source.Name);
+                    tracing.AddSource("Microsoft.AspNetCore.SignalR.Server");
                     if (exportConsole) tracing.AddConsoleExporter();
                     if (hasOtlpEndpoint) tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
                 })
                 .WithMetrics(metrics =>
                 {
+                    SafeMetricPolicy.Configure(metrics);
                     metrics.AddAspNetCoreInstrumentation();
                     metrics.AddHttpClientInstrumentation();
                     metrics.AddRuntimeInstrumentation();
                     metrics.AddMeter(AutoMateTelemetry.DeploymentMeter.Name);
                     metrics.AddMeter(AutoMateTelemetry.SecurityMeter.Name);
+                    metrics.AddMeter(AnalysisTelemetry.Meter.Name);
                     metrics.AddMeter("AutoMate.TelemetryStorage");
                     if (exportConsole) metrics.AddConsoleExporter();
                     if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
@@ -433,8 +482,12 @@ public static class ServiceConfiguration
                 .AddStandardResilienceHandler();
             services.AddHttpClient<IGitHubAppCredentials, GitHubAppCredentials>()
                 .AddStandardResilienceHandler();
-            services.AddHttpClient<ILlmAnalysisProvider, OpenAiAnalysisProvider>()
-                .AddStandardResilienceHandler();
+            services.AddSingleton(new AnalysisProviderRegistration("openai", typeof(OpenAiAnalysisProvider),
+                settings => settings.Endpoint == $"https://{settings.ProcessingRegion}.api.openai.com/v1/"));
+            services.AddSingleton<AnalysisProviderCatalog>();
+            services.AddScoped<ILlmAnalysisProvider, ConfiguredAnalysisProvider>();
+            services.AddHttpClient<OpenAiAnalysisProvider>()
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
             services.AddSingleton<IValidateOptions<TelemetryStorageOptions>, TelemetryStorageOptionsValidator>();
             services.AddOptions<TelemetryStorageOptions>()
                 .Configure(o =>
@@ -481,9 +534,16 @@ public static class ServiceConfiguration
             services.AddScoped<IDeploymentHistoryService, DeploymentHistoryService>();
             services.AddScoped<IProjectTelemetryAnalytics, ProjectTelemetryAnalyticsService>();
             services.AddHostedService<TelemetryDeliveryWorker>();
-            services.AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>();
+            services.AddScoped<IAnalysisEgressAuthorizer, AnalysisEgressAuthorizer>();
+            services.AddScoped<DeploymentAnalysisService>();
+            services.AddScoped<IDeploymentAnalysisService>(provider =>
+                provider.GetRequiredService<DeploymentAnalysisService>());
+            services.AddScoped<IDeploymentAnalysisContextBuilder, DeploymentAnalysisContextBuilder>();
+            services.AddSingleton<IAnalysisResultValidator, AnalysisResultValidator>();
             services.AddScoped<IDeploymentAnalysisQueue, DeploymentAnalysisQueue>();
             services.AddHostedService<DeploymentAnalysisWorker>();
+            services.AddHostedService<FailedDeploymentAnalysisDispatcher>();
+            services.AddHostedService<DeploymentAnalysisRetentionService>();
         }
 
 
@@ -556,7 +616,20 @@ public static class ServiceConfiguration
                     options.Scope.Add("read:packages");
                     options.Scope.Add("write:packages");
 
-                    options.Events.OnCreatingTicket = async context => await ProcessGitHubLoginAsync(context);
+                    options.Events.OnCreatingTicket = async context =>
+                    {
+                        await ProcessGitHubLoginAsync(context);
+                        OperationalLog.Record(context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                                .CreateLogger("AutoMate.Security.Authentication"), AuditOperation.Authentication,
+                            AuditOutcome.Prepared);
+                    };
+                    options.Events.OnRemoteFailure = context =>
+                    {
+                        OperationalLog.Record(context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                                .CreateLogger("AutoMate.Security.Authentication"), AuditOperation.Authentication,
+                            AuditOutcome.Failed);
+                        return Task.CompletedTask;
+                    };
                 })
                 .AddOAuth("Microsoft", options =>
                 {
@@ -582,12 +655,26 @@ public static class ServiceConfiguration
 
                     options.SaveTokens = true;
 
-                    options.Events.OnCreatingTicket = async context => await ProcessMicrosoftLoginAsync(context);
+                    options.Events.OnCreatingTicket = async context =>
+                    {
+                        await ProcessMicrosoftLoginAsync(context);
+                        OperationalLog.Record(context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                                .CreateLogger("AutoMate.Security.Authentication"), AuditOperation.Authentication,
+                            AuditOutcome.Prepared);
+                    };
+                    options.Events.OnRemoteFailure = context =>
+                    {
+                        OperationalLog.Record(context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                                .CreateLogger("AutoMate.Security.Authentication"), AuditOperation.Authentication,
+                            AuditOutcome.Failed);
+                        return Task.CompletedTask;
+                    };
                     options.Events.OnTicketReceived = CompleteMicrosoftConnectionAsync;
                 });
 
             // Add a cascading authentication state provider
             services.AddCascadingAuthenticationState();
+            services.AddSingleton<IAuthorizationMiddlewareResultHandler, SecurityAuditResultHandler>();
             services.AddAuthorizationBuilder()
                 .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
@@ -620,6 +707,8 @@ public static class ServiceConfiguration
                     activity?.SetTag("security.authentication_state", authenticationState);
                     var tags = new TagList { { "security.authentication_state", authenticationState } };
                     AutoMateTelemetry.RateLimitRejections.Add(1, tags);
+                    OperationalLog.Record(context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("AutoMate.Security.RateLimiting"), AuditOperation.RateLimit, AuditOutcome.Denied);
                     context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
                         .CreateLogger("AutoMate.Security.RateLimiting")
                         .LogWarning("Rate limit rejected request. Authentication state {AuthenticationState}.",
@@ -660,7 +749,13 @@ public static class ServiceConfiguration
             // Orchestration & Docker. Local services are intentionally absent from SaaS instances.
             if (capabilities.LocalDeploymentsEnabled)
             {
-                services.AddScoped<IDockerService, DockerService>();
+                services.AddScoped<DockerService>();
+                services.AddScoped<IDockerService>(sp => sp.GetRequiredService<DockerService>());
+                services.AddScoped<IDockerDiagnosticSource>(sp => sp.GetRequiredService<DockerService>());
+                services.AddSingleton<LocalDeploymentLogStreamManager>();
+                services.AddSingleton<ILocalDeploymentDiagnostics>(sp =>
+                    sp.GetRequiredService<LocalDeploymentLogStreamManager>());
+                services.AddHostedService(sp => sp.GetRequiredService<LocalDeploymentLogStreamManager>());
                 services.AddScoped<ILocalDeploymentOrchestrator, LocalDeploymentOrchestrator>();
                 services.AddHostedService<LocalRuntimeRecoveryService>();
             }

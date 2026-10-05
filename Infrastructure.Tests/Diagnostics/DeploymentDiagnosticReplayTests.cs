@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Application.Abstractions.Diagnostics;
 using Domain.Entities;
 using Domain.Enums;
@@ -12,6 +13,20 @@ namespace Infrastructure.Tests.Diagnostics;
 
 public sealed class DeploymentDiagnosticReplayTests
 {
+    /// <summary>Even direct legacy-store calls cannot insert new diagnostic payloads.</summary>
+    [Fact]
+    public async Task Legacy_store_rejects_new_payloads_before_database_access()
+    {
+        await using var db = new AutoMateDbContext(
+            new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite("Data Source=:memory:").Options,
+            new EphemeralDataProtectionProvider());
+        var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.PersistAsync(Event(Guid.NewGuid(), Guid.NewGuid(), "password=private-value"), "build"));
+        Assert.Empty(db.ChangeTracker.Entries());
+    }
+
+    /// <summary>Legacy replay preserves bounded ordering, ownership and expiry.</summary>
     [Fact]
     public async Task Recent_history_is_ordered_bounded_project_scoped_and_excludes_expired_rows()
     {
@@ -28,7 +43,7 @@ public sealed class DeploymentDiagnosticReplayTests
         db.Deployments.Add(CreateDeployment(secondProject, secondDeployment));
         await db.SaveChangesAsync();
 
-        var store = new DeploymentDiagnosticStore(db);
+        var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
         var safeMessage = new DiagnosticRedactor().Redact(Event(firstProject, firstDeployment, "password=secret"))
             .Event.Message;
         db.DeploymentDiagnosticRecords.AddRange(
@@ -45,6 +60,7 @@ public sealed class DeploymentDiagnosticReplayTests
         db.DeploymentDiagnosticRecords.Count().Should().Be(2);
     }
 
+    /// <summary>Legacy replay and context mask supported secrets without rewriting stored rows.</summary>
     [Fact]
     public async Task Replay_reports_when_older_messages_are_omitted()
     {
@@ -57,18 +73,25 @@ public sealed class DeploymentDiagnosticReplayTests
         var deploymentId = Guid.NewGuid();
         db.Deployments.Add(CreateDeployment(projectId, deploymentId));
         await db.SaveChangesAsync();
-        var store = new DeploymentDiagnosticStore(db);
+        var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
         db.DeploymentDiagnosticRecords.AddRange(
             Record(1, projectId, deploymentId, "first"),
-            Record(2, projectId, deploymentId, "second"),
+            Record(2, projectId, deploymentId, "password=private-value"),
             Record(3, projectId, deploymentId, "third"));
         await db.SaveChangesAsync();
 
         var history = await store.ReadRecentAsync(projectId, deploymentId, 2);
+        Assert.DoesNotContain("private-value", JsonSerializer.Serialize(history));
+        Assert.Contains("private-value",
+            (await db.DeploymentDiagnosticRecords.SingleAsync(row => row.OrderId == 2)).Message);
+        Assert.DoesNotContain("private-value",
+            JsonSerializer.Serialize(await store.ReadAfterAsync(projectId, deploymentId, 1, 10)));
+        Assert.DoesNotContain("private-value", await store.BuildContextAsync(deploymentId, 4096));
         history.EarlierOmitted.Should().BeTrue();
-        history.Events.Select(item => item.Message).Should().Equal("second", "third");
+        history.Events.Select(item => item.Message).Should().Equal("password=[REDACTED]", "third");
     }
 
+    /// <summary>Legacy uncorrelated output remains confined to its project and deployment lifetime.</summary>
     [Fact]
     public async Task Replay_recovers_legacy_uncorrelated_output_only_within_its_project_and_deployment_window()
     {
@@ -95,19 +118,29 @@ public sealed class DeploymentDiagnosticReplayTests
         db.DeploymentDiagnosticRecords.AddRange(
             new DeploymentDiagnosticRecord
             {
-                OrderId = 1, ProjectId = projectId, TimestampUtc = start.AddMinutes(30),
-                Source = "GitHubActions", Kind = "Log", Severity = "Information", Message = "first cloud",
+                OrderId = 1,
+                ProjectId = projectId,
+                TimestampUtc = start.AddMinutes(30),
+                Source = "GitHubActions",
+                Kind = "Log",
+                Severity = "Information",
+                Message = "first cloud",
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
             },
             new DeploymentDiagnosticRecord
             {
-                OrderId = 2, ProjectId = projectId, TimestampUtc = start.AddHours(1).AddMinutes(1),
-                Source = "GitHubActions", Kind = "Log", Severity = "Information", Message = "second cloud",
+                OrderId = 2,
+                ProjectId = projectId,
+                TimestampUtc = start.AddHours(1).AddMinutes(1),
+                Source = "GitHubActions",
+                Kind = "Log",
+                Severity = "Information",
+                Message = "second cloud",
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
             });
         await db.SaveChangesAsync();
 
-        var store = new DeploymentDiagnosticStore(db);
+        var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
         var firstHistory = await store.ReadRecentAsync(projectId, firstId, 10);
         firstHistory.Events.Select(item => item.Message).Should().Equal("first cloud");
         firstHistory.Events[0].TerminalChannel.Should().Be("github-actions");
@@ -128,9 +161,15 @@ public sealed class DeploymentDiagnosticReplayTests
     {
         return new DeploymentDiagnosticRecord
         {
-            OrderId = orderId, ProjectId = projectId, DeploymentId = deploymentId,
-            TimestampUtc = DateTimeOffset.UtcNow, Source = "DockerCompose", Kind = "Log",
-            Severity = "Information", Message = message, TerminalChannel = "build",
+            OrderId = orderId,
+            ProjectId = projectId,
+            DeploymentId = deploymentId,
+            TimestampUtc = DateTimeOffset.UtcNow,
+            Source = "DockerCompose",
+            Kind = "Log",
+            Severity = "Information",
+            Message = message,
+            TerminalChannel = "build",
             ExpiresAt = expiresAt ?? DateTimeOffset.UtcNow.AddDays(30)
         };
     }
@@ -142,10 +181,13 @@ public sealed class DeploymentDiagnosticReplayTests
             Id = deploymentId,
             CsProject = new CsProject
             {
-                Name = "Web", Path = "Web/Web.csproj",
+                Name = "Web",
+                Path = "Web/Web.csproj",
                 Application = new Domain.Entities.Application
                 {
-                    Id = projectId, Name = "Sample", SourceType = SourceType.Local,
+                    Id = projectId,
+                    Name = "Sample",
+                    SourceType = SourceType.Local,
                     SourcePathOrUrl = "C:/sample",
                     User = new LocalUser { Username = "test", Email = $"{projectId:N}@example.invalid" }
                 }

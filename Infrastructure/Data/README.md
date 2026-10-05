@@ -38,3 +38,35 @@ gateway confirms durable checksummed writes before cloud checkpoints advance. Te
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
 Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
 points.
+
+`20261004201350_AddAiAnalysisResultProvenance` adds nullable provenance/usage/cost fields to AiDeploymentAnalysis only.
+Cost precision is numeric (18,8); provider/model/prompt identifiers are bounded at 100 characters and currency at three.
+Existing legacy results are not backfilled with invented provenance. The generated SQL alters no telemetry tables.
+
+20261005091947_AddAnalysisQueueLeases adds attempt_count, lease_id and lease_until only to analysis work metadata,
+with an eligibility index on completed_at/lease_until/created_at. Legacy null leases are recoverable. Stop older workers
+before applying the migration and starting lease-aware binaries. SQL was reviewed; this change does not apply it or
+alter log/metric storage.
+
+20261005094754_AddAnalysisRetryScheduling adds nullable next_attempt_at and default-zero provider_retry_count to
+analysis work metadata and replaces its eligibility index. No log/metric table changes or context snapshots are added.
+SQL is reviewed and the EF model matches; the migration is not applied. Stop older workers before applying/starting
+retry-aware binaries because older queue implementations ignore future eligibility deadlines.
+
+Owner cancellation uses existing analysis status/completion and queue completion/lease/deadline columns in one
+transaction. Cancelled appends integer value 5 without renumbering existing states. EF reports no pending model change;
+this cancellation slice introduces no migration and applies none of the previously prepared metadata migrations.
+
+20261005102239_AddAnalysisAdmissionReceipts adds the ai_analysis_requests metadata table, unique request key and
+quota/expiry indexes. Its only foreign key cascades with the project, not result/deployment deletion. PostgreSQL SQL
+backfills surviving analysis admissions from ninety days with explicit UTC dates and GUID-only legacy keys; deleted
+history cannot be recovered. SQL/model consistency is reviewed; no migration is applied. Stop older Web/worker instances
+before applying and starting these binaries because old admission code ignores project serialization/receipt accounting.
+
+20261005104851_AddFailedDeploymentAnalysisEvents adds a GUID/timestamp-only outbox and PostgreSQL AFTER INSERT OR
+UPDATE OF status trigger. It checks the actual old/new status, captures integer Failed=3, and uses ON CONFLICT on the
+deployment primary key. Tracked saves, direct SQL and bulk startup cleanup therefore capture failures in the same
+transaction. No existing failures are backfilled. Completed markers are retained until deployment cascade deletion;
+result/receipt cleanup cannot create duplicate automatic admission. Down removes trigger/function before the table.
+The migration is prepared and unapplied; no log/metric tables are altered. Apply prepared metadata migrations before
+starting the new dispatcher. Do not use EnsureCreated for production: it cannot install this migration-owned trigger.

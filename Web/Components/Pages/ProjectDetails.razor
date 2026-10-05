@@ -173,6 +173,16 @@
                     </div>
                 </section>
 
+                <DeploymentAnalysisPanel DeploymentId="@GetLatestDeployment()?.Id" Result="@_latestAnalysis"
+                                         Enabled="@AnalysisOptions.CurrentValue.Enabled"
+                                         Consented="@HasAnalysisConsent()"
+                                         FailedDeployment="@(GetLatestDeployment()?.Status == DeploymentStatus.Failed)"
+                                         Busy="@_analysisBusy" Message="@_analysisMessage"
+                                         OnRequest="RequestAnalysisAsync"
+                                         OnRefresh="RefreshAnalysisFromUiAsync"
+                                         CanEditConsent="@(GetAnalysisProject()?.Configuration is not null)"
+                                         OnConsentChange="SetAiConsentAsync" OnCancel="CancelAnalysisAsync"/>
+
                 @if (_app.SourceType == SourceType.Local && latestStatus == DeploymentStatus.Running && _webHostPort > 0)
                 {
                     <div class="live-launch">

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Bridges durable PostgreSQL ingestion and specialized history without losing recent replay.</summary>
+/// <summary>Persists through the disk gateway and merges Loki history with legacy records for replay.</summary>
 public sealed class DeploymentTelemetryStore(
     AutoMateDbContext db,
     DeploymentDiagnosticStore postgres,
@@ -25,6 +25,7 @@ public sealed class DeploymentTelemetryStore(
     public async Task<long> PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, string? terminalChannel,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (options.Value.DiskGateway)
         {
             var policy = await policies!.GetAsync(diagnosticEvent.ProjectId, cancellationToken);
@@ -38,119 +39,11 @@ public sealed class DeploymentTelemetryStore(
             var receipt = await gateway!.AcceptAsync(redactor.Redact(diagnosticEvent).Event with
             {
                 EventId = diagnosticEvent.EventId ?? Guid.NewGuid()
-            }, terminalChannel, cancellationToken);
+            }, terminalChannel is null ? null : redactor.RedactText(terminalChannel, 128), cancellationToken);
             return receipt.OrderId;
         }
 
-        var project = await db.Applications.AsNoTracking().Where(p => p.Id == diagnosticEvent.ProjectId)
-            .Select(p => new { p.UserId, p.RuntimeDiagnosticsEnabled, p.ManagedTelemetryConsent })
-            .SingleOrDefaultAsync(cancellationToken);
-        if (project is null) return 0;
-        var runtime = diagnosticEvent.Kind == DeploymentDiagnosticKind.Metric ||
-                      diagnosticEvent.Source == DeploymentDiagnosticSource.DockerContainer ||
-                      diagnosticEvent.Source == DeploymentDiagnosticSource.AzureContainerApps;
-        // Output collected for an authorized viewer must be durable too, so reload/reconnect can replay it.
-        // The preference controls unattended collection, rather than discarding already-viewed history.
-        if (runtime && !project.RuntimeDiagnosticsEnabled &&
-            !(diagnosticEvent.DeploymentId is { } deploymentId &&
-              viewers.HasViewers(diagnosticEvent.ProjectId, deploymentId))) return 0;
-        var safe = redactor.Redact(diagnosticEvent).Event;
-        if (!options.Value.Specialized || (options.Value.ManagedService && !project.ManagedTelemetryConsent))
-            return await postgres.PersistAsync(safe, terminalChannel, cancellationToken);
-        if (safe.Kind == DeploymentDiagnosticKind.Metric &&
-            (safe.DeploymentId is null || safe.Metrics is not { Count: > 0 })) return 0;
-
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        // The short ingestion lock makes byte admission and identity assignment atomic across instances.
-        // No provider request is performed while this lock is held.
-        if (db.Database.IsNpgsql())
-            await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(73104021)", cancellationToken);
-        var now = DateTimeOffset.UtcNow;
-        var state = await db.TelemetryTenantStates.SingleOrDefaultAsync(s => s.TenantId == project.UserId,
-            cancellationToken);
-        if (state is not null) await db.Entry(state).ReloadAsync(cancellationToken);
-        if (state is null)
-        {
-            state = new TelemetryTenantState { TenantId = project.UserId, DueAt = now, LastStoredAt = now };
-            db.TelemetryTenantStates.Add(state);
-        }
-
-        var json = JsonSerializer.Serialize(safe, TelemetryHttpTransport.Json);
-        var bytes = Encoding.UTF8.GetByteCount(json) + Encoding.UTF8.GetByteCount(safe.Message) + 512 +
-                    (safe.Metrics is null ? 0 : Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(safe.Metrics))) +
-                    (safe.SourceIdentity is null
-                        ? 0
-                        : Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(safe.SourceIdentity)));
-        var global =
-            await db.TelemetryTenantStates.SingleOrDefaultAsync(s => s.TenantId == Guid.Empty, cancellationToken);
-        if (global is null)
-        {
-            global = new TelemetryTenantState { TenantId = Guid.Empty, DueAt = now, LastStoredAt = now };
-            db.TelemetryTenantStates.Add(global);
-        }
-        else
-        {
-            await db.Entry(global).ReloadAsync(cancellationToken);
-        }
-
-        if (state.RateWindowStart <= now.AddMinutes(-1))
-        {
-            state.RateWindowStart = now;
-            state.RateWindowBytes = 0;
-        }
-
-        var identities = JsonSerializer.Deserialize<Dictionary<string, DateTimeOffset>>(state.MetricIdentitiesJson)!;
-        foreach (var expired in identities.Where(p => p.Value <= now).Select(p => p.Key).ToArray())
-            identities.Remove(expired);
-        var metricIdentity = $"{safe.DeploymentId:N}/{safe.TerminalChannel.Target}";
-        if (state.BufferedBytes + bytes > options.Value.TenantBufferBytes ||
-            global.BufferedBytes + bytes > options.Value.GlobalBufferBytes ||
-            state.RateWindowBytes + bytes > options.Value.TenantBytesPerMinute ||
-            (safe.Kind == DeploymentDiagnosticKind.Metric &&
-             identities.Count >= options.Value.MaximumMetricContainers &&
-             !identities.ContainsKey(metricIdentity)))
-        {
-            state.DroppedEvents++;
-            await db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            logger.LogWarning("Telemetry admission dropped an event for owner {TenantId}; history is incomplete.",
-                project.UserId);
-            TelemetryStorageMetrics.Dropped.Add(1);
-            return 0;
-        }
-
-        // PostgreSQL timestamp precision is one microsecond.
-        state.LastStoredAt = now > state.LastStoredAt.AddTicks(10) ? now : state.LastStoredAt.AddTicks(10);
-        state.RateWindowBytes += bytes;
-        state.BufferedBytes += bytes;
-        global.BufferedBytes += bytes;
-        if (safe.Kind == DeploymentDiagnosticKind.Metric) identities[metricIdentity] = now.AddDays(30);
-        state.MetricIdentitiesJson = JsonSerializer.Serialize(identities);
-        var record = new DeploymentDiagnosticRecord
-        {
-            TenantId = project.UserId,
-            ProjectId = safe.ProjectId,
-            DeploymentId = safe.DeploymentId,
-            TimestampUtc = safe.TimestampUtc,
-            Source = safe.Source.ToString(),
-            Kind = safe.Kind.ToString(),
-            Severity = safe.Severity.ToString(),
-            Message = safe.Message,
-            TerminalChannel = terminalChannel,
-            DeliveryJson = json,
-            DeliveryBytes = bytes,
-            StoredAt = state.LastStoredAt,
-            BufferExpiresAt = now.AddHours(options.Value.BufferHours),
-            ExpiresAt = now.AddDays(30),
-            Cursor = safe.TerminalChannel.Target,
-            MetricSamplesJson = safe.Metrics is null ? null : JsonSerializer.Serialize(safe.Metrics),
-            SourceIdentityJson = safe.SourceIdentity is null ? null : JsonSerializer.Serialize(safe.SourceIdentity)
-        };
-        db.DeploymentDiagnosticRecords.Add(record);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        TelemetryStorageMetrics.IngestedBytes.Add(bytes);
-        return record.OrderId;
+        throw new InvalidOperationException("New diagnostic payloads require the Loki/Mimir disk gateway.");
     }
 
     /// <inheritdoc />
@@ -187,7 +80,9 @@ public sealed class DeploymentTelemetryStore(
         CancellationToken cancellationToken = default)
     {
         if (!options.Value.Specialized)
-            return await postgres.BuildContextAsync(deploymentId, maximumCharacters, cancellationToken);
+            return redactor.RedactText(
+                await postgres.BuildContextAsync(deploymentId, maximumCharacters, cancellationToken),
+                maximumCharacters);
         var project = await db.Deployments.Where(d => d.Id == deploymentId).Select(d => d.CsProject!.AppId)
             .SingleOrDefaultAsync(cancellationToken);
         var page = await ReadRecentAsync(project, deploymentId, 300, cancellationToken);
@@ -198,7 +93,7 @@ public sealed class DeploymentTelemetryStore(
             context.AppendLine(line.Message);
         }
 
-        return context.ToString();
+        return redactor.RedactText(context.ToString(), maximumCharacters);
     }
 
     /// <summary>Merges ordered specialized history, legacy rows and unconfirmed durable events.</summary>
@@ -219,6 +114,7 @@ public sealed class DeploymentTelemetryStore(
         if (!specialized && cursor == 0 && backwards && string.IsNullOrEmpty(search))
         {
             var history = await postgres.ReadRecentAsync(projectId, deploymentId, limit, cancellationToken);
+            history = history with { Events = history.Events.Select(redactor.RedactTerminal).ToArray() };
             return options.Value.Specialized
                 ? history with { Availability = "Managed storage requires owner consent; local history is shown." }
                 : history;
@@ -239,7 +135,14 @@ public sealed class DeploymentTelemetryStore(
         if (!string.IsNullOrEmpty(search)) query = query.Where(r => r.Message.Contains(search));
         var local = await (backwards ? query.OrderByDescending(r => r.OrderId) : query.OrderBy(r => r.OrderId))
             .Take(limit + 1).Select(r => new DeploymentTerminalLog(r.OrderId, r.ProjectId, r.DeploymentId,
-                r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build"), r.Message))
+                r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build"), r.Message, null, null,
+                r.Severity == "Critical" ? DeploymentDiagnosticSeverity.Critical :
+                r.Severity == "Error" ? DeploymentDiagnosticSeverity.Error :
+                r.Severity == "Warning" ? DeploymentDiagnosticSeverity.Warning :
+                r.Severity == "Information" ? DeploymentDiagnosticSeverity.Information :
+                r.Severity == "Debug" ? DeploymentDiagnosticSeverity.Debug :
+                r.Severity == "Trace" ? DeploymentDiagnosticSeverity.Trace : null,
+                r.TimestampUtc, null, null, r.TraceId, r.SpanId, r.Sequence))
             .ToListAsync(cancellationToken);
         var availability = options.Value.Specialized && !specialized
             ? "Managed storage requires owner consent; local history is shown."
@@ -259,8 +162,7 @@ public sealed class DeploymentTelemetryStore(
                                                              (string.IsNullOrEmpty(search) ||
                                                               e.Event.Message.Contains(search,
                                                                   StringComparison.Ordinal)))
-                        .Select(e => new DeploymentTerminalLog(e.OrderId, projectId, deploymentId, e.Channel!,
-                            e.Event.Message, e.EventId)));
+                        .Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
                     if (pending.Events.Count > 0) availability = "Recent history is pending storage confirmation.";
                     if (pending.DroppedEvents > 0 || pending.Truncated)
                         availability = "Some diagnostics were omitted or pending history exceeds the read limit.";
@@ -271,8 +173,7 @@ public sealed class DeploymentTelemetryStore(
                         search, cancellationToken)
                     : await logs.ReadAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
                         cancellationToken, deploymentCreatedAt);
-                local.AddRange(remote.Select(e => new DeploymentTerminalLog(e.OrderId, e.Event.ProjectId,
-                    e.Event.DeploymentId, e.Channel!, e.Event.Message, e.EventId)));
+                local.AddRange(remote.Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
                 if (await db.DeploymentDiagnosticRecords.AnyAsync(
                         r => r.ProjectId == projectId && r.DeploymentId == deploymentId && r.DeliveryJson != null,
                         cancellationToken))
@@ -301,7 +202,8 @@ public sealed class DeploymentTelemetryStore(
         page.Sort((a, b) => a.OrderId.CompareTo(b.OrderId));
         if (page.Count == 0 && availability is null)
             availability = "No saved output is available; diagnostics expire after 30 days.";
-        return new DeploymentTerminalHistory(page, more, availability, canAdvance);
+        return new DeploymentTerminalHistory(page.Select(redactor.RedactTerminal).ToArray(), more, availability,
+            canAdvance);
     }
 
     /// <summary>Restores the same immutable envelope on every delivery attempt.</summary>

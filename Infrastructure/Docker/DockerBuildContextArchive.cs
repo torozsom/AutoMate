@@ -46,11 +46,11 @@ internal sealed class DockerBuildContextArchive(DockerOptions options, ILogger l
         }
         catch (IOException ex)
         {
-            logger.LogWarning(ex, "[DockerService] Failed to delete temporary Docker build context '{Path}'.", path);
+            logger.LogWarning("Temporary Docker build context cleanup failed: {FailureType}.", ex.GetType().Name);
         }
         catch (UnauthorizedAccessException ex)
         {
-            logger.LogWarning(ex, "[DockerService] Failed to delete temporary Docker build context '{Path}'.", path);
+            logger.LogWarning("Temporary Docker build context cleanup failed: {FailureType}.", ex.GetType().Name);
         }
     }
 

@@ -1,8 +1,8 @@
 using System.Reflection;
 using Application.Abstractions.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
-using Microsoft.Extensions.DependencyInjection;
 using Web.Components.Pages;
 using Web.Components.Shared;
 using Xunit;
@@ -69,8 +69,11 @@ public sealed class DeploymentHistoryTests
     }
 
     /// <summary>Exercises the independent metric range action.</summary>
-    private static Task LoadMetricsAsync(DeploymentHistory page) =>
-        (Task)typeof(DeploymentHistory).GetMethod("LoadMetricsAsync", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(page, null)!;
+    private static Task LoadMetricsAsync(DeploymentHistory page)
+    {
+        return (Task)typeof(DeploymentHistory).GetMethod("LoadMetricsAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(page, null)!;
+    }
 
     /// <summary>Changing metric ranges must not replace the log cursor, channel, or rendered output.</summary>
     [Fact]
@@ -98,15 +101,19 @@ public sealed class DeploymentHistoryTests
         var history = new HistoryStub(new DeploymentTerminalHistory([], false));
         var calls = 0;
         var now = DateTimeOffset.UtcNow;
-        history.Metrics = () => ++calls == 1 ? older.Task : Task.FromResult(new DeploymentMetricHistory([
-            new("web", TelemetryPresentation.Cpu, "cores", now, .006, 0, .012),
-            new("db", TelemetryPresentation.Memory, "bytes", now, 1024, 1024, 1024)
-        ]));
+        history.Metrics = () => ++calls == 1
+            ? older.Task
+            : Task.FromResult(new DeploymentMetricHistory([
+                new DeploymentMetricPoint("web", TelemetryPresentation.Cpu, "cores", now, .006, 0, .012),
+                new DeploymentMetricPoint("db", TelemetryPresentation.Memory, "bytes", now, 1024, 1024, 1024)
+            ]));
         var (page, _) = CreatePage(history);
         var first = LoadMetricsAsync(page);
         SetField(page, "_metricDays", 7);
         await LoadMetricsAsync(page);
-        older.SetResult(new DeploymentMetricHistory([new("old", TelemetryPresentation.Cpu, "cores", now, 99, 99, 99)]));
+        older.SetResult(new DeploymentMetricHistory([
+            new DeploymentMetricPoint("old", TelemetryPresentation.Cpu, "cores", now, 99, 99, 99)
+        ]));
         await first;
         Assert.Equal(7, GetField<int>(page, "_loadedMetricDays"));
         Assert.Equal("db", GetField<string>(page, "_metricContainer"));
@@ -176,9 +183,11 @@ public sealed class DeploymentHistoryTests
     {
         /// <summary>Counts actual log queries independently of metric requests.</summary>
         public int LogReads { get; private set; }
+
         /// <summary>Controllable independent provider response for concurrency and authorization scenarios.</summary>
         public Func<Task<DeploymentMetricHistory>> Metrics { get; set; } =
             () => Task.FromException<DeploymentMetricHistory>(new HttpRequestException("Metric backend unavailable"));
+
         /// <inheritdoc />
         public Task<DeploymentTerminalHistory> ReadLogsAsync(Guid userId, Guid projectId, Guid deploymentId,
             long cursor, bool backwards, int limit, CancellationToken cancellationToken = default)

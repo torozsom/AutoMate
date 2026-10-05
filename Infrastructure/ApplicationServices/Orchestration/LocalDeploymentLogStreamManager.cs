@@ -1,203 +1,358 @@
 using System.Collections.Concurrent;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
-using Domain.DTO;
-using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Orchestration;
 
-/// <summary>
-///     Manages background Docker log and metrics streaming for local deployments.
-/// </summary>
-internal sealed class LocalDeploymentLogStreamManager(
-    IServiceScopeFactory serviceScopeFactory,
-    ILogger logger,
-    CancellationToken applicationStopping = default)
+/// <summary>Host-owned supervision; every subscription is tracked, canceled and awaited on replacement/shutdown.</summary>
+public sealed class LocalDeploymentLogStreamManager(
+    IServiceScopeFactory scopes,
+    ILogger<LocalDeploymentLogStreamManager> logger) : BackgroundService, ILocalDeploymentDiagnostics
 {
-    /// <summary>
-    ///     Active per-project cancellation sources for background log streaming workers.
-    /// </summary>
-    private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> ActiveLogStreams = new();
+    /// <summary>Protects registry mutations; source shutdown is awaited outside this shared gate.</summary>
+    private readonly SemaphoreSlim _changes = new(1);
 
-    /// <summary>Checks whether the host already supervises a project.</summary>
-    public static bool IsActive(Guid projectId)
+    /// <summary>Links all registered targets to host shutdown.</summary>
+    private readonly CancellationTokenSource _shutdown = new();
+
+    /// <summary>Finite per-project registry of supervisors.</summary>
+    private readonly ConcurrentDictionary<Guid, TargetState> _targets = new();
+
+    /// <summary>Ensures singleton/host registrations can safely dispose the same owner more than once.</summary>
+    private int _disposed;
+
+    /// <inheritdoc />
+    public bool IsActive(Guid projectId, Guid deploymentId)
     {
-        return ActiveLogStreams.ContainsKey(projectId);
+        return _targets.TryGetValue(projectId, out var state) &&
+               state.Target.DeploymentId == deploymentId && !state.Task.IsCompleted;
     }
 
-    /// <summary>Restores a collector without replacing an existing deployment's supervisor.</summary>
-    public void EnsureStarted(DeploymentConfigDto config, CsProject csProject, Guid deploymentId)
+    /// <inheritdoc />
+    public async Task RegisterAsync(DockerDeploymentTarget target, bool deploymentOperation,
+        CancellationToken cancellationToken = default)
     {
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(applicationStopping);
-        if (!ActiveLogStreams.TryAdd(config.ProjectId, cts))
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.ProjectId == Guid.Empty || target.DeploymentId == Guid.Empty ||
+            target.Containers.Count is < 1 or > 32)
+            throw new ArgumentException("Local diagnostics require ownership and a bounded container inventory.",
+                nameof(target));
+        TargetState state;
+        while (true)
         {
-            cts.Dispose();
-            return;
-        }
-
-        _ = Task.Run(() => RunStreamsAsync(config, csProject, deploymentId, cts, cts.Token));
-    }
-
-    /// <summary>
-    ///     Starts web and database container log/metric streams for a running deployment.
-    /// </summary>
-    public void Start(DeploymentConfigDto config, CsProject csProject, Guid deploymentId)
-    {
-        var cts = CancellationTokenSource.CreateLinkedTokenSource(applicationStopping);
-        ActiveLogStreams.AddOrUpdate(config.ProjectId, cts, (_, oldCts) =>
-        {
-            oldCts.Cancel();
-            return cts;
-        });
-
-        var token = cts.Token;
-
-        _ = Task.Run(async () => await RunStreamsAsync(config, csProject, deploymentId, cts, token), token);
-    }
-
-    /// <summary>
-    ///     Cancels and disposes active streams for a project if any are registered.
-    /// </summary>
-    public async Task StopAsync(Guid projectId)
-    {
-        if (!ActiveLogStreams.TryRemove(projectId, out var cts))
-            return;
-
-        logger.LogInformation(
-            "[LocalDeploymentOrchestrator] Cancelling active log streams for Project ID {Id}...", projectId);
-        await cts.CancelAsync();
-        cts.Dispose();
-    }
-
-    /// <summary>
-    ///     Runs all configured stream tasks inside an independent service scope.
-    /// </summary>
-    private async Task RunStreamsAsync(DeploymentConfigDto config, CsProject csProject, Guid deploymentId,
-        CancellationTokenSource cts,
-        CancellationToken token)
-    {
-        using var scope = serviceScopeFactory.CreateScope();
-        var scopedDockerService = scope.ServiceProvider.GetRequiredService<IDockerService>();
-        try
-        {
-            // Host-owned collection follows consent independently of page views.
-            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-            CancellationTokenSource? collection = null;
-            Task? running = null;
+            Task? retiring = null;
+            await _changes.WaitAsync(cancellationToken);
             try
             {
-                do
+                _shutdown.Token.ThrowIfCancellationRequested();
+                if (_targets.TryGetValue(target.ProjectId, out var existing))
                 {
-                    await using var policyScope = serviceScopeFactory.CreateAsyncScope();
-                    var db = policyScope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-                    var current = await db.Deployments.Where(d => d.CsProject!.AppId == config.ProjectId)
-                        .OrderByDescending(d => d.CreatedAt).Select(d => new { d.Id, d.Status })
-                        .FirstOrDefaultAsync(token);
-                    if (current?.Id != deploymentId || current.Status != DeploymentStatus.Running) break;
-                    var enabled = await db.Applications
-                        .AnyAsync(p => p.Id == config.ProjectId && p.RuntimeDiagnosticsEnabled, token);
-                    enabled |= policyScope.ServiceProvider.GetRequiredService<IDeploymentRuntimeViewers>()
-                        .HasViewers(config.ProjectId, deploymentId);
-                    if (enabled && running is null)
+                    if (existing.StopTask is null && existing.Target.DeploymentId == target.DeploymentId &&
+                        !existing.Task.IsCompleted &&
+                        existing.Operation == deploymentOperation)
                     {
-                        collection = CancellationTokenSource.CreateLinkedTokenSource(token);
-                        running = Task.WhenAll(CreateStreamingTasks(scopedDockerService, config, csProject,
-                            deploymentId, collection.Token));
+                        existing.Operation = deploymentOperation;
+                        return;
                     }
 
-                    if ((!enabled || running?.IsCompleted == true) && running is not null)
-                    {
-                        await collection!.CancelAsync();
-                        try
-                        {
-                            await running;
-                        }
-                        catch (OperationCanceledException)
-                        {
-                        }
+                    retiring = existing.StopTask ??= StopTargetAsync(existing);
+                    if (retiring.IsCompleted) _targets.TryRemove(target.ProjectId, out _);
+                }
 
-                        collection.Dispose();
-                        collection = null;
-                        running = null;
-                    }
-                } while (await timer.WaitForNextTickAsync(token));
+                if (retiring is null || retiring.IsCompleted)
+                {
+                    foreach (var completed in _targets.Where(t => t.Value.Task.IsCompleted).ToArray())
+                        if (completed.Value.StopTask is null && _targets.TryRemove(completed.Key, out var removed))
+                            removed.Cancellation.Dispose();
+                    if (_targets.Count >= 1024)
+                        throw new InvalidOperationException("Local collector capacity has been reached.");
+                    state = new TargetState(target, deploymentOperation,
+                        CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token));
+                    _targets[target.ProjectId] = state;
+                    state.Task = RunTargetAsync(state);
+                    break;
+                }
             }
             finally
             {
-                if (collection is not null)
-                {
-                    await collection.CancelAsync();
-                    try
-                    {
-                        if (running is not null) await running;
-                    }
-                    catch (OperationCanceledException)
-                    {
-                    }
-
-                    collection.Dispose();
-                }
+                _changes.Release();
             }
+
+            // Retain the retiring target until shutdown completes, without blocking other registry entries.
+            await retiring!.WaitAsync(cancellationToken);
         }
-        catch (OperationCanceledException)
+
+        // Registration-time overlap recovers events even when the daemon cannot connect before Compose starts.
+        if (deploymentOperation)
+            try
+            {
+                await state.Ready.Task.WaitAsync(TimeSpan.FromSeconds(3), cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                logger.LogWarning("Docker lifecycle startup is delayed; timestamp recovery remains active.");
+            }
+    }
+
+    /// <inheritdoc />
+    public Task SetOperationAsync(Guid projectId, Guid deploymentId, bool active,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_targets.TryGetValue(projectId, out var state) && state.Target.DeploymentId == deploymentId)
+            state.Operation = active;
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async Task StopProjectAsync(Guid projectId, CancellationToken cancellationToken = default)
+    {
+        TargetState? state;
+        Task? retirement;
+        await _changes.WaitAsync(cancellationToken);
+        try
         {
-            logger.LogDebug("Log streaming cancelled for project {ProjectId}.", config.ProjectId);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "[LocalDeploymentOrchestrator] Error streaming logs for Project ID {Id}.",
-                config.ProjectId);
+            _targets.TryGetValue(projectId, out state);
+            retirement = state is null ? null : state.StopTask ??= StopTargetAsync(state);
         }
         finally
         {
-            if (ActiveLogStreams.TryGetValue(config.ProjectId, out var activeCts) &&
-                ReferenceEquals(activeCts, cts))
-                ActiveLogStreams.TryRemove(config.ProjectId, out _);
+            _changes.Release();
+        }
 
-            cts.Dispose();
+        if (retirement is null) return;
+        await retirement.WaitAsync(cancellationToken);
+        await _changes.WaitAsync(cancellationToken);
+        try
+        {
+            if (_targets.TryGetValue(projectId, out var current) && ReferenceEquals(current, state))
+                _targets.TryRemove(projectId, out _);
+        }
+        finally
+        {
+            _changes.Release();
         }
     }
 
-    /// <summary>
-    ///     Creates Docker log and metric stream tasks for the web container and configured databases.
-    /// </summary>
-    private static List<Task> CreateStreamingTasks(IDockerService dockerService, DeploymentConfigDto config,
-        CsProject csProject, Guid deploymentId, CancellationToken token)
+    /// <inheritdoc />
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var appName = OrchestrationNameNormalizer.NormalizeContainerName(config.ProjectName);
-        var webContainerName = $"{OrchestrationNameNormalizer.NormalizeContainerName(csProject.Name)}-web";
-        var streamingTasks = new List<Task>
+        try
         {
-            dockerService.StreamContainerLogsAsync(webContainerName, config.ProjectId, deploymentId, "web", token),
-            dockerService.StreamContainerMetricsAsync(webContainerName, config.ProjectId, deploymentId, "web", token)
-        };
-
-        if (config.Databases == null)
-            return streamingTasks;
-
-        foreach (var database in config.Databases)
-        {
-            var dbContainerName = $"{appName}-{database.ContainerNameSuffix}";
-            streamingTasks.Add(dockerService.StreamContainerLogsAsync(
-                dbContainerName,
-                config.ProjectId,
-                deploymentId,
-                database.ContainerNameSuffix,
-                token));
-
-            streamingTasks.Add(dockerService.StreamContainerMetricsAsync(
-                dbContainerName,
-                config.ProjectId,
-                deploymentId,
-                database.ContainerNameSuffix,
-                token));
+            await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
         }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            logger.LogDebug("Local diagnostics are shutting down.");
+        }
+        finally
+        {
+            await _shutdown.CancelAsync();
+            await _changes.WaitAsync();
+            try
+            {
+                foreach (var state in _targets.Values) await (state.StopTask ??= StopTargetAsync(state));
+                _targets.Clear();
+            }
+            finally
+            {
+                _changes.Release();
+            }
+        }
+    }
 
-        return streamingTasks;
+    /// <inheritdoc />
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await _shutdown.CancelAsync();
+        await base.StopAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public override void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _shutdown.Cancel();
+        base.Dispose();
+        _shutdown.Dispose();
+        _changes.Dispose();
+    }
+
+    /// <summary>Separates source lifetimes and viewing consent while tracking every child task.</summary>
+    private async Task RunTargetAsync(TargetState state)
+    {
+        var token = state.Cancellation.Token;
+        await using var scope = scopes.CreateAsyncScope();
+        CancellationTokenSource? daemonCancellation = null;
+        Task? daemon = null;
+        CancellationTokenSource? runtimeCancellation = null;
+        var runtime = new Dictionary<string, Task>();
+        try
+        {
+            var source = scope.ServiceProvider.GetRequiredService<IDockerDiagnosticSource>();
+            if (state.Operation)
+            {
+                daemonCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+                daemon = source.MonitorDaemonAsync(state.Target, () => state.Ready.TrySetResult(),
+                    daemonCancellation.Token);
+            }
+            else
+            {
+                state.Ready.TrySetResult();
+            }
+
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            do
+            {
+                var policy = await ReadPolicyAsync(state.Target, token);
+                if (!policy.Current || (!state.Operation &&
+                                        policy.Status is DeploymentStatus.Failed or DeploymentStatus.Stopped)) break;
+                if (daemon?.IsCompleted == true)
+                {
+                    await CancelTasksAsync(daemonCancellation!, [daemon]);
+                    daemonCancellation = null;
+                    daemon = null;
+                }
+
+                var observeLifecycle = state.Operation || policy.Runtime;
+                if (observeLifecycle && daemon is null)
+                {
+                    daemonCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+                    daemon = source.MonitorDaemonAsync(state.Target, () => state.Ready.TrySetResult(),
+                        daemonCancellation.Token);
+                }
+
+                if (!observeLifecycle && daemon is not null)
+                {
+                    await CancelTasksAsync(daemonCancellation!, [daemon]);
+                    daemonCancellation = null;
+                    daemon = null;
+                }
+
+                if (policy.Runtime)
+                {
+                    runtimeCancellation ??= CancellationTokenSource.CreateLinkedTokenSource(token);
+                    foreach (var container in state.Target.Containers)
+                    {
+                        var logKey = container.Channel + "/logs";
+                        if (!runtime.TryGetValue(logKey, out var logs) || logs.IsCompleted)
+                        {
+                            if (logs is not null) await ObserveTaskAsync(logs);
+                            runtime[logKey] =
+                                source.MonitorContainerAsync(state.Target, container, runtimeCancellation.Token);
+                        }
+
+                        var key = container.Channel + "/metrics";
+                        if (!runtime.TryGetValue(key, out var metrics) || metrics.IsCompleted)
+                        {
+                            if (metrics is not null) await ObserveTaskAsync(metrics);
+                            runtime[key] =
+                                source.MonitorMetricsAsync(state.Target, container, runtimeCancellation.Token);
+                        }
+                    }
+                }
+                else if (runtimeCancellation is not null)
+                {
+                    await CancelTasksAsync(runtimeCancellation, runtime.Values);
+                    runtime.Clear();
+                    runtimeCancellation = null;
+                }
+            } while (await timer.WaitForNextTickAsync(token));
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            logger.LogDebug("Local subscriptions were canceled.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning("Local supervision will be restored by recovery: {FailureType}.",
+                exception.GetType().Name);
+        }
+        finally
+        {
+            state.Ready.TrySetResult();
+            if (runtimeCancellation is not null) await CancelTasksAsync(runtimeCancellation, runtime.Values);
+            if (daemonCancellation is not null)
+                await CancelTasksAsync(daemonCancellation, daemon is null ? [] : [daemon]);
+        }
+    }
+
+    /// <summary>Reads current deployment and consent using an independent EF scope.</summary>
+    private async Task<(bool Current, bool Runtime, DeploymentStatus Status)> ReadPolicyAsync(
+        DockerDeploymentTarget target, CancellationToken token)
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var latest = await scope.ServiceProvider.GetRequiredService<AutoMateDbContext>().Deployments.AsNoTracking()
+            .Where(d => d.CsProject!.AppId == target.ProjectId).OrderByDescending(d => d.CreatedAt)
+            .Select(d => new { d.Id, d.Status, d.CsProject!.Application!.RuntimeDiagnosticsEnabled })
+            .FirstOrDefaultAsync(token);
+        var interest = latest?.RuntimeDiagnosticsEnabled == true || scope.ServiceProvider
+            .GetRequiredService<IDeploymentRuntimeViewers>()
+            .HasViewers(target.ProjectId, target.DeploymentId);
+        return (latest?.Id == target.DeploymentId, interest, latest?.Status ?? DeploymentStatus.Stopped);
+    }
+
+    /// <summary>Cancels and awaits a source group before disposing its cancellation owner.</summary>
+    private async Task CancelTasksAsync(CancellationTokenSource cancellation, IEnumerable<Task> tasks)
+    {
+        await cancellation.CancelAsync();
+        await Task.WhenAll(tasks.Select(ObserveTaskAsync));
+        cancellation.Dispose();
+    }
+
+    /// <summary>Observes faults without exposing provider bodies or abandoning other sources.</summary>
+    private async Task ObserveTaskAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+            logger.LogDebug("Docker subscription ended during cancellation.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning("Docker subscription ended: {FailureType}.", exception.GetType().Name);
+        }
+    }
+
+    /// <summary>Releases the cancellation owner only after its supervisor and children finish.</summary>
+    private async Task StopTargetAsync(TargetState state)
+    {
+        await state.Cancellation.CancelAsync();
+        await ObserveTaskAsync(state.Task);
+        state.Cancellation.Dispose();
+    }
+
+    /// <summary>Owns one deployment's tasks without retaining configuration credentials.</summary>
+    private sealed class TargetState(
+        DockerDeploymentTarget target,
+        bool operation,
+        CancellationTokenSource cancellation)
+    {
+        /// <summary>Whether a Compose operation requires automatic lifecycle diagnostics.</summary>
+        public volatile bool Operation = operation;
+
+        /// <summary>Immutable, non-secret inventory.</summary>
+        public DockerDeploymentTarget Target { get; } = target;
+
+        /// <summary>Cancellation linked to host shutdown.</summary>
+        public CancellationTokenSource Cancellation { get; } = cancellation;
+
+        /// <summary>Task owned by the host registry.</summary>
+        public Task Task { get; set; } = Task.CompletedTask;
+
+        /// <summary>Single shared shutdown task; registry callers never dispose the same owner twice.</summary>
+        public Task? StopTask { get; set; }
+
+        /// <summary>First daemon subscription attempt confirmation.</summary>
+        public TaskCompletionSource Ready { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

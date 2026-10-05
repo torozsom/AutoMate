@@ -1,5 +1,6 @@
 // Client-side inspection avoids a server roundtrip for every pointer movement.
 const bindings = new WeakMap();
+
 /** Installs delegated handlers; points are resolved afresh after Blazor updates. */
 export function attach(root) {
     detach(root);
@@ -22,7 +23,10 @@ export function attach(root) {
             points.forEach((candidate, index) => {
                 const box = candidate.getBoundingClientRect();
                 const delta = Math.hypot(event.clientX - box.x - box.width / 2, event.clientY - box.y - box.height / 2);
-                if (delta < distance) { nearest = index; distance = delta; }
+                if (delta < distance) {
+                    nearest = index;
+                    distance = delta;
+                }
             });
             show(nearest);
         }
@@ -46,8 +50,9 @@ export function attach(root) {
         });
     });
     observer?.observe(root);
-    bindings.set(root, { pointer, key, observer });
+    bindings.set(root, {pointer, key, observer});
 }
+
 /** Removes all listeners when a chart is disposed. */
 export function detach(root) {
     const binding = bindings.get(root);
