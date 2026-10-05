@@ -24,18 +24,25 @@ public sealed class ProjectTelemetrySummaryTests
         Set(component, "ProjectId", project);
         Set(component, "ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
         Set(component, "Logger", NullLogger<ProjectTelemetrySummary>.Instance);
-        var load = typeof(ProjectTelemetrySummary).GetMethod("LoadAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var load = typeof(ProjectTelemetrySummary).GetMethod("LoadAsync",
+            BindingFlags.NonPublic | BindingFlags.Instance)!;
         await Task.WhenAll((Task)load.Invoke(component, null)!, (Task)load.Invoke(component, null)!);
         Assert.Equal(2, recorder.Calls.Count);
         Assert.Equal(2, recorder.Calls.Select(call => call.Scope).Distinct().Count());
-        Assert.All(recorder.Calls, call => { Assert.Equal(owner, call.Owner); Assert.Equal(project, call.Project); });
+        Assert.All(recorder.Calls, call =>
+        {
+            Assert.Equal(owner, call.Owner);
+            Assert.Equal(project, call.Project);
+        });
         Assert.Equal(2, recorder.Disposed.Count);
         component.Dispose();
     }
 
-    private static void Set(object component, string name, object value) =>
+    private static void Set(object component, string name, object value)
+    {
         component.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(component, value);
+    }
 
     private sealed class ScopeRecorder
     {
@@ -47,6 +54,11 @@ public sealed class ProjectTelemetrySummaryTests
     {
         private readonly Guid _id = Guid.NewGuid();
 
+        public void Dispose()
+        {
+            recorder.Disposed.Add(_id);
+        }
+
         public async Task<ProjectTelemetryAnalytics> ReadAsync(Guid user, Guid project, DateTimeOffset start,
             DateTimeOffset end, CancellationToken token = default)
         {
@@ -54,7 +66,5 @@ public sealed class ProjectTelemetrySummaryTests
             await Task.Delay(20, token);
             return new ProjectTelemetryAnalytics(0, 0, 0, null, [], null);
         }
-
-        public void Dispose() => recorder.Disposed.Add(_id);
     }
 }

@@ -69,7 +69,7 @@ public sealed class DeploymentJobWorker(
         }
         catch (Exception ex)
         {
-            logger.LogCritical(ex, "Deployment job scheduler stopped unexpectedly.");
+            logger.LogCritical("Deployment job scheduler stopped unexpectedly: {FailureType}.", ex.GetType().Name);
         }
         finally
         {
@@ -111,7 +111,7 @@ public sealed class DeploymentJobWorker(
         {
             LocalDeploymentJob => running.Count(item => item.Queued.Job is LocalDeploymentJob) < _localLimit,
             CloudDeploymentJob => running.Count(item => item.Queued.Job is CloudDeploymentJob) < _cloudLimit,
-            StopLocalDeploymentJob => running.Count(item => item.Queued.Job is StopLocalDeploymentJob) < 1,
+            StopLocalDeploymentJob => running.Count(item => item.Queued.Job is StopLocalDeploymentJob) < 4,
             _ => false
         };
     }
@@ -163,6 +163,9 @@ public sealed class DeploymentJobWorker(
     {
         var succeeded = await running.Task;
         queue.MarkCompleted(running.Queued.Job);
+        logger.LogInformation("Finished {JobType} for project {ProjectId} with outcome {Outcome}.",
+            running.Queued.Job.GetType().Name, running.Queued.Job.ProjectId,
+            succeeded ? AuditOutcome.Completed : AuditOutcome.Failed);
         var lane = Lane(running.Queued.Job);
         if (succeeded)
             AutoMateTelemetry.DeploymentJobsCompleted.Add(1,
@@ -187,8 +190,8 @@ public sealed class DeploymentJobWorker(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Deployment job {JobType} failed for project {ProjectId}.",
-                job.GetType().Name, job.ProjectId);
+            logger.LogError("Deployment job {JobType} failed for project {ProjectId}: {FailureType}.",
+                job.GetType().Name, job.ProjectId, ex.GetType().Name);
             if (job is not StopLocalDeploymentJob) NotifyFailureStatus(job.ProjectId);
             return false;
         }
@@ -202,7 +205,8 @@ public sealed class DeploymentJobWorker(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to publish deployment failure for project {ProjectId}.", projectId);
+            logger.LogWarning("Failed to publish deployment failure for project {ProjectId}: {FailureType}.",
+                projectId, ex.GetType().Name);
         }
     }
 

@@ -62,8 +62,8 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
                 config.Databases.Add(CreateDatabaseConfig(rule));
 
                 logger.LogInformation(
-                    "[ProjectScannerService] Database dependency detected for project '{ProjectName}': {DbType}",
-                    app.Name, rule.DbType);
+                    "Database dependency detected for project {ProjectId}: {DbType}.",
+                    app.Id, rule.DbType);
             }
         }
         catch (OperationCanceledException ex)

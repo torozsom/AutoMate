@@ -66,6 +66,11 @@ public interface IApplicationService
     Task<Domain.Entities.Application?> GetAppByIdAsync(Guid projectId, Guid userId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Updates the first configured project for legacy application-level callers.</summary>
     Task<bool> SetAiDiagnosticEgressConsentAsync(Guid projectId, Guid userId, bool consented,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Updates only the specified C# project's consent after verifying application membership and ownership.</summary>
+    Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, Guid csProjectId, bool consented,
         CancellationToken cancellationToken = default);
 }

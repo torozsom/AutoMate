@@ -6,7 +6,10 @@ using Microsoft.Extensions.Options;
 namespace Infrastructure.Diagnostics;
 
 /// <summary>OTLP/HTTP numeric ingestion and Prometheus-compatible historical queries.</summary>
-public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOptions<TelemetryStorageOptions> options)
+public sealed class MimirDeploymentMetrics(
+    TelemetryHttpTransport transport,
+    IOptions<TelemetryStorageOptions> options,
+    IDiagnosticRedactor redactor)
     : IDeploymentMetricWriter, IDeploymentMetricQuery, IDailyDeploymentMetricQuery
 {
     /// <summary>Fixed series names prevent arbitrary metric/label injection.</summary>
@@ -19,6 +22,7 @@ public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOp
 
     public static IReadOnlyDictionary<string, string> SupportedUnits => Units;
 
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DailyMetricStatistics>> ReadDailyAsync(Guid tenant, Guid project, Guid deployment,
         DateTimeOffset start, DateTimeOffset end, CancellationToken token)
     {
@@ -44,7 +48,8 @@ public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOp
             }
 
             result.AddRange(series.Where(p => p.Value.All(double.IsFinite) && p.Value[0] > 0).Select(p =>
-                new DailyMetricStatistics(p.Key, name, Units[name], (long)p.Value[0], p.Value[1], p.Value[2],
+                new DailyMetricStatistics(redactor.RedactText(p.Key, 128), name, Units[name], (long)p.Value[0],
+                    p.Value[1], p.Value[2],
                     p.Value[3])));
         }
 
@@ -86,7 +91,8 @@ public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOp
         }
 
         return points.Where(p => p.Value.All(double.IsFinite)).Select(p => new DeploymentMetricPoint(
-                p.Key.Container, p.Key.Name, Units[p.Key.Name], p.Key.Time, p.Value[0], p.Value[1], p.Value[2]))
+                redactor.RedactText(p.Key.Container, 128), p.Key.Name, Units[p.Key.Name], p.Key.Time, p.Value[0],
+                p.Value[1], p.Value[2]))
             .OrderBy(p => p.Timestamp).ToArray();
     }
 
@@ -94,7 +100,9 @@ public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOp
     public async Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events,
         CancellationToken cancellationToken)
     {
+        events = TelemetryWriteBoundary.Snapshot(events, redactor, cancellationToken);
         if (events.Count == 0) return true;
+        ValidateSamples(events);
         // Range selectors return raw sample timestamps; evaluated gauge timestamps cannot prove visibility.
         foreach (var group in events.SelectMany(e => (e.Event.Metrics ?? []).Select(m => new { e, m }))
                      .GroupBy(x => new { x.e.Event.ProjectId, x.e.Event.DeploymentId, x.m.Name }))
@@ -119,7 +127,9 @@ public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOp
     /// <inheritdoc />
     public async Task WriteAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken cancellationToken)
     {
+        events = TelemetryWriteBoundary.Snapshot(events, redactor, cancellationToken);
         if (events.Count == 0) return;
+        ValidateSamples(events);
         var metrics = events.SelectMany(e => (e.Event.Metrics ?? []).Select(m => new { Envelope = e, Sample = m }))
             .GroupBy(x => x.Sample.Name).Select(group => new
             {
@@ -146,6 +156,15 @@ public sealed class MimirDeploymentMetrics(TelemetryHttpTransport transport, IOp
         if (response.RootElement.TryGetProperty("partialSuccess", out var partial) &&
             partial.TryGetProperty("rejectedDataPoints", out var rejected) && rejected.ToString() != "0")
             throw new InvalidOperationException("Telemetry metric batch was partially rejected.");
+    }
+
+    /// <summary>Rejects unsupported or nonfinite samples before store writes and visibility queries.</summary>
+    private static void ValidateSamples(IReadOnlyList<DeploymentLogEnvelope> events)
+    {
+        if (events.Any(item => item.Event.Metrics?.Any(sample =>
+                !double.IsFinite(sample.Value) || sample.Value < 0 ||
+                !Units.TryGetValue(sample.Name, out var unit) || unit != sample.Unit) == true))
+            throw new ArgumentException("Telemetry metric batch contains unsupported samples.");
     }
 
     /// <summary>Restricts queries to server-constructed GUID selectors.</summary>

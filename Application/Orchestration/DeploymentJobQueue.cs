@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Threading.Channels;
 using Application.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Application.Orchestration;
@@ -8,7 +9,9 @@ namespace Application.Orchestration;
 /// <summary>
 ///     Channel-backed deployment job queue with bounded capacity to avoid unbounded server memory growth.
 /// </summary>
-public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> options) : IDeploymentJobQueue
+public sealed class DeploymentJobQueue(
+    IOptions<DeploymentConcurrencyOptions> options,
+    ILogger<DeploymentJobQueue>? logger = null) : IDeploymentJobQueue
 {
     private readonly object _gate = new();
     private readonly int _maxQueued = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
@@ -55,6 +58,7 @@ public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> op
             AutoMateTelemetry.DeploymentJobsQueued.Add(1);
         }
 
+        logger?.LogInformation("Queued {JobType} for project {ProjectId}.", job.GetType().Name, job.ProjectId);
         NotifyStateChanged(job.ProjectId);
         return ValueTask.CompletedTask;
     }

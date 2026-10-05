@@ -18,3 +18,5 @@ Infrastructure types are registered only in Web/Configs.
 ## Related documentation
 
 - [Application](../Application/README.md)`n- [Infrastructure](../Infrastructure/README.md)
+
+Platform logging/trace export policy lives in [Observability](Observability/README.md), registered in Web/Configs.

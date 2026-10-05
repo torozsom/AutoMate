@@ -1,5 +1,9 @@
 # Configs
 
+Both profiles explicitly register the AutoMate.Analysis activity source and meter alongside existing deployment/security
+sources. The shared export policy allows only fixed analysis operations/outcomes and dimensionless usage/wait/active
+measurements. Registration does not enable AI or change provider/consent policy.
+
 Web dependency composition, authentication, options, and HTTP pipeline configuration. It configures OpenTelemetry for
 AutoMate's logs, traces, metrics, deployment diagnostic activity/meter sources, and security rate-limit rejection
 events. Development console export is on by default; optional OTLP export is controlled by `OpenTelemetry` options and
@@ -24,7 +28,7 @@ Infrastructure types are registered only in Web/Configs.
 
 - [Solution navigation map](../../.agents/navigation.md)
 
-`TelemetryStorage` selects PostgreSQL or Loki/Mimir and validates endpoints, transport, managed onboarding and quotas
+`TelemetryStorage` requires Loki/Mimir and validates endpoints, transport, managed onboarding and quotas
 at startup. [Telemetry hosting](../../docs/deployment-telemetry.md) documents operator secrets and retention controls.
 
 Telemetry startup validation uses `TelemetryStorageOptionsValidator` to identify individual invalid settings without
@@ -34,3 +38,99 @@ exposing their values. Local IDE launches can import the complete pilot settings
 Both hosting profiles require LokiMimir/DiskGateway. Web supplies those defaults before binding operator settings and
 rejects PostgresOutbox even when explicitly configured. Endpoint and gateway credentials remain mandatory. Legacy
 PostgreSQL reads and outbox draining continue during migration. See ../../docs/saas-telemetry.md.
+
+`DeploymentDiagnostics` validates a buffer capacity of 16–16,384 events, a persistence deadline of 1–60 seconds and a
+delivery deadline of 1–30 seconds. Defaults are 512 events, 10 seconds and 2 seconds. The log hub has explicit 64 KiB
+transport buffers in each direction; sinks honor cancellation without changing callback names or subscription policy.
+
+SelfHosted registers one host-owned `LocalDeploymentLogStreamManager` singleton behind `ILocalDeploymentDiagnostics`
+and as a hosted service. Scoped `DockerService` implements both Docker operation and diagnostic source ports. SaaS
+continues to omit local deployment collectors and registers only its existing disabled Docker operation adapter.
+
+The AI result boundary registers `IAnalysisResultValidator` as a singleton using the central singleton redactor.
+Both the typed provider client and scoped analysis service/worker use it. Both profiles remain default-off for AI;
+resolving these ports does not require provider credentials or initiate any provider request.
+
+Both profiles register `DeploymentAnalysisRetentionService` independently of AI admission, using the existing singleton
+`TimeProvider.System` and a fresh database scope per startup/hourly cleanup pass. Expiry guards and owner deletion use
+the
+same clock.
+
+Both profiles register `DeploymentAnalysisRetentionService` independently of AI admission, using the existing singleton
+`TimeProvider.System` and a fresh database scope per startup/hourly cleanup pass. Expiry guards and owner deletion use
+the
+same clock.
+
+## Structured platform logging
+
+Both profiles export log scopes and share service.name, service.version, deployment.environment and a bounded
+`automate.hosting_profile` resource attribute. `SecurityAuditResultHandler` logs fixed challenge/denial outcomes and
+then delegates to the default authorization handler, preserving responses and redirects. OAuth ticket preparation and
+remote failure, local login and rate-limit rejection use the fixed Application `OperationalLog` event API. Credentials,
+users, paths, headers, query strings and external failure bodies are not event properties. Startup database failure
+logs retain the failure type and omit the raw exception. Web/Observability now sanitizes legacy/framework logging
+through the registered ILoggerFactory and SDK processors.
+Its explicit catalog and typed allowlists retain safe audit correlation and omit unapproved payloads. Real SDK
+exports/resource attributes and default authorization behavior are tested
+without a collector in `Web.Tests/OperationalLoggingTests.cs` and hosting-profile tests.
+
+Tracing includes Microsoft.AspNetCore.SignalR.Server. SQL command and DeploymentTelemetry HTTP Information chatter is
+suppressed by tracked category defaults; warnings/errors and application Information remain visible. Temporarily set
+those Logging:LogLevel categories to Information for additional safe metadata; URLs and SQL text remain omitted. Console
+export stays opt-in. Filters do
+not disable tracing or Loki/Mimir ingestion.
+
+M5 metric views omit request-derived HTTP dimensions and unknown instruments, retain finite operational/runtime labels,
+and disable exemplars. Default resource detectors are replaced by the four-field SafeResourceDetector shared by logs,
+traces and metrics; arbitrary OTEL_RESOURCE_ATTRIBUTES are excluded. See ../Observability/README.md for approved labels
+and configuration fallback behavior.
+
+Both profiles resolve scoped IDeploymentAnalysisContextBuilder using existing metadata, diagnostic-history and Mimir
+ports. AiAnalysis options add MaximumContextBytes (48,000) and MaximumContextTokens (12,000 conservative units),
+alongside
+MaximumContextCharacters (24,000). These limit encoded diagnostic input; they do not count whole-request/schema/output
+cost. Context acquisition does not invoke an LLM; AI remains default-off and provider/tenant/region egress remains gated
+by the outstanding policy work in PLAN.md.
+
+AI egress options bind with startup validation when ProviderEgressEnabled is requested. Shared runtime policy uses
+IOptionsMonitor and a scoped fresh-metadata IAnalysisEgressAuthorizer in both profiles. The initial OpenAI typed client
+has redirects and automatic HTTP retries disabled, so a retry cannot reuse an earlier consent decision. Defaults and
+operator onboarding are documented in Infrastructure/Ai/README.md; enabling AI is not a provider/region approval.
+
+AI startup options independently validate LeaseDurationSeconds (30–900) and MaximumRecoveryAttempts (1–10), even
+while AI remains disabled. These configure renewable ownership and bounded interruption recovery, without enabling
+provider egress or automatic HTTP retries.
+
+Retry options are validated even when AI is disabled: MaximumProviderRetries 0–5, RetryBaseDelaySeconds 1–300,
+RetryMaximumDelaySeconds 5–3,600, with base no greater than maximum. Defaults are 2/10/300. They do not enable egress.
+
+DailyProjectLimit startup validation accepts 0–1,000, including disabled AI configurations. Zero blocks new analyses
+without preventing owner reads/cancellation/deletion; stable replay/active coalescing still require admission policy.
+Project allowance is serialized and receipt-backed; it is distinct from later tenant/cost limits.
+
+AiAnalysis:MaximumConcurrency validates 1–16 even with AI disabled, defaulting to one processing slot per instance.
+Set AiAnalysis__MaximumConcurrency in environment configuration and restart to resize the worker. Invalid settings
+fail options validation; there is no silent clamp. Other AI policy/consent monitor checks continue to refresh normally.
+
+Provider composition uses AnalysisProviderCatalog and the scoped ConfiguredAnalysisProvider port. OpenAI's concrete
+HttpClient retains no-redirect behavior. Add an Infrastructure adapter plus its DI client and
+AnalysisProviderRegistration (exact approved route) to extend selection; no Application workflow/UI change is needed.
+Enabled egress validates the
+selected catalog entry and common policy at startup; unknown/unapproved provider routes fail closed. Missing API keys
+remain unavailable at adapter invocation and never appear in diagnostics or configuration validation output.
+
+M8 adds independent startup validation for AiAnalysis:TimeoutSeconds (5–300), MaximumOutputTokens (1–8,192),
+MaximumContextCharacters/Bytes/Tokens (each 1–131,072) and ResultRetentionDays (1–90). These apply even with AI
+disabled;
+defaults remain 60 seconds, 8,192 output tokens, 24,000/48,000/12,000 context limits and 90-day result retention.
+No provider credentials, egress or automatic analysis are enabled by validation. Exact provider/region/tenant/category
+approvals remain mandatory only when provider egress is requested; missing keys remain a safe runtime unavailable state.
+
+OpenTelemetryOptionsValidator runs at startup. OtlpEndpoint is optional; if supplied, it must be an absolute HTTP (S)
+collector URL up to 2,048 characters, without embedded credentials, whitespace, query or fragment. Authentication
+belongs in protected exporter configuration, never the URL or tracked JSON. HTTP remains supported for trusted internal
+collector networks; operators own TLS/network policy. ServiceName must have 1–100 nonblank characters; optional
+Environment has the same bound. SafeResourceDetector still sanitizes labels. Invalid endpoints are never registered
+with an exporter and fail startup using fixed messages that omit supplied values. Valid endpoints retain existing
+export behavior; changing OTLP export/resource configuration requires restart. The standard configuration binder still
+handles type conversion; validators handle typed settings and policy bounds.

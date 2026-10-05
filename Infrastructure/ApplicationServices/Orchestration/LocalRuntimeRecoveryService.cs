@@ -1,4 +1,4 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Docker;
 using Application.Abstractions.Scanning;
 using Domain.Enums;
 using Infrastructure.Data;
@@ -9,11 +9,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Orchestration;
 
-/// <summary>Restores opted-in or actively viewed local runtime collectors after an AutoMate restart.</summary>
+/// <summary>Restores supervisors for current local deployments; supervisors enforce runtime collection interest.</summary>
 public sealed class LocalRuntimeRecoveryService(
     IServiceScopeFactory scopes,
-    IDeploymentRuntimeViewers viewers,
-    IHostApplicationLifetime lifetime,
+    ILocalDeploymentDiagnostics diagnostics,
     ILogger<LocalRuntimeRecoveryService> logger) : BackgroundService
 {
     /// <inheritdoc />
@@ -32,12 +31,13 @@ public sealed class LocalRuntimeRecoveryService(
             }
             catch (Exception exception)
             {
-                logger.LogWarning(exception, "Local runtime collection recovery will retry.");
+                logger.LogWarning("Local runtime collection recovery will retry: {FailureType}.",
+                    exception.GetType().Name);
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Finds current local deployments and starts only missing collectors with collection interest.</summary>
+    /// <summary>Registers only missing supervisors for current local deployments, without starting idle runtime sources.</summary>
     internal async Task RecoverOnceAsync(CancellationToken token)
     {
         await using var scope = scopes.CreateAsyncScope();
@@ -49,7 +49,6 @@ public sealed class LocalRuntimeRecoveryService(
                                                      newer.CreatedAt > d.CreatedAt))
             .Include(d => d.CsProject!).ThenInclude(p => p.Application)
             .OrderBy(d => d.Id);
-        var manager = new LocalDeploymentLogStreamManager(scopes, logger, lifetime.ApplicationStopping);
         for (var offset = 0;; offset += 100)
         {
             var deployments = await query.Skip(offset).Take(100).ToListAsync(token);
@@ -57,18 +56,18 @@ public sealed class LocalRuntimeRecoveryService(
             {
                 var project = deployment.CsProject!;
                 var app = project.Application!;
-                if (LocalDeploymentLogStreamManager.IsActive(app.Id) ||
-                    (!app.RuntimeDiagnosticsEnabled && !viewers.HasViewers(app.Id, deployment.Id))) continue;
+                if (diagnostics.IsActive(app.Id, deployment.Id)) continue;
                 try
                 {
                     var config = await scope.ServiceProvider.GetRequiredService<IProjectScannerService>()
                         .AnalyzeDependenciesAsync(app, project, token);
-                    manager.EnsureStarted(config, project, deployment.Id);
+                    await diagnostics.RegisterAsync(LocalDockerTargets.Create(config, project.Name, deployment.Id),
+                        false, token);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
-                    logger.LogWarning(exception, "Could not restore runtime collection for project {ProjectId}.",
-                        app.Id);
+                    logger.LogWarning("Local runtime collection recovery unavailable: {FailureType}.",
+                        exception.GetType().Name);
                 }
             }
 

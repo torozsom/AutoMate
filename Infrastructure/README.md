@@ -23,3 +23,8 @@ gateway confirms durable checksummed writes before cloud checkpoints advance. Te
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
 Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
 points.
+
+Infrastructure/Observability owns the shared SDK-independent logger factory, literal catalog and typed policy used by
+Web and the private Telemetry host. SDK exporter processors/views remain in Web/Observability. Diagnostic adapters
+recheck writes/readback, and legacy PostgreSQL diagnostic ingestion methods reject new payloads even when called
+directly.

@@ -12,6 +12,118 @@ namespace Infrastructure.Tests.Diagnostics;
 /// <summary>Credential-free storage protocol, quota configuration, and numeric-unit regression tests.</summary>
 public sealed class TelemetryStorageTests
 {
+    /// <summary>Direct adapter callers are masked independently of spool/publisher safeguards.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Storage_write_boundary_masks_direct_payloads_and_preserves_identity(bool metric)
+    {
+        var original = Envelope();
+        var attributes = new Dictionary<string, string> { ["Authorization"] = "Bearer private-value" };
+        var input = original with
+        {
+            Channel = "password=private-channel",
+            Event = original.Event with
+            {
+                Message = "Build failed. password=private-value",
+                Attributes = attributes,
+                TerminalChannel = original.Event.TerminalChannel with { Target = "password=private-container" },
+                Metrics = [new DeploymentMetricSample("automate_cpu_usage_cores", 1.25, "cores")]
+            }
+        };
+        var calls = 0;
+        using var handler = new DelegateHttpMessageHandler(request =>
+        {
+            calls++;
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            Assert.DoesNotContain("private-", body);
+            Assert.Contains("[REDACTED]", body);
+            Assert.Contains(input.Event.ProjectId.ToString("N"), body);
+            Assert.Equal(input.TenantId.ToString("N"), request.Headers.GetValues("X-Scope-OrgID").Single());
+            if (metric)
+            {
+                Assert.Contains("1.25", body);
+            }
+            else
+            {
+                using var parsed = JsonDocument.Parse(body);
+                var stored = parsed.RootElement.GetProperty("streams")[0].GetProperty("values")[0];
+                using var envelope = JsonDocument.Parse(stored[1].GetString()!);
+                Assert.Contains("Build failed.",
+                    envelope.RootElement.GetProperty("event").GetProperty("message").GetString());
+                Assert.Equal(input.EventId, envelope.RootElement.GetProperty("eventId").GetGuid());
+                Assert.Equal(input.OrderId, envelope.RootElement.GetProperty("orderId").GetInt64());
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        using var transport =
+            new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
+        if (metric)
+            await new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor())
+                .WriteAsync([input], default);
+        else
+            await new LokiDeploymentLogs(transport, Options.Create(Specialized()), new DiagnosticRedactor()).WriteAsync(
+                [input], default);
+        Assert.Equal(1, calls);
+        Assert.Contains("private-value", input.Event.Message);
+        Assert.Equal("Bearer private-value", attributes["Authorization"]);
+    }
+
+    /// <summary>Adapters cannot route a mixed-tenant batch under its first tenant's credentials.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Mixed_tenant_write_batches_never_reach_transport(bool metric)
+    {
+        var calls = 0;
+        using var handler = new DelegateHttpMessageHandler(_ =>
+        {
+            calls++;
+            throw new InvalidOperationException();
+        });
+        using var transport =
+            new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
+        var items = new[] { Envelope(), Envelope() };
+        if (metric)
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor())
+                    .WriteAsync(items, default));
+        else
+            await Assert.ThrowsAsync<ArgumentException>(() =>
+                new LokiDeploymentLogs(transport, Options.Create(Specialized()), new DiagnosticRedactor()).WriteAsync(
+                    items, default));
+        Assert.Equal(0, calls);
+    }
+
+    /// <summary>Unsupported names/units and nonfinite or negative values cannot become numeric store payloads.</summary>
+    [Theory]
+    [InlineData("private-name", 1, "cores")]
+    [InlineData("automate_cpu_usage_cores", 1, "private-unit")]
+    [InlineData("automate_cpu_usage_cores", -1, "cores")]
+    [InlineData("automate_cpu_usage_cores", double.NaN, "cores")]
+    [InlineData("automate_cpu_usage_cores", double.PositiveInfinity, "cores")]
+    public async Task Unsupported_metric_batches_are_rejected_before_transport(string name, double value, string unit)
+    {
+        var calls = 0;
+        using var handler = new DelegateHttpMessageHandler(_ =>
+        {
+            calls++;
+            throw new InvalidOperationException();
+        });
+        using var transport =
+            new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
+        var envelope = Envelope();
+        envelope = envelope with
+        {
+            Event = envelope.Event with { Metrics = [new DeploymentMetricSample(name, value, unit)] }
+        };
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor()).WriteAsync(
+                [envelope], default));
+        Assert.Equal(0, calls);
+    }
+
     /// <summary>Docker CPU usage preserves multiple cores and binary memory units.</summary>
     [Fact]
     public void Docker_numeric_samples_preserve_units_and_missing_values()
@@ -69,7 +181,7 @@ public sealed class TelemetryStorageTests
         });
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
-        var adapter = new LokiDeploymentLogs(transport, Options.Create(Specialized()));
+        var adapter = new LokiDeploymentLogs(transport, Options.Create(Specialized()), new DiagnosticRedactor());
         await adapter.WriteAsync([envelope], CancellationToken.None);
         await adapter.WriteAsync([envelope], CancellationToken.None);
     }
@@ -79,6 +191,7 @@ public sealed class TelemetryStorageTests
     public async Task Loki_query_deduplicates_retry_copies_and_scopes_project_and_cursor()
     {
         var envelope = Envelope();
+        envelope = envelope with { Event = envelope.Event with { Message = "password=private-backend-value" } };
         var handler = new DelegateHttpMessageHandler(request =>
         {
             var query = Uri.UnescapeDataString(request.RequestUri!.Query);
@@ -105,9 +218,12 @@ public sealed class TelemetryStorageTests
         });
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
-        var adapter = new LokiDeploymentLogs(transport, Options.Create(Specialized()));
-        (await adapter.ReadAsync(envelope.TenantId, envelope.Event.ProjectId, envelope.Event.DeploymentId!.Value,
-            10, false, 500, CancellationToken.None)).Should().ContainSingle();
+        var adapter = new LokiDeploymentLogs(transport, Options.Create(Specialized()), new DiagnosticRedactor());
+        var result = await adapter.ReadAsync(envelope.TenantId, envelope.Event.ProjectId,
+            envelope.Event.DeploymentId!.Value,
+            10, false, 500, CancellationToken.None);
+        Assert.Single(result);
+        Assert.Equal("password=[REDACTED]", result[0].Event.Message);
     }
 
     /// <summary>Metric requests use numeric OTLP fields and report partial rejection.</summary>
@@ -131,7 +247,7 @@ public sealed class TelemetryStorageTests
         });
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
-        var adapter = new MimirDeploymentMetrics(transport, Options.Create(Specialized()));
+        var adapter = new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor());
         await adapter.Invoking(a => a.WriteAsync([envelope], CancellationToken.None)).Should()
             .ThrowAsync<InvalidOperationException>();
     }

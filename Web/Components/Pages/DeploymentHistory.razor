@@ -1,8 +1,8 @@
 @page "/project/{ProjectId:guid}/deployment/{DeploymentId:guid}"
+@attribute [Authorize]
 @using Application.Abstractions.Diagnostics
 @using Application.Data.Users
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize]
 @implements IDisposable
 @inject AuthenticationStateProvider Authentication
 @inject IUserService Users
@@ -13,63 +13,157 @@
 <main class="history-page">
     <header class="history-header">
         <a href="@($"/project/{ProjectId}")">← Back to project</a>
-        <div class="telemetry-toolbar"><div><p class="telemetry-eyebrow">DEPLOYMENT</p><h1>Deployment history</h1></div><span class="history-id">@DeploymentId.ToString("N")[..8]</span></div>
-        <details class="history-identity"><summary>Deployment details</summary><p>Deployment ID: <code>@DeploymentId</code></p></details>
+        <div class="telemetry-toolbar">
+            <div><p class="telemetry-eyebrow">DEPLOYMENT</p>
+                <h1>Deployment history</h1></div>
+            <span class="history-id">@DeploymentId.ToString("N")[..8]</span></div>
+        <details class="history-identity">
+            <summary>Deployment details</summary>
+            <p>Deployment ID: <code>@DeploymentId</code></p></details>
     </header>
-    @if (_error is not null) { <p class="telemetry-notice" role="alert">@_error</p> }
+    @if (_error is not null)
+    {
+        <p class="telemetry-notice" role="alert">@_error</p>
+    }
     @if (_authorized)
     {
         <section class="telemetry-panel" aria-labelledby="history-metrics-title" aria-busy="@_metricBusy">
             <div class="telemetry-toolbar">
-                <div><h2 id="history-metrics-title">Resource overview</h2><p class="telemetry-muted">Summaries of returned interval aggregates</p></div>
+                <div><h2 id="history-metrics-title">Resource overview</h2>
+                    <p class="telemetry-muted">Summaries of returned interval aggregates</p></div>
                 <div class="telemetry-controls">
-                    <label class="telemetry-control">Period<select class="form-select" @bind="_metricDays" @bind:after="LoadMetricsAsync"><option value="1">24 hours</option><option value="7">7 days</option><option value="30">30 days</option></select></label>
-                    <label class="telemetry-control">Container<select class="form-select" @bind="_metricContainer" disabled="@(_metrics.Count == 0)">
-                        @foreach (var name in _metrics.Select(p => p.Container).Distinct().Order()) { <option value="@name">@name</option> }
-                    </select></label>
+                    <label class="telemetry-control">Period<select class="form-select" @bind="_metricDays"
+                                                                   @bind:after="LoadMetricsAsync">
+                            <option value="1">24 hours</option>
+                            <option value="7">7 days</option>
+                            <option value="30">30 days</option>
+                        </select></label>
+                    <label class="telemetry-control">Container<select class="form-select" @bind="_metricContainer"
+                                                                      disabled="@(_metrics.Count == 0)">
+                            @foreach (var name in _metrics.Select(p => p.Container).Distinct().Order())
+                            {
+                                <option value="@name">@name</option>
+                            }
+                        </select></label>
                 </div>
             </div>
-            @if (_metricBusy) { <p class="telemetry-muted" role="status">Loading metrics…</p> }
-                <div class="telemetry-kpis">
-                    <div class="telemetry-kpi"><span>Average CPU</span><strong>@Value(TelemetryPresentation.Cpu, false)</strong><small>Observed intervals</small></div>
-                    <div class="telemetry-kpi"><span>Peak CPU</span><strong>@Value(TelemetryPresentation.Cpu, true)</strong><small>Observed maximum</small></div>
-                    <div class="telemetry-kpi"><span>Average memory</span><strong>@Value(TelemetryPresentation.Memory, false)</strong><small>Observed intervals</small></div>
-                    <div class="telemetry-kpi"><span>Peak memory</span><strong>@Value(TelemetryPresentation.Memory, true)</strong><small>Observed maximum</small></div>
+            @if (_metricBusy)
+            {
+                <p class="telemetry-muted" role="status">Loading metrics…</p>
+            }
+            <div class="telemetry-kpis">
+                <div class="telemetry-kpi">
+                    <span>Average CPU</span><strong>@Value(TelemetryPresentation.Cpu, false)</strong><small>Observed
+                        intervals</small></div>
+                <div class="telemetry-kpi"><span>Peak CPU</span><strong>@Value(TelemetryPresentation.Cpu, true)</strong><small>Observed
+                        maximum</small></div>
+                <div class="telemetry-kpi">
+                    <span>Average memory</span><strong>@Value(TelemetryPresentation.Memory, false)</strong><small>Observed
+                        intervals</small></div>
+                <div class="telemetry-kpi">
+                    <span>Peak memory</span><strong>@Value(TelemetryPresentation.Memory, true)</strong><small>Observed
+                        maximum</small></div>
+            </div>
+            <div class="telemetry-support">
+                @if (Selected(TelemetryPresentation.MemoryLimit).LastOrDefault() is { } limit)
+                {
+                    <span>Latest observed memory limit: <strong>@TelemetryPresentation.Format(limit.Average, limit.Name)</strong></span>
+                }
+                <span>Missing intervals remain gaps · detailed history retained for 30 days</span>
+            </div>
+            @if (_metricAvailability is not null)
+            {
+                <p class="telemetry-notice" role="status">@_metricAvailability</p>
+            }
+            @if (_metrics.Count == 0)
+            {
+                <p class="telemetry-muted">No saved metric observations in this period. Runtime collection is
+                    optional.</p>
+            }
+            <details class="telemetry-explore">
+                <summary>Explore metrics <span>CPU, memory and numeric observations</span></summary>
+                <div class="telemetry-chart-grid">
+                    <TelemetryChart Title="CPU usage" Metric="@TelemetryPresentation.Cpu"
+                                    Points="@ChartPoints(TelemetryPresentation.Cpu)"
+                                    Start="@_end.AddDays(-_loadedMetricDays)" End="_end" Gap="@ChartGap"/>
+                    <TelemetryChart Title="Memory usage" Metric="@TelemetryPresentation.Memory"
+                                    Points="@ChartPoints(TelemetryPresentation.Memory)"
+                                    Start="@_end.AddDays(-_loadedMetricDays)" End="_end" Gap="@ChartGap"/>
                 </div>
-                <div class="telemetry-support">
-                    @if (Selected(TelemetryPresentation.MemoryLimit).LastOrDefault() is { } limit) { <span>Latest observed memory limit: <strong>@TelemetryPresentation.Format(limit.Average, limit.Name)</strong></span> }
-                    <span>Missing intervals remain gaps · detailed history retained for 30 days</span>
-                </div>
-                @if (_metricAvailability is not null) { <p class="telemetry-notice" role="status">@_metricAvailability</p> }
-                @if (_metrics.Count == 0) { <p class="telemetry-muted">No saved metric observations in this period. Runtime collection is optional.</p> }
-                <details class="telemetry-explore">
-                    <summary>Explore metrics <span>CPU, memory and numeric observations</span></summary>
-                    <div class="telemetry-chart-grid">
-                        <TelemetryChart Title="CPU usage" Metric="@TelemetryPresentation.Cpu" Points="@ChartPoints(TelemetryPresentation.Cpu)" Start="@_end.AddDays(-_loadedMetricDays)" End="_end" Gap="@ChartGap"/>
-                        <TelemetryChart Title="Memory usage" Metric="@TelemetryPresentation.Memory" Points="@ChartPoints(TelemetryPresentation.Memory)" Start="@_end.AddDays(-_loadedMetricDays)" End="_end" Gap="@ChartGap"/>
+                <details class="telemetry-table-details">
+                    <summary>Numeric observations</summary>
+                    <div class="table-responsive">
+                        <table class="table telemetry-table">
+                            <caption>Returned interval aggregates for @_metricContainer. Sample counts are not supplied
+                                by this history query.
+                            </caption>
+                            <thead>
+                            <tr>
+                                <th>UTC</th>
+                                <th>Metric</th>
+                                <th>Average</th>
+                                <th>Minimum</th>
+                                <th>Maximum</th>
+                            </tr>
+                            </thead>
+                            <tbody>@foreach (var point in _metrics.Where(p => p.Container == _metricContainer).OrderBy(p => p.Timestamp).ThenBy(p => p.Name))
+                            {
+                                <tr>
+                                    <td>@point.Timestamp.ToString("u")</td>
+                                    <td><span title="@point.Name">@TelemetryPresentation.Label(point.Name)</span></td>
+                                    <td>@TelemetryPresentation.Format(point.Average, point.Name)</td>
+                                    <td>@TelemetryPresentation.Format(point.Minimum, point.Name)</td>
+                                    <td>@TelemetryPresentation.Format(point.Maximum, point.Name)</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
                     </div>
-                    <details class="telemetry-table-details"><summary>Numeric observations</summary><div class="table-responsive"><table class="table telemetry-table">
-                        <caption>Returned interval aggregates for @_metricContainer. Sample counts are not supplied by this history query.</caption>
-                        <thead><tr><th>UTC</th><th>Metric</th><th>Average</th><th>Minimum</th><th>Maximum</th></tr></thead>
-                        <tbody>@foreach (var point in _metrics.Where(p => p.Container == _metricContainer).OrderBy(p => p.Timestamp).ThenBy(p => p.Name)) {
-                            <tr><td>@point.Timestamp.ToString("u")</td><td><span title="@point.Name">@TelemetryPresentation.Label(point.Name)</span></td><td>@TelemetryPresentation.Format(point.Average, point.Name)</td><td>@TelemetryPresentation.Format(point.Minimum, point.Name)</td><td>@TelemetryPresentation.Format(point.Maximum, point.Name)</td></tr>
-                        }</tbody>
-                    </table></div></details>
                 </details>
+            </details>
         </section>
         <section class="telemetry-panel" aria-labelledby="history-logs-title">
-            <div class="telemetry-toolbar"><div><h2 id="history-logs-title">Logs</h2><p class="telemetry-muted">Saved build and runtime output</p></div></div>
-            @if (_history?.Availability is { } availability) { <p class="telemetry-notice" role="status">@availability</p> }
-            <div class="history-log-controls">
-                <div class="history-search"><label for="history-search">Search saved logs</label><div class="d-flex gap-2"><input id="history-search" class="form-control" maxlength="256" @bind="_search"/><button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LatestAsync">Search</button></div></div>
-                <label class="telemetry-control">Channel<select class="form-select" @bind="_channel" @bind:after="RenderTerminalAsync">@foreach (var channel in _history?.Events.Select(e => e.TerminalChannel).Distinct() ?? []) { <option value="@channel">@channel</option> }</select></label>
+            <div class="telemetry-toolbar">
+                <div><h2 id="history-logs-title">Logs</h2>
+                    <p class="telemetry-muted">Saved build and runtime output</p></div>
             </div>
-            <div class="history-terminal-viewport"><Terminal @ref="_terminal" OnReady="RenderTerminalAsync"/></div>
-            <div class="history-log-footer"><span class="telemetry-muted">Bounded saved output</span><div class="d-flex gap-2"><button class="btn btn-outline-secondary" disabled="@(_busy || _history?.EarlierOmitted != true)" @onclick="EarlierAsync">Earlier output</button><button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LatestAsync">Latest output</button></div></div>
+            @if (_history?.Availability is { } availability)
+            {
+                <p class="telemetry-notice" role="status">@availability</p>
+            }
+            <div class="history-log-controls">
+                <div class="history-search"><label for="history-search">Search saved logs</label>
+                    <div class="d-flex gap-2"><input id="history-search" class="form-control" maxlength="256"
+                                                     @bind="_search"/>
+                        <button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LatestAsync">Search
+                        </button>
+                    </div>
+                </div>
+                <label class="telemetry-control">Channel<select class="form-select" @bind="_channel"
+                                                                @bind:after="RenderTerminalAsync">@foreach (var channel in _history?.Events.Select(e => e.TerminalChannel).Distinct() ?? [])
+                        {
+                            <option value="@channel">@channel</option>
+                        }</select></label>
+            </div>
+            <div class="history-terminal-viewport">
+                <Terminal @ref="_terminal" OnReady="RenderTerminalAsync"/>
+            </div>
+            <div class="history-log-footer"><span class="telemetry-muted">Bounded saved output</span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary" disabled="@(_busy || _history?.EarlierOmitted != true)"
+                            @onclick="EarlierAsync">Earlier output
+                    </button>
+                    <button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LatestAsync">Latest output
+                    </button>
+                </div>
+            </div>
         </section>
-        <section class="telemetry-panel"><h2>Collection settings</h2><TelemetryPreferences ProjectId="ProjectId"/></section>
+        <section class="telemetry-panel"><h2>Collection settings</h2>
+            <TelemetryPreferences ProjectId="ProjectId"/>
+        </section>
     }
 </main>
+
 @code {
 
     /// <summary>Authorized project identity.</summary>
@@ -115,30 +209,46 @@
 
     /// <summary>Includes retained older deployments by default, with bounded zoom choices.</summary>
     private int _metricDays = 30;
+
     /// <summary>Range belonging to the displayed response while a newer range is loading.</summary>
     private int _loadedMetricDays = 30;
+
     /// <summary>Selected container, shared by all metric summaries and charts.</summary>
     private string _metricContainer = "";
+
     /// <summary>Independent metric request state; log paging never resets it.</summary>
     private bool _metricBusy;
+
     /// <summary>Cancels previous range requests and all requests on navigation.</summary>
     private readonly CancellationTokenSource _lifetime = new();
+
     /// <summary>The current range request identity.</summary>
     private CancellationTokenSource? _metricLoad;
+
     /// <summary>The active log request, independent of metrics.</summary>
     private CancellationTokenSource? _logLoad;
+
     /// <summary>Gap threshold consistent with the bounded history query interval.</summary>
     private TimeSpan ChartGap => TimeSpan.FromSeconds(Math.Max(60, _loadedMetricDays * 86400 / 120d) + 5);
+
     /// <summary>Orders the selected container's observations for a metric.</summary>
-    private IEnumerable<DeploymentMetricPoint> Selected(string name) => _metrics.Where(p => p.Container == _metricContainer && p.Name == name).OrderBy(p => p.Timestamp);
+    private IEnumerable<DeploymentMetricPoint> Selected(string name)
+    {
+        return _metrics.Where(p => p.Container == _metricContainer && p.Name == name).OrderBy(p => p.Timestamp);
+    }
+
     /// <summary>Shows interval means or extrema, without claiming raw sample weighting.</summary>
     private string Value(string metric, bool peak)
     {
         var points = Selected(metric).ToArray();
         return TelemetryPresentation.Format(points.Length == 0 ? null : peak ? points.Max(p => p.Maximum) : points.Average(p => p.Average), metric);
     }
+
     /// <summary>Adapts existing aggregates to the reusable presentation component.</summary>
-    private IReadOnlyList<TelemetryChartPoint> ChartPoints(string metric) => Selected(metric).Select(p => new TelemetryChartPoint(p.Timestamp, p.Average, p.Minimum, p.Maximum)).ToArray();
+    private IReadOnlyList<TelemetryChartPoint> ChartPoints(string metric)
+    {
+        return Selected(metric).Select(p => new TelemetryChartPoint(p.Timestamp, p.Average, p.Minimum, p.Maximum)).ToArray();
+    }
 
     /// <summary>Preserves the selected page/channel across unchanged route parameters.</summary>
     private (Guid Project, Guid Deployment)? _loadedRoute;
@@ -192,7 +302,9 @@
             _error = null;
             await RenderTerminalAsync();
         }
-        catch (OperationCanceledException) when (request.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (request.IsCancellationRequested)
+        {
+        }
         catch (UnauthorizedAccessException)
         {
             if (request.IsCancellationRequested) return;
@@ -207,7 +319,11 @@
         }
         finally
         {
-            if (ReferenceEquals(_logLoad, request)) { _busy = false; _logLoad = null; }
+            if (ReferenceEquals(_logLoad, request))
+            {
+                _busy = false;
+                _logLoad = null;
+            }
         }
     }
 
@@ -216,7 +332,7 @@
     {
         if (_terminal is null || _history is null) return;
         await _terminal.ClearAsync();
-        var output = string.Concat(_history.Events.Where(e => e.TerminalChannel == _channel).Select(e => e.Message));
+        var output = string.Concat(_history.Events.Where(e => e.TerminalChannel == _channel).Select(DeploymentTerminalPresentation.Format));
         await _terminal.WriteAsync(output.Length > 0 ? output : "[No saved output in this terminal page.]\r\n");
     }
 
@@ -241,11 +357,15 @@
             if (!_metrics.Any(p => p.Container == _metricContainer))
                 _metricContainer = _metrics.Select(p => p.Container).Distinct().Order().FirstOrDefault() ?? "";
         }
-        catch (OperationCanceledException) when (request.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (request.IsCancellationRequested)
+        {
+        }
         catch (UnauthorizedAccessException)
         {
             if (request.IsCancellationRequested) return;
-            _authorized = false; _metrics = []; _error = "Deployment history access denied.";
+            _authorized = false;
+            _metrics = [];
+            _error = "Deployment history access denied.";
         }
         catch (Exception ex)
         {
@@ -256,11 +376,19 @@
         }
         finally
         {
-            if (ReferenceEquals(_metricLoad, request)) { _metricBusy = false; _metricLoad = null; }
+            if (ReferenceEquals(_metricLoad, request))
+            {
+                _metricBusy = false;
+                _metricLoad = null;
+            }
         }
     }
 
     /// <inheritdoc />
-    public void Dispose() { _lifetime.Cancel(); _lifetime.Dispose(); }
+    public void Dispose()
+    {
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+    }
 
 }

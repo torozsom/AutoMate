@@ -9,6 +9,9 @@ Container Apps availability, metrics, console output, and system/revision events
 diagnostics before terminal delivery. `AzureContainerAppRuntimeStreamer` is a host-managed coordinator; it queries
 the Azure Monitor resource-scoped Logs API with a memory-only token and persists timestamp/hash cursors, never log
 content or OAuth tokens.
+The runtime poll activity and source-only metrics report query failures, subsequent recovery and duplicate checkpoint
+suppression. Delivered record age is measured by the shared publisher; live transport failure does not invalidate a
+confirmed durable record or prevent its checkpoint from advancing.
 
 ## Source inventory
 
@@ -54,3 +57,10 @@ gateway confirms durable checksummed writes before cloud checkpoints advance. Te
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
 Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
 points.
+
+Runtime polls and child log/metric queries have GUID correlation and finite outcomes. Handled Monitor result failures
+mark query spans Error without changing retry/checkpoint behavior. Resource IDs, tokens, KQL, names and records are
+excluded from custom tags; coordinator failure logs omit exception bodies. Revision-isolation tests check correlation.
+
+OIDC setup/readiness logs omit provider identity/subject payloads and raw exceptions. Readiness retains attempt counts
+and failure types, with the same retries and propagation timeout behavior.

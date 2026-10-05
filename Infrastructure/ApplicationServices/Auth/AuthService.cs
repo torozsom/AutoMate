@@ -83,7 +83,7 @@ public sealed class AuthService(
             return false;
         }
 
-        logger.LogInformation("[AuthService] Successfully registered new user '{Username}'.", registration.Username);
+        logger.LogInformation("User registration completed for user {UserId}.", newUser.Id);
         return true;
     }
 
@@ -109,7 +109,7 @@ public sealed class AuthService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("[AuthService] Email verified successfully for user '{Username}'.", user.Username);
+        logger.LogInformation("Email verification completed for user {UserId}.", user.Id);
         return true;
     }
 
@@ -159,16 +159,16 @@ public sealed class AuthService(
 
         if (existingUser == null)
         {
-            dbContext.Users.Add(CreateRemoteUser(profile));
-            logger.LogInformation("[AuthService] Created new GitHub user: {Username}", profile.Username);
+            existingUser = CreateRemoteUser(profile);
+            dbContext.Users.Add(existingUser);
         }
         else
         {
             ApplyGitHubProfile(existingUser, profile);
-            logger.LogInformation("[AuthService] Updated existing GitHub user: {Username}", profile.Username);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("GitHub account profile saved for user {UserId}.", existingUser.Id);
     }
 
 
@@ -207,8 +207,7 @@ public sealed class AuthService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("[AuthService] Linked Azure account '{AzureAccountId}' to user '{UserId}'.",
-            azureConnection.AccountId, user.Id);
+        logger.LogInformation("Azure account connection saved for user {UserId}.", user.Id);
     }
 
 

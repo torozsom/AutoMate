@@ -148,6 +148,26 @@ public static class AutoMateTelemetry
     public static readonly Histogram<double> SinkDuration = DeploymentMeter.CreateHistogram<double>(
         "automate.deployment.diagnostics.sink.duration", "ms");
 
+    /// <summary>Number of redacted events waiting in the bounded dispatcher queue.</summary>
+    public static readonly UpDownCounter<long> DiagnosticQueueDepth = DeploymentMeter.CreateUpDownCounter<long>(
+        "automate.deployment.diagnostics.queue.depth");
+
+    /// <summary>Provider log age at ingestion; measures delivery freshness without source identifiers as labels.</summary>
+    public static readonly Histogram<double> DiagnosticCursorLag = DeploymentMeter.CreateHistogram<double>(
+        "automate.deployment.diagnostics.cursor.lag", "s");
+
+    /// <summary>Provider observations omitted because their durable checkpoint was already delivered.</summary>
+    public static readonly Counter<long> DiagnosticDuplicates = DeploymentMeter.CreateCounter<long>(
+        "automate.deployment.diagnostics.duplicates");
+
+    /// <summary>Collector failures grouped only by the finite source taxonomy.</summary>
+    public static readonly Counter<long> CollectorErrors = DeploymentMeter.CreateCounter<long>(
+        "automate.deployment.collector.errors");
+
+    /// <summary>Collector recovery after a provider query or subscription outage.</summary>
+    public static readonly Counter<long> CollectorReconnects = DeploymentMeter.CreateCounter<long>(
+        "automate.deployment.collector.reconnects");
+
     /// <summary>Publishes a bounded database snapshot to the process's observable gauges.</summary>
     public static void SetCloudControlPlaneSnapshot(long queued, long active, long webhookBacklog,
         long reconciliationBacklog, long oldestQueueAgeMs)

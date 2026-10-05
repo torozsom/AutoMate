@@ -16,7 +16,7 @@ separate UI delivery port and is not a diagnostic persistence or analysis API.
 - `IDeploymentDiagnosticPublisher.cs` — non-blocking ingestion boundary.
 - `IDiagnosticRedactor.cs` — safe-copy redaction boundary.
 - `IDeploymentDiagnosticStore.cs` — redacted persistence and bounded context boundary shared by replay and analysis.
-- `DeploymentTerminalLog.cs` — persisted terminal message and bounded history contracts with a database order cursor.
+- `DeploymentTerminalLog.cs` — persisted terminal message and bounded history contracts with a durable order cursor.
 
 ## Related documentation
 
@@ -37,3 +37,21 @@ gateway confirms durable checksummed writes before cloud checkpoints advance. Te
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
 Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
 points.
+
+`DeploymentTerminalLog` carries additive optional stream, severity, timestamp, source-instance and source-cursor
+metadata.
+`FromEvent` preserves these fields for both live delivery and disk/Loki replay; legacy messages remain compatible.
+Presentation prefixes stderr without modifying the saved message or its replay identity.
+
+## M5 shared text and terminal policy
+
+`IDiagnosticRedactor.RedactText` masks standalone text with a caller-selected bounded limit. `DiagnosticRedaction`
+applies it to terminal message/channel/instance/cursor fields while preserving GUIDs, ordering and event identity.
+History and SignalR use the same projection policy; safe callback shapes and channel names remain unchanged.
+
+Terminal projections add optional TraceId, SpanId and Sequence for in-memory AI evidence. FromEvent retains actual
+source
+metadata; RedactTerminal accepts only canonical hexadecimal trace identity. Legacy read projections retain their stored
+time/severity/sequence without assigning invented event GUIDs. The analysis worker now uses
+IDeploymentAnalysisContextBuilder; BuildContextAsync remains a compatibility text API without grounded evidence
+semantics.

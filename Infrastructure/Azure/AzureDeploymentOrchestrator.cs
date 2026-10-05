@@ -68,11 +68,7 @@ public sealed class AzureDeploymentOrchestrator(
             pullIdentityId = pullIdentity.Id.ToString();
         }
 
-        logger.LogInformation(
-            "[AzureDeploymentOrchestrator] OIDC trust configured for {Owner}/{Repo}@{Branch}. Identity: {IdentityResourceId}. ClientId: {ClientId}. TenantId: {TenantId}. FederatedCredential: {FederatedCredentialName}. Issuer: {Issuer}. Subject: {Subject}. Audience: {Audience}.",
-            repositoryOwner, repositoryName, branchName, identity.Id, identity.Data.ClientId, identity.Data.TenantId,
-            setupContext.FederatedCredentialName, AzureConstants.GitHubTokenIssuer, setupContext.Subject,
-            AzureConstants.AzureTokenExchangeAudience);
+        logger.LogInformation("Azure OIDC trust configured.");
 
         return AzureOidcSetupPlanner.CreateResult(credentials, identity, setupContext) with
         {

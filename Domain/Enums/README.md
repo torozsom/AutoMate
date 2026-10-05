@@ -16,3 +16,6 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+AiAnalysisStatus retains existing persisted values 0–4 and appends Cancelled = 5. It is a terminal owner-requested
+state, excluded from claims and renewals; canceled results can be deleted or expire under normal retention.

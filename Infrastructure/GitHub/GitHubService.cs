@@ -158,7 +158,7 @@ public sealed class GitHubService : IGitHubService
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "[GitHubService] Network error occurred while contacting the GitHub API.");
+            _logger.LogError("GitHub API network request failed: {FailureType}.", ex.GetType().Name);
             return [];
         }
     }
@@ -226,9 +226,7 @@ public sealed class GitHubService : IGitHubService
             await gitHubClient.Git.Reference.Update(repoOwner, repoName, $"heads/{branchName}",
                 new ReferenceUpdate(createdCommit.Sha));
 
-            _logger.LogInformation(
-                "[GitHubService] Committed {FileCount} cloud deployment files to {Owner}/{Repo}@{Branch}. Commit: {Sha}",
-                files.Count, repoOwner, repoName, branchName, createdCommit.Sha);
+            _logger.LogInformation("Committed {FileCount} cloud deployment files to GitHub.", files.Count);
 
             return createdCommit.Sha;
         }
@@ -242,16 +240,12 @@ public sealed class GitHubService : IGitHubService
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning(
-                "[GitHubService] Cloud deployment commit was cancelled for {Owner}/{Repo}@{Branch}.",
-                repoOwner, repoName, branchName);
+            _logger.LogWarning("GitHub cloud deployment commit was canceled.");
             throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
-                "[GitHubService] Failed to commit cloud deployment files to {Owner}/{Repo}@{Branch}.",
-                repoOwner, repoName, branchName);
+            _logger.LogError("GitHub cloud deployment commit failed: {FailureType}.", ex.GetType().Name);
             throw;
         }
     }
@@ -305,8 +299,7 @@ public sealed class GitHubService : IGitHubService
             GitHubAppCredentials.ThrowIfRateLimited(response);
             response.EnsureSuccessStatusCode();
 
-            _logger.LogInformation("[GitHubService] Upserted repository secret {SecretName} for {Owner}/{Repo}.",
-                secretName, repoOwner, repoName);
+            _logger.LogInformation("GitHub repository secret upserted.");
         }
     }
 
@@ -339,8 +332,7 @@ public sealed class GitHubService : IGitHubService
         GitHubAppCredentials.ThrowIfRateLimited(response);
         response.EnsureSuccessStatusCode();
 
-        _logger.LogInformation("[GitHubService] Dispatched workflow {Workflow} for {Owner}/{Repo}@{Branch}.",
-            workflowFileName, repoOwner, repoName, branchName);
+        _logger.LogInformation("GitHub workflow dispatched.");
     }
 
 

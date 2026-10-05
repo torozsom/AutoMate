@@ -8,10 +8,12 @@ namespace Application.Abstractions.Logging;
 public interface ILogStreamer
 {
     /// <summary>Streams redacted output to one stable, source-aware terminal channel.</summary>
-    Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog);
+    Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog, CancellationToken cancellationToken = default);
 
-    Task StreamTerminalNoticeAsync(Guid projectId, string message);
+    /// <summary>Streams a safe availability notice; cancellation must terminate a pending transport write.</summary>
+    Task StreamTerminalNoticeAsync(Guid projectId, string message, CancellationToken cancellationToken = default);
 
     /// <summary>Streams container metrics for a specific project and container.</summary>
-    Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage, string memoryUsage);
+    Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage, string memoryUsage,
+        CancellationToken cancellationToken = default);
 }

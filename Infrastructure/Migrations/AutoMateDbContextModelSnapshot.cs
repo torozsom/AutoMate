@@ -22,6 +22,67 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.AiAnalysisRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("AdmissionDay")
+                        .HasColumnType("date")
+                        .HasColumnName("admission_day");
+
+                    b.Property<Guid>("AnalysisId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("analysis_id");
+
+                    b.Property<bool>("ConsumesQuota")
+                        .HasColumnType("boolean")
+                        .HasColumnName("consumes_quota");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DeploymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deployment_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("request_key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ai_analysis_requests");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_ai_analysis_requests_expires_at");
+
+                    b.HasIndex("RequestKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_analysis_requests_request_key");
+
+                    b.HasIndex("ProjectId", "AdmissionDay", "ConsumesQuota")
+                        .HasDatabaseName("ix_ai_analysis_requests_project_id_admission_day_consumes_quota");
+
+                    b.ToTable("ai_analysis_requests", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.AiDeploymentAnalysis", b =>
                 {
                     b.Property<Guid>("Id")
@@ -33,6 +94,11 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_at");
 
+                    b.Property<string>("CostCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("cost_currency");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -40,6 +106,11 @@ namespace Infrastructure.Migrations
                     b.Property<Guid>("DeploymentId")
                         .HasColumnType("uuid")
                         .HasColumnName("deployment_id");
+
+                    b.Property<decimal?>("EstimatedCost")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("estimated_cost");
 
                     b.Property<string>("EvidenceReferencesJson")
                         .HasColumnType("text")
@@ -60,11 +131,29 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("idempotency_key");
 
+                    b.Property<int?>("InputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("input_tokens");
+
                     b.Property<string>("Model")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("model");
+
+                    b.Property<string>("ModelVersion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("model_version");
+
+                    b.Property<int?>("OutputTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("output_tokens");
+
+                    b.Property<string>("PromptVersion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("prompt_version");
 
                     b.Property<string>("Provider")
                         .IsRequired()
@@ -75,6 +164,15 @@ namespace Infrastructure.Migrations
                     b.Property<string>("RecommendedStepsJson")
                         .HasColumnType("text")
                         .HasColumnName("recommended_steps_json");
+
+                    b.Property<string>("RequestedModel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("requested_model");
+
+                    b.Property<int?>("ResultSchemaVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("result_schema_version");
 
                     b.Property<int>("RetryCount")
                         .HasColumnType("integer")
@@ -723,6 +821,12 @@ namespace Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("analysis_id");
 
+                    b.Property<int>("AttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempt_count");
+
                     b.Property<DateTimeOffset?>("ClaimedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("claimed_at");
@@ -735,6 +839,24 @@ namespace Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_id");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<int>("ProviderRetryCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("provider_retry_count");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -746,8 +868,8 @@ namespace Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_deployment_analysis_work_items_analysis_id");
 
-                    b.HasIndex("CompletedAt", "ClaimedAt")
-                        .HasDatabaseName("ix_deployment_analysis_work_items_completed_at_claimed_at");
+                    b.HasIndex("CompletedAt", "NextAttemptAt", "LeaseUntil", "CreatedAt")
+                        .HasDatabaseName("ix_deployment_analysis_work_items_completed_at_next_attempt_at");
 
                     b.ToTable("deployment_analysis_work_items", (string)null);
                 });
@@ -979,6 +1101,29 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_deployment_diagnostic_records_project_id_deployment_id_orde");
 
                     b.ToTable("deployment_diagnostic_records", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.FailedDeploymentAnalysisEvent", b =>
+                {
+                    b.Property<Guid>("DeploymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deployment_id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.HasKey("DeploymentId")
+                        .HasName("pk_failed_deployment_analysis_events");
+
+                    b.HasIndex("CompletedAt", "CreatedAt")
+                        .HasDatabaseName("ix_failed_deployment_analysis_events_completed_at_created_at");
+
+                    b.ToTable("failed_deployment_analysis_events", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.GitHubWorkflowCheckpoint", b =>
@@ -1319,6 +1464,18 @@ namespace Infrastructure.Migrations
                     b.HasDiscriminator().HasValue("github");
                 });
 
+            modelBuilder.Entity("Domain.Entities.AiAnalysisRequest", b =>
+                {
+                    b.HasOne("Domain.Entities.CsProject", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ai_analysis_requests_cs_projects_project_id");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("Domain.Entities.AiDeploymentAnalysis", b =>
                 {
                     b.HasOne("Domain.Entities.Deployment", "Deployment")
@@ -1447,6 +1604,18 @@ namespace Infrastructure.Migrations
                         .HasForeignKey("DeploymentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("fk_deployment_diagnostic_records_deployments_deployment_id");
+
+                    b.Navigation("Deployment");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FailedDeploymentAnalysisEvent", b =>
+                {
+                    b.HasOne("Domain.Entities.Deployment", "Deployment")
+                        .WithOne()
+                        .HasForeignKey("Domain.Entities.FailedDeploymentAnalysisEvent", "DeploymentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_failed_deployment_analysis_events_deployments_deployment_id");
 
                     b.Navigation("Deployment");
                 });

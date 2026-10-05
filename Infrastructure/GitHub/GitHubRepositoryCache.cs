@@ -44,13 +44,13 @@ internal sealed class GitHubRepositoryCache(IDistributedCache cache, ILogger log
         catch (OperationCanceledException ex)
         {
             logger.LogWarning(
-                "[GitHubService] Fetching repositories from cache was cancelled. Exception: {Message}", ex.Message);
+                "Repository cache read canceled: {FailureType}.", ex.GetType().Name);
             throw;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex,
-                "[GitHubService] Failed to read or deserialize repositories from cache. Falling back to API call.");
+            logger.LogWarning("Repository cache read unavailable; falling back to API: {FailureType}.",
+                ex.GetType().Name);
             return null;
         }
     }
@@ -75,13 +75,13 @@ internal sealed class GitHubRepositoryCache(IDistributedCache cache, ILogger log
         catch (OperationCanceledException ex)
         {
             logger.LogWarning(
-                "[GitHubService] Failed to save repositories to distributed cache. Exception: {Message}",
-                ex.Message);
+                "Repository cache write canceled: {FailureType}.",
+                ex.GetType().Name);
             throw;
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "[GitHubService] Failed to save repositories to distributed cache.");
+            logger.LogWarning("Repository cache write unavailable: {FailureType}.", ex.GetType().Name);
         }
     }
 

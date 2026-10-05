@@ -14,8 +14,10 @@ namespace Infrastructure.Diagnostics;
 public sealed class TelemetryDailyAggregationWorker(
     IServiceScopeFactory scopes,
     IOptions<TelemetryStorageOptions> options,
-    ILogger<TelemetryDailyAggregationWorker> logger) : BackgroundService
+    ILogger<TelemetryDailyAggregationWorker> logger,
+    IDiagnosticRedactor redactor) : BackgroundService
 {
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
@@ -55,6 +57,12 @@ public sealed class TelemetryDailyAggregationWorker(
                 {
                     var metrics = await scope.ServiceProvider.GetRequiredService<IDailyDeploymentMetricQuery>()
                         .ReadDailyAsync(deployment.UserId, deployment.AppId, deployment.Id, start, end, token);
+                    metrics = metrics.Select(metric => metric with
+                    {
+                        Container = redactor.RedactText(metric.Container, 128),
+                        Name = redactor.RedactText(metric.Name, 128),
+                        Unit = redactor.RedactText(metric.Unit, 64)
+                    }).ToArray();
                     var errors = await scope.ServiceProvider.GetRequiredService<IDeploymentErrorCountQuery>()
                         .CountErrorsAsync(deployment.UserId, deployment.AppId, deployment.Id, start, end, token);
                     var rows = await db.DeploymentDailyTelemetry

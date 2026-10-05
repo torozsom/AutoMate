@@ -25,9 +25,9 @@ public sealed class DeploymentStatusNotifier(ILogger<DeploymentStatusNotifier> l
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex,
-                    "Deployment status subscriber failed for project {ProjectId} with status {Status}.",
-                    projectId, status);
+                logger.LogWarning(
+                    "Deployment status subscriber failed for project {ProjectId} with status {Status}: {FailureType}.",
+                    projectId, status, ex.GetType().Name);
             }
     }
 }

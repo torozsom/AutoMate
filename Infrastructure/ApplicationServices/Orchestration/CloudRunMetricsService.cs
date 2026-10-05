@@ -44,7 +44,8 @@ public sealed class CloudRunMetricsService(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                logger.LogWarning(exception, "SaaS cloud control metrics could not be sampled.");
+                logger.LogWarning("SaaS cloud control metrics could not be sampled. Failure {FailureType}.",
+                    exception.GetType().Name);
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }

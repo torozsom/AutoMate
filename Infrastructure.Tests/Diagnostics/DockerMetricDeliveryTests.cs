@@ -92,7 +92,8 @@ public sealed class DockerMetricDeliveryTests
         public bool FailNext { get; set; }
         public List<(string Cpu, string Memory)> Values { get; } = [];
 
-        public Task StreamContainerMetricsAsync(Guid project, string container, string cpu, string memory)
+        public Task StreamContainerMetricsAsync(Guid project, string container, string cpu, string memory,
+            CancellationToken cancellationToken = default)
         {
             if (FailNext)
             {
@@ -104,12 +105,14 @@ public sealed class DockerMetricDeliveryTests
             return Task.CompletedTask;
         }
 
-        public Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog)
+        public Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog,
+            CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }
 
-        public Task StreamTerminalNoticeAsync(Guid project, string message)
+        public Task StreamTerminalNoticeAsync(Guid project, string message,
+            CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }

@@ -6,7 +6,10 @@ using Microsoft.Extensions.Options;
 namespace Infrastructure.Diagnostics;
 
 /// <summary>Loki JSON ingestion and bounded structured-metadata queries.</summary>
-public sealed class LokiDeploymentLogs(TelemetryHttpTransport transport, IOptions<TelemetryStorageOptions> options)
+public sealed class LokiDeploymentLogs(
+    TelemetryHttpTransport transport,
+    IOptions<TelemetryStorageOptions> options,
+    IDiagnosticRedactor redactor)
     : IDeploymentLogWriter, IDeploymentLogQuery, IDeploymentLogSearch, IDeploymentErrorCountQuery
 {
     public async Task<long> CountErrorsAsync(Guid tenant, Guid project, Guid deployment, DateTimeOffset start,
@@ -62,6 +65,7 @@ public sealed class LokiDeploymentLogs(TelemetryHttpTransport transport, IOption
     /// <inheritdoc />
     public async Task WriteAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken cancellationToken)
     {
+        events = TelemetryWriteBoundary.Snapshot(events, redactor, cancellationToken);
         if (events.Count == 0) return;
         var streams = events.GroupBy(e => new { e.Event.Source, e.Event.Severity }).Select(group => new
         {
@@ -109,7 +113,11 @@ public sealed class LokiDeploymentLogs(TelemetryHttpTransport transport, IOption
             var envelope =
                 JsonSerializer.Deserialize<DeploymentLogEnvelope>(value[1].GetString()!, TelemetryHttpTransport.Json);
             if (envelope is not null && envelope.TenantId == tenantId && envelope.ExpiresAt > now)
-                result.Add(envelope);
+                result.Add(envelope with
+                {
+                    Event = redactor.Redact(envelope.Event).Event,
+                    Channel = envelope.Channel is null ? null : redactor.RedactText(envelope.Channel, 128)
+                });
         }
 
         return result.DistinctBy(e => e.EventId).OrderBy(e => e.OrderId).ToArray();

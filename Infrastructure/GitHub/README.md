@@ -14,6 +14,8 @@ short-lived signed redirect without forwarding the OAuth token to the download h
 Job/step state lines are emitted only when that state changes; pending steps are not printed. No per-step log
 availability probe or runner-side forwarder is needed for the chosen progress-then-logs presentation. Diagnostic
 delivery failures are isolated from the workflow conclusion.
+Workflow poll/observation activities and source-only counters report polling failures, recovery and checkpointed
+prefix suppression. These changes retain the progress-then-completed-logs ordering.
 
 ## Source inventory
 
@@ -38,3 +40,10 @@ behavior.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+Workflow/job queries and completed log downloads have correlated child spans. Tokens, repository/branch names, signed
+URLs and output are excluded. Existing retry, checkpoint and progress-then-completed-logs behavior remains unchanged.
+
+API/cache operational logs omit repository/branch/secret names and exception bodies. Cache failures retain API fallback;
+cancellation and return contracts stay unchanged. Real SDK export regressions in Web.Tests/OperationalLoggingTests.cs
+verify sensitive failure text never enters attributes or exception exports.

@@ -23,7 +23,7 @@ public interface IDockerService
 
     /// <summary>Executes the 'docker compose down' command in the specified working directory.</summary>
     Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default, Guid? deploymentId = null);
 
     /// <summary>Gets a list of all currently running Docker Compose project names.</summary>
     Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default);

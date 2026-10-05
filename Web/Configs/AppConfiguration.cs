@@ -1,6 +1,7 @@
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Web.Hubs;
+using Web.Observability;
 using Web.Routes;
 
 namespace Web.Configs;
@@ -49,6 +50,9 @@ public static class AppConfiguration
             // Routing (Explicitly added to ensure correct middleware execution order)
             app.UseRouting();
 
+            // Wrap authentication callbacks, security rejections and endpoints in the same safe operation audit.
+            app.UseMiddleware<RequestAuditMiddleware>();
+
             // Use authentication middleware to authenticate users.
             app.UseAuthentication();
 
@@ -62,7 +66,12 @@ public static class AppConfiguration
             app.UseAntiforgery();
 
             // Endpoints & SignalR Hubs
-            app.MapHub<LogHub>("/loghub");
+            app.MapHub<LogHub>("/loghub", options =>
+            {
+                // Bound both directions per connection; canceled writes release slow-client backpressure.
+                options.TransportMaxBufferSize = 65_536;
+                options.ApplicationMaxBufferSize = 65_536;
+            });
 
             // Map Health Checks (Industry standard for readiness/liveness probes)
             app.MapHealthChecks("/health");
@@ -97,7 +106,9 @@ public static class AppConfiguration
             }
             catch (Exception ex)
             {
-                logger.LogCritical(ex, "[Startup] Critical database connectivity error during initialization.");
+                logger.LogCritical(
+                    "[Startup] Critical database connectivity error during initialization. Failure {FailureType}.",
+                    ex.GetType().Name);
             }
         }
     }

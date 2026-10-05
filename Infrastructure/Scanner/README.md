@@ -2,6 +2,9 @@
 
 Local filesystem and .NET project scanning infrastructure adapters.
 
+Dependency detection logs the project GUID and reviewed database-provider kind; customer names and arbitrary rule
+values remain excluded by the platform logging policy.
+
 ## Source inventory
 
 - `CsprojMetadataReader.cs`

@@ -1,13 +1,18 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using Application.Abstractions.Diagnostics;
 using Application.Data.Apps;
+using Application.Diagnostics;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging.Abstractions;
+using OpenTelemetry;
+using OpenTelemetry.Trace;
 using Web.Hubs;
 using Xunit;
 
@@ -46,6 +51,39 @@ public sealed class LogHubCancellationTests
         Assert.False(disconnected.IsCancellationRequested);
     }
 
+    /// <summary>Join/replay spans share one trace and separate expected disconnects from provider failure.</summary>
+    [Theory]
+    [InlineData(true, "canceled", ActivityStatusCode.Unset)]
+    [InlineData(false, "failed", ActivityStatusCode.Error)]
+    public async Task Join_and_replay_spans_report_safe_correlated_outcomes(bool disconnect, string outcome,
+        ActivityStatusCode status)
+    {
+        using var exporter = new TraceSnapshotExporter();
+        using var provider = Sdk.CreateTracerProviderBuilder().AddSource(AutoMateTelemetry.Deployments.Name)
+            .AddProcessor(new SimpleActivityExportProcessor(exporter)).Build();
+        using var canceled = new CancellationTokenSource();
+        var (hub, project, deployment, token) = CreateHub(canceled, disconnect);
+        if (disconnect) await hub.JoinProjectGroup(project, deployment, token);
+        else
+            await Assert.ThrowsAsync<OperationCanceledException>(() =>
+                hub.JoinProjectGroup(project, deployment, token));
+        var spans = exporter.Spans.Where(span => Equals(span.Tags.GetValueOrDefault("deployment.project.id"), project))
+            .ToArray();
+        var join = Assert.Single(spans, span => span.Name == "deployment.signalr.join");
+        var replay = Assert.Single(spans, span => span.Name == "deployment.signalr.replay");
+        Assert.Equal(join.TraceId, replay.TraceId);
+        Assert.Equal(join.SpanId, replay.ParentSpanId);
+        Assert.All(spans, span =>
+        {
+            Assert.Equal(status, span.Status);
+            Assert.Equal(outcome, span.Tags["deployment.outcome"]);
+            Assert.Equal(deployment, span.Tags["deployment.id"]);
+            Assert.Null(span.Description);
+            Assert.Equal(0, span.EventCount);
+        });
+        Assert.DoesNotContain(token, JsonSerializer.Serialize(spans));
+    }
+
     /// <summary>Creates an authorized subscription whose storage read simulates cancellation.</summary>
     private static (LogHub Hub, Guid Project, Guid Deployment, string Token) CreateHub(
         CancellationTokenSource disconnected, bool disconnectDuringReplay)
@@ -53,7 +91,10 @@ public sealed class LogHubCancellationTests
         var deployment = new Deployment { Id = Guid.NewGuid() };
         var app = new Domain.Entities.Application
         {
-            Id = Guid.NewGuid(), Name = "test", SourceType = SourceType.Local, SourcePathOrUrl = "test",
+            Id = Guid.NewGuid(),
+            Name = "test",
+            SourceType = SourceType.Local,
+            SourcePathOrUrl = "test",
             CsProjects = [new CsProject { Deployments = [deployment] }]
         };
         var applications = Stub<IApplicationService>((_, _) => Task.FromResult<Domain.Entities.Application?>(app));

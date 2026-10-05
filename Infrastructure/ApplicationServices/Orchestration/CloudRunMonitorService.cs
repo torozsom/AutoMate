@@ -39,7 +39,8 @@ public sealed class CloudRunMonitorService(
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Cloud workflow monitor will retry after a bounded delay.");
+                logger.LogWarning("Cloud workflow monitor will retry after a bounded delay. Failure {FailureType}.",
+                    ex.GetType().Name);
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
     }

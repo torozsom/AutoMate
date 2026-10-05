@@ -35,6 +35,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// The ID of the currently authenticated user, used to fetch and manage their projects.
     private Guid _currentUserId;
 
+    /// <summary>Prevents notifications queued before navigation from updating a disposed component.</summary>
+    private bool _disposed;
+
     /// A message to display global errors that occur during operations like deployment or project fetching.
     private string? _globalErrorMessage;
 
@@ -61,6 +64,10 @@ public partial class Dashboard : ComponentBase, IDisposable
 
     /// A flag indicating whether the deployment configuration modal is currently visible to the user.
     private bool _showConfigModal;
+
+    /// <summary>Records fixed safe outcomes for asynchronous UI notification failures.</summary>
+    [Inject]
+    private ILogger<Dashboard> Logger { get; set; } = null!;
 
 
     /// Authentication State Provider for checking user authentication and retrieving user information.
@@ -112,6 +119,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     public void Dispose()
     {
+        _disposed = true;
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
         GC.SuppressFinalize(this);
@@ -156,6 +164,36 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <param name="status">The new deployment status to be applied.</param>
     private void OnDeploymentStatusChanged(Guid appId, DeploymentStatus status)
     {
+        _ = DispatchStatusChangedAsync(appId, status);
+    }
+
+    /// <summary>Marshals model changes and rendering together onto the circuit and observes notification failures.</summary>
+    private async Task DispatchStatusChangedAsync(Guid appId, DeploymentStatus status)
+    {
+        if (_disposed) return;
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                if (_disposed) return;
+                await ApplyStatusChangedAsync(appId, status);
+            });
+        }
+        catch (Exception) when (_disposed)
+        {
+            // Navigation can dispose the renderer after the notification was queued.
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning(
+                "Deployment status subscriber failed for project {ProjectId} with status {Status}: {FailureType}.",
+                appId, status, error.GetType().Name);
+        }
+    }
+
+    /// <summary>Updates the current model and deploy controls only on the renderer dispatcher.</summary>
+    private async Task ApplyStatusChangedAsync(Guid appId, DeploymentStatus status)
+    {
         var app = _apps?.FirstOrDefault(p => p.Id == appId);
         if (app is null) return;
 
@@ -166,12 +204,12 @@ public partial class Dashboard : ComponentBase, IDisposable
         if (latestDeployment is not null)
             latestDeployment.Status = status;
         else
-            _ = RefreshAppsAsync();
+            await RefreshAppsAsync();
 
         if (status is DeploymentStatus.Running or DeploymentStatus.Failed or DeploymentStatus.Stopped)
             SetDeployingState(appId, false);
 
-        InvokeAsync(StateHasChanged);
+        StateHasChanged();
     }
 
 
@@ -253,9 +291,9 @@ public partial class Dashboard : ComponentBase, IDisposable
             _selectedProjectPath = csProjectToDeploy.Path;
             _showConfigModal = true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            _globalErrorMessage = $"Failed to analyze project dependencies: {ex.Message}";
+            _globalErrorMessage = "Failed to analyze project dependencies. Verify the project files and try again.";
         }
     }
 
@@ -359,9 +397,9 @@ public partial class Dashboard : ComponentBase, IDisposable
                 _globalSuccessMessage =
                     $"Cloud deployment workflow for '{finalConfig.ProjectName}' has been queued.";
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                _globalErrorMessage = $"Failed to queue cloud deployment for '{finalConfig.ProjectName}': {ex.Message}";
+                _globalErrorMessage = "Cloud deployment failed to queue. Verify provider access and try again shortly.";
                 SetDeployingState(finalConfig.ProjectId, false);
                 return;
             }
@@ -379,7 +417,10 @@ public partial class Dashboard : ComponentBase, IDisposable
         }
         catch (Exception ex)
         {
-            _globalErrorMessage = $"Failed to queue deployment for '{finalConfig.ProjectName}': {ex.Message}";
+            _globalErrorMessage = ex is InvalidOperationException &&
+                                  ex.Message == "The deployment queue is full. Try again after a job starts."
+                ? "The deployment queue is full. Try again after a job starts."
+                : "AutoMate could not queue this deployment. Try again shortly.";
             SetDeployingState(finalConfig.ProjectId, false);
             return;
         }

@@ -1,5 +1,10 @@
 # Components
 
+Dashboard deployment-status notifications marshal model changes and rendering together through InvokeAsync.
+Async callback failures are observed and logged with fixed guidance, GUIDs and failure types; queued callbacks after
+disposal are ignored. DashboardStatusTests exercises Running/Failed/Stopped notifications from background tasks using
+a real renderer dispatcher, including disposal.
+
 ## Telemetry presentation
 
 Project details groups daily analytics with live container utilization in Metrics. Deployment history opens with
@@ -74,4 +79,33 @@ revision recovery and weighted daily project analytics are documented in [the ro
 Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
 points.
 
-ProjectTelemetrySummary receives the already resolved owner from ProjectDetails and creates a separate dependency scope for each analytics load. This prevents its EF queries from sharing the parent's circuit context during overlapping rendering/history loads; the application service still checks ownership.
+ProjectTelemetrySummary receives the already resolved owner from ProjectDetails and creates a separate dependency scope
+for each analytics load. This prevents its EF queries from sharing the parent's circuit context during overlapping
+rendering/history loads; the application service still checks ownership.
+
+`Shared/DeploymentTerminalPresentation.cs` formats live and saved stderr with a plain `[stderr]` marker, preserving
+line endings and legacy/stdout text. Stored event messages remain unchanged so replay identities remain stable.
+The existing Build tab also receives strictly owned local Docker lifecycle and subscription notices.
+
+Deployment preparation/queue failures show fixed guidance rather than provider exception text. The known local
+queue-full guidance is retained. Project status/SignalR operational failures log GUIDs and failure types without
+exception objects; terminal replay and reconnection behavior are unchanged.
+
+DeploymentAnalysisPanel is a passive owner-result presenter on ProjectDetails. It renders durable state/timestamps,
+trigger and completed provenance/summary/steps/evidence through normal Razor encoding; partial nonterminal fields and
+results from another deployment are omitted. Analyze and Refresh use native buttons, live textual status, existing
+theme tokens and wrapping touch targets. Actual deployment consent and operator enablement control presentation;
+server ports continue to enforce authorization and egress policy. ProjectDetails retains a stable request GUID only
+when admission is uncertain, serializes owner actions and displays fixed errors without exception payloads. Explicit
+consent editing targets only the current deployment's configured C# project through the exact-project Application
+overload. Cancel uses the existing owner-authorized idempotent cancellation and saved readback; it remains available
+for queued/running work when AI or consent is disabled. Consent changes do not enqueue work or change operator policy.
+Linked consent guidance explains data egress and revocation limits. Both handlers fence stale feedback and use fresh
+scopes; uncertain cancellation can safely be retried for the same analysis. Native controls include visible focus
+outlines and sufficiently contrasting borders in both themes.
+
+Analysis request/read actions resolve their Application port through fresh asynchronous scopes, avoiding concurrent
+DbContext use with page/background reads. The latest deployment is rechecked after awaits before publishing a view.
+An independent five-second analysis timer runs in both hosting profiles on the renderer dispatcher. Versioned reads
+capture owner/deployment identity, preserve the saved view on failure, clear temporary polling warnings after recovery
+and ignore late results/feedback. Busy owner actions skip ticks; page disposal cancels and awaits polling.

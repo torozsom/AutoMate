@@ -8,8 +8,8 @@ With PostgreSQL, the telemetry stack and Grafana running, use PowerShell 7:
 ./deploy/telemetry/Sync-GrafanaHierarchy.ps1
 ```
 
-Open [AutoMate user project deployment](http://localhost:3000/d/automate-hierarchy), also available under
-**Dashboards → AutoMate**. Select **User**, then **Project**, then **Deployment**. Projects have names;
+Open [AutoMate user project deployment](http://localhost:3000/d/automate-hierarchy), also available under **Dashboards →
+AutoMate**. Select **User**, then **Project**, then **Deployment**. Projects have names;
 deployments have UTC creation times, short IDs and statuses. All remains inside the selected user's tenant.
 Choose the dashboard time range containing the deployment's observations. CPU/memory requires runtime collection.
 

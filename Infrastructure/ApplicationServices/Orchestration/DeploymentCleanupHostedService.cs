@@ -118,8 +118,7 @@ public sealed class DeploymentCleanupHostedService(
         }
         catch (Exception ex)
         {
-            logger.LogCritical(ex, "[DeploymentCleanupHostedService] CRITICAL: Error occurred while " +
-                                   "executing bulk update to clean up and sync deployments.");
+            logger.LogCritical("Deployment cleanup and synchronization failed: {FailureType}.", ex.GetType().Name);
         }
     }
 }

@@ -31,3 +31,29 @@ Hourly aggregation replaces deployment/day/container/metric rows, rereads the cu
 retains daily summaries for 365 days. It does not claim data before collection started or exact error counts.
 
 See [SaaS telemetry rollout](../docs/saas-telemetry.md) and [navigation](../navigation.md).
+
+The M5 central policy also masks the separate ingestion channel before spool persistence. Existing authentication,
+owner admission, metric validation, event identity and durable confirmation are unchanged. Production encryption and
+operational retention drills remain rollout work.
+
+The spool itself now snapshots/redacts event payloads and channel before channel admission, including direct callers.
+Backlog reads verify checksums first, then mask with the current policy for delivery/replay without rewriting files.
+The shared stateless redactor is a singleton. Durable receipt, quotas and cancellation behavior remain unchanged.
+
+## Host safety and composition
+
+Program delegates to TelemetryApplication.Build, which contains the existing services, authentication and routes and
+installs Infrastructure/Observability's AddSafePlatformLogging before building. Framework/EF/HTTP and worker logs cross
+that factory before console/debug/custom providers. Unknown templates/categories, URLs/SQL, raw exceptions and arbitrary
+scope values are omitted; reviewed delivery/spool/daily alerts retain fixed messages and finite metadata. There is no
+SDK
+exporter registration in this host. Future exporters require processor/view/resource review before enablement.
+
+TelemetryApplication exposes optional builder customization for deployment/test hosting; normal startup passes only
+args. Loopback tests use the production composition, replace background dependencies and retain auth/route/option
+policy:
+missing credentials return 401 and malformed authenticated JSON returns 400 without leaking values to captured
+providers.
+Loki/Mimir adapters apply mandatory final redaction even for direct calls. Legacy PostgreSQL diagnostic writers now
+reject
+new payloads at the method boundary; existing reads/draining remain available through Web.

@@ -202,13 +202,19 @@ public sealed class CloudRunProcessor(
                 StatusCode: HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
             })
             return "Provider authorization failed. Reconnect the affected account and verify its permissions.";
-        if (exception is InvalidOperationException &&
-            (exception.Message.StartsWith("Reconnect Azure", StringComparison.Ordinal) ||
-             exception.Message.StartsWith("Azure authorization expired", StringComparison.Ordinal) ||
-             exception.Message.StartsWith("The Azure Container Registry name", StringComparison.Ordinal) ||
-             exception.Message.StartsWith("The AutoMate GitHub App installation", StringComparison.Ordinal) ||
-             exception.Message.StartsWith("Unable to verify the prior AutoMate commit", StringComparison.Ordinal)))
-            return exception.Message[..Math.Min(exception.Message.Length, 512)];
+        if (exception is InvalidOperationException)
+        {
+            if (exception.Message.StartsWith("Reconnect Azure", StringComparison.Ordinal) ||
+                exception.Message.StartsWith("Azure authorization expired", StringComparison.Ordinal))
+                return "Reconnect Azure and verify deployment permissions before retrying.";
+            if (exception.Message.StartsWith("The Azure Container Registry name", StringComparison.Ordinal))
+                return "Verify the Azure Container Registry name and retry.";
+            if (exception.Message.StartsWith("The AutoMate GitHub App installation", StringComparison.Ordinal))
+                return "Verify the AutoMate GitHub App installation and repository access before retrying.";
+            if (exception.Message.StartsWith("Unable to verify the prior AutoMate commit", StringComparison.Ordinal))
+                return "The prior AutoMate commit could not be verified. Verify GitHub access before retrying.";
+        }
+
         return "Cloud deployment preparation failed. Review the deployment logs.";
     }
 }

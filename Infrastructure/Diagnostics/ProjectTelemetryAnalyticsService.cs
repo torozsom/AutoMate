@@ -6,7 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Infrastructure.Diagnostics;
 
 /// <summary>Authorizes project access before returning bounded daily statistics and deployment counts.</summary>
-public sealed class ProjectTelemetryAnalyticsService(AutoMateDbContext db) : IProjectTelemetryAnalytics
+public sealed class ProjectTelemetryAnalyticsService(AutoMateDbContext db, IDiagnosticRedactor redactor)
+    : IProjectTelemetryAnalytics
 {
     /// <inheritdoc />
     public async Task<ProjectTelemetryAnalytics> ReadAsync(Guid user, Guid project, DateTimeOffset start,
@@ -42,8 +43,10 @@ public sealed class ProjectTelemetryAnalyticsService(AutoMateDbContext db) : IPr
             deployments.Count(d => d.Status is DeploymentStatus.Running or DeploymentStatus.Stopped),
             deployments.Count(d => d.Status == DeploymentStatus.Failed),
             durations.Length == 0 ? null : durations.Average(),
-            daily.Take(10000).Select(d => new DeploymentAnalyticsRow(d.DeploymentId, d.DayUtc, d.Container,
-                d.Metric, d.Unit, d.SampleCount, d.SampleCount > 0 ? d.Sum / d.SampleCount : null,
+            daily.Take(10000).Select(d => new DeploymentAnalyticsRow(d.DeploymentId, d.DayUtc,
+                redactor.RedactText(d.Container, 128),
+                redactor.RedactText(d.Metric, 128), redactor.RedactText(d.Unit, 64), d.SampleCount,
+                d.SampleCount > 0 ? d.Sum / d.SampleCount : null,
                 d.Minimum, d.Maximum, d.ObservedErrors, d.Incomplete, d.UpdatedAt)).ToArray(), notice);
     }
 }

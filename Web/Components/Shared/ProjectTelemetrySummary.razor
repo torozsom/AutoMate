@@ -5,72 +5,146 @@
 
 <div class="telemetry-panel" aria-labelledby="project-analytics-title" aria-busy="@_busy">
     <div class="telemetry-toolbar">
-        <div><h3 id="project-analytics-title">Project analytics</h3><p class="telemetry-muted">Daily observations across this project's deployments</p></div>
+        <div><h3 id="project-analytics-title">Project analytics</h3>
+            <p class="telemetry-muted">Daily observations across this project's deployments</p></div>
         <label class="telemetry-control">Period
             <select class="form-select" @bind="_days" @bind:after="LoadAsync">
-                <option value="7">7 days</option><option value="30">30 days</option><option value="365">1 year</option>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+                <option value="365">1 year</option>
             </select>
         </label>
     </div>
-    @if (_busy) { <p class="telemetry-muted" role="status">Loading analytics…</p> }
+    @if (_busy)
+    {
+        <p class="telemetry-muted" role="status">Loading analytics…</p>
+    }
     @if (_summary is { } summary)
     {
         <div class="telemetry-kpis">
-            <div class="telemetry-kpi"><span>Deployments</span><strong>@summary.Deployments</strong><small>In the selected period</small></div>
-            <div class="telemetry-kpi"><span>Successful / failed</span><strong>@summary.SuccessfulDeployments / @summary.FailedDeployments</strong><small>Deployment outcomes</small></div>
-            <div class="telemetry-kpi"><span>Average CPU</span><strong>@Average(TelemetryPresentation.Cpu)</strong><small>Per observed container</small></div>
-            <div class="telemetry-kpi"><span>Average memory</span><strong>@Average(TelemetryPresentation.Memory)</strong><small>Per observed container</small></div>
+            <div class="telemetry-kpi"><span>Deployments</span><strong>@summary.Deployments</strong><small>In the
+                    selected period</small></div>
+            <div class="telemetry-kpi">
+                <span>Successful / failed</span><strong>@summary.SuccessfulDeployments / @summary.FailedDeployments</strong><small>Deployment
+                    outcomes</small></div>
+            <div class="telemetry-kpi">
+                <span>Average CPU</span><strong>@Average(TelemetryPresentation.Cpu)</strong><small>Per observed
+                    container</small></div>
+            <div class="telemetry-kpi">
+                <span>Average memory</span><strong>@Average(TelemetryPresentation.Memory)</strong><small>Per observed
+                    container</small></div>
         </div>
-        <div class="telemetry-support"><span>Observed log errors: <strong>@(summary.Daily.Any(d => d.Metric == "observed_log_errors") ? summary.Daily.Where(d => d.Metric == "observed_log_errors").Sum(d => d.ObservedErrors).ToString() : "—")</strong> · approximate</span>
-            @if (summary.AverageDeploymentSeconds is { } seconds) { <span>Average cloud deployment: @TimeSpan.FromSeconds(seconds).ToString("g") · includes queue</span> }
-            @if (summary.Daily.Count > 0) { <span>Updated @summary.Daily.Max(r => r.UpdatedAt).ToString("u")</span> }
+        <div class="telemetry-support">
+            <span>Observed log errors: <strong>@(summary.Daily.Any(d => d.Metric == "observed_log_errors") ? summary.Daily.Where(d => d.Metric == "observed_log_errors").Sum(d => d.ObservedErrors).ToString() : "—")</strong> · approximate</span>
+            @if (summary.AverageDeploymentSeconds is { } seconds)
+            {
+                <span>Average cloud deployment: @TimeSpan.FromSeconds(seconds).ToString("g") · includes queue</span>
+            }
+            @if (summary.Daily.Count > 0)
+            {
+                <span>Updated @summary.Daily.Max(r => r.UpdatedAt).ToString("u")</span>
+            }
         </div>
-        @if (_notice is not null) { <p class="telemetry-notice" role="status">@_notice</p> }
+        @if (_notice is not null)
+        {
+            <p class="telemetry-notice" role="status">@_notice</p>
+        }
+
         <details class="telemetry-explore">
             <summary>Explore metrics <span>CPU, memory and daily statistics</span></summary>
             <div class="telemetry-chart-grid">
-                <TelemetryChart Title="Daily CPU usage" Metric="@TelemetryPresentation.Cpu" Points="@Daily(TelemetryPresentation.Cpu)" Start="_start" End="_end"/>
-                <TelemetryChart Title="Daily memory usage" Metric="@TelemetryPresentation.Memory" Points="@Daily(TelemetryPresentation.Memory)" Start="_start" End="_end"/>
+                <TelemetryChart Title="Daily CPU usage" Metric="@TelemetryPresentation.Cpu"
+                                Points="@Daily(TelemetryPresentation.Cpu)" Start="_start" End="_end"/>
+                <TelemetryChart Title="Daily memory usage" Metric="@TelemetryPresentation.Memory"
+                                Points="@Daily(TelemetryPresentation.Memory)" Start="_start" End="_end"/>
             </div>
-            <p class="telemetry-muted">Sample-weighted daily averages per observed container. Missing days remain gaps. Daily statistics are retained for one year.</p>
-            <details class="telemetry-table-details"><summary>Daily deployment statistics</summary>
-                <div class="table-responsive"><table class="table telemetry-table">
-                    <caption>UTC daily statistics by deployment and container</caption>
-                    <thead><tr><th>Day</th><th>Deployment</th><th>Container</th><th>Metric</th><th>Average</th><th>Minimum</th><th>Maximum</th><th>Samples / errors</th><th>Quality</th></tr></thead>
-                    <tbody>@foreach (var row in summary.Daily.Take(500))
-                    {
-                        <tr><td>@row.DayUtc.ToString("yyyy-MM-dd")</td><td><a href="@($"/project/{ProjectId}/deployment/{row.DeploymentId}")">@row.DeploymentId.ToString("N")[..8]</a></td>
-                            <td>@row.Container</td><td><span title="@row.Metric">@TelemetryPresentation.Label(row.Metric)</span></td>
-                            <td>@TelemetryPresentation.Format(row.Average, row.Metric)</td><td>@TelemetryPresentation.Format(row.Minimum, row.Metric)</td><td>@TelemetryPresentation.Format(row.Maximum, row.Metric)</td>
-                            <td>@(row.Metric == "observed_log_errors" ? row.ObservedErrors : row.SampleCount)</td><td>@(row.Incomplete ? "Partial / approximate" : "Observed")</td></tr>
-                    }</tbody>
-                </table></div>
-                @if (summary.Daily.Count > 500) { <p>Showing the first 500 rows. Select a shorter period for more detail.</p> }
+            <p class="telemetry-muted">Sample-weighted daily averages per observed container. Missing days remain gaps.
+                Daily statistics are retained for one year.</p>
+            <details class="telemetry-table-details">
+                <summary>Daily deployment statistics</summary>
+                <div class="table-responsive">
+                    <table class="table telemetry-table">
+                        <caption>UTC daily statistics by deployment and container</caption>
+                        <thead>
+                        <tr>
+                            <th>Day</th>
+                            <th>Deployment</th>
+                            <th>Container</th>
+                            <th>Metric</th>
+                            <th>Average</th>
+                            <th>Minimum</th>
+                            <th>Maximum</th>
+                            <th>Samples / errors</th>
+                            <th>Quality</th>
+                        </tr>
+                        </thead>
+                        <tbody>@foreach (var row in summary.Daily.Take(500))
+                        {
+                            <tr>
+                                <td>@row.DayUtc.ToString("yyyy-MM-dd")</td>
+                                <td>
+                                    <a href="@($"/project/{ProjectId}/deployment/{row.DeploymentId}")">@row.DeploymentId.ToString("N")[..8]</a>
+                                </td>
+                                <td>@row.Container</td>
+                                <td><span title="@row.Metric">@TelemetryPresentation.Label(row.Metric)</span></td>
+                                <td>@TelemetryPresentation.Format(row.Average, row.Metric)</td>
+                                <td>@TelemetryPresentation.Format(row.Minimum, row.Metric)</td>
+                                <td>@TelemetryPresentation.Format(row.Maximum, row.Metric)</td>
+                                <td>@(row.Metric == "observed_log_errors" ? row.ObservedErrors : row.SampleCount)</td>
+                                <td>@(row.Incomplete ? "Partial / approximate" : "Observed")</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                @if (summary.Daily.Count > 500)
+                {
+                    <p>Showing the first 500 rows. Select a shorter period for more detail.</p>
+                }
             </details>
         </details>
     }
-    else { <p class="telemetry-notice" role="status">@(_notice ?? "No analytics available yet.")</p> }
+    else
+    {
+        <p class="telemetry-notice" role="status">@(_notice ?? "No analytics available yet.")</p>
+    }
 </div>
+
 @code {
+
     /// <summary>Authorized project whose daily statistics are displayed.</summary>
-    [Parameter] public Guid ProjectId { get; set; }
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
     /// <summary>The parent page's resolved owner; the analytics service still verifies project ownership.</summary>
-    [Parameter] public Guid UserId { get; set; }
+    [Parameter]
+    public Guid UserId { get; set; }
+
     private int _days = 30;
     private Guid _loaded;
     private bool _busy;
     private string? _notice;
     private ProjectTelemetryAnalytics? _summary;
     private readonly CancellationTokenSource _lifetime = new();
+
     /// <summary>Cancellation source for the most recently requested period.</summary>
     private CancellationTokenSource? _load;
+
     /// <summary>Bounds shared summary and chart time ranges.</summary>
     private DateTimeOffset _start, _end;
+
     /// <summary>Formats a sample-weighted project resource average.</summary>
-    private string Average(string metric) => TelemetryPresentation.Format(
-        TelemetryPresentation.WeightedAverage(_summary!.Daily.Where(r => r.Metric == metric)), metric);
+    private string Average(string metric)
+    {
+        return TelemetryPresentation.Format(
+            TelemetryPresentation.WeightedAverage(_summary!.Daily.Where(r => r.Metric == metric)), metric);
+    }
+
     /// <summary>Returns observed daily points for a selected resource.</summary>
-    private IReadOnlyList<TelemetryChartPoint> Daily(string metric) => TelemetryPresentation.DailyPoints(_summary!.Daily.Where(r => r.Metric == metric));
+    private IReadOnlyList<TelemetryChartPoint> Daily(string metric)
+    {
+        return TelemetryPresentation.DailyPoints(_summary!.Daily.Where(r => r.Metric == metric));
+    }
 
     /// <inheritdoc />
     protected override async Task OnParametersSetAsync()
@@ -96,7 +170,8 @@
             var start = now.AddDays(-_days);
             var result = await analytics.ReadAsync(UserId, ProjectId, start, now, request.Token);
             if (request.IsCancellationRequested) return;
-            _start = start; _end = now;
+            _start = start;
+            _end = now;
             _summary = result;
             _notice = _summary.Availability;
         }
@@ -112,7 +187,11 @@
         }
         finally
         {
-            if (ReferenceEquals(_load, request)) { _busy = false; _load = null; }
+            if (ReferenceEquals(_load, request))
+            {
+                _busy = false;
+                _load = null;
+            }
         }
     }
 

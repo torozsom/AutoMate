@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Text.Json;
 using Application.Abstractions.Diagnostics;
 using Domain.Entities;
 using Domain.Enums;
@@ -29,7 +29,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         DiskTelemetrySpool Create()
         {
             return new DiskTelemetrySpool(Options.Create(new DiskSpoolOptions { Directory = directory }),
-                Options.Create(settings), NullLogger<DiskTelemetrySpool>.Instance);
+                Options.Create(settings), NullLogger<DiskTelemetrySpool>.Instance, new DiagnosticRedactor());
         }
 
         try
@@ -92,9 +92,9 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         await using (var scope = services.CreateAsyncScope())
         {
             var store = scope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>();
-            await store.PersistAsync(Event(seeded, "password=secret"), "build");
-            await store.PersistAsync(Event(seeded, "second"), "build");
-            await store.PersistAsync(Event(seeded, "metrics") with
+            await SeedLegacyBufferAsync(services, Event(seeded, "password=secret"), "build");
+            await SeedLegacyBufferAsync(services, Event(seeded, "second"), "build");
+            await SeedLegacyBufferAsync(services, Event(seeded, "metrics") with
             {
                 Kind = DeploymentDiagnosticKind.Metric,
                 Source = DeploymentDiagnosticSource.DockerContainer,
@@ -138,46 +138,24 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             .Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
-    /// <summary>Concurrent processes share atomic byte admission and stable cursors.</summary>
+    /// <summary>Legacy modes reject all new concurrent ingestion while leaving the historical database untouched.</summary>
     [TelemetryIntegrationFact]
-    public async Task Concurrent_ingestion_is_bounded_and_runtime_opt_out_is_enforced()
+    public async Task Concurrent_legacy_ingestion_is_rejected_without_database_payloads()
     {
-        var options = TelemetryStorageTests.Specialized();
-        options.TenantBufferBytes = 16000;
-        using var services = Services(options);
+        using var services = Services();
         var seeded = await SeedAsync(services);
-        var durations = new List<double>();
         await Parallel.ForEachAsync(Enumerable.Range(0, 100), new ParallelOptions { MaxDegreeOfParallelism = 12 },
             async (i, token) =>
             {
-                var started = Stopwatch.GetTimestamp();
                 await using var scope = services.CreateAsyncScope();
-                await scope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>()
-                    .PersistAsync(Event(seeded, $"line {i}"), "build", token);
-                lock (durations)
-                {
-                    durations.Add(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-                }
+                await Assert.ThrowsAsync<InvalidOperationException>(() => scope.ServiceProvider
+                    .GetRequiredService<DeploymentTelemetryStore>()
+                    .PersistAsync(Event(seeded, $"line {i}"), "build", token));
             });
         await using var readScope = services.CreateAsyncScope();
-        var db = readScope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        var rows = await db.DeploymentDiagnosticRecords.Where(r => r.ProjectId == seeded.Project).ToListAsync();
-        rows.Sum(r => r.DeliveryBytes).Should().BeLessThanOrEqualTo(16000);
-        rows.Select(r => r.OrderId).Should().OnlyHaveUniqueItems();
-        var state = await db.TelemetryTenantStates.SingleAsync(s => s.TenantId == seeded.Owner);
-        state.DroppedEvents.Should().BeGreaterThan(0);
-        var history = readScope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>();
-        (await history.ReadLogsAsync(seeded.Owner, seeded.Project, seeded.Deployment, 0, true, 500))
-            .Availability.Should().Contain("omitted");
-        await history.SetRuntimeCollectionAsync(seeded.Owner, seeded.Project, false);
-        (await readScope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>().PersistAsync(
-            Event(seeded, "runtime") with
-            {
-                Source = DeploymentDiagnosticSource.DockerContainer
-            }, "web")).Should().Be(0);
-        var ordered = durations.Order().ToArray();
-        output.WriteLine(
-            $"Concurrent pilot ingestion: 100 events, 12 callers, p95 {ordered[94]:F1} ms; buffer {rows.Sum(r => r.DeliveryBytes)} bytes.");
+        Assert.False(await readScope.ServiceProvider.GetRequiredService<AutoMateDbContext>()
+            .DeploymentDiagnosticRecords.AnyAsync(row => row.ProjectId == seeded.Project));
+        output.WriteLine("Concurrent legacy ingestion: 100 direct calls rejected without new PostgreSQL payloads.");
     }
 
     /// <summary>Reclaims a dead worker lease and never drops a partially visible prefix.</summary>
@@ -190,8 +168,8 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         await using (var scope = services.CreateAsyncScope())
         {
             var store = scope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>();
-            await store.PersistAsync(Event(seeded, "first"), "build");
-            await store.PersistAsync(Event(seeded, "second"), "build");
+            await SeedLegacyBufferAsync(services, Event(seeded, "first"), "build");
+            await SeedLegacyBufferAsync(services, Event(seeded, "second"), "build");
             var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
             await db.TelemetryTenantStates.Where(s => s.TenantId == seeded.Owner).ExecuteUpdateAsync(u =>
                 u.SetProperty(s => s.LeaseId, Guid.NewGuid())
@@ -211,8 +189,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         await worker.DeliverOnceAsync(CancellationToken.None);
         (await dbRead.DeploymentDiagnosticRecords.CountAsync(r => r.ProjectId == seeded.Project)).Should().Be(0);
         sinks.Writes.Should().Be(1, "accepted batches awaiting visibility should not be resent");
-        await readScope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>()
-            .PersistAsync(Event(seeded, "expired buffer"), "build");
+        await SeedLegacyBufferAsync(services, Event(seeded, "expired buffer"), "build");
         await dbRead.DeploymentDiagnosticRecords.Where(r => r.ProjectId == seeded.Project).ExecuteUpdateAsync(u =>
             u.SetProperty(r => r.BufferExpiresAt, DateTimeOffset.UtcNow.AddHours(-1)));
         await dbRead.TelemetryTenantStates.Where(s => s.TenantId == seeded.Owner)
@@ -222,7 +199,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             .Should().Be(1);
     }
 
-    /// <summary>Legacy rows remain pageable during migration, and PostgreSQL remains a working fallback.</summary>
+    /// <summary>Legacy rows remain pageable and expiring in both query modes; new PostgreSQL ingestion is denied.</summary>
     [TelemetryIntegrationFact]
     public async Task Legacy_history_is_pageable_and_expired_rows_stay_hidden_in_both_modes()
     {
@@ -282,16 +259,15 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         await fallbackScope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>().DeleteExpiredAsync(10000);
         (await db.DeploymentDiagnosticRecords.CountAsync(r => r.ProjectId == seeded.Project)).Should().Be(2);
         await history.SetRuntimeCollectionAsync(seeded.Owner, seeded.Project, false);
-        (await fallbackScope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>().PersistAsync(
-            Event(seeded, "runtime") with
-            {
-                Source = DeploymentDiagnosticSource.DockerContainer
-            }, "web")).Should().Be(0);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => fallbackScope.ServiceProvider
+            .GetRequiredService<DeploymentTelemetryStore>()
+            .PersistAsync(Event(seeded, "runtime") with { Source = DeploymentDiagnosticSource.DockerContainer },
+                "web"));
     }
 
-    /// <summary>External ingestion and queries require consent, while build diagnostics remain available locally.</summary>
+    /// <summary>Consent gates external historical queries/draining but never enables new PostgreSQL fallback writes.</summary>
     [TelemetryIntegrationFact]
-    public async Task Managed_consent_controls_external_storage_without_losing_build_diagnostics()
+    public async Task Managed_consent_controls_legacy_delivery_without_new_database_ingestion()
     {
         var settings = TelemetryStorageTests.Specialized();
         settings.ManagedService = true;
@@ -303,30 +279,72 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         await using var scope = services.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>();
         var history = scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>();
-        await store.PersistAsync(Event(seeded, "before consent"), "build");
-        (await history.ReadLogsAsync(seeded.Owner, seeded.Project, seeded.Deployment, 0, true, 10))
-            .Events.Should().ContainSingle().Which.Message.Should().Be("before consent");
+        await SeedLegacyBufferAsync(services, Event(seeded, "legacy before consent"), "build", false);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.PersistAsync(Event(seeded, "new before consent"), "build"));
+        Assert.Single(
+            (await history.ReadLogsAsync(seeded.Owner, seeded.Project, seeded.Deployment, 0, true, 10)).Events);
         await history.ReadMetricsAsync(seeded.Owner, seeded.Project, seeded.Deployment,
             DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow, 10);
-        sinks.Reads.Should().Be(0);
-        var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        (await db.DeploymentDiagnosticRecords.SingleAsync(r => r.ProjectId == seeded.Project)).DeliveryJson.Should()
-            .BeNull();
+        Assert.Equal(0, sinks.Reads);
         await history.SetManagedConsentAsync(seeded.Owner, seeded.Project, true);
-        await store.PersistAsync(Event(seeded, "after consent"), "build");
-        (await db.DeploymentDiagnosticRecords.CountAsync(r => r.ProjectId == seeded.Project && r.DeliveryJson != null))
-            .Should().Be(1);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            store.PersistAsync(Event(seeded, "new after consent"), "build"));
+        await SeedLegacyBufferAsync(services, Event(seeded, "legacy pending"), "build");
         await history.SetManagedConsentAsync(seeded.Owner, seeded.Project, false);
         var worker = new TelemetryDeliveryWorker(services.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(settings),
-            NullLogger<TelemetryDeliveryWorker>.Instance);
-        await worker.DeliverOnceAsync(CancellationToken.None);
-        sinks.Writes.Should().Be(0);
-        (await db.DeploymentDiagnosticRecords.CountAsync(r => r.ProjectId == seeded.Project && r.DeliveryJson != null))
-            .Should().Be(0);
-        await store.PersistAsync(Event(seeded, "after revocation"), "build");
-        (await db.DeploymentDiagnosticRecords.CountAsync(r => r.ProjectId == seeded.Project && r.DeliveryJson == null))
-            .Should().Be(2);
+            Options.Create(settings), NullLogger<TelemetryDeliveryWorker>.Instance);
+        await worker.DeliverOnceAsync(default);
+        Assert.Equal(0, sinks.Writes);
+        var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+        Assert.False(await db.DeploymentDiagnosticRecords.AnyAsync(row =>
+            row.ProjectId == seeded.Project && row.DeliveryJson != null));
+        Assert.Single(await db.DeploymentDiagnosticRecords.Where(row => row.ProjectId == seeded.Project).ToListAsync());
+    }
+
+    /// <summary>Seeds historical migration fixtures only; production ingestion never creates these records or outboxes.</summary>
+    private static async Task SeedLegacyBufferAsync(ServiceProvider services, DeploymentDiagnosticEvent diagnostic,
+        string? channel, bool buffered = true)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+        var tenant = await db.Applications.Where(item => item.Id == diagnostic.ProjectId).Select(item => item.UserId)
+            .SingleAsync();
+        var now = DateTimeOffset.UtcNow;
+        diagnostic = new DiagnosticRedactor().Redact(diagnostic with { EventId = diagnostic.EventId ?? Guid.NewGuid() })
+            .Event;
+        db.DeploymentDiagnosticRecords.Add(new DeploymentDiagnosticRecord
+        {
+            TenantId = buffered ? tenant : null,
+            ProjectId = diagnostic.ProjectId,
+            DeploymentId = diagnostic.DeploymentId,
+            TimestampUtc = diagnostic.TimestampUtc,
+            Source = diagnostic.Source.ToString(),
+            Kind = diagnostic.Kind.ToString(),
+            Severity = diagnostic.Severity.ToString(),
+            Message = diagnostic.Message,
+            TerminalChannel = channel,
+            ExpiresAt = now.AddDays(30),
+            StoredAt = buffered ? now : null,
+            BufferExpiresAt = buffered ? now.AddHours(24) : null,
+            DeliveryJson = buffered ? JsonSerializer.Serialize(diagnostic, TelemetryHttpTransport.Json) : null,
+            DeliveryBytes = buffered ? 512 : 0
+        });
+        if (buffered)
+            foreach (var owner in new[] { tenant, Guid.Empty })
+            {
+                var state = await db.TelemetryTenantStates.SingleOrDefaultAsync(item => item.TenantId == owner);
+                if (state is null)
+                {
+                    state = new TelemetryTenantState { TenantId = owner, DueAt = now, LastStoredAt = now };
+                    db.TelemetryTenantStates.Add(state);
+                }
+
+                state.BufferedBytes += 512;
+                state.DueAt = now;
+            }
+
+        await db.SaveChangesAsync();
     }
 
     /// <summary>Builds independent scopes sharing an isolated real database.</summary>

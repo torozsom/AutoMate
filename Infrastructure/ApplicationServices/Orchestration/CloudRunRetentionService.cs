@@ -45,7 +45,8 @@ public sealed class CloudRunRetentionService(
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                logger.LogWarning(exception, "Expired SaaS cloud control metadata cleanup failed.");
+                logger.LogWarning("Expired SaaS cloud control metadata cleanup failed. Failure {FailureType}.",
+                    exception.GetType().Name);
             }
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }

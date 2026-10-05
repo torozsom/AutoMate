@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
 using Domain.DTO;
@@ -22,6 +24,14 @@ public sealed class AzureContainerAppRuntimeStreamerTests
     [Fact]
     public async Task Parallel_deployments_in_one_project_keep_distinct_revision_logs()
     {
+        var spans = new ConcurrentQueue<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == "AutoMate.Deployments",
+            Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = spans.Enqueue
+        };
+        ActivitySource.AddActivityListener(listener);
         var path = Path.Combine(Path.GetTempPath(), "automate-azure-" + Guid.NewGuid().ToString("N") + ".db");
         var dbOptions = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite($"Data Source={path};Pooling=False")
             .Options;
@@ -68,6 +78,20 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                     Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
                 });
             await streamer.PollOnceAsync(default);
+            foreach (var id in new[] { first, second })
+            {
+                var owned = spans.Where(span => Equals(span.GetTagItem("deployment.id"), id)).ToArray();
+                var poll = Assert.Single(owned, span => span.OperationName == "azure.runtime.poll");
+                Assert.Contains(owned,
+                    span => span.OperationName == "azure.logs.query" && span.TraceId == poll.TraceId);
+                Assert.All(owned, span =>
+                {
+                    Assert.Equal(project.Id, span.GetTagItem("deployment.project.id"));
+                    Assert.Empty(span.Events);
+                    Assert.Null(span.StatusDescription);
+                });
+            }
+
             Assert.Contains(publisher.Events, e => e.DeploymentId == first && e.Message == "console line");
             Assert.Contains(publisher.Events, e => e.DeploymentId == second && e.Message == "second revision line");
             Assert.DoesNotContain(publisher.Events,
