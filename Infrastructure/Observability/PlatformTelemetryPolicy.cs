@@ -101,9 +101,11 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
             return value is "Cookies" or "GitHub" or "Microsoft" ? value : null;
         if (key == "ConsentState") return value is "enabled" or "disabled" ? value : null;
         if (key == "OutputFile")
-            return value is "Dockerfile" or "Dockerfile.dockerignore" or "docker-compose.yml" or "main.bicep" or "deploy.yml" or "infra/main.bicep" or
+            return value is "Dockerfile" or "Dockerfile.dockerignore" or "docker-compose.yml" or "main.bicep"
+                or "deploy.yml" or "infra/main.bicep" or
                 ".automate/Dockerfile" or ".automate/Dockerfile.dockerignore" or ".github/workflows/deploy.yml"
-                ? value : null;
+                ? value
+                : null;
         if (key is "Source" or "DiagnosticSource" or "deployment.source")
             return value is "SignalR" ? "SignalR" : EnumValue<DeploymentDiagnosticSource>(value);
         if (key is "Kind" or "DiagnosticKind" or "deployment.kind") return EnumValue<DeploymentDiagnosticKind>(value);
@@ -125,12 +127,13 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
                 : null;
         if (key is "http.request.method" or "http.method" or "HttpMethod" or "RequestMethod")
         {
-            if (value is System.Net.Http.HttpMethod method) value = method.Method;
+            if (value is HttpMethod method) value = method.Method;
             return value is "GET" or "POST" or "PUT" or "PATCH" or "DELETE" or "HEAD" or "OPTIONS" or "CONNECT"
                 or "TRACE"
                 ? value
                 : null;
         }
+
         if (key == "url.scheme") return value is "http" or "https" ? value : null;
         if (key is "db.system" or "db.system.name") return value is "postgresql" or "sqlite" or "redis" ? value : null;
         return null;
@@ -164,23 +167,29 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
                 "Outbound HTTP response received: status {StatusCode}, duration {ElapsedMilliseconds} ms.",
             "End processing HTTP request after {ElapsedMilliseconds}ms - {StatusCode}" =>
                 "Outbound HTTP request completed: status {StatusCode}, duration {ElapsedMilliseconds} ms.",
-            "AuthenticationScheme: {AuthenticationScheme} signed in." => "Authentication scheme {AuthenticationScheme} signed in.",
-            "AuthenticationScheme: {AuthenticationScheme} signed out." => "Authentication scheme {AuthenticationScheme} signed out.",
-            "AuthenticationScheme: {AuthenticationScheme} was challenged." => "Authentication scheme {AuthenticationScheme} challenged.",
-            "AuthenticationScheme: {AuthenticationScheme} was forbidden." => "Authentication scheme {AuthenticationScheme} forbidden.",
+            "AuthenticationScheme: {AuthenticationScheme} signed in." =>
+                "Authentication scheme {AuthenticationScheme} signed in.",
+            "AuthenticationScheme: {AuthenticationScheme} signed out." =>
+                "Authentication scheme {AuthenticationScheme} signed out.",
+            "AuthenticationScheme: {AuthenticationScheme} was challenged." =>
+                "Authentication scheme {AuthenticationScheme} challenged.",
+            "AuthenticationScheme: {AuthenticationScheme} was forbidden." =>
+                "Authentication scheme {AuthenticationScheme} forbidden.",
             "AuthenticationScheme: {AuthenticationScheme} was successfully authenticated." =>
                 "Authentication scheme {AuthenticationScheme} authenticated.",
             "No migrations were applied. The database is already up to date." => "Database migrations are current.",
             _ => template is not null && PlatformLogCatalog.Templates.Contains(template) ? template : UnknownMessage
         };
         if (exception is not null) fields["FailureType"] = Field("FailureType", exception.GetType().Name);
-        if (template == UnknownMessage && category is not null && category != "AutoMate.Platform" && PlatformLogCatalog.Categories.Contains(category))
+        if (template == UnknownMessage && category is not null && category != "AutoMate.Platform" &&
+            PlatformLogCatalog.Categories.Contains(category))
         {
             fields["EventCode"] = eventCode;
             template = exception is null
                 ? "Module event {EventCode}; additional text fields withheld."
                 : "Module event {EventCode} failed: {FailureType}; additional text fields withheld.";
         }
+
         var message = Placeholder().Replace(template, match => fields.TryGetValue(match.Groups[1].Value, out var value)
             ? Convert.ToString(value, CultureInfo.InvariantCulture) ?? "[REDACTED]"
             : "[REDACTED]");

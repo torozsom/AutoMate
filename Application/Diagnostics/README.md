@@ -6,7 +6,8 @@ labels; identifiers belong in approved log/trace correlation, never metric dimen
 `OperationalLog` emits structured ILogger audit events using fixed `AuditOperation` and `AuditOutcome` names and stable
 operation event IDs (1000-1005). `BeginCorrelation` accepts only deployment, analysis and project GUIDs. The event API
 accepts no free-form messages, users, paths, exception objects, provider data or diagnostic context. Invalid enum values
-produce Unknown rather than arbitrary names. Started/canceled events are Information; discarded events are Debug; denials/failures/invalid
+produce Unknown rather than arbitrary names. Started/canceled events are Information; discarded events are Debug;
+denials/failures/invalid
 results
 are Warning; normal completion/unavailability is Information. These events do not authorize LLM egress.
 

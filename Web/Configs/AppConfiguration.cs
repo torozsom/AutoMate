@@ -1,8 +1,8 @@
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Web.Hubs;
-using Web.Routes;
 using Web.Observability;
+using Web.Routes;
 
 namespace Web.Configs;
 

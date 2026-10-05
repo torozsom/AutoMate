@@ -1,15 +1,16 @@
 using System.Diagnostics;
 using System.Threading.Channels;
 using Application.Diagnostics;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Application.Orchestration;
 
 /// <summary>
 ///     Channel-backed deployment job queue with bounded capacity to avoid unbounded server memory growth.
 /// </summary>
-public sealed class DeploymentJobQueue(IOptions<DeploymentConcurrencyOptions> options,
+public sealed class DeploymentJobQueue(
+    IOptions<DeploymentConcurrencyOptions> options,
     ILogger<DeploymentJobQueue>? logger = null) : IDeploymentJobQueue
 {
     private readonly object _gate = new();

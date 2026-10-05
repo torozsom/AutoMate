@@ -4,7 +4,8 @@ Operational logging preserves reviewed source module categories and readable sco
 deployment and analysis IDs). UserId is a typed internal GUID for security audits, never an email, name or external
 account identifier. Outbound HTTP start/send/response/completion summaries retain finite methods, numeric status and
 duration while excluding request URLs/bodies/headers. Cookie authentication summaries retain a finite scheme and
-sign-in/sign-out/challenge/forbid outcome. Actual HttpClientFactory tests verify runtime fields, including typed HttpMethod.
+sign-in/sign-out/challenge/forbid outcome. Actual HttpClientFactory tests verify runtime fields, including typed
+HttpMethod.
 Startup, migration and authentication framework categories retain their source names and normal category filters.
 Reviewed modules' unfamiliar events retain numeric event codes and safe exception classes; unknown categories still
 fail closed. Additional templates must be reviewed; raw formatters, SQL and exception bodies remain blocked.

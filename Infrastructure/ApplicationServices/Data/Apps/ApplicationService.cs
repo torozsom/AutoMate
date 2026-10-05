@@ -180,12 +180,15 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
             .FirstOrDefaultAsync(item => item != null, cancellationToken);
         if (configuration is null)
         {
-            logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId, userId);
+            logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId,
+                userId);
             return false;
         }
+
         configuration.AiDiagnosticEgressConsented = consented;
         await context.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",
+        logger.LogInformation(
+            "Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",
             appId, userId, consented ? "enabled" : "disabled");
         return true;
     }
@@ -199,12 +202,15 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
             .Select(item => item.Configuration).FirstOrDefaultAsync(cancellationToken);
         if (configuration is null)
         {
-            logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId, userId);
+            logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId,
+                userId);
             return false;
         }
+
         configuration.AiDiagnosticEgressConsented = consented;
         await context.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",
+        logger.LogInformation(
+            "Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",
             appId, userId, consented ? "enabled" : "disabled");
         return true;
     }

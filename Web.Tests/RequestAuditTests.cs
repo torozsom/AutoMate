@@ -28,7 +28,8 @@ public sealed class RequestAuditTests
         {
             User = new ClaimsPrincipal(new ClaimsIdentity([
                 new Claim(ClaimTypes.NameIdentifier, actor.ToString()),
-                new Claim(ClaimTypes.Email, "private-email")], "Cookies"))
+                new Claim(ClaimTypes.Email, "private-email")
+            ], "Cookies"))
         };
         context.Request.Method = "POST";
         context.Request.Path = "/api/deployments/private-path";
@@ -61,7 +62,8 @@ public sealed class RequestAuditTests
         var failure = new IOException("private-provider-body");
         var middleware = new RequestAuditMiddleware(_ => Task.FromException(failure),
             factory.CreateLogger<RequestAuditMiddleware>());
-        Assert.Same(failure, await Assert.ThrowsAsync<IOException>(() => middleware.InvokeAsync(new DefaultHttpContext())));
+        Assert.Same(failure,
+            await Assert.ThrowsAsync<IOException>(() => middleware.InvokeAsync(new DefaultHttpContext())));
         Assert.Contains("IOException", capture.Messages.Last());
         Assert.DoesNotContain("private", string.Join('\n', capture.Messages));
     }
@@ -76,22 +78,36 @@ public sealed class RequestAuditTests
         public List<string> Messages { get; } = [];
 
         /// <inheritdoc />
-        public ILogger CreateLogger(string categoryName) => new Logger(this, categoryName);
+        public ILogger CreateLogger(string categoryName)
+        {
+            return new Logger(this, categoryName);
+        }
 
         /// <inheritdoc />
-        public void SetScopeProvider(IExternalScopeProvider scopeProvider) => _scopes = scopeProvider;
+        public void Dispose()
+        {
+        }
 
         /// <inheritdoc />
-        public void Dispose() { }
+        public void SetScopeProvider(IExternalScopeProvider scopeProvider)
+        {
+            _scopes = scopeProvider;
+        }
 
         /// <summary>Observes provider-facing state without invoking raw application formatters.</summary>
         private sealed class Logger(Capture owner, string category) : ILogger
         {
             /// <inheritdoc />
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => owner._scopes.Push(state);
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+            {
+                return owner._scopes.Push(state);
+            }
 
             /// <inheritdoc />
-            public bool IsEnabled(LogLevel logLevel) => true;
+            public bool IsEnabled(LogLevel logLevel)
+            {
+                return true;
+            }
 
             /// <inheritdoc />
             public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception,

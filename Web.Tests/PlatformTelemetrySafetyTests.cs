@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Application.Diagnostics;
@@ -8,9 +9,8 @@ using Infrastructure.Observability;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
-using System.Net;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Trace;
@@ -43,14 +43,6 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.DoesNotContain("additional text fields withheld", text);
     }
 
-    /// <summary>Returns a synthetic rejection without network access.</summary>
-    private sealed class SafeHttpFixture : HttpMessageHandler
-    {
-        /// <inheritdoc />
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
-    }
-
     /// <summary>HTTP summaries retain method, timing, status and source while excluding URLs and provider payloads.</summary>
     [Fact]
     public void Framework_requests_and_authentication_keep_detailed_safe_operation_metadata()
@@ -59,7 +51,8 @@ public sealed class PlatformTelemetrySafetyTests
         using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
         var client = factory.CreateLogger("System.Net.Http.HttpClient.IGitHubService.ClientHandler");
-        client.LogInformation("Sending HTTP request {HttpMethod} {Uri}", "POST", "https://private.invalid?token=private-query");
+        client.LogInformation("Sending HTTP request {HttpMethod} {Uri}", "POST",
+            "https://private.invalid?token=private-query");
         client.LogInformation("Received HTTP response headers after {ElapsedMilliseconds}ms - {StatusCode}", 42.5, 401);
         factory.CreateLogger("Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationHandler")
             .LogInformation("AuthenticationScheme: {AuthenticationScheme} signed in.", "Cookies");
@@ -125,7 +118,7 @@ public sealed class PlatformTelemetrySafetyTests
         var logger = factory.CreateLogger("private-category-token");
         var project = Guid.NewGuid();
         var scope = new Dictionary<string, object?>
-        { ["ProjectId"] = project, ["Cookie"] = "private-cookie", ["private-key"] = new NeverFormat() };
+            { ["ProjectId"] = project, ["Cookie"] = "private-cookie", ["private-key"] = new NeverFormat() };
         using (logger.BeginScope(scope))
         {
             scope["ProjectId"] = Guid.NewGuid();
@@ -243,6 +236,16 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.True(packet.AsSpan().IndexOf(Convert.FromHexString(traceId.ToString())) >= 0);
     }
 
+    /// <summary>Returns a synthetic rejection without network access.</summary>
+    private sealed class SafeHttpFixture : HttpMessageHandler
+    {
+        /// <inheritdoc />
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
+        }
+    }
+
     /// <summary>Unknown external objects must never have their formatter invoked.</summary>
     private sealed class NeverFormat
     {
@@ -323,7 +326,7 @@ public sealed class PlatformTelemetrySafetyTests
                 var scopes = new List<object?>();
                 owner._scopes.ForEachScope((scope, list) => list.Add(scope), scopes);
                 owner.Records.Enqueue(new
-                { category, eventId, exception, Message = formatter(state, exception), state, scopes });
+                    { category, eventId, exception, Message = formatter(state, exception), state, scopes });
             }
         }
     }

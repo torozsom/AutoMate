@@ -25,7 +25,8 @@ internal sealed class DeploymentStatusUpdater(
         {
             deployment.Status = status;
             await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogInformation("Deployment status persisted for project {ProjectId}, deployment {DeploymentId}: {Status}.",
+            logger.LogInformation(
+                "Deployment status persisted for project {ProjectId}, deployment {DeploymentId}: {Status}.",
                 projectId, deployment.Id, status);
             statusNotifier.NotifyStatusChanged(projectId, status);
         }
@@ -45,7 +46,8 @@ internal sealed class DeploymentStatusUpdater(
     {
         deployment.Status = status;
         await dbContext.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Deployment status persisted for project {ProjectId}, deployment {DeploymentId}: {Status}.",
+        logger.LogInformation(
+            "Deployment status persisted for project {ProjectId}, deployment {DeploymentId}: {Status}.",
             projectId, deployment.Id, status);
         statusNotifier.NotifyStatusChanged(projectId, status);
     }

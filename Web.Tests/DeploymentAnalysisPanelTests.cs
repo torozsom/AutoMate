@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using Application.Abstractions.Ai;
 using Application.Ai;
 using Domain.Entities;
@@ -26,11 +27,11 @@ public sealed class DeploymentAnalysisPanelTests
     {
         var owner = Guid.NewGuid();
         var project = new CsProject
-        { Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true } };
+            { Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true } };
         var deployment = new Deployment { CsProjectId = project.Id, Status = DeploymentStatus.Failed };
         project.Deployments.Add(deployment);
         var app = new Domain.Entities.Application
-        { Name = "Fixture", SourceType = SourceType.Local, SourcePathOrUrl = "C:/fixture" };
+            { Name = "Fixture", SourceType = SourceType.Local, SourcePathOrUrl = "C:/fixture" };
         app.CsProjects.Add(project);
         var component = new ProjectDetails();
         var type = typeof(ProjectDetails);
@@ -128,7 +129,7 @@ public sealed class DeploymentAnalysisPanelTests
     {
         var html = await RenderAsync(Result(status), false, false);
         // Razor source line wrapping is equivalent whitespace in visible button and paragraph text.
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"\s+", " ");
+        html = Regex.Replace(html, @"\s+", " ");
         Assert.Equal(visible, html.Contains("Cancel analysis", StringComparison.Ordinal));
         Assert.Contains("Allow diagnostic data egress", html);
         Assert.Contains("data already sent cannot be recalled", html);

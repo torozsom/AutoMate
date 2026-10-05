@@ -9,8 +9,10 @@ retain their behavior. Collector authentication belongs in protected exporter co
 
 Ordinary ILogger output goes to console/debug providers; AutoMate currently has no application file-log provider.
 Console output includes UTC timestamps to distinguish queue wait, command execution and source cleanup durations.
-Console records are single-line and include readable safe scopes and the originating logger module. RequestAuditMiddleware
-records all requests reaching routed application middleware, including authentication callbacks, authorization/rate-limit/
+Console records are single-line and include readable safe scopes and the originating logger module.
+RequestAuditMiddleware
+records all requests reaching routed application middleware, including authentication callbacks,
+authorization/rate-limit/
 antiforgery rejections and endpoint failures. It retains a generated request GUID, finite route area, method, status,
 duration, authentication state and internal user GUID when available. Paths, queries, bodies, cookies and credentials
 are excluded. Requests handled before routing (such as HTTPS redirects and Swagger middleware) do not cross this audit.
