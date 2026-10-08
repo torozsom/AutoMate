@@ -113,3 +113,17 @@ ConsoleExceptionDiagnosticsTests exercises bounded UTF-8 snapshots, credential m
 details, approved correlation, payload/path suppression, logging filters and fail-safe writers/getters.
 PlatformTelemetrySafetyTests verifies ordinary and real SDK exports remain metadata-only with the console sink active.
 Both hosting-profile composition fixtures resolve the sink and shared safe logger factory.
+
+## Deployment history update (2026-10-08)
+
+Section navigation and shared history presentation remain provider-free. Fixture HTML supports browser review without
+OAuth. Production external-stack tests retain their explicit opt-in requirements.
+
+The provider-free Project Details and Deployment Details previews are also checked in Edge with
+Web.Tests/Browser/project-sections.test.cjs. Set AUTOMATE_PLAYWRIGHT_MODULE to the installed playwright module and run
+node Web.Tests/Browser/project-sections.test.cjs after TelemetryPageRenderingTests creates .artifacts/metrics-preview.
+These browser checks cover fragments, focus, history navigation, mobile overflow and both themes; they do not require
+OAuth or make provider calls.
+
+ProjectDetailsMetricRecoveryTests covers reconnect callbacks after disposal and delayed metric replies or disposed
+providers after the page closes, without renderer/provider access after cancellation.

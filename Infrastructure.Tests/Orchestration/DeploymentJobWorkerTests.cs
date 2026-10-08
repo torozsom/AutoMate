@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading.Channels;
 using Application.Abstractions.Hosting;
 using Application.Orchestration;
@@ -209,6 +210,39 @@ public sealed class DeploymentJobWorkerTests
 
         await harness.Worker.StopAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
         harness.Queue.GetProjectState(project).Active.Should().Be(0);
+        await harness.Worker.ExecuteTask!;
+        harness.Worker.ExecuteTask!.IsCompletedSuccessfully.Should().BeTrue();
+    }
+
+    /// <summary>A read that settles after job cancellation must finish before the async iterator is disposed.</summary>
+    [Fact]
+    public async Task Shutdown_waits_for_pending_queue_read_before_disposing_iterator()
+    {
+        var queue = new DelayedReadQueue();
+        await using var harness = new Harness(queue: queue);
+        var project = Guid.NewGuid();
+        await queue.EnqueueAsync(Local(project, "shutdown", 18510));
+        await harness.Worker.StartAsync(default);
+        await harness.ReadStartAsync();
+        await queue.Reader.Pending.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var stopping = harness.Worker.StopAsync(timeout.Token);
+        try
+        {
+            await queue.Reader.Cancelled.Task.WaitAsync(timeout.Token);
+            await harness.WaitForStateAsync(project, state => state.Active == 0);
+            queue.Reader.Disposed.Should().BeFalse();
+            stopping.IsCompleted.Should().BeFalse();
+        }
+        finally
+        {
+            queue.Reader.Settle.TrySetResult();
+        }
+
+        await stopping;
+        await harness.Worker.ExecuteTask!;
+        queue.Reader.Disposed.Should().BeTrue();
+        harness.Worker.ExecuteTask!.IsCompletedSuccessfully.Should().BeTrue();
     }
 
     private static LocalDeploymentJob Local(Guid projectId, string name, int port)
@@ -227,11 +261,100 @@ public sealed class DeploymentJobWorkerTests
         });
     }
 
+    /// <summary>Models an asynchronous channel cancellation completing after the running job has already settled.</summary>
+    private sealed class DelayedReadQueue : IDeploymentJobQueue, IAsyncEnumerable<QueuedDeploymentJob>
+    {
+        private readonly DeploymentJobQueue _inner = new(Options.Create(new DeploymentConcurrencyOptions()));
+        public DelayedReader Reader { get; } = new();
+
+        public IAsyncEnumerator<QueuedDeploymentJob> GetAsyncEnumerator(CancellationToken token = default)
+        {
+            Reader.Token = token;
+            return Reader;
+        }
+
+        public event Action<Guid>? StateChanged
+        {
+            add => _inner.StateChanged += value;
+            remove => _inner.StateChanged -= value;
+        }
+
+        public ValueTask EnqueueAsync(DeploymentJob job, CancellationToken token = default)
+        {
+            Reader.Job = new QueuedDeploymentJob(job, Stopwatch.GetTimestamp());
+            return _inner.EnqueueAsync(job, token);
+        }
+
+        public IAsyncEnumerable<QueuedDeploymentJob> DequeueAllAsync(CancellationToken token)
+        {
+            return this;
+        }
+
+        public DeploymentQueueState GetProjectState(Guid project)
+        {
+            return _inner.GetProjectState(project);
+        }
+
+        public void MarkStarted(DeploymentJob job)
+        {
+            _inner.MarkStarted(job);
+        }
+
+        public void MarkCompleted(DeploymentJob job)
+        {
+            _inner.MarkCompleted(job);
+        }
+    }
+
+    /// <summary>Rejects disposal during an outstanding MoveNextAsync, like ChannelReader.ReadAllAsync.</summary>
+    private sealed class DelayedReader : IAsyncEnumerator<QueuedDeploymentJob>
+    {
+        private bool _pending;
+        private bool _started;
+        public TaskCompletionSource Pending { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Cancelled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Settle { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public QueuedDeploymentJob Job { get; set; } = null!;
+        public CancellationToken Token { get; set; }
+        public bool Disposed { get; private set; }
+        public QueuedDeploymentJob Current => Job;
+
+        public ValueTask<bool> MoveNextAsync()
+        {
+            if (!_started)
+            {
+                _started = true;
+                return ValueTask.FromResult(true);
+            }
+
+            return new ValueTask<bool>(ReadAsync());
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            if (_pending) throw new NotSupportedException("Disposal during read");
+            return ValueTask.CompletedTask;
+        }
+
+        private async Task<bool> ReadAsync()
+        {
+            _pending = true;
+            Pending.TrySetResult();
+            using var registration = Token.Register(() => Cancelled.TrySetResult());
+            await Cancelled.Task;
+            await Settle.Task;
+            _pending = false;
+            Token.ThrowIfCancellationRequested();
+            return false;
+        }
+    }
+
     private sealed class Harness : IAsyncDisposable
     {
         private readonly ServiceProvider _provider;
 
-        public Harness(DeploymentConcurrencyOptions? options = null)
+        public Harness(DeploymentConcurrencyOptions? options = null, IDeploymentJobQueue? queue = null)
         {
             var services = new ServiceCollection();
             services.AddSingleton(Tracker);
@@ -242,7 +365,8 @@ public sealed class DeploymentJobWorkerTests
                 NullLogger<DeploymentStatusNotifier>.Instance));
             services.AddSingleton(Options.Create(
                 options ?? new DeploymentConcurrencyOptions { MaxLocalBuilds = 2, MaxCloudDeployments = 4 }));
-            services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
+            if (queue is null) services.AddSingleton<IDeploymentJobQueue, DeploymentJobQueue>();
+            else services.AddSingleton(queue);
             services.AddSingleton<ILogger<DeploymentJobWorker>>(NullLogger<DeploymentJobWorker>.Instance);
             services.AddSingleton<DeploymentJobWorker>();
             _provider = services.BuildServiceProvider();

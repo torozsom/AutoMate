@@ -1,4 +1,5 @@
 using Domain.Entities;
+using Domain.Enums;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -89,6 +90,9 @@ public class AutoMateDbContext(
     ///     Gets or sets the collection of Deployment entities in the database.
     /// </summary>
     public DbSet<Deployment> Deployments => Set<Deployment>();
+
+    /// <summary>Archive deletion outbox without cascading owner/project foreign keys.</summary>
+    public DbSet<DeploymentArchiveCleanup> DeploymentArchiveCleanups => Set<DeploymentArchiveCleanup>();
 
     /// <summary>Durable SaaS cloud deployment requests.</summary>
     public DbSet<CloudDeploymentRun> CloudDeploymentRuns => Set<CloudDeploymentRun>();
@@ -261,6 +265,17 @@ public class AutoMateDbContext(
     /// </summary>
     private void UpdateAuditFields()
     {
+        foreach (var entry in ChangeTracker.Entries<Deployment>()
+                     .Where(e => e.State is EntityState.Added or EntityState.Modified))
+            if (entry.Entity.Outcome == DeploymentOutcome.Unknown &&
+                entry.Entity.Status is DeploymentStatus.Running or DeploymentStatus.Failed)
+            {
+                entry.Entity.Outcome = entry.Entity.Status == DeploymentStatus.Running
+                    ? DeploymentOutcome.Succeeded
+                    : DeploymentOutcome.Failed;
+                entry.Entity.FinishedAt ??= DateTimeOffset.UtcNow;
+            }
+
         var entries = ChangeTracker.Entries<BaseEntity>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified);
 
@@ -382,6 +397,7 @@ public class AutoMateDbContext(
 
     private static void ConfigureDeploymentDiagnosticsAndAnalyses(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<DeploymentArchiveCleanup>().HasIndex(item => item.ProjectId).IsUnique();
         var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
         diagnostic.HasIndex(item => new { item.TenantId, item.OrderId });
         diagnostic.HasIndex(item => item.BufferExpiresAt);

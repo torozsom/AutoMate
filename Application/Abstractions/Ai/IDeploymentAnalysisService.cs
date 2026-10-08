@@ -84,4 +84,12 @@ public interface IDeploymentAnalysisService
 
     Task<DeploymentAnalysisView?> GetLatestAsync(Guid ownerId, Guid deploymentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Reads a bounded page of all saved runs for one owned deployment, newest first.</summary>
+    async Task<IReadOnlyList<DeploymentAnalysisView>> ListAsync(Guid ownerId, Guid deploymentId, int offset = 0,
+        int limit = 20, CancellationToken cancellationToken = default)
+    {
+        var latest = await GetLatestAsync(ownerId, deploymentId, cancellationToken);
+        return offset == 0 && latest is not null ? [latest] : [];
+    }
 }

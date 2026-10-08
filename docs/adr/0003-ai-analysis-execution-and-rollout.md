@@ -1,5 +1,9 @@
 # ADR 0003: Durable AI execution, owner budgets and staged rollout
 
+Permanent archive, saved AI-result and analytics retention are superseded
+by [ADR 0004](0004-permanent-deployment-history.md), approved by the owner on 2026-10-08. Operational backend windows,
+redaction, consent and accounting safeguards remain.
+
 ## Status and scope
 
 Accepted for the implemented architecture on 2026-10-05. This records M6–M8 controls and the user's explicit

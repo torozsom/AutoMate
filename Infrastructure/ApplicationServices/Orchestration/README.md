@@ -48,3 +48,9 @@ latest deployment. The first cloud preparation diagnostic runs inside the existi
 Deployment failure handlers now pass exceptions to ILogger so the host can produce a bounded redacted console snapshot.
 The shared ordinary-provider/export boundary remains metadata-only. Customer-visible cloud/local failure guidance,
 statuses, cancellation and retry behavior are unchanged.
+
+## Deployment history update (2026-10-08)
+
+DeploymentSnapshotCapture whitelists non-secret launch settings before provider side effects, then records discovered
+runtime/commit/image facts. Current configuration edits never rewrite previous snapshots. Preparation outcomes persist
+independently of later stops.

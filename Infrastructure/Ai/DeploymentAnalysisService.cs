@@ -47,10 +47,24 @@ public sealed class DeploymentAnalysisService(
         var now = clock.GetUtcNow();
         var analysis = await dbContext.AiDeploymentAnalyses.AsNoTracking()
             .Where(item =>
-                item.DeploymentId == deploymentId && item.ExpiresAt > now &&
+                item.DeploymentId == deploymentId && (item.ExpiresAt > now || item.RetainUntilDeleted) &&
                 item.Deployment.CsProject!.Application!.UserId == ownerId)
             .OrderByDescending(item => item.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         return analysis is null ? null : ToView(analysis);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeploymentAnalysisView>> ListAsync(Guid ownerId, Guid deploymentId, int offset = 0,
+        int limit = 20, CancellationToken cancellationToken = default)
+    {
+        var now = clock.GetUtcNow();
+        var results = await dbContext.AiDeploymentAnalyses.AsNoTracking().Where(item =>
+                item.DeploymentId == deploymentId &&
+                item.Deployment.CsProject!.Application.UserId == ownerId &&
+                (item.RetainUntilDeleted || item.ExpiresAt > now))
+            .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id)
+            .Skip(Math.Max(0, offset)).Take(Math.Clamp(limit, 1, 50)).ToArrayAsync(cancellationToken);
+        return results.Select(ToView).ToArray();
     }
 
     /// <inheritdoc />
@@ -201,6 +215,14 @@ public sealed class DeploymentAnalysisService(
                     "This request was already processed and its result is no longer available.");
         }
 
+        var retained = await dbContext.AiDeploymentAnalyses.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.IdempotencyKey == key && item.RetainUntilDeleted &&
+                                         item.DeploymentId == deploymentId &&
+                                         item.Deployment!.CsProject!.Application.UserId == ownerId, token);
+        if (retained is not null)
+            return new DeploymentAnalysisRequestResult(approved && retained.Status != AiAnalysisStatus.Skipped,
+                "This analysis request was already processed.", ToView(retained));
+
         var existing = !approved
             ? null
             : await dbContext.AiDeploymentAnalyses.AsNoTracking().Where(item => item.DeploymentId == deploymentId &&
@@ -231,6 +253,7 @@ public sealed class DeploymentAnalysisService(
             DeploymentId = deploymentId,
             Trigger = trigger,
             Status = skip is null ? AiAnalysisStatus.Queued : AiAnalysisStatus.Skipped,
+            RetainUntilDeleted = true,
             Provider = skip is null ? settings.Provider ?? "unavailable" : "unavailable",
             Model = skip is null ? settings.Model : "unavailable",
             FailureCode = skip is { } reason ? AnalysisSkipPolicy.Code(reason) : null,

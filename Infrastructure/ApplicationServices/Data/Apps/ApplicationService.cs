@@ -147,6 +147,13 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
                 return false;
             }
 
+            // PostgreSQL also handles account cascades through the transactional deletion trigger.
+            if (!context.Database.IsNpgsql())
+                context.DeploymentArchiveCleanups.Add(new DeploymentArchiveCleanup
+                {
+                    TenantId = userId,
+                    ProjectId = appId
+                });
             context.Applications.Remove(app);
             await context.SaveChangesAsync(cancellationToken);
 

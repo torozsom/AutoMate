@@ -77,3 +77,9 @@ transaction. No existing failures are backfilled. Completed markers are retained
 result/receipt cleanup cannot create duplicate automatic admission. Down removes trigger/function before the table.
 The migration is prepared and unapplied; no log/metric tables are altered. Apply prepared metadata migrations before
 starting the new dispatcher. Do not use EnsureCreated for production: it cannot install this migration-owned trigger.
+
+## Deployment history update (2026-10-08)
+
+PreserveDeploymentHistory adds snapshots/outcomes, permanent AI-result markers and archive cleanup metadata. Positive
+Running/Failed facts backfill outcomes; stopped-only records remain Unknown. A PostgreSQL project-deletion trigger
+queues archive cleanup in the same transaction, including account cascades.

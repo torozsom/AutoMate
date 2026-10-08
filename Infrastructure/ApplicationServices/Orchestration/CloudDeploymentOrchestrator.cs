@@ -79,8 +79,18 @@ public sealed class CloudDeploymentOrchestrator(
             : new Deployment { CsProjectId = csProject.Id, Status = DeploymentStatus.Starting };
         if (saasRun?.DeploymentId is null)
         {
+            await DeploymentSnapshotCapture.CaptureAsync(dbContext, deployment, config,
+                $"https://github.com/{request.RepositoryOwner}/{request.RepositoryName}", request.BranchName,
+                cancellationToken);
             dbContext.Deployments.Add(deployment);
             if (saasRun is not null) saasRun.DeploymentId = deployment.Id;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else if (deployment.ConfigurationSnapshotJson is null)
+        {
+            await DeploymentSnapshotCapture.CaptureAsync(dbContext, deployment, config,
+                $"https://github.com/{request.RepositoryOwner}/{request.RepositoryName}", request.BranchName,
+                cancellationToken);
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -168,6 +178,7 @@ public sealed class CloudDeploymentOrchestrator(
                             $"Add AutoMate Azure deployment workflow\n\n{marker}",
                             cancellationToken);
                 deployment.ImageTag = commitSha;
+                DeploymentSnapshotCapture.Resolve(deployment, request.Metadata.DotNetVersion, commitSha);
                 saasRun.CommitSha = commitSha;
                 saasRun.CommittedAt = DateTimeOffset.UtcNow;
                 saasRun.Phase = CloudRunPhase.AwaitingWorkflow;
@@ -182,6 +193,7 @@ public sealed class CloudDeploymentOrchestrator(
                     request.RepositoryOwner, request.RepositoryName, files, request.BranchName,
                     cancellationToken: cancellationToken);
                 deployment.ImageTag = commitSha;
+                DeploymentSnapshotCapture.Resolve(deployment, request.Metadata.DotNetVersion, commitSha);
             }
 
             await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
@@ -213,6 +225,8 @@ public sealed class CloudDeploymentOrchestrator(
             else if (workflowRun is { Status: "completed" } &&
                      string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
             {
+                deployment.Outcome = DeploymentOutcome.Succeeded;
+                deployment.FinishedAt = DateTimeOffset.UtcNow;
                 await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
                     cancellationToken);
                 await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,

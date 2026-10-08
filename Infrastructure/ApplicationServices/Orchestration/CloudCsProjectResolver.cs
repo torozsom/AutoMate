@@ -17,11 +17,13 @@ internal sealed class CloudCsProjectResolver(AutoMateDbContext dbContext)
         CancellationToken cancellationToken)
     {
         if (request.Config.CsProjectId != Guid.Empty)
-            return await GetExistingCsProjectAsync(request.Config.CsProjectId, cancellationToken);
+            return await GetExistingCsProjectAsync(request.Config.CsProjectId, request.Config.ProjectId,
+                request.RequestingUserId, cancellationToken);
 
         var app = await dbContext.Applications
             .Include(a => a.CsProjects)
-            .FirstOrDefaultAsync(a => a.Id == request.Config.ProjectId, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == request.Config.ProjectId && a.UserId == request.RequestingUserId,
+                cancellationToken);
 
         if (app == null)
             throw new InvalidOperationException($"Application with ID {request.Config.ProjectId} not found.");
@@ -46,10 +48,12 @@ internal sealed class CloudCsProjectResolver(AutoMateDbContext dbContext)
     /// <summary>
     ///     Loads an explicitly selected C# project or fails with the legacy error message.
     /// </summary>
-    private async Task<CsProject> GetExistingCsProjectAsync(Guid csProjectId, CancellationToken cancellationToken)
+    private async Task<CsProject> GetExistingCsProjectAsync(Guid csProjectId, Guid projectId, Guid ownerId,
+        CancellationToken cancellationToken)
     {
         var existingCsProject = await dbContext.CsProjects.FirstOrDefaultAsync(
-            csp => csp.Id == csProjectId, cancellationToken);
+            csp => csp.Id == csProjectId && csp.AppId == projectId && csp.Application.UserId == ownerId,
+            cancellationToken);
 
         return existingCsProject ?? throw new InvalidOperationException(
             $"Project with ID {csProjectId} not found in the database.");

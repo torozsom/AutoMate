@@ -35,7 +35,9 @@ public sealed class DeploymentJobWorker(
     {
         var pending = new List<QueuedDeploymentJob>();
         var running = new List<RunningJob>();
-        await using var reader = queue.DequeueAllAsync(stoppingToken).GetAsyncEnumerator(stoppingToken);
+        using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        await using var reader =
+            queue.DequeueAllAsync(readCancellation.Token).GetAsyncEnumerator(readCancellation.Token);
         Task<bool>? readTask = null;
 
         try
@@ -74,6 +76,22 @@ public sealed class DeploymentJobWorker(
         }
         finally
         {
+            // Async iterators cannot be disposed while MoveNextAsync is still pending.
+            await readCancellation.CancelAsync();
+            if (readTask is not null)
+                try
+                {
+                    await readTask;
+                }
+                catch (OperationCanceledException) when (readCancellation.IsCancellationRequested)
+                {
+                }
+                catch (Exception ex)
+                {
+                    logger.LogCritical(ex, "Deployment job scheduler stopped unexpectedly: {FailureType}.",
+                        ex.GetType().Name);
+                }
+
             // Every admitted job owns a scope and must finish before the hosted worker exits.
             foreach (var item in running)
                 await FinishAsync(item);

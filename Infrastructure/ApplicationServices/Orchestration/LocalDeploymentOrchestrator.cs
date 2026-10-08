@@ -82,6 +82,7 @@ public sealed class LocalDeploymentOrchestrator(
         };
 
         // Save the deployment to the database
+        await DeploymentSnapshotCapture.CaptureAsync(dbContext, deployment, config, null, null, cancellationToken);
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync(cancellationToken);
         using var activity = DeploymentTracing.Start(DeploymentOperation.LocalDeploy, config.ProjectId, deployment.Id);
@@ -271,6 +272,8 @@ public sealed class LocalDeploymentOrchestrator(
 
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 2/4: Scanning project content for dependencies...");
         var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path, cancellationToken);
+        DeploymentSnapshotCapture.Resolve(deployment, metadata.DotNetVersion);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
             "[LocalDeploymentOrchestrator] Step 3/4: Generating Infrastructure-as-Code files (Dockerfile, docker-compose)...");
@@ -305,6 +308,7 @@ public sealed class LocalDeploymentOrchestrator(
                                                 "Check server console for details.");
 
         var systemUrl = $"http://localhost:{config.ExposedPort}";
+        deployment.ResolvedHostPort = config.ExposedPort;
         logger.LogInformation("Deployment finished successfully.");
 
         await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,

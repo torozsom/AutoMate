@@ -39,3 +39,9 @@ Azure OpenAI API-key analysis is registered in both hosting profiles. Follow
 [Azure Portal and Web user-secrets setup](../docs/azure-openai-setup.md); default-off flags, project consent and
 positive
 reviewed spend limits still govern provider execution. Web already has the required local UserSecretsId.
+
+## Deployment history update (2026-10-08)
+
+Project Details anchors follow Overview, Live Logs, Live Resource Utilization, Project Analytics, AI Analysis,
+Configuration and Deployment History. Each six-item history page opens View Details on the existing deployment route.
+Recorded configuration is separate from next-deployment settings.

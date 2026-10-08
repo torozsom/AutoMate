@@ -21,6 +21,7 @@ using Application.Diagnostics;
 using Application.Orchestration;
 using Domain.Entities;
 using Infrastructure.Ai;
+using Infrastructure.ApplicationServices.Data.Apps;
 using Infrastructure.ApplicationServices.Orchestration;
 using Infrastructure.Azure;
 using Infrastructure.Data;
@@ -534,6 +535,7 @@ public static class ServiceConfiguration
             services.AddSingleton<TelemetryHttpTransport>();
             services.AddSingleton<TelemetryProjectPolicyCache>();
             services.AddScoped<ITelemetryGateway, TelemetryGatewayClient>();
+            services.AddScoped<IDeploymentArchive, TelemetryGatewayClient>();
             services.AddScoped<DeploymentDiagnosticStore>();
             services.AddScoped<DeploymentTelemetryStore>();
             services.AddScoped<IDeploymentDiagnosticStore>(sp => sp.GetRequiredService<DeploymentTelemetryStore>());
@@ -544,6 +546,7 @@ public static class ServiceConfiguration
             services.AddScoped<IDeploymentMetricWriter>(sp => sp.GetRequiredService<MimirDeploymentMetrics>());
             services.AddScoped<IDeploymentMetricQuery>(sp => sp.GetRequiredService<MimirDeploymentMetrics>());
             services.AddScoped<IDeploymentHistoryService, DeploymentHistoryService>();
+            services.AddScoped<IDeploymentDetailsService, DeploymentDetailsService>();
             services.AddScoped<IProjectTelemetryAnalytics, ProjectTelemetryAnalyticsService>();
             services.AddHostedService<TelemetryDeliveryWorker>();
             services.AddScoped<IAnalysisEgressAuthorizer, AnalysisEgressAuthorizer>();

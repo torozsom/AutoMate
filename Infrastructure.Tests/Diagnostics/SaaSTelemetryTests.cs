@@ -1,7 +1,11 @@
+using System.Reflection;
 using System.Text.Json;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
+using Application.Data.Apps;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Ai;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
@@ -9,6 +13,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -84,6 +89,198 @@ public sealed class SaaSTelemetryTests
             Assert.Contains("private-value", (await fixture.Db.DeploymentDiagnosticRecords.SingleAsync()).Message);
         else
             Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
+    }
+
+    /// <summary>Imported legacy identities merge once and the archive can page during an operational-store outage.</summary>
+    [Fact]
+    public async Task Archived_legacy_output_deduplicates_and_survives_backend_failure()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var row = new DeploymentDiagnosticRecord
+        {
+            ProjectId = fixture.Project,
+            DeploymentId = fixture.Deployment,
+            OrderId = 17,
+            TimestampUtc = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
+            Source = "DockerContainer",
+            Kind = "Log",
+            Severity = "Information",
+            TerminalChannel = "web",
+            Message = "saved"
+        };
+        fixture.Db.DeploymentDiagnosticRecords.Add(row);
+        await fixture.Db.SaveChangesAsync();
+        var path = Path.Combine(Path.GetTempPath(), "automate-archive-merge-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
+                new DiagnosticRedactor());
+            var e = fixture.Event() with { EventId = row.Id, Message = "saved" };
+            await archive.AppendAsync(
+                new DeploymentLogEnvelope(row.Id, fixture.User, 17, row.TimestampUtc, row.ExpiresAt, e, "web"),
+                default);
+            var options = Options.Create(new TelemetryStorageOptions { Backend = "LokiMimir" });
+            var logs = new EmptyLogs { Fail = true };
+            var store = new DeploymentTelemetryStore(fixture.Db,
+                new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()),
+                logs, options, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
+                new DeploymentRuntimeViewers(TimeProvider.System), archive: archive);
+            var page = await store.ReadPageAsync(fixture.Project, fixture.Deployment, 0, true, 1, default);
+            Assert.Single(page.Events);
+            Assert.Equal(row.Id, page.Events[0].EventId);
+            Assert.True(page.CanAdvanceCursor);
+            Assert.Contains("Saved archive output", page.Availability);
+        }
+        finally
+        {
+            Directory.Delete(path, true);
+        }
+    }
+
+    /// <summary>Metrics-only historical analysis uses the selected deployment activity window beyond operational retention.</summary>
+    [Fact]
+    public async Task Historical_ai_context_uses_archived_metrics_from_its_own_activity_window()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var end = DateTimeOffset.UtcNow.AddDays(-120);
+        await fixture.Db.Deployments.Where(d => d.Id == fixture.Deployment).ExecuteUpdateAsync(update => update
+            .SetProperty(d => d.CreatedAt, end.AddHours(-2)).SetProperty(d => d.UpdatedAt, end)
+            .SetProperty(d => d.Status, DeploymentStatus.Stopped));
+        var path = Path.Combine(Path.GetTempPath(), "automate-archive-context-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
+                new DiagnosticRedactor());
+            await archive.ImportMetricsAsync(new ArchiveMetricImport(fixture.User, fixture.Project, fixture.Deployment,
+                [
+                    new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", end.AddMinutes(-5), 2, 1, 3)
+                ]),
+                default);
+            await archive.ImportMetricsAsync(new ArchiveMetricImport(fixture.User, fixture.Project, Guid.NewGuid(),
+            [
+                new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", end.AddMinutes(-5), 999, 999, 999)
+            ]), default);
+            var context = await new DeploymentAnalysisContextBuilder(fixture.Db,
+                new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), new EmptyMetrics(),
+                new DiagnosticRedactor(),
+                Options.Create(new AiAnalysisOptions()), Options.Create(new TelemetryStorageOptions()),
+                TimeProvider.System, archive).BuildAsync(fixture.Deployment);
+            Assert.NotEmpty(context.Text);
+            Assert.Contains(context.EvidenceReferences, value => value.StartsWith("metric:automate_cpu_usage_cores:"));
+            Assert.DoesNotContain("999", context.Text);
+        }
+        finally
+        {
+            Directory.Delete(path, true);
+        }
+    }
+
+    /// <summary>Metadata denial is immediate; a failed archive deletion keeps the outbox until a later successful retry.</summary>
+    [Fact]
+    public async Task Archive_cleanup_retries_after_project_deletion()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var path = Path.Combine(Path.GetTempPath(), "automate-archive-cleanup-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
+                new DiagnosticRedactor());
+            var e = fixture.Event();
+            await archive.AppendAsync(
+                new DeploymentLogEnvelope(e.EventId!.Value, fixture.User, 1, e.TimestampUtc, e.TimestampUtc.AddDays(30),
+                    e, "web"), default);
+            var apps = new ApplicationService(fixture.Db,
+                NullLogger<ApplicationService>.Instance);
+            Assert.True(await apps.DeleteAppAsync(fixture.Project, fixture.User));
+            Assert.False(await fixture.Db.Applications.AnyAsync(x => x.Id == fixture.Project));
+            Assert.Single(await fixture.Db.DeploymentArchiveCleanups.ToArrayAsync());
+            var gateway = DispatchProxy.Create<IDeploymentArchive, CleanupArchiveProxy>();
+            var proxy = (CleanupArchiveProxy)gateway;
+            proxy.Archive = archive;
+            using var worker = new DeploymentArchiveCleanupWorker(
+                fixture.Services.GetRequiredService<IServiceScopeFactory>(), gateway,
+                NullLogger<DeploymentArchiveCleanupWorker>.Instance);
+            await worker.ProcessOnceAsync(default);
+            Assert.Single(await fixture.Db.DeploymentArchiveCleanups.AsNoTracking().ToArrayAsync());
+            Assert.Single(await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 10, null,
+                default));
+            proxy.Fail = false;
+            await worker.ProcessOnceAsync(default);
+            Assert.Empty(await fixture.Db.DeploymentArchiveCleanups.AsNoTracking().ToArrayAsync());
+            Assert.Empty(await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 10, null,
+                default));
+        }
+        finally
+        {
+            Directory.Delete(path, true);
+        }
+    }
+
+    /// <summary>Backfill checkpoints resume bounded legacy pages after restart and an unavailable log backend.</summary>
+    [Fact]
+    public async Task Backfill_resumes_without_rewriting_or_duplicating_legacy_records()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        fixture.Db.DeploymentDiagnosticRecords.AddRange(Enumerable.Range(1, 1001).Select(i =>
+            new DeploymentDiagnosticRecord
+            {
+                ProjectId = fixture.Project,
+                DeploymentId = fixture.Deployment,
+                OrderId = i,
+                TimestampUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
+                ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
+                Source = "DockerContainer",
+                Kind = "Log",
+                Severity = "Information",
+                TerminalChannel = "web",
+                Message = "saved-" + i
+            }));
+        await fixture.Db.SaveChangesAsync();
+        var path = Path.Combine(Path.GetTempPath(), "automate-archive-backfill-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var logs = new EmptyLogs { Fail = true };
+            using var services = new ServiceCollection().AddScoped<AutoMateDbContext>(_ => fixture.NewDb())
+                .AddSingleton<IDeploymentLogQuery>(logs).AddSingleton<IDeploymentMetricQuery>(new EmptyMetrics())
+                .BuildServiceProvider();
+            using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
+                new DiagnosticRedactor());
+
+            DeploymentArchiveBackfillWorker Worker()
+            {
+                return new DeploymentArchiveBackfillWorker(services.GetRequiredService<IServiceScopeFactory>(), archive,
+                    Options.Create(new DiskSpoolOptions { Directory = path }),
+                    Options.Create(new TelemetryStorageOptions()),
+                    new BackfillTestLogger());
+            }
+
+            using (var first = Worker())
+            {
+                await first.ImportBatchAsync(default);
+            }
+
+            Assert.Equal(500,
+                (await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 2001, null,
+                    default)).Count);
+            using (var restarted = Worker())
+            {
+                await restarted.ImportBatchAsync(default);
+                logs.Fail = false;
+                await restarted.ImportBatchAsync(default);
+                await restarted.ImportBatchAsync(default);
+            }
+
+            var rows = await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 2001, null,
+                default);
+            Assert.Equal(1001, rows.Count);
+            Assert.Equal(1001, rows.Select(r => r.EventId).Distinct().Count());
+            Assert.Equal(1001, await fixture.Db.DeploymentDiagnosticRecords.CountAsync());
+        }
+        finally
+        {
+            Directory.Delete(path, true);
+        }
     }
 
     /// <summary>Neither legacy backend nor outbox mode allows new payload rows when called directly.</summary>
@@ -187,7 +384,7 @@ public sealed class SaaSTelemetryTests
         await worker.AggregateOnceAsync(default);
         fixture.Db.ChangeTracker.Clear();
         var rows = await fixture.Db.DeploymentDailyTelemetry.ToListAsync();
-        Assert.DoesNotContain(rows, r => r.Metric == "expired");
+        Assert.Contains(rows, r => r.Metric == "expired");
         var cpu = Assert.Single(rows, r => r.Metric == "automate_cpu_usage_cores" && r.DayUtc == day);
         Assert.Equal(10, cpu.SampleCount);
         Assert.Equal(25, cpu.Sum);
@@ -305,8 +502,46 @@ public sealed class SaaSTelemetryTests
         }
     }
 
+    /// <summary>Injects a transient storage failure without changing production cleanup semantics.</summary>
+    public class CleanupArchiveProxy : DispatchProxy
+    {
+        public IDeploymentArchive Archive { get; set; } = null!;
+        public bool Fail { get; set; } = true;
+
+        protected override object? Invoke(MethodInfo? method, object?[]? arguments)
+        {
+            if (method?.Name != nameof(IDeploymentArchive.DeleteProjectAsync)) throw new NotSupportedException();
+            return Fail
+                ? Task.FromException(new IOException("Synthetic archive outage"))
+                : Archive.DeleteProjectAsync((Guid)arguments![0]!, (Guid)arguments[1]!,
+                    (CancellationToken)arguments[2]!);
+        }
+    }
+
+    /// <summary>Fails a fixture on unexpected backfill errors while permitting its deliberate backend outage.</summary>
+    private sealed class BackfillTestLogger : ILogger<DeploymentArchiveBackfillWorker>
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+        {
+            return null;
+        }
+
+        public bool IsEnabled(LogLevel level)
+        {
+            return true;
+        }
+
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (exception is not IOException) throw new InvalidOperationException("Backfill failed", exception);
+        }
+    }
+
     private sealed class EmptyLogs : IDeploymentLogQuery
     {
+        public bool Fail { get; set; }
+
         /// <summary>Synthetic provider records returned by history privacy scenarios.</summary>
         public IReadOnlyList<DeploymentLogEnvelope> Events { get; set; } = [];
 
@@ -317,6 +552,7 @@ public sealed class SaaSTelemetryTests
             bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null)
         {
             Reads++;
+            if (Fail) throw new IOException("Synthetic backend outage");
             return Task.FromResult(Events);
         }
 

@@ -138,3 +138,10 @@ The M5 analysis context reader consumes the existing diagnostic history and Mimi
 retain actual stored timestamp/severity/sequence/trace metadata for selection/evidence; specialized history retains
 those fields from its event envelope. New payload persistence, history authorization/cursors and disk-spool behavior are
 unchanged. No context snapshots or analysis diagnostic payloads are written to PostgreSQL. See ../Ai/README.md.
+
+## Deployment history update (2026-10-08)
+
+DiskDeploymentArchive stores checksummed redacted per-event segments and imported interval statistics until owner
+deletion. DeploymentArchiveBackfillWorker imports bounded still-retained backend/legacy pages with flushed checkpoints.
+DeploymentArchiveCleanupWorker retries committed deletion outbox items. Archived replay survives backend outages;
+Loki/Mimir remain operational stores with 30-day retention. Reads reapply current redaction.

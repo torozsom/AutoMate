@@ -8,6 +8,18 @@ namespace Domain.Entities;
 /// </summary>
 public class Deployment : BaseEntity
 {
+    /// <summary>Serialized immutable non-secret configuration; null for legacy deployments.</summary>
+    public string? ConfigurationSnapshotJson { get; set; }
+
+    /// <summary>Completion outcome retained after runtime status changes.</summary>
+    public DeploymentOutcome Outcome { get; set; }
+
+    /// <summary>Time a deployment completed preparation successfully or failed.</summary>
+    public DateTimeOffset? FinishedAt { get; set; }
+
+    /// <summary>Resolved local host port; independent of later configuration edits.</summary>
+    public int? ResolvedHostPort { get; set; }
+
     /// <summary>
     ///     Gets or sets the unique identifier of the project associated with this deployment.
     /// </summary>

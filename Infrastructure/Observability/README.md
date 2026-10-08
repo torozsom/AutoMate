@@ -69,3 +69,6 @@ OTLP pipelines. This exception is documented in ADR 0001. Ordinary provider/expo
 Do not replace the factory or register an unredacted exception provider. Console failures and hostile exception getters
 are isolated. Existing standard log summaries still appear once; exception diagnostics are a separate correlated record.
 Web.Tests/ConsoleExceptionDiagnosticsTests and real SDK export tests cover the separate boundaries.
+
+Archive backfill and cleanup failures use approved failure-type metadata. Detached redacted console exception
+diagnostics follow the same bounded safety policy as other failures; exported telemetry never receives exception prose.

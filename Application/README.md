@@ -32,3 +32,9 @@ See [platform observability](Diagnostics/README.md) for the event contract, cons
 
 `Diagnostics/DeploymentTracing.cs` owns fixed child span names, GUID correlation and safe provider/sink outcomes, shared
 by Web and Infrastructure without an OpenTelemetry SDK dependency in Application.
+
+## Deployment history update (2026-10-08)
+
+IDeploymentArchive defines durable deployment log append, cursor reads, bounded metric aggregation/import and project
+deletion. IDeploymentDetailsService authorizes exact deployment metadata. AI results expose deployment-specific paged
+listing.

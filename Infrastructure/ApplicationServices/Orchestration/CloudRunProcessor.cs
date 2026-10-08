@@ -6,6 +6,7 @@ using Application.Abstractions.GitHub;
 using Application.Diagnostics;
 using Application.Orchestration;
 using Domain.DTO;
+using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Azure;
 using Infrastructure.Data;
@@ -102,6 +103,28 @@ public sealed class CloudRunProcessor(
                                                                         ?? throw new InvalidOperationException(
                                                                             "The deployment snapshot is missing."))
                            ?? throw new InvalidOperationException("The deployment snapshot is invalid.");
+            if (run.DeploymentId is null)
+            {
+                snapshot.Config.IsCloudDeployment = true;
+                CloudDeploymentDefaults.Apply(snapshot.Config);
+                var project = await new CloudCsProjectResolver(dbContext).GetOrCreateAsync(new CloudDeploymentRequestDto
+                {
+                    RequestingUserId = run.UserId,
+                    Config = snapshot.Config,
+                    CsProjectName = snapshot.CsProjectName,
+                    RepositoryRoot = snapshot.RepositoryRoot
+                }, cancellationToken);
+                snapshot.Config.CsProjectId = project.Id;
+                var deployment = new Deployment { CsProjectId = project.Id, Status = DeploymentStatus.Starting };
+                await DeploymentSnapshotCapture.CaptureAsync(dbContext, deployment, snapshot.Config,
+                    $"https://github.com/{run.RepositoryOwner}/{run.RepositoryName}", run.BranchName,
+                    cancellationToken);
+                DeploymentSnapshotCapture.Resolve(deployment, snapshot.Metadata.DotNetVersion);
+                dbContext.Deployments.Add(deployment);
+                run.DeploymentId = deployment.Id;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
             var githubToken = await githubApp.CreateInstallationTokenAsync(run.InstallationId, cancellationToken);
             var azure = await azureCredentials.GetAsync(run.UserId, cancellationToken);
             var request = new CloudDeploymentRequestDto

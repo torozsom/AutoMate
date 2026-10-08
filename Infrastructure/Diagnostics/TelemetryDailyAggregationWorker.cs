@@ -40,7 +40,6 @@ public sealed class TelemetryDailyAggregationWorker(
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
         var now = DateTimeOffset.UtcNow;
-        await db.DeploymentDailyTelemetry.Where(d => d.DayUtc < now.AddDays(-365)).ExecuteDeleteAsync(token);
         var deployments = await db.Deployments.AsNoTracking().Where(d =>
                 (!options.Value.ManagedService || d.CsProject!.Application.ManagedTelemetryConsent) &&
                 (d.Status == DeploymentStatus.Running || d.UpdatedAt >= now.AddDays(-2)))

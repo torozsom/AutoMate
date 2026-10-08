@@ -1,12 +1,16 @@
 using System.Buffers;
 using System.Globalization;
 using System.Net;
+using System.Text.Json;
 using System.Threading.Channels;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Diagnostics;
 using Docker.DotNet;
 using Docker.DotNet.Models;
+using Domain.Entities;
+using Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -234,6 +238,7 @@ internal sealed class DockerDiagnosticCollector(
 
                 if (previousId != inspect.ID)
                 {
+                    await RecordContainerAsync(target, container, inspect, token);
                     window = new DockerLogReplayWindow();
                     await RestoreAsync(target, inspect.ID, window, token);
                     previousId = inspect.ID;
@@ -382,6 +387,38 @@ internal sealed class DockerDiagnosticCollector(
             }
 
             await Task.Delay(Backoff(++attempt), clock, token);
+        }
+    }
+
+    /// <summary>Records verified local artifacts without copying environment values from Docker inspect.</summary>
+    private async Task RecordContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
+        ContainerInspectResponse inspect, CancellationToken token)
+    {
+        if (scopes is null || container.IsDatabase) return;
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetService<AutoMateDbContext>();
+            if (db is null) return;
+            var deployment = await db.Deployments.SingleOrDefaultAsync(d => d.Id == target.DeploymentId &&
+                                                                            d.CsProject!.AppId == target.ProjectId,
+                token);
+            if (deployment is null || deployment.DockerContainerId is not null) return;
+            deployment.DockerContainerId = redactor.RedactText(inspect.ID, 128);
+            if (deployment.ConfigurationSnapshotJson is { } json)
+            {
+                var snapshot = JsonSerializer.Deserialize<DeploymentConfigurationSnapshot>(json)!;
+                deployment.ConfigurationSnapshotJson = JsonSerializer.Serialize(snapshot with
+                {
+                    Image = redactor.RedactText(inspect.Config?.Image ?? inspect.Image, 512)
+                });
+            }
+
+            await db.SaveChangesAsync(token);
+        }
+        catch (Exception error) when (!token.IsCancellationRequested)
+        {
+            logger.LogWarning(error, "Deployment artifact metadata unavailable: {FailureType}.", error.GetType().Name);
         }
     }
 

@@ -46,7 +46,7 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext, IDiag
             .Take(boundedLimit + 1)
             .Select(item => new DeploymentTerminalLog(item.OrderId, item.ProjectId, item.DeploymentId,
                 item.TerminalChannel ?? (item.Source == "GitHubActions" ? "github-actions" : "build"), item.Message,
-                null, null, item.Severity == "Critical" ? DeploymentDiagnosticSeverity.Critical :
+                item.Id, null, item.Severity == "Critical" ? DeploymentDiagnosticSeverity.Critical :
                 item.Severity == "Error" ? DeploymentDiagnosticSeverity.Error :
                 item.Severity == "Warning" ? DeploymentDiagnosticSeverity.Warning :
                 item.Severity == "Information" ? DeploymentDiagnosticSeverity.Information :
@@ -72,7 +72,7 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext, IDiag
                            item.OrderId > afterOrderId)
             .OrderBy(item => item.OrderId).Take(boundedLimit + 1)
             .Select(item => new DeploymentTerminalLog(item.OrderId, item.ProjectId, item.DeploymentId,
-                item.TerminalChannel!, item.Message, null, null, item.Severity == "Critical"
+                item.TerminalChannel!, item.Message, item.Id, null, item.Severity == "Critical"
                     ? DeploymentDiagnosticSeverity.Critical
                     : item.Severity == "Error"
                         ? DeploymentDiagnosticSeverity.Error

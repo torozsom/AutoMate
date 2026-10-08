@@ -1,0 +1,247 @@
+@using Application.Abstractions.Ai
+@using Application.Ai
+@using Application.Data.Apps
+@using Microsoft.Extensions.Options
+@implements IAsyncDisposable
+@inject IServiceScopeFactory Scopes
+@inject IOptionsMonitor<AiAnalysisOptions> Options
+@inject ILogger<DeploymentAnalysisSection> Logger
+
+<DeploymentAnalysisPanel DeploymentId="DeploymentId" Result="@_latest" Enabled="@Options.CurrentValue.Enabled"
+                         Consented="@_consented" AllowAnyStatus="true" CanEditConsent="@(CsProjectId != Guid.Empty)"
+                         Busy="@_busy" Message="@_message" OnRequest="RequestAsync" OnRefresh="RefreshAsync"
+                         OnConsentChange="ConsentAsync" OnCancel="CancelAsync"/>
+@if (_runs.Count > 0)
+{
+    <div class="analysis-history">
+        <h3>Saved analysis runs</h3>
+        @foreach (var run in _runs.Take(20))
+        {
+            <details @key="run.Id">
+                <summary>@run.CreatedAt.ToString("u") · @run.Status · @run.Trigger</summary>
+                <DeploymentAnalysisPanel DeploymentId="DeploymentId" Result="run" ReadOnly="true" Busy="true"
+                                         Consented="_consented"/>
+            </details>
+        }
+        <div class="history-pagination">
+            <button class="btn btn-sm btn-outline-secondary" disabled="@(_busy || _offset == 0)"
+                    @onclick="PreviousAsync">Newer runs
+            </button>
+            <span>Page @(_offset / 20 + 1)</span>
+            <button class="btn btn-sm btn-outline-secondary" disabled="@(_busy || _runs.Count <= 20)"
+                    @onclick="NextAsync">Older runs
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+
+    /// <summary>Resolved account identity; server ports recheck ownership.</summary>
+    [Parameter]
+    public Guid OwnerId { get; set; }
+
+    /// <summary>Owning dashboard project.</summary>
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    /// <summary>Exact deployment shown on either current or historical page.</summary>
+    [Parameter]
+    public Guid? DeploymentId { get; set; }
+
+    /// <summary>Exact C# project whose current egress consent controls analysis.</summary>
+    [Parameter]
+    public Guid CsProjectId { get; set; }
+
+    /// <summary>Consent read by the parent for the initial selection.</summary>
+    [Parameter]
+    public bool Consented { get; set; }
+
+    /// <summary>Cancels reads/actions and the independent poll loop on disposal.</summary>
+    private readonly CancellationTokenSource _lifetime = new();
+
+    /// <summary>Current selection generation; rejects late action responses.</summary>
+    private (Guid Owner, Guid Project, Guid? Deployment)? _identity;
+
+    /// <summary>Stops work on route changes without stopping the whole component.</summary>
+    private CancellationTokenSource? _selection;
+
+    /// <summary>Serializes UI actions and poll reads.</summary>
+    private bool _busy;
+
+    /// <summary>Current owner-authorized consent state.</summary>
+    private bool _consented;
+
+    /// <summary>Independent saved-result poll task.</summary>
+    private Task? _poll;
+
+    /// <summary>Latest selected deployment result.</summary>
+    private DeploymentAnalysisView? _latest;
+
+    /// <summary>Bounded saved result page, plus one pagination sentinel.</summary>
+    private IReadOnlyList<DeploymentAnalysisView> _runs = [];
+
+    /// <summary>Saved result page offset.</summary>
+    private int _offset;
+
+    /// <summary>Stable request identity retained only after uncertain admission.</summary>
+    private Guid? _requestId;
+
+    /// <summary>Fixed customer-facing action feedback.</summary>
+    private string? _message;
+
+    /// <inheritdoc />
+    protected override async Task OnParametersSetAsync()
+    {
+        var identity = (OwnerId, ProjectId, DeploymentId);
+        if (_identity == identity) return;
+        _selection?.Cancel();
+        _selection?.Dispose();
+        _selection = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _identity = identity;
+        _consented = Consented;
+        _latest = null;
+        _runs = [];
+        _offset = 0;
+        _requestId = null;
+        _message = null;
+        await RefreshAsync();
+        _poll ??= PollAsync();
+    }
+
+    /// <summary>Refreshes saved state every five seconds without overlapping owner actions.</summary>
+    private async Task PollAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_lifetime.Token))
+                await InvokeAsync(async () =>
+                {
+                    await RefreshAsync();
+                    StateHasChanged();
+                });
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+    }
+
+    /// <summary>Loads current and historical saved runs through a fresh service scope.</summary>
+    private Task RefreshAsync()
+    {
+        return ActAsync(async (service, token) =>
+        {
+            var identity = _identity;
+            if (DeploymentId is not { } deployment) return;
+            var latest = await service.GetLatestAsync(OwnerId, deployment, token);
+            var runs = await service.ListAsync(OwnerId, deployment, _offset, 21, token);
+            if (identity != _identity || token.IsCancellationRequested) return;
+            _latest = latest;
+            _runs = runs;
+            _message = null;
+        });
+    }
+
+    /// <summary>Requests a new manual assessment; only uncertain responses retain the idempotency key.</summary>
+    private Task RequestAsync()
+    {
+        return ActAsync(async (service, token) =>
+        {
+            if (DeploymentId is not { } deployment || !_consented || !Options.CurrentValue.Enabled) return;
+            var identity = _identity;
+            _requestId ??= Guid.NewGuid();
+            var result = await service.RequestManualAsync(OwnerId, deployment, _requestId.Value, token);
+            if (identity != _identity || token.IsCancellationRequested) return;
+            _requestId = null;
+            _offset = 0;
+            _latest = result.Analysis;
+            _message = result.Message;
+            var runs = await service.ListAsync(OwnerId, deployment, 0, 21, token);
+            if (identity == _identity && !token.IsCancellationRequested) _runs = runs;
+        });
+    }
+
+    /// <summary>Cancels only the latest selected deployment's active analysis.</summary>
+    private Task CancelAsync()
+    {
+        return ActAsync(async (service, token) =>
+        {
+            if (DeploymentId is not { } deployment || _latest is not { } latest || latest.DeploymentId != deployment) return;
+            var identity = _identity;
+            await service.CancelAsync(OwnerId, deployment, latest.Id, token);
+            var updated = await service.GetLatestAsync(OwnerId, deployment, token);
+            if (identity == _identity && !token.IsCancellationRequested) _latest = updated;
+        });
+    }
+
+    /// <summary>Edits current consent for the exact project; snapshots never grant consent.</summary>
+    private Task ConsentAsync(bool consented)
+    {
+        return ActAsync(async (_, token) =>
+        {
+            var identity = _identity;
+            await using var scope = Scopes.CreateAsyncScope();
+            var changed = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
+                .SetAiDiagnosticEgressConsentAsync(ProjectId, OwnerId, CsProjectId, consented, token);
+            if (identity == _identity && !token.IsCancellationRequested)
+            {
+                if (changed) _consented = consented;
+                else _message = "Consent could not be updated.";
+            }
+        });
+    }
+
+    /// <summary>Moves one bounded result page.</summary>
+    private async Task PreviousAsync()
+    {
+        if (_busy) return;
+        _offset = Math.Max(0, _offset - 20);
+        await RefreshAsync();
+    }
+
+    /// <summary>Moves one bounded result page.</summary>
+    private async Task NextAsync()
+    {
+        if (_busy) return;
+        _offset += 20;
+        await RefreshAsync();
+    }
+
+    /// <summary>Isolates request scopes and prevents stale error feedback after navigation.</summary>
+    private async Task ActAsync(Func<IDeploymentAnalysisService, CancellationToken, Task> action)
+    {
+        if (_busy || _lifetime.IsCancellationRequested || OwnerId == Guid.Empty || DeploymentId is null) return;
+        var identity = _identity;
+        var token = _selection?.Token ?? _lifetime.Token;
+        _busy = true;
+        try
+        {
+            await using var scope = Scopes.CreateAsyncScope();
+            await action(scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>(), token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning(error, "Analysis action unavailable: {FailureType}.", error.GetType().Name);
+            if (identity == _identity && !token.IsCancellationRequested) _message = "Analysis could not be updated. Refresh or retry shortly.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        await _lifetime.CancelAsync();
+        _selection?.Cancel();
+        if (_poll is not null) await _poll;
+        _selection?.Dispose();
+        _lifetime.Dispose();
+    }
+
+}

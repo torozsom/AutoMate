@@ -5,6 +5,9 @@ namespace Domain.Entities;
 /// <summary>Stores the status and redacted result of one requested deployment analysis.</summary>
 public sealed class AiDeploymentAnalysis : BaseEntity
 {
+    /// <summary>Retains saved results independently of the finite execution expiry.</summary>
+    public bool RetainUntilDeleted { get; set; }
+
     public Guid DeploymentId { get; set; }
     public Deployment Deployment { get; set; } = null!;
     public AiAnalysisTrigger Trigger { get; set; }

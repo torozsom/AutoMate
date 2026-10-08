@@ -7,8 +7,8 @@ a real renderer dispatcher, including disposal.
 
 ## Telemetry presentation
 
-Project details groups daily analytics with live container utilization in Metrics. Deployment history opens with
-container-scoped resource summaries and a separate Logs card. Charts and numeric tables are collapsed by default;
+Project details separates live utilization and Project Analytics. Deployment Details opens with an overview, saved logs
+and historical resource summaries. Charts and numeric tables are collapsed by default;
 range changes preserve log paging and channels. Independent asynchronous scopes isolate history and analytics database
 reads, and cancelled/stale responses cannot overwrite newer selections.
 
@@ -111,3 +111,14 @@ DbContext use with page/background reads. The latest deployment is rechecked aft
 An independent five-second analysis timer runs in both hosting profiles on the renderer dispatcher. Versioned reads
 capture owner/deployment identity, preserve the saved view on failure, clear temporary polling warnings after recovery
 and ignore late results/feedback. Busy owner actions skip ticks; page disposal cancels and awaits polling.
+
+## Deployment history update (2026-10-08)
+
+ProjectSectionNavigation uses a scoped disposable JS module for fragments, focus, history, offsets and reduced motion.
+DeploymentAnalysisSection shares fenced consent/actions and five-second polling across both pages, with paged saved
+runs. DeploymentConfigurationDetails shows only recorded snapshots/artifacts; unavailable legacy configuration is
+explicit. Deployment Details presents selected-deployment logs before historical metrics and AI.
+
+Project Details ignores saved metric recovery callbacks and late provider replies after page disposal. Lifetime
+cancellation remains available until hub disposal completes; expected navigation cancellation/disposal does not emit a
+recovery failure. Real provider failures retain redacted exception diagnostics.

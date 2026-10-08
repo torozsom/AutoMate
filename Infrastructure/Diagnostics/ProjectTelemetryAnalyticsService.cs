@@ -18,7 +18,6 @@ public sealed class ProjectTelemetryAnalyticsService(AutoMateDbContext db, IDiag
         if (!await db.Applications.AnyAsync(p => p.Id == project && p.UserId == user, token))
             throw new UnauthorizedAccessException("Project analytics access denied.");
         var now = DateTimeOffset.UtcNow;
-        if (start < now.AddDays(-365)) start = now.AddDays(-365);
         var deployments = await db.Deployments.AsNoTracking().Where(d => d.CsProject!.AppId == project &&
                                                                          d.CreatedAt >= start && d.CreatedAt <= end)
             .Select(d => new { d.Id, d.Status, d.CloudGitHubActionRunId }).ToListAsync(token);

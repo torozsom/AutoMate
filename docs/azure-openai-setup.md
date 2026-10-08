@@ -193,13 +193,16 @@ existing 50 USD entry remains exhausted until midnight UTC. Do not delete accoun
 
 For a reviewed model/deployment price, use uncached USD rates per million tokens:
 attempt_bound = ceiling_to_cent (2 * ((maximum_context_tokens + fixed_request_token_upper_bound) * input_rate
+
 + maximum_output_tokens * output_rate) / 1,000,000).
-Include the actual fixed instructions, response schema and request framing in the input upper bound. The current pilot
-uses gpt-5.4-mini, default 12,000 context byte/token units and 4,096 output tokens including reasoning; retries stay
-zero.
-Use the rate for the deployment's region/type/tier from the Azure Portal or official Azure pricing, never direct OpenAI
-API rates or cached/batch prices. Keep the daily ceiling at 50 USD and update only AiAnalysis:MaximumProviderAttemptCost
-in Web user secrets once the bound is verified.
+  Include the actual fixed instructions, response schema and request framing in the input upper bound. The current pilot
+  uses gpt-5.4-mini, default 12,000 context byte/token units and 4,096 output tokens including reasoning; retries stay
+  zero.
+  Use the rate for the deployment's region/type/tier from the Azure Portal or official Azure pricing, never direct
+  OpenAI
+  API rates or cached/batch prices. Keep the daily ceiling at 50 USD and update only AiAnalysis:
+  MaximumProviderAttemptCost
+  in Web user secrets once the bound is verified.
 
 The October 2026 detailed Azure usage file supplied by the operator verifies the current Data Zone Standard (EUR)
 gpt-5.4-mini meters: uncached input costs **0.825 USD per million tokens** (`5.4 mini Inp Dz 1M Tokens`), and output

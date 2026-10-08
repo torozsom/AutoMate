@@ -242,6 +242,10 @@ public sealed class CloudRunMonitor(
             run.Phase = workflow.Conclusion == "success" ? CloudRunPhase.Succeeded : CloudRunPhase.Failed;
             run.SnapshotJson = null;
             deployment.Status = workflow.Conclusion == "success" ? DeploymentStatus.Running : DeploymentStatus.Failed;
+            deployment.Outcome = workflow.Conclusion == "success"
+                ? DeploymentOutcome.Succeeded
+                : DeploymentOutcome.Failed;
+            deployment.FinishedAt = run.CompletedAt;
             if (workflow.Conclusion != "success")
                 run.FailureReason = $"GitHub Actions concluded: {workflow.Conclusion ?? "unknown"}.";
             await dbContext.SaveChangesAsync(cancellationToken);

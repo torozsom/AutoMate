@@ -28,7 +28,7 @@ Alert on rising losses, age near the 24-hour limit, failed delivery and service 
 returns a bounded pending read for AutoMate's authorized history merge. The read limit is reported as truncation.
 
 Hourly aggregation replaces deployment/day/container/metric rows, rereads the current and previous two UTC dates and
-retains daily summaries for 365 days. It does not claim data before collection started or exact error counts.
+retains daily summaries until project deletion. It does not claim data before collection started or exact error counts.
 
 See [SaaS telemetry rollout](../docs/saas-telemetry.md) and [navigation](../navigation.md).
 
@@ -57,3 +57,10 @@ providers.
 Loki/Mimir adapters apply mandatory final redaction even for direct calls. Legacy PostgreSQL diagnostic writers now
 reject
 new payloads at the method boundary; existing reads/draining remain available through Web.
+
+## Deployment history update (2026-10-08)
+
+The host registers DiskDeploymentArchive before ingesting events: acknowledgments require archive and spool persistence.
+Authenticated archive routes recheck deployment ownership/managed consent. Backfill and cleanup workers run on the same
+exclusive persistent volume. Daily aggregates now retain until project deletion. See ADR 0004 for storage growth, backup
+and rollout requirements.

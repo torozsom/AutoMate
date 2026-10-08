@@ -56,7 +56,9 @@ approximate.
 
 Daily aggregation runs hourly on the single telemetry service, replacing current/previous-two-date results. It uses
 Mimir count/sum/min/max queries, never averages averages. It does not backfill unavailable history. Keep detailed data
-30 days, daily data 365 days, and apply those deadlines to encrypted backups and restored copies too.
+30 days for operational Loki/Mimir copies. Archived deployment diagnostics, saved AI results and daily project
+aggregates remain until owner deletion. Backups and restored copies must honor committed owner deletions; see ADR 0004
+for persistent-volume backup, rollout and storage-growth requirements.
 
 ## Verification
 
@@ -79,3 +81,8 @@ not the final sustained 300-deployment production acceptance run.
 An extended local benchmark also runs with AUTOMATE_TELEMETRY_EXTENDED_LOAD=1: 60 seconds at 100/s followed by 10
 seconds at 1000/s. See telemetry-load-results.md. All six isolated PostgreSQL/Loki/Mimir integration tests were
 executed, including recovered disk delivery, raw-row avoidance, daily metric queries and tenant isolation.
+
+Permanent history rollout: apply PreserveDeploymentHistory, update the private archive-capable Telemetry host, then
+update Web/workers. The archive lives under the existing persistent spool volume. Bounded resumable backfill imports
+still-available legacy/backend records; expired data cannot be recovered. Budget reservations ($0.07 per attempt, $50
+daily), disabled retries, receipt expiry and accounting cleanup remain unchanged.

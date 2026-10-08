@@ -6,6 +6,11 @@ internal static class PlatformLogCatalog
     /// <summary>Fixed application messages; interpolated and unknown provider templates are excluded.</summary>
     internal static readonly HashSet<string> Templates = new(StringComparer.Ordinal)
     {
+        "Archive cleanup unavailable: {FailureType}.",
+        "Archive backfill unavailable: {FailureType}.",
+        "Archive backfill deployment unavailable: {FailureType}.",
+        "Deployment artifact metadata unavailable: {FailureType}.",
+        "Analysis action unavailable: {FailureType}.",
         "Outbound HTTP request started: method {HttpMethod}.",
         "Outbound HTTP request sent: method {HttpMethod}.",
         "Outbound HTTP response received: status {StatusCode}, duration {ElapsedMilliseconds} ms.",
@@ -289,6 +294,9 @@ internal static class PlatformLogCatalog
     /// <summary>Known application and framework logger categories; unknown names use a fixed fallback.</summary>
     internal static readonly HashSet<string> Categories = new(StringComparer.Ordinal)
     {
+        "Infrastructure.Diagnostics.DeploymentArchiveCleanupWorker",
+        "Infrastructure.Diagnostics.DeploymentArchiveBackfillWorker",
+        "Web.Components.Shared.DeploymentAnalysisSection",
         "AppStartup",
         "Application.Orchestration.DeploymentJobQueue",
         "Web.Observability.RequestAuditMiddleware",

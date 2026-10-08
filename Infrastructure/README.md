@@ -42,3 +42,8 @@ Infrastructure/Observability owns the shared SDK-independent logger factory, lit
 Web and the private Telemetry host. SDK exporter processors/views remain in Web/Observability. Diagnostic adapters
 recheck writes/readback, and legacy PostgreSQL diagnostic ingestion methods reject new payloads even when called
 directly.
+
+## Deployment history update (2026-10-08)
+
+Private Telemetry archives deployment diagnostics on its persistent volume; Web queries through IDeploymentArchive. See
+docs/adr/0004-permanent-deployment-history.md for migration and host ordering.

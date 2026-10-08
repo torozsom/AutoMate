@@ -1,0 +1,132 @@
+@using System.Text.Json
+@using Domain.Entities
+@if (Deployment is not null)
+{
+    var snapshot = Snapshot;
+    <div class="configuration-grid">
+        <div class="config-item">
+            <span>Project</span><strong>@(snapshot?.ProjectName ?? Deployment.CsProject?.Name ?? "Unavailable")</strong>
+        </div>
+        <div class="config-item">
+            <span>Provider</span><strong>@(snapshot?.Provider ?? (Deployment.CloudGitHubActionRunId is not null ? "Azure Container Apps" : "Not recorded"))</strong>
+        </div>
+        <div class="config-item"><span>Runtime</span><strong>@(snapshot?.Runtime ?? "Not recorded")</strong></div>
+        <div class="config-item"><span>Environment</span><strong>@(snapshot?.Environment ?? "Not recorded")</strong>
+        </div>
+        <div class="config-item">
+            <span>Port</span><strong>@(Deployment.ResolvedHostPort?.ToString() ?? snapshot?.Port.ToString() ?? "Not recorded")</strong>
+        </div>
+        <div class="config-item">
+            <span>Image</span><strong>@(snapshot?.Image ?? Deployment.ImageTag ?? "Not recorded")</strong></div>
+        <div class="config-item">
+            <span>Resource group</span><strong>@(snapshot?.ResourceGroup ?? "Not recorded / not applicable")</strong>
+        </div>
+        <div class="config-item">
+            <span>Container App</span><strong>@(Deployment.CloudContainerAppName ?? snapshot?.ContainerApp ?? "Not recorded / not applicable")</strong>
+        </div>
+        <div class="config-item">
+            <span>Region</span><strong>@(snapshot?.Region ?? "Not recorded / not applicable")</strong></div>
+        <div class="config-item">
+            <span>Registry</span><strong>@(snapshot?.Registry ?? "Not recorded / not applicable")</strong></div>
+        <div class="config-item">
+            <span>Revision</span><strong>@(Deployment.CloudContainerRevision ?? "Not recorded / not applicable")</strong>
+        </div>
+        <div class="config-item">
+            <span>Docker container</span><strong>@(Deployment.DockerContainerId ?? "Not recorded / not applicable")</strong>
+        </div>
+        <div class="config-item">
+            <span>Branch / commit</span><strong>@(snapshot?.Branch ?? "Not recorded") / @(snapshot?.Commit ?? "Not recorded")</strong>
+        </div>
+        <div class="config-item">
+            <span>Workflow run</span><strong>@(Deployment.CloudGitHubActionRunId?.ToString() ?? "Not recorded / not applicable")</strong>
+        </div>
+        <div class="config-item">
+            <span>Azure resource identity</span><strong>@(Deployment.CloudResourceId ?? "Not recorded / not applicable")</strong>
+        </div>
+        @foreach (var database in snapshot?.Databases ?? [])
+        {
+            <div class="config-item">
+                <span>Database / container</span><strong>@database.Provider / @database.Name / @database.ContainerSuffix</strong>
+            </div>
+        }
+    </div>
+    <div class="deployment-provider-links">
+        @if (SourceUrl is { } source)
+        {
+            <a href="@source" target="_blank" rel="noopener noreferrer">GitHub source ↗</a>
+        }
+        @if (WorkflowUrl is { } workflow)
+        {
+            <a href="@workflow" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary">Open
+                workflow ↗</a>
+        }
+        @if (AppUrl is { } app)
+        {
+            <a href="@app" target="_blank" rel="noopener noreferrer" class="btn btn-outline-success">Open deployed app
+                ↗</a>
+        }
+        @if (ResourceUrl is { } resource)
+        {
+            <a href="@resource" target="_blank" rel="noopener noreferrer">Azure resource ↗</a>
+        }
+    </div>
+    @if (snapshot is null)
+    {
+        <p class="telemetry-muted">This deployment predates configuration snapshots. Missing historical settings cannot
+            be reconstructed.</p>
+    }
+}
+else
+{
+    <p class="telemetry-muted">No deployment has been recorded yet.</p>
+}
+
+@code {
+
+    /// <summary>Selected deployment; artifacts must not come from another run.</summary>
+    [Parameter]
+    public Deployment? Deployment { get; set; }
+
+    /// <summary>Reads only the explicit non-secret snapshot contract.</summary>
+    private DeploymentConfigurationSnapshot? Snapshot
+    {
+        get
+        {
+            try
+            {
+                return Deployment?.ConfigurationSnapshotJson is { } json ? JsonSerializer.Deserialize<DeploymentConfigurationSnapshot>(json) : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>Validated source from the immutable snapshot, or recorded legacy repository identity.</summary>
+    private string? SourceUrl => SafeUrl(Snapshot?.SourceUrl, true);
+
+    /// <summary>Stable run link survives workflow completion and component reload.</summary>
+    private string? WorkflowUrl => SourceUrl is { } source
+        ? (source.TrimEnd('/').EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? source.TrimEnd('/')[..^4] : source.TrimEnd('/')) +
+          (Deployment?.CloudGitHubActionRunId is { } run ? $"/actions/runs/{run}" : "/actions/workflows/deploy.yml")
+        : null;
+
+    /// <summary>Recorded cloud endpoint or local host port, without asserting that old resources still exist.</summary>
+    private string? AppUrl => SafeUrl(Deployment?.CloudAppUrl) ?? (Deployment?.ResolvedHostPort is { } port ? $"http://localhost:{port}" : null);
+
+    /// <summary>Azure Portal deep link constructed from a recorded ARM identity.</summary>
+    private string? ResourceUrl => Deployment?.CloudResourceId is { } id && id.StartsWith("/subscriptions/", StringComparison.OrdinalIgnoreCase)
+        ? "https://portal.azure.com/#resource" + id
+        : null;
+
+    /// <summary>External links reject credential-bearing URLs and unsafe schemes.</summary>
+    private static string? SafeUrl(string? value, bool github = false)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+               uri.Scheme is "http" or "https" && string.IsNullOrEmpty(uri.UserInfo) && (!github || uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            ? uri.GetLeftPart(UriPartial.Path)
+            : null;
+    }
+
+}

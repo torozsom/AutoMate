@@ -416,7 +416,8 @@ public sealed class AnalysisAdmissionTests
         fixture.Clock.Now = fixture.Clock.Now.AddDays(2);
         await db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.ExpiresAt, fixture.Clock.Now.AddSeconds(-1)));
-        Assert.Equal(1, await DeploymentAnalysisRetentionService.DeleteBatchAsync(db, fixture.Clock.Now, default));
+        Assert.Equal(0, await DeploymentAnalysisRetentionService.DeleteBatchAsync(db, fixture.Clock.Now, default));
+        Assert.Equal(AiAnalysisStatus.Cancelled, await db.AiDeploymentAnalyses.Select(a => a.Status).SingleAsync());
         Assert.Equal(0,
             await DeploymentAnalysisRetentionService.DeleteRequestBatchAsync(db, fixture.Clock.Now, default));
         Assert.False((await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request))
@@ -487,6 +488,55 @@ public sealed class AnalysisAdmissionTests
         Assert.False((await db.AiAnalysisRequests.SingleAsync()).ConsumesQuota);
         Assert.Equal("quota_exceeded", (await db.AiDeploymentAnalyses.SingleAsync()).FailureCode);
         Assert.Equal(0, await db.DeploymentAnalysisWorkItems.CountAsync());
+    }
+
+    /// <summary>Stopping changes runtime state but retains the successful historical outcome.</summary>
+    [Fact]
+    public async Task Successful_outcome_survives_stopping_and_snapshot_remains_immutable()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var db = fixture.NewDb();
+        var deployment = await db.Deployments.SingleAsync();
+        deployment.ConfigurationSnapshotJson = "{\"ProjectName\":\"original\"}";
+        deployment.Status = DeploymentStatus.Running;
+        await db.SaveChangesAsync();
+        Assert.Equal(DeploymentOutcome.Succeeded, deployment.Outcome);
+        deployment.Status = DeploymentStatus.Stopped;
+        (await db.CsProjects.Include(p => p.Configuration).SingleAsync()).Configuration!.DotNetVersion = "changed";
+        await db.SaveChangesAsync();
+        Assert.Equal(DeploymentOutcome.Succeeded, deployment.Outcome);
+        Assert.Contains("original", deployment.ConfigurationSnapshotJson);
+        Assert.DoesNotContain("changed", deployment.ConfigurationSnapshotJson);
+    }
+
+    /// <summary>Every manual status is admitted; old saved results remain owner-scoped and paged after expiry.</summary>
+    [Theory]
+    [InlineData(DeploymentStatus.Starting)]
+    [InlineData(DeploymentStatus.Running)]
+    [InlineData(DeploymentStatus.Stopped)]
+    [InlineData(DeploymentStatus.Failed)]
+    public async Task Manual_statuses_and_permanent_result_listing(DeploymentStatus status)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var db = fixture.NewDb();
+        var deployment = await db.Deployments.SingleAsync();
+        deployment.Status = status;
+        await db.SaveChangesAsync();
+        var request = Guid.NewGuid();
+        var accepted = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, deployment.Id, request);
+        Assert.True(accepted.Accepted);
+        await db.AiDeploymentAnalyses.ExecuteUpdateAsync(u => u.SetProperty(a => a.Status, AiAnalysisStatus.Completed));
+        fixture.Clock.Now = fixture.Clock.Now.AddDays(121);
+        await db.AiAnalysisRequests.ExecuteDeleteAsync();
+        Assert.Single(await fixture.Service(db).ListAsync(fixture.OwnerId, deployment.Id));
+        Assert.Empty(await fixture.Service(db).ListAsync(Guid.NewGuid(), deployment.Id));
+        var repeat = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, deployment.Id, request);
+        Assert.Equal(accepted.Analysis!.Id, repeat.Analysis!.Id);
+        var second = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, deployment.Id, Guid.NewGuid());
+        Assert.True(second.Accepted);
+        Assert.NotEqual(accepted.Analysis.Id, second.Analysis!.Id);
+        Assert.Equal(2, await db.AiDeploymentAnalyses.CountAsync());
+        Assert.Equal(2, (await fixture.Service(db).ListAsync(fixture.OwnerId, deployment.Id)).Count);
     }
 
     /// <summary>Cancels on preparation and simulates unavailable diagnostics on the failure path.</summary>

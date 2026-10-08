@@ -1,5 +1,9 @@
 # ADR 0001: Diagnostic data safety and AI egress
 
+Permanent archive, saved AI-result and analytics retention are superseded
+by [ADR 0004](0004-permanent-deployment-history.md), approved by the owner on 2026-10-08. Operational backend windows,
+redaction, consent and accounting safeguards remain.
+
 ## Status
 
 Accepted on 2026-10-02. Delivery buffers in both hosting profiles and aggregate retention are superseded

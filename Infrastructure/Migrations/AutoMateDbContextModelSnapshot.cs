@@ -242,6 +242,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("result_schema_version");
 
+                    b.Property<bool>("RetainUntilDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("retain_until_deleted");
+
                     b.Property<int>("RetryCount")
                         .HasColumnType("integer")
                         .HasColumnName("retry_count");
@@ -837,6 +841,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("cloud_resource_id");
 
+                    b.Property<string>("ConfigurationSnapshotJson")
+                        .HasColumnType("text")
+                        .HasColumnName("configuration_snapshot_json");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -849,9 +857,21 @@ namespace Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("docker_container_id");
 
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
                     b.Property<string>("ImageTag")
                         .HasColumnType("text")
                         .HasColumnName("image_tag");
+
+                    b.Property<int>("Outcome")
+                        .HasColumnType("integer")
+                        .HasColumnName("outcome");
+
+                    b.Property<int?>("ResolvedHostPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("resolved_host_port");
 
                     b.Property<Guid?>("RuntimeCollectorLeaseOwner")
                         .HasColumnType("uuid")
@@ -940,6 +960,39 @@ namespace Infrastructure.Migrations
                         .HasDatabaseName("ix_deployment_analysis_work_items_completed_at_next_attempt_at");
 
                     b.ToTable("deployment_analysis_work_items", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.DeploymentArchiveCleanup", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_deployment_archive_cleanups");
+
+                    b.HasIndex("ProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_deployment_archive_cleanups_project_id");
+
+                    b.ToTable("deployment_archive_cleanups", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.DeploymentDailyTelemetry", b =>

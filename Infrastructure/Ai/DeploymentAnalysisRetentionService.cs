@@ -1,4 +1,5 @@
 using Application.Diagnostics;
+using Domain.Enums;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,9 +65,15 @@ public sealed class DeploymentAnalysisRetentionService(
     }
 
     /// <summary>Deletes one bounded expiry batch; database cascades remove its queue rows.</summary>
-    internal static Task<int> DeleteBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
+    internal static async Task<int> DeleteBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
-        return db.AiDeploymentAnalyses.Where(item => item.ExpiresAt <= now)
+        var expiredWork = db.AiDeploymentAnalyses.Where(item => item.RetainUntilDeleted && item.ExpiresAt <= now &&
+                                                                (item.Status == AiAnalysisStatus.Queued ||
+                                                                 item.Status == AiAnalysisStatus.Running));
+        await expiredWork.OrderBy(item => item.ExpiresAt).Take(BatchSize).ExecuteUpdateAsync(update => update
+            .SetProperty(item => item.Status, AiAnalysisStatus.Cancelled)
+            .SetProperty(item => item.CompletedAt, now), token);
+        return await db.AiDeploymentAnalyses.Where(item => item.ExpiresAt <= now && !item.RetainUntilDeleted)
             .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
     }
 

@@ -58,3 +58,7 @@ notifications, queue bounds and cancellation behavior remain unchanged.
 
 Job failure exceptions now reach the host's separate redacted console diagnostics boundary. The ordinary provider/export
 boundary still omits exception objects and prose; queue/status behavior and customer-facing guidance are unchanged.
+
+Shutdown cancels queue consumption and observes any pending asynchronous read before disposing its iterator. Admitted
+jobs finish cancellation and release their scopes before the worker exits. This prevents channel iterator disposal
+faults during host shutdown without changing admission limits or per-project ordering.

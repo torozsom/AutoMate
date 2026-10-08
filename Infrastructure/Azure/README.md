@@ -55,7 +55,8 @@ Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployme
 writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
 gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
-Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+Operational Loki/Mimir data expires after 30 days. Redacted deployment diagnostics and project analytics aggregates
+remain until owner deletion; see ADR 0004. See the root navigation.md for new module entry
 points.
 
 Runtime polls and child log/metric queries have GUID correlation and finite outcomes. Handled Monitor result failures
@@ -64,3 +65,6 @@ excluded from custom tags; coordinator failure logs omit exception bodies. Revis
 
 OIDC setup/readiness logs omit provider identity/subject payloads and raw exceptions. Readiness retains attempt counts
 and failure types, with the same retries and propagation timeout behavior.
+
+Verified Azure runtime observations enrich only the selected deployment snapshot with its resolved image,
+revision/resource identity and validated app URL. Mutable project settings never reconstruct missing historical values.

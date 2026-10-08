@@ -1,6 +1,7 @@
 using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
 using Application.Ai;
+using Domain.Enums;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Reads existing Loki/legacy terminal history and Mimir samples into bounded in-memory analysis context.</summary>
+/// <summary>Reads deployment-scoped archived and retained diagnostics into bounded in-memory analysis context.</summary>
 public sealed class DeploymentAnalysisContextBuilder(
     AutoMateDbContext db,
     IDeploymentDiagnosticStore diagnostics,
@@ -16,7 +17,8 @@ public sealed class DeploymentAnalysisContextBuilder(
     IDiagnosticRedactor redactor,
     IOptions<AiAnalysisOptions> options,
     IOptions<TelemetryStorageOptions> storage,
-    TimeProvider clock) : IDeploymentAnalysisContextBuilder
+    TimeProvider clock,
+    IDeploymentArchive? archive = null) : IDeploymentAnalysisContextBuilder
 {
     /// <inheritdoc />
     public async Task<DeploymentAnalysisContext> BuildAsync(Guid deploymentId,
@@ -28,7 +30,9 @@ public sealed class DeploymentAnalysisContextBuilder(
                 Project = item.CsProject!.AppId,
                 Owner = item.CsProject.Application.UserId,
                 Consent = item.CsProject.Application.ManagedTelemetryConsent,
-                item.CreatedAt
+                item.CreatedAt,
+                item.UpdatedAt,
+                item.Status
             }).SingleOrDefaultAsync(cancellationToken);
         if (deployment is null) return new DeploymentAnalysisContext("", []);
         var history = await diagnostics.ReadRecentAsync(deployment.Project, deploymentId,
@@ -44,15 +48,23 @@ public sealed class DeploymentAnalysisContextBuilder(
         if (!unavailable)
         {
             var now = clock.GetUtcNow();
-            var end = history.Events.Where(row => row.TimestampUtc <= now).Max(row => row.TimestampUtc) ?? now;
+            var activityEnd = deployment.Status == DeploymentStatus.Running
+                ? now
+                : deployment.UpdatedAt < now
+                    ? deployment.UpdatedAt
+                    : now;
+            var end = history.Events.Where(row => row.TimestampUtc <= now).Max(row => row.TimestampUtc) ?? activityEnd;
             var start = end.AddHours(-1);
             if (start < deployment.CreatedAt) start = deployment.CreatedAt;
-            if (start < now.AddDays(-30)) start = now.AddDays(-30);
+            if (archive is null && start < now.AddDays(-30)) start = now.AddDays(-30);
             try
             {
                 if (start < end)
-                    points = await metrics.ReadAsync(deployment.Owner, deployment.Project, deploymentId,
-                        start, end, 300, cancellationToken);
+                    points = archive is null
+                        ? await metrics.ReadAsync(deployment.Owner, deployment.Project, deploymentId, start, end, 300,
+                            cancellationToken)
+                        : await archive.ReadMetricsAsync(deployment.Owner, deployment.Project, deploymentId, start, end,
+                            300, cancellationToken);
             }
             catch (Exception) when (!cancellationToken.IsCancellationRequested)
             {

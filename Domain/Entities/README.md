@@ -57,3 +57,9 @@ excluded.
 FailedDeploymentAnalysisEvent stores only DeploymentId (primary key/FK), CreatedAt and nullable CompletedAt. Database
 capture creates at most one marker per deployment; completion survives result/receipt retention and deletion. Deployment
 deletion cascades the marker. It contains neither diagnostic context nor log/metric samples.
+
+## Deployment history update (2026-10-08)
+
+Deployment records own non-secret configuration snapshots, resolved artifacts, an outcome independent of runtime status,
+and completion time. Legacy snapshots remain absent. DeploymentArchiveCleanup is a durable deletion outbox without
+foreign keys to deleted owners.

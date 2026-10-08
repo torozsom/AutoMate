@@ -1,0 +1,50 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+<nav @ref="_navigation" class="project-section-tabs" aria-label="Project detail sections">
+    <a href="#overview">Overview</a>
+    <a href="#logs">Live Logs</a>
+    <a href="#metrics">Resource Utilization</a>
+    <a href="#analytics">Project Analytics</a>
+    <a href="#ai-analysis">AI Analysis</a>
+    <a href="#configuration">Configuration</a>
+    <a href="#deployments">Deployment History</a>
+</nav>
+
+@code {
+
+    /// <summary>Root for section navigation and the terminal shortcut.</summary>
+    private ElementReference _navigation;
+
+    /// <summary>Scoped browser module with no circuit business state.</summary>
+    private IJSObjectReference? _module;
+
+    /// <summary>Disposable browser listeners for this page instance.</summary>
+    private IJSObjectReference? _controller;
+
+    /// <inheritdoc />
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/project-sections.js");
+        _controller = await _module.InvokeAsync<IJSObjectReference>("attach", _navigation);
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_controller is not null)
+            {
+                await _controller.InvokeVoidAsync("dispose");
+                await _controller.DisposeAsync();
+            }
+
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+}

@@ -158,3 +158,12 @@ Budget regression coverage now includes distinct missing/invalid/currency denial
 UTC reset and a real relational-query configuration reload without a charge. Worker persistence tests assert denied work
 never calls the provider and no Skipped analysis emits a Completed audit. Shared safe logging is used by the worker
 fixture.
+
+## Deployment history update (2026-10-08)
+
+DiskDeploymentArchiveTests covers old-event restart replay, event identity, bounded paging/search, current redaction,
+metric interval import, checksums, incomplete files and deletion tombstones. Admission regressions cover manual
+statuses, retained results after 121 days, multiple runs and outcome survival after stopping.
+
+DeploymentJobWorkerTests deterministically delays queue cancellation beyond active-job completion and verifies that
+shutdown waits for the read before iterator disposal, with no faulted worker task.

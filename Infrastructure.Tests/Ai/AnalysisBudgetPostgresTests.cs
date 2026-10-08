@@ -174,7 +174,8 @@ public sealed class AnalysisBudgetPostgresTests
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(90)
             });
         await db.SaveChangesAsync();
-        await db.Database.MigrateAsync();
+        await using var migration = fixture.Db(true);
+        await migration.Database.MigrateAsync();
         var admission = await db.AiAnalysisBudgetEntries.SingleAsync();
         Assert.Equal(deletedAnalysis, admission.AnalysisId);
         Assert.Equal(fixture.Owners[0], admission.TenantId);
@@ -183,11 +184,49 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.Null(admission.LeaseId);
         Assert.Equal(0, admission.ReservedCostUnits);
         Assert.Equal("USD", admission.Currency);
-        Assert.Empty(await db.Database.GetPendingMigrationsAsync());
+        Assert.Empty(await migration.Database.GetPendingMigrationsAsync());
+    }
+
+    /// <summary>The real deletion trigger handles project deletion and account cascades in the same transaction.</summary>
+    [AiPostgresFact]
+    public async Task Archive_cleanup_is_transactional_and_covers_account_cascades()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var db = fixture.Db();
+        var project = await db.Deployments.Where(d => d.Id == fixture.Deployments[0]).Select(d => d.CsProject!.AppId)
+            .SingleAsync();
+        await using (var rollback = await db.Database.BeginTransactionAsync())
+        {
+            await db.Applications.Where(a => a.Id == project).ExecuteDeleteAsync();
+            Assert.Single(await db.DeploymentArchiveCleanups.ToArrayAsync());
+            await rollback.RollbackAsync();
+        }
+
+        Assert.Empty(await db.DeploymentArchiveCleanups.ToArrayAsync());
+        Assert.True(await db.Applications.AnyAsync(a => a.Id == project));
+        await db.Users.Where(u => u.Id == fixture.Owners[0]).ExecuteDeleteAsync();
+        var work = await db.DeploymentArchiveCleanups.ToArrayAsync();
+        Assert.Equal(4, work.Length);
+        Assert.All(work, x => Assert.Equal(fixture.Owners[0], x.TenantId));
+        Assert.False(await db.Deployments.AnyAsync(d => fixture.Deployments.Take(4).Contains(d.Id)));
+    }
+
+    /// <summary>Seeds the earlier schema through its actual pre-history model; later migration adds the new columns.</summary>
+    private sealed class LegacyBudgetContext(DbContextOptions<AutoMateDbContext> options)
+        : AutoMateDbContext(options, new EphemeralDataProtectionProvider())
+    {
+        /// <inheritdoc />
+        protected override void OnModelCreating(ModelBuilder model)
+        {
+            base.OnModelCreating(model);
+            model.Entity<Deployment>().Ignore(d => d.ConfigurationSnapshotJson).Ignore(d => d.Outcome)
+                .Ignore(d => d.FinishedAt).Ignore(d => d.ResolvedHostPort);
+            model.Entity<AiDeploymentAnalysis>().Ignore(a => a.RetainUntilDeleted);
+        }
     }
 
     /// <summary>Owns only a generated schema in the explicitly isolated test database; never drops that database.</summary>
-    private sealed class Fixture(string schema, string connectionString) : IAsyncDisposable
+    private sealed class Fixture(string schema, string connectionString, bool legacy = false) : IAsyncDisposable
     {
         /// <summary>Seeded owner-account tenant identifiers.</summary>
         public Guid[] Owners { get; private set; } = [];
@@ -212,14 +251,17 @@ public sealed class AnalysisBudgetPostgresTests
         }
 
         /// <summary>Creates an independent connection and production model with schema-scoped migration history.</summary>
-        public AutoMateDbContext Db()
+        public AutoMateDbContext Db(bool fullModel = false)
         {
             var builder = new NpgsqlConnectionStringBuilder(connectionString)
                 { SearchPath = schema, Pooling = false, Timeout = 10, CommandTimeout = 30 };
-            return new AutoMateDbContext(new DbContextOptionsBuilder<AutoMateDbContext>()
+            var options = new DbContextOptionsBuilder<AutoMateDbContext>()
                 .UseNpgsql(builder.ToString(),
                     settings => settings.MigrationsHistoryTable("__EFMigrationsHistory", schema))
-                .UseSnakeCaseNamingConvention().Options, new EphemeralDataProtectionProvider());
+                .UseSnakeCaseNamingConvention().Options;
+            return legacy && !fullModel
+                ? new LegacyBudgetContext(options)
+                : new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
         }
 
         /// <summary>Uses the production metadata service and current-consent authorizer without any provider.</summary>
@@ -268,7 +310,7 @@ public sealed class AnalysisBudgetPostgresTests
         public static async Task<Fixture> CreateAsync(bool beforeBudget = false)
         {
             var connectionString = Environment.GetEnvironmentVariable("AUTOMATE_AI_TEST_DB")!;
-            var fixture = new Fixture("ai_budget_test_" + Guid.NewGuid().ToString("N"), connectionString);
+            var fixture = new Fixture("ai_budget_test_" + Guid.NewGuid().ToString("N"), connectionString, beforeBudget);
             await using var admin = new NpgsqlConnection(connectionString);
             await admin.OpenAsync();
             await using var create = new NpgsqlCommand($"CREATE SCHEMA {fixture.Schema}", admin);
@@ -276,7 +318,8 @@ public sealed class AnalysisBudgetPostgresTests
             try
             {
                 await using var db = fixture.Db();
-                await db.GetService<IMigrator>().MigrateAsync(beforeBudget
+                await using var migration = fixture.Db(true);
+                await migration.GetService<IMigrator>().MigrateAsync(beforeBudget
                     ? "20261005104851_AddFailedDeploymentAnalysisEvents"
                     : null);
                 var owners = Enumerable.Range(0, 2).Select(index => new LocalUser

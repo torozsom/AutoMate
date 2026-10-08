@@ -55,7 +55,12 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
             configuration.TryGetProperty("ingress", out var ingress))
             fqdn = GetString(ingress, "fqdn");
 
-        return new AzureContainerAppState(latestRevision, fqdn);
+        string? image = null;
+        if (properties.TryGetProperty("template", out var template) &&
+            template.TryGetProperty("containers", out var containers) &&
+            containers.ValueKind == JsonValueKind.Array && containers.GetArrayLength() > 0)
+            image = GetString(containers[0], "image");
+        return new AzureContainerAppState(latestRevision, fqdn, image);
     }
 
     /// <summary>

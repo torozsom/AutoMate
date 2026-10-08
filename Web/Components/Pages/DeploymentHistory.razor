@@ -1,7 +1,10 @@
 @page "/project/{ProjectId:guid}/deployment/{DeploymentId:guid}"
 @attribute [Authorize]
 @using Application.Abstractions.Diagnostics
+@using Application.Data.Apps
 @using Application.Data.Users
+@using Domain.Entities
+@using Domain.Enums
 @using Microsoft.AspNetCore.Authorization
 @implements IDisposable
 @inject AuthenticationStateProvider Authentication
@@ -9,13 +12,13 @@
 @inject IServiceScopeFactory ServiceScopes
 @inject ILogger<DeploymentHistory> Logger
 
-<PageTitle>Deployment history</PageTitle>
+<PageTitle>Deployment Details</PageTitle>
 <main class="history-page">
     <header class="history-header">
         <a href="@($"/project/{ProjectId}")">← Back to project</a>
         <div class="telemetry-toolbar">
             <div><p class="telemetry-eyebrow">DEPLOYMENT</p>
-                <h1>Deployment history</h1></div>
+                <h1>Deployment Details</h1></div>
             <span class="history-id">@DeploymentId.ToString("N")[..8]</span></div>
         <details class="history-identity">
             <summary>Deployment details</summary>
@@ -27,100 +30,15 @@
     }
     @if (_authorized)
     {
-        <section class="telemetry-panel" aria-labelledby="history-metrics-title" aria-busy="@_metricBusy">
-            <div class="telemetry-toolbar">
-                <div><h2 id="history-metrics-title">Resource overview</h2>
-                    <p class="telemetry-muted">Summaries of returned interval aggregates</p></div>
-                <div class="telemetry-controls">
-                    <label class="telemetry-control">Period<select class="form-select" @bind="_metricDays"
-                                                                   @bind:after="LoadMetricsAsync">
-                            <option value="1">24 hours</option>
-                            <option value="7">7 days</option>
-                            <option value="30">30 days</option>
-                        </select></label>
-                    <label class="telemetry-control">Container<select class="form-select" @bind="_metricContainer"
-                                                                      disabled="@(_metrics.Count == 0)">
-                            @foreach (var name in _metrics.Select(p => p.Container).Distinct().Order())
-                            {
-                                <option value="@name">@name</option>
-                            }
-                        </select></label>
-                </div>
-            </div>
-            @if (_metricBusy)
+        <section class="telemetry-panel">
+            <h2>Deployment overview</h2>
+            @if (_deployment is not null)
             {
-                <p class="telemetry-muted" role="status">Loading metrics…</p>
+                <DeploymentBadge Status="_deployment.Status"/>
+                <p>@(_deployment.CsProject?.Name) · Started @_deployment.CreatedAt.ToString("u") ·
+                    Outcome @_deployment.Outcome</p>
+                <p>Finished: @(_deployment.FinishedAt?.ToString("u") ?? "Not recorded")</p>
             }
-            <div class="telemetry-kpis">
-                <div class="telemetry-kpi">
-                    <span>Average CPU</span><strong>@Value(TelemetryPresentation.Cpu, false)</strong><small>Observed
-                        intervals</small></div>
-                <div class="telemetry-kpi"><span>Peak CPU</span><strong>@Value(TelemetryPresentation.Cpu, true)</strong><small>Observed
-                        maximum</small></div>
-                <div class="telemetry-kpi">
-                    <span>Average memory</span><strong>@Value(TelemetryPresentation.Memory, false)</strong><small>Observed
-                        intervals</small></div>
-                <div class="telemetry-kpi">
-                    <span>Peak memory</span><strong>@Value(TelemetryPresentation.Memory, true)</strong><small>Observed
-                        maximum</small></div>
-            </div>
-            <div class="telemetry-support">
-                @if (Selected(TelemetryPresentation.MemoryLimit).LastOrDefault() is { } limit)
-                {
-                    <span>Latest observed memory limit: <strong>@TelemetryPresentation.Format(limit.Average, limit.Name)</strong></span>
-                }
-                <span>Missing intervals remain gaps · detailed history retained for 30 days</span>
-            </div>
-            @if (_metricAvailability is not null)
-            {
-                <p class="telemetry-notice" role="status">@_metricAvailability</p>
-            }
-            @if (_metrics.Count == 0)
-            {
-                <p class="telemetry-muted">No saved metric observations in this period. Runtime collection is
-                    optional.</p>
-            }
-            <details class="telemetry-explore">
-                <summary>Explore metrics <span>CPU, memory and numeric observations</span></summary>
-                <div class="telemetry-chart-grid">
-                    <TelemetryChart Title="CPU usage" Metric="@TelemetryPresentation.Cpu"
-                                    Points="@ChartPoints(TelemetryPresentation.Cpu)"
-                                    Start="@_end.AddDays(-_loadedMetricDays)" End="_end" Gap="@ChartGap"/>
-                    <TelemetryChart Title="Memory usage" Metric="@TelemetryPresentation.Memory"
-                                    Points="@ChartPoints(TelemetryPresentation.Memory)"
-                                    Start="@_end.AddDays(-_loadedMetricDays)" End="_end" Gap="@ChartGap"/>
-                </div>
-                <details class="telemetry-table-details">
-                    <summary>Numeric observations</summary>
-                    <div class="table-responsive">
-                        <table class="table telemetry-table">
-                            <caption>Returned interval aggregates for @_metricContainer. Sample counts are not supplied
-                                by this history query.
-                            </caption>
-                            <thead>
-                            <tr>
-                                <th>UTC</th>
-                                <th>Metric</th>
-                                <th>Average</th>
-                                <th>Minimum</th>
-                                <th>Maximum</th>
-                            </tr>
-                            </thead>
-                            <tbody>@foreach (var point in _metrics.Where(p => p.Container == _metricContainer).OrderBy(p => p.Timestamp).ThenBy(p => p.Name))
-                            {
-                                <tr>
-                                    <td>@point.Timestamp.ToString("u")</td>
-                                    <td><span title="@point.Name">@TelemetryPresentation.Label(point.Name)</span></td>
-                                    <td>@TelemetryPresentation.Format(point.Average, point.Name)</td>
-                                    <td>@TelemetryPresentation.Format(point.Minimum, point.Name)</td>
-                                    <td>@TelemetryPresentation.Format(point.Maximum, point.Name)</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                </details>
-            </details>
         </section>
         <section class="telemetry-panel" aria-labelledby="history-logs-title">
             <div class="telemetry-toolbar">
@@ -158,8 +76,115 @@
                 </div>
             </div>
         </section>
+        <section class="telemetry-panel" aria-labelledby="history-metrics-title" aria-busy="@_metricBusy">
+            <div class="telemetry-toolbar">
+                <div><h2 id="history-metrics-title">Resource overview</h2>
+                    <p class="telemetry-muted">Summaries of returned interval aggregates</p></div>
+                <div class="telemetry-controls">
+                    <label class="telemetry-control">Period<select class="form-select" @bind="_metricDays"
+                                                                   @bind:after="LoadMetricsAsync">
+                            <option value="1">24 hours</option>
+                            <option value="7">7 days</option>
+                            <option value="30">30 days</option>
+                            <option value="0">Deployment lifetime</option>
+                        </select></label>
+                    <label class="telemetry-control">Container<select class="form-select" @bind="_metricContainer"
+                                                                      disabled="@(_metrics.Count == 0)">
+                            @foreach (var name in _metrics.Select(p => p.Container).Distinct().Order())
+                            {
+                                <option value="@name">@name</option>
+                            }
+                        </select></label>
+                </div>
+            </div>
+            @if (_metricBusy)
+            {
+                <p class="telemetry-muted" role="status">Loading metrics…</p>
+            }
+            <div class="telemetry-kpis">
+                <div class="telemetry-kpi">
+                    <span>Average CPU</span><strong>@Value(TelemetryPresentation.Cpu, false)</strong><small>Observed
+                        intervals</small></div>
+                <div class="telemetry-kpi"><span>Peak CPU</span><strong>@Value(TelemetryPresentation.Cpu, true)</strong><small>Observed
+                        maximum</small></div>
+                <div class="telemetry-kpi">
+                    <span>Average memory</span><strong>@Value(TelemetryPresentation.Memory, false)</strong><small>Observed
+                        intervals</small></div>
+                <div class="telemetry-kpi">
+                    <span>Peak memory</span><strong>@Value(TelemetryPresentation.Memory, true)</strong><small>Observed
+                        maximum</small></div>
+            </div>
+            <div class="telemetry-support">
+                @if (Selected(TelemetryPresentation.MemoryLimit).LastOrDefault() is { } limit)
+                {
+                    <span>Latest observed memory limit: <strong>@TelemetryPresentation.Format(limit.Average, limit.Name)</strong></span>
+                }
+                <span>Missing intervals remain gaps · saved history retained until deletion</span>
+            </div>
+            @if (_metricAvailability is not null)
+            {
+                <p class="telemetry-notice" role="status">@_metricAvailability</p>
+            }
+            @if (_metrics.Count == 0)
+            {
+                <p class="telemetry-muted">No saved metric observations in this period. Runtime collection is
+                    optional.</p>
+            }
+            <details class="telemetry-explore">
+                <summary>Explore metrics <span>CPU, memory and numeric observations</span></summary>
+                <div class="telemetry-chart-grid">
+                    <TelemetryChart Title="CPU usage" Metric="@TelemetryPresentation.Cpu"
+                                    Points="@ChartPoints(TelemetryPresentation.Cpu)"
+                                    Start="_metricStart" End="_end" Gap="@ChartGap"/>
+                    <TelemetryChart Title="Memory usage" Metric="@TelemetryPresentation.Memory"
+                                    Points="@ChartPoints(TelemetryPresentation.Memory)"
+                                    Start="_metricStart" End="_end" Gap="@ChartGap"/>
+                </div>
+                <details class="telemetry-table-details">
+                    <summary>Numeric observations</summary>
+                    <div class="table-responsive">
+                        <table class="table telemetry-table">
+                            <caption>Returned interval aggregates for @_metricContainer. Sample counts are not supplied
+                                by this history query.
+                            </caption>
+                            <thead>
+                            <tr>
+                                <th>UTC</th>
+                                <th>Metric</th>
+                                <th>Average</th>
+                                <th>Minimum</th>
+                                <th>Maximum</th>
+                            </tr>
+                            </thead>
+                            <tbody>@foreach (var point in _metrics.Where(p => p.Container == _metricContainer).OrderBy(p => p.Timestamp).ThenBy(p => p.Name))
+                            {
+                                <tr>
+                                    <td>@point.Timestamp.ToString("u")</td>
+                                    <td><span title="@point.Name">@TelemetryPresentation.Label(point.Name)</span></td>
+                                    <td>@TelemetryPresentation.Format(point.Average, point.Name)</td>
+                                    <td>@TelemetryPresentation.Format(point.Minimum, point.Name)</td>
+                                    <td>@TelemetryPresentation.Format(point.Maximum, point.Name)</td>
+                                </tr>
+                            }
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            </details>
+        </section>
         <section class="telemetry-panel"><h2>Collection settings</h2>
             <TelemetryPreferences ProjectId="ProjectId"/>
+        </section>
+        <section class="telemetry-panel">
+            <h2>AI Analysis</h2>
+            <DeploymentAnalysisSection @key="DeploymentId" OwnerId="_owner" ProjectId="ProjectId"
+                                       DeploymentId="DeploymentId"
+                                       CsProjectId="@(_deployment?.CsProjectId ?? Guid.Empty)"
+                                       Consented="_aiConsented"/>
+        </section>
+        <section class="telemetry-panel">
+            <h2>Recorded configuration and provider details</h2>
+            <DeploymentConfigurationDetails Deployment="_deployment"/>
         </section>
     }
 </main>
@@ -205,10 +230,22 @@
     private string? _error;
 
     /// <summary>Fixed chart time range.</summary>
-    private readonly DateTimeOffset _end = DateTimeOffset.UtcNow;
+    private DateTimeOffset _end = DateTimeOffset.UtcNow;
+
+    /// <summary>Recorded deployment beginning, independent of the current date.</summary>
+    private DateTimeOffset _start = DateTimeOffset.UtcNow.AddDays(-30);
+
+    /// <summary>Owner-authorized metadata for this exact history route.</summary>
+    private Deployment? _deployment;
+
+    /// <summary>Current exact-project egress consent; historical settings do not grant consent.</summary>
+    private bool _aiConsented;
+
+    /// <summary>Displayed metric range beginning.</summary>
+    private DateTimeOffset _metricStart = DateTimeOffset.UtcNow.AddDays(-30);
 
     /// <summary>Includes retained older deployments by default, with bounded zoom choices.</summary>
-    private int _metricDays = 30;
+    private int _metricDays;
 
     /// <summary>Range belonging to the displayed response while a newer range is loading.</summary>
     private int _loadedMetricDays = 30;
@@ -229,7 +266,7 @@
     private CancellationTokenSource? _logLoad;
 
     /// <summary>Gap threshold consistent with the bounded history query interval.</summary>
-    private TimeSpan ChartGap => TimeSpan.FromSeconds(Math.Max(60, _loadedMetricDays * 86400 / 120d) + 5);
+    private TimeSpan ChartGap => TimeSpan.FromSeconds(Math.Max(60, (_end - _metricStart).TotalSeconds / 120d) + 5);
 
     /// <summary>Orders the selected container's observations for a metric.</summary>
     private IEnumerable<DeploymentMetricPoint> Selected(string name)
@@ -257,14 +294,36 @@
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedRoute == (ProjectId, DeploymentId)) return;
-        _loadedRoute = (ProjectId, DeploymentId);
+        var selection = (ProjectId, DeploymentId);
+        _loadedRoute = selection;
         _history = null;
         _logLoad?.Cancel();
         _metricLoad?.Cancel();
         _metrics = [];
         _channel = "";
         _authorized = false;
-        _owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication, Users);
+        var owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication, Users);
+        if (selection != (ProjectId, DeploymentId) || _lifetime.IsCancellationRequested) return;
+        _owner = owner;
+        _deployment = null;
+        _aiConsented = false;
+        await using (var scope = ServiceScopes.CreateAsyncScope())
+        {
+            var details = scope.ServiceProvider.GetService<IDeploymentDetailsService>();
+            var deployment = details is null ? null : await details.GetAsync(owner, selection.ProjectId, selection.DeploymentId, _lifetime.Token);
+            if (selection != (ProjectId, DeploymentId) || _lifetime.IsCancellationRequested) return;
+            _deployment = deployment;
+            if (_deployment is not null)
+            {
+                _start = _deployment.CreatedAt;
+                _end = _deployment.Status == DeploymentStatus.Running ? DateTimeOffset.UtcNow : _deployment.UpdatedAt;
+                if (_end <= _start) _end = _start.AddMinutes(1);
+                var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>().GetAppByIdAsync(ProjectId, _owner, _lifetime.Token);
+                if (selection != (ProjectId, DeploymentId) || _lifetime.IsCancellationRequested) return;
+                _aiConsented = app?.CsProjects.FirstOrDefault(p => p.Id == _deployment.CsProjectId)?.Configuration?.AiDiagnosticEgressConsented == true;
+            }
+        }
+
         await LoadAsync(null);
         if (_authorized) await LoadMetricsAsync();
     }
@@ -349,10 +408,12 @@
         {
             await using var scope = ServiceScopes.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>();
-            var result = await service.ReadMetricsAsync(_owner, route.ProjectId, route.DeploymentId, _end.AddDays(-days), _end, 120, request.Token);
+            var rangeStart = days == 0 ? _start : _end.AddDays(-days);
+            var result = await service.ReadMetricsAsync(_owner, route.ProjectId, route.DeploymentId, rangeStart, _end, 120, request.Token);
             if (request.IsCancellationRequested || route != (ProjectId, DeploymentId)) return;
             _metrics = result.Points;
             _loadedMetricDays = days;
+            _metricStart = rangeStart;
             _metricAvailability = result.Availability;
             if (!_metrics.Any(p => p.Container == _metricContainer))
                 _metricContainer = _metrics.Select(p => p.Container).Distinct().Order().FirstOrDefault() ?? "";

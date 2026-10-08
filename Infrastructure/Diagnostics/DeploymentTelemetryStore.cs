@@ -19,7 +19,8 @@ public sealed class DeploymentTelemetryStore(
     ILogger<DeploymentTelemetryStore> logger,
     IDeploymentRuntimeViewers viewers,
     ITelemetryGateway? gateway = null,
-    TelemetryProjectPolicyCache? policies = null) : IDeploymentDiagnosticStore
+    TelemetryProjectPolicyCache? policies = null,
+    IDeploymentArchive? archive = null) : IDeploymentDiagnosticStore
 {
     /// <inheritdoc />
     public async Task<long> PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, string? terminalChannel,
@@ -135,7 +136,7 @@ public sealed class DeploymentTelemetryStore(
         if (!string.IsNullOrEmpty(search)) query = query.Where(r => r.Message.Contains(search));
         var local = await (backwards ? query.OrderByDescending(r => r.OrderId) : query.OrderBy(r => r.OrderId))
             .Take(limit + 1).Select(r => new DeploymentTerminalLog(r.OrderId, r.ProjectId, r.DeploymentId,
-                r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build"), r.Message, null, null,
+                r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build"), r.Message, r.Id, null,
                 r.Severity == "Critical" ? DeploymentDiagnosticSeverity.Critical :
                 r.Severity == "Error" ? DeploymentDiagnosticSeverity.Error :
                 r.Severity == "Warning" ? DeploymentDiagnosticSeverity.Warning :
@@ -148,10 +149,20 @@ public sealed class DeploymentTelemetryStore(
             ? "Managed storage requires owner consent; local history is shown."
             : null;
         var canAdvance = true;
+        var archiveAvailable = false;
         if (specialized)
         {
             try
             {
+                if (archive is not null)
+                {
+                    var archived = await archive.ReadAsync(tenant, projectId, deploymentId, cursor, backwards,
+                        limit + 1, search, cancellationToken);
+                    local.AddRange(
+                        archived.Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
+                    archiveAvailable = true;
+                }
+
                 if (options.Value.DiskGateway)
                 {
                     var pending = await gateway!.ReadPendingAsync(tenant, projectId, deploymentId, cancellationToken);
@@ -184,8 +195,10 @@ public sealed class DeploymentTelemetryStore(
             {
                 logger.LogWarning("Specialized history unavailable for {DeploymentId}: {FailureType}.", deploymentId,
                     ex.GetType().Name);
-                availability = "History storage is temporarily unavailable; only buffered output is shown.";
-                canAdvance = false;
+                availability = archiveAvailable
+                    ? "Saved archive output is available; operational storage is temporarily unavailable."
+                    : "History storage is temporarily unavailable; only buffered output is shown.";
+                canAdvance = archiveAvailable;
             }
 
             if (await db.TelemetryTenantStates.AnyAsync(s => s.TenantId == tenant && s.DroppedEvents > 0,
@@ -201,7 +214,8 @@ public sealed class DeploymentTelemetryStore(
         if (more) page.RemoveAt(page.Count - 1);
         page.Sort((a, b) => a.OrderId.CompareTo(b.OrderId));
         if (page.Count == 0 && availability is null)
-            availability = "No saved output is available; diagnostics expire after 30 days.";
+            availability =
+                "No saved output is available for this deployment. Older data may predate permanent history.";
         return new DeploymentTerminalHistory(page.Select(redactor.RedactTerminal).ToArray(), more, availability,
             canAdvance);
     }

@@ -157,7 +157,8 @@ actual provider approval, PostgreSQL/external environment acceptance and the liv
 
 ## Retention and deletion
 
-Analysis metadata expires under ResultRetentionDays (1–90 days, default 90) after request admission.
+ResultRetentionDays (1–90 days, default 90) bounds execution eligibility after request admission; saved results retain
+until owner deletion.
 `DeploymentAnalysisRetentionService` runs at startup and
 hourly
 in both hosting profiles even with AI disabled. Each pass deletes up to ten batches of 1,000 expired analysis rows;
@@ -511,3 +512,10 @@ attempt bound, deleting results or retrying. Midnight UTC starts the next allowa
 every
 Skipped result as Unavailable rather than Completed. Execution exceptions reach the separate redacted console sink;
 persisted results and exported telemetry do not contain their prose.
+
+## Deployment history update (2026-10-08)
+
+Saved production results retain until owner deletion; ResultRetentionDays now bounds execution eligibility, not saved
+terminal results. Receipt and spending cleanup remain ninety days. Manual assessment supports every deployment status;
+automatic admission remains failure-only. Historical context uses the exact deployment archive.
+The $0.07 attempt reservation, $50 USD daily ceiling and disabled retries remain unchanged.
