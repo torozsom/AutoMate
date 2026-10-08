@@ -841,6 +841,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         return _app?.CsProjects.FirstOrDefault(project => project.Id == GetLatestDeployment()?.CsProjectId);
     }
 
+    /// <summary>Remote projects can save explicit consent before a deployment configuration exists.</summary>
+    private bool CanEditAnalysisConsent()
+    {
+        return GetAnalysisProject() is { } project &&
+               (project.Configuration is not null || _app?.SourceType == SourceType.Remote);
+    }
+
     /// <summary>Refreshes owner-visible persisted state with fixed failure guidance and duplicate-action suppression.</summary>
     private async Task RefreshAnalysisFromUiAsync()
     {
@@ -869,7 +876,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private async Task SetAiConsentAsync(bool consented)
     {
         var project = GetAnalysisProject();
-        if (_analysisDisposed || _analysisBusy || project?.Configuration is null) return;
+        if (_analysisDisposed || _analysisBusy || project is null || !CanEditAnalysisConsent()) return;
         var appId = ProjectId;
         var owner = _currentUserId;
         var projectId = project.Id;
@@ -882,6 +889,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             await using var scope = ScopeFactory.CreateAsyncScope();
             var apps = scope.ServiceProvider.GetRequiredService<IApplicationService>();
             var saved = await apps.SetAiDiagnosticEgressConsentAsync(appId, owner, projectId, consented, token);
+            if (saved && project.Configuration is null)
+            {
+                var refreshed = await apps.GetAppByIdAsync(appId, owner, token);
+                if (!IsCurrentAnalysisAction(version, owner, deploymentId, token) || ProjectId != appId) return;
+                project.Configuration =
+                    refreshed?.CsProjects.FirstOrDefault(item => item.Id == projectId)?.Configuration;
+            }
+
             if (!IsCurrentAnalysisAction(version, owner, deploymentId, token) || ProjectId != appId) return;
             if (saved && GetAnalysisProject() is { Configuration: { } configuration } current &&
                 current.Id == projectId)

@@ -61,7 +61,8 @@ public sealed class DeploymentAnalysisWorker(
             }
             catch (Exception exception)
             {
-                logger.LogError("Deployment analysis worker recovered: {FailureType}.", exception.GetType().Name);
+                logger.LogError(exception, "Deployment analysis worker recovered: {FailureType}.",
+                    exception.GetType().Name);
                 await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
             }
     }
@@ -217,6 +218,24 @@ public sealed class DeploymentAnalysisWorker(
                 return AnalysisOutcome.Discarded;
             if (!await egress.AuthorizeAsync(analysis.DeploymentId, analysis.Trigger, cancellationToken))
                 throw new AnalysisProviderUnavailableException();
+            var spendSettings = services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>().CurrentValue;
+            var denied = await services.GetRequiredService<IAnalysisBudgetGuard>()
+                .ReserveAttemptAsync(work, cancellationToken);
+            if (!ReferenceEquals(spendSettings,
+                    services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>().CurrentValue))
+                denied = AnalysisSkipReason.Unavailable;
+            if (denied is { } reason)
+            {
+                OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Denied);
+                throw new AnalysisProviderUnavailableException(reason);
+            }
+
+            now = clock.GetUtcNow();
+            if (!await db.DeploymentAnalysisWorkItems.AsNoTracking().AnyAsync(item =>
+                        item.AnalysisId == analysisId && item.LeaseId == work.LeaseId && item.CompletedAt == null &&
+                        item.LeaseUntil > now && item.Analysis.ExpiresAt > now &&
+                        item.Analysis.Status == AiAnalysisStatus.Running,
+                    cancellationToken)) return AnalysisOutcome.Discarded;
             providerStarted = true;
             OperationalLog.Record(logger, AuditOperation.AnalysisProvider, AuditOutcome.Started);
             var response = await AnalysisTelemetry.RunAsync(AnalysisOperation.Provider, analysis.DeploymentId,
@@ -257,6 +276,7 @@ public sealed class DeploymentAnalysisWorker(
         }
         catch (TransientAnalysisProviderException error) when (providerStarted)
         {
+            logger.LogWarning(error, "AI analysis execution failed: {FailureType}.", error.GetType().Name);
             OperationalLog.Record(logger, AuditOperation.AnalysisProvider, AuditOutcome.Failed);
             var delay = AnalysisRetryPolicy.Delay(
                 services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>().CurrentValue,
@@ -306,8 +326,9 @@ public sealed class DeploymentAnalysisWorker(
             analysis.FailureCode = "invalid_response";
             analysis.CompletedAt = clock.GetUtcNow();
         }
-        catch (Exception)
+        catch (Exception error)
         {
+            logger.LogError(error, "AI analysis execution failed: {FailureType}.", error.GetType().Name);
             if (providerStarted) OperationalLog.Record(logger, AuditOperation.AnalysisProvider, AuditOutcome.Failed);
             analysis.Status = AiAnalysisStatus.Failed;
             analysis.FailureCode = "provider_failure";
@@ -372,7 +393,7 @@ public sealed class DeploymentAnalysisWorker(
             "invalid_response" => AuditOutcome.InvalidResult,
             "unavailable" or "unsupported_data" or "quota_exceeded" => AuditOutcome.Unavailable,
             "provider_failure" or "recovery_exhausted" or "retry_exhausted" => AuditOutcome.Failed,
-            _ => AuditOutcome.Completed
+            _ => analysis.Status == AiAnalysisStatus.Skipped ? AuditOutcome.Unavailable : AuditOutcome.Completed
         });
         return analysis.Status switch
         {

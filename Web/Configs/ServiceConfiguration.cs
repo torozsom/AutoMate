@@ -273,7 +273,9 @@ public static class ServiceConfiguration
             builder.Services.AddLogging();
 
             // Add Health Checks
-            builder.Services.AddHealthChecks();
+            builder.Services.AddHealthChecks()
+                .AddCheck<AnalysisReadinessHealthCheck>("ai_analysis", tags: [AnalysisHealthChecks.ReadinessTag],
+                    timeout: TimeSpan.FromSeconds(5));
 
             // Bind Strongly-Typed Configurations
             var deploymentCapabilities = builder.AddConfigurations();
@@ -341,6 +343,8 @@ public static class ServiceConfiguration
                 .ValidateOnStart();
             builder.Services.AddOptions<AiAnalysisOptions>()
                 .Bind(builder.Configuration.GetSection(AiAnalysisOptions.SectionName))
+                .Validate(AnalysisBudgetPolicy.IsValid,
+                    "AI tenant, rate, shared concurrency and exact monetary budget limits must be within supported bounds.")
                 .Validate<AnalysisProviderCatalog>(
                     (settings, catalog) => !settings.ProviderEgressEnabled || catalog.IsConfigured(settings),
                     "AI egress requires explicit provider, tenant, category and matching regional processing approvals with bounded context and retention.")
@@ -483,10 +487,18 @@ public static class ServiceConfiguration
             services.AddHttpClient<IGitHubAppCredentials, GitHubAppCredentials>()
                 .AddStandardResilienceHandler();
             services.AddSingleton(new AnalysisProviderRegistration("openai", typeof(OpenAiAnalysisProvider),
-                settings => settings.Endpoint == $"https://{settings.ProcessingRegion}.api.openai.com/v1/"));
+                settings => settings.Endpoint == $"https://{settings.ProcessingRegion}.api.openai.com/v1/",
+                () => !string.IsNullOrWhiteSpace(config["AiAnalysis:ApiKey"])));
+            services.AddSingleton(new AnalysisProviderRegistration(AzureOpenAiAnalysisProvider.ProviderName,
+                typeof(AzureOpenAiAnalysisProvider),
+                settings => AzureOpenAiAnalysisProvider.ReadOptions(config).ApprovesRoute(settings),
+                () => AzureOpenAiAnalysisProvider.ReadOptions(config).HasApiKey()));
             services.AddSingleton<AnalysisProviderCatalog>();
             services.AddScoped<ILlmAnalysisProvider, ConfiguredAnalysisProvider>();
             services.AddHttpClient<OpenAiAnalysisProvider>()
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+            services.AddHttpClient<AzureOpenAiAnalysisProvider>()
+                .RemoveAllLoggers()
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
             services.AddSingleton<IValidateOptions<TelemetryStorageOptions>, TelemetryStorageOptionsValidator>();
             services.AddOptions<TelemetryStorageOptions>()
@@ -541,6 +553,8 @@ public static class ServiceConfiguration
             services.AddScoped<IDeploymentAnalysisContextBuilder, DeploymentAnalysisContextBuilder>();
             services.AddSingleton<IAnalysisResultValidator, AnalysisResultValidator>();
             services.AddScoped<IDeploymentAnalysisQueue, DeploymentAnalysisQueue>();
+            services.AddScoped<IAnalysisBudgetGuard, AnalysisBudgetGuard>();
+            services.AddScoped<IDeploymentAnalysisReadiness, DeploymentAnalysisReadinessService>();
             services.AddHostedService<DeploymentAnalysisWorker>();
             services.AddHostedService<FailedDeploymentAnalysisDispatcher>();
             services.AddHostedService<DeploymentAnalysisRetentionService>();

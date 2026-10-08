@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
 using Application.Diagnostics;
 using Domain.Enums;
 
@@ -26,7 +27,8 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
     {
         "Count", "FileCount", "Attempt", "AttemptCount", "RedactedValueCount", "WaitMs", "DelaySeconds",
         "HostPort", "ContainerPort", "Port", "JobId", "Code", "StatusCode", "http.response.status_code",
-        "http.status_code", "network.protocol.version", "ElapsedMilliseconds", "DurationMs", "EventCode"
+        "http.status_code", "network.protocol.version", "ElapsedMilliseconds", "DurationMs", "EventCode",
+        "DailyBudgetUnits", "ReservedCostUnits", "AttemptCostUnits"
     };
 
     /// <summary>Known failure classes; unknown exception/type names cannot become exported payloads.</summary>
@@ -89,6 +91,7 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
             };
         }
 
+        if (key == "BudgetReason") return EnumValue<AnalysisSkipReason>(value);
         if (key == "Operation") return EnumValue<AuditOperation>(value);
         if (key == "Outcome") return EnumValue<AuditOutcome>(value);
         if (key == "ComposeOutcome")
@@ -181,6 +184,8 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
             _ => template is not null && PlatformLogCatalog.Templates.Contains(template) ? template : UnknownMessage
         };
         if (exception is not null) fields["FailureType"] = Field("FailureType", exception.GetType().Name);
+        if (exception is HttpRequestException { StatusCode: { } statusCode })
+            fields["StatusCode"] = (int)statusCode;
         if (template == UnknownMessage && category is not null && category != "AutoMate.Platform" &&
             PlatformLogCatalog.Categories.Contains(category))
         {

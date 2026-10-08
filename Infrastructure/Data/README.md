@@ -1,5 +1,12 @@
 # Data
 
+`20261005190054_AddAiTenantBudgets` creates the metadata-only `ai_analysis_budget_entries` table with owner/date/kind,
+rolling-time and unique lease indexes. Only the owner FK cascades, so project/result deletion preserves usage. Retained
+quota-consuming request receipts are backfilled as admissions; historical provider cost is not inferred. Generated SQL
+and EF model consistency are reviewed; applying the migration requires the normal stopped-worker rollout workflow.
+The full migration chain and retained-receipt backfill now execute in disposable PostgreSQL regression schemas. The
+budget join uses the actual `cs_projects.app_id` FK; no application/production migration is applied by verification.
+
 EF Core DbContext, mappings, token protection conversion, and migrations.
 SaaS cloud runs, transactional outbox wakeups, webhook receipts, and installation cooldowns are stored in PostgreSQL.
 Run configuration snapshots use a separate Data Protection purpose because they may contain customer environment

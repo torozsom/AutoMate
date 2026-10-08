@@ -22,6 +22,74 @@ namespace Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Domain.Entities.AiAnalysisBudgetEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateOnly>("AccountingDay")
+                        .HasColumnType("date")
+                        .HasColumnName("accounting_day");
+
+                    b.Property<Guid>("AnalysisId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("analysis_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<bool>("IsProviderAttempt")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_provider_attempt");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_id");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<long>("ReservedCostUnits")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reserved_cost_units");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ai_analysis_budget_entries");
+
+                    b.HasIndex("LeaseId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_ai_analysis_budget_entries_lease_id");
+
+                    b.HasIndex("OccurredAt")
+                        .HasDatabaseName("ix_ai_analysis_budget_entries_occurred_at");
+
+                    b.HasIndex("TenantId", "AccountingDay", "IsProviderAttempt")
+                        .HasDatabaseName("ix_ai_analysis_budget_entries_tenant_id_accounting_day_is_prov");
+
+                    b.HasIndex("TenantId", "IsProviderAttempt", "OccurredAt")
+                        .HasDatabaseName("ix_ai_analysis_budget_entries_tenant_id_is_provider_attempt_oc");
+
+                    b.ToTable("ai_analysis_budget_entries", (string)null);
+                });
+
             modelBuilder.Entity("Domain.Entities.AiAnalysisRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1462,6 +1530,18 @@ namespace Infrastructure.Migrations
                     b.ToTable("users", (string)null);
 
                     b.HasDiscriminator().HasValue("github");
+                });
+
+            modelBuilder.Entity("Domain.Entities.AiAnalysisBudgetEntry", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ai_analysis_budget_entries_users_tenant_id");
+
+                    b.Navigation("Tenant");
                 });
 
             modelBuilder.Entity("Domain.Entities.AiAnalysisRequest", b =>

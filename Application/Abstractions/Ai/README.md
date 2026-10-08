@@ -1,5 +1,15 @@
 # Deployment analysis ports
 
+`IAnalysisBudgetGuard` gates one provider attempt with current ownership, shared provider concurrency and a durable
+conservative maximum-cost reservation. Its finite denial becomes a user-visible Skipped result. The worker calls it
+after fresh egress/context checks and before resolving the provider; retries and recovery use new ownership tokens.
+See [shared budget semantics and limits](../../../Infrastructure/Ai/README.md). It is not a billing reconciliation API.
+
+`IDeploymentAnalysisReadiness` returns only finite configuration state and queue metadata availability. The scoped
+Infrastructure implementation checks current policy, local credential presence and bounded read-only metadata access.
+It never resolves an LLM adapter, claims work, loads diagnostic context or grants tenant/project consent. Cancellation
+reaches database reads. Web maps this port to the five-second `/health/ready` check independently of `/health` liveness.
+
 `ILlmAnalysisProvider` consumes already-redacted in-memory context and returns an untrusted `LlmAnalysisResponse`.
 The response adds optional requested/returned model provenance, explicit model revision, AutoMate prompt/schema
 versions,
@@ -14,9 +24,11 @@ provenance/usage fields. Legacy metadata remains unknown, and retrieval does not
 number.
 Atomic claims, token-fenced renewal and release support bounded interruption recovery. Context is never queued.
 Durable retries, owner cancellation, manual/automatic admission and per-instance processing concurrency are implemented.
-Cross-instance tenant/provider budgets remain M8 work.
+Cross-instance tenant/provider limits and conservative spend reservations are implemented in M8.
 
 See [result policy](../../Ai/README.md) and [adapter/worker behavior](../../../Infrastructure/Ai/README.md).
+The [onboarding guide](../../../docs/ai-analysis.md) maps every port to its implementation and documents upgrades,
+operator controls, independent retention and the pending provider/pilot approvals.
 
 `IDeploymentAnalysisService.DeleteAsync` authorizes owner/deployment/analysis together, deletes terminal or expired
 results
@@ -59,3 +71,6 @@ Ownership/
 consent/global-disable denials remain empty. Stable IDs replay skipped results. Skipped readback uses fixed guidance,
 known reason codes and no saved provenance or partial result fields. ILlmAnalysisProvider remains provider-neutral;
 Infrastructure registry routing does not change Application workflow or UI contracts.
+
+Spending denials distinguish absent/invalid amounts, currency mismatch and genuinely exhausted account reservations.
+IAnalysisBudgetGuard keeps its existing nullable finite-reason signature. No metadata schema migration is needed.

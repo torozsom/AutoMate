@@ -42,6 +42,13 @@ public sealed class DeploymentAnalysisRetentionService(
                     if (count < BatchSize) break;
                 }
 
+                for (var batch = 0; batch < 10; batch++)
+                {
+                    var count = await DeleteBudgetBatchAsync(db, clock.GetUtcNow(), stoppingToken);
+                    removed += count;
+                    if (count < BatchSize) break;
+                }
+
                 if (removed > 0)
                     OperationalLog.Record(logger, AuditOperation.AnalysisRetention, AuditOutcome.Completed);
             }
@@ -68,5 +75,12 @@ public sealed class DeploymentAnalysisRetentionService(
     {
         return db.AiAnalysisRequests.Where(item => item.ExpiresAt <= now)
             .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
+    }
+
+    /// <summary>Bounds cleanup of accounting metadata to ninety days, preserving all current-day/window charges.</summary>
+    internal static Task<int> DeleteBudgetBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
+    {
+        return db.AiAnalysisBudgetEntries.Where(item => item.OccurredAt < now.AddDays(-90))
+            .OrderBy(item => item.OccurredAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
     }
 }

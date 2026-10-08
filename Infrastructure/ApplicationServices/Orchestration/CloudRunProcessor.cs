@@ -131,7 +131,7 @@ public sealed class CloudRunProcessor(
         }
         catch (Exception ex)
         {
-            logger.LogWarning("Cloud launch {RunId} attempt {Attempt} failed ({FailureType}).",
+            logger.LogWarning(ex, "Cloud launch {RunId} attempt {Attempt} failed ({FailureType}).",
                 runId, run.Attempt, ex.GetType().Name);
             dbContext.ChangeTracker.Clear();
             run = await dbContext.CloudDeploymentRuns.SingleAsync(item => item.Id == runId, cancellationToken);

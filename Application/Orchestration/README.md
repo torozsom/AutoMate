@@ -52,5 +52,9 @@ Application/Abstractions.
 
 - [Solution navigation map](../../.agents/navigation.md)
 
-Scheduler and status-subscriber failures log named failure types without exception objects. Subscriber isolation, status
+Scheduler and status-subscriber failures export named failure types without exception objects. Subscriber isolation,
+status
 notifications, queue bounds and cancellation behavior remain unchanged.
+
+Job failure exceptions now reach the host's separate redacted console diagnostics boundary. The ordinary provider/export
+boundary still omits exception objects and prose; queue/status behavior and customer-facing guidance are unchanged.

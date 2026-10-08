@@ -251,11 +251,12 @@ public sealed class CloudDeploymentOrchestrator(
             }
             catch (Exception diagnosticError)
             {
-                logger.LogWarning("Could not publish cloud failure for deployment {DeploymentId}: {FailureType}.",
+                logger.LogWarning(diagnosticError,
+                    "Could not publish cloud failure for deployment {DeploymentId}: {FailureType}.",
                     deployment.Id, diagnosticError.GetType().Name);
             }
 
-            logger.LogError("Cloud deployment preparation failed: {FailureType}.", ex.GetType().Name);
+            logger.LogError(ex, "Cloud deployment preparation failed: {FailureType}.", ex.GetType().Name);
 
             if (saasRun is null)
             {

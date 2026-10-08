@@ -8,7 +8,8 @@ sign-in/sign-out/challenge/forbid outcome. Actual HttpClientFactory tests verify
 HttpMethod.
 Startup, migration and authentication framework categories retain their source names and normal category filters.
 Reviewed modules' unfamiliar events retain numeric event codes and safe exception classes; unknown categories still
-fail closed. Additional templates must be reviewed; raw formatters, SQL and exception bodies remain blocked.
+fail closed. Additional templates must be reviewed; raw formatters, SQL and exception bodies remain blocked for ordinary
+providers and exports. The console-only exception described below applies separately.
 
 Reviewed hosting lifecycle templates become fixed start/listener/environment/root/shutdown summaries without values.
 Compose exit codes, finite command outcomes and queued-job completion stay readable; host paths, addresses, customer
@@ -47,3 +48,24 @@ payload is emitted.
 
 FailedDeploymentAnalysisDispatcher is an approved platform category. Its fixed admission-deferred warning records only
 the exception type; no provider response, diagnostic payload or context is emitted.
+
+## Console exception diagnostics
+
+ConsoleExceptionDiagnostics is installed by AddSafePlatformLogging in every environment in both Web profiles and the
+private Telemetry host. SafeLoggerFactory passes exceptions directly to this console-only sink after ordinary logging;
+it never puts exception snapshots into ILogger state, scopes, exception arguments or OpenTelemetry exports.
+Console stderr records include UTC timestamp, reviewed category, numeric event ID, safe GUID correlation and ambient
+trace/span IDs. The host's enabled logging levels still gate records.
+
+Snapshots include redacted type/message and up to four exception levels, sixteen total exceptions and twenty compiled
+stack symbols per exception. Records are limited to 16 KiB of UTF-8 including the newline. Source file paths, arguments,
+exception Data, headers and body dumps are omitted. Azure, Docker, Octokit and database SDK messages are suppressed
+because they can embed complete provider/SQL payloads; safe inner exceptions remain useful. HttpRequestException status
+is numeric. Central redaction and current protected IConfiguration values mask configured credentials before output.
+Redaction is conservative pattern/known-value masking, not proof that arbitrary prose cannot contain sensitive data.
+Keep console access and container logging-driver retention restricted; do not forward these console records to platform
+OTLP pipelines. This exception is documented in ADR 0001. Ordinary provider/export policy remains metadata-only.
+
+Do not replace the factory or register an unredacted exception provider. Console failures and hostile exception getters
+are isolated. Existing standard log summaries still appear once; exception diagnostics are a separate correlated record.
+Web.Tests/ConsoleExceptionDiagnosticsTests and real SDK export tests cover the separate boundaries.

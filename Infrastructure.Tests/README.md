@@ -1,10 +1,29 @@
 # Infrastructure Tests
 
+Ai/AnalysisBudgetTests uses independent SQLite contexts to verify account quotas across projects, atomic reservations,
+shared tenant/global provider slots, rolling/time boundaries, project/result deletion survival, currency denial,
+retry/recovery charges and transaction failure cleanup. Persistence fixtures verify disabled spending finishes as
+Skipped/budget_exceeded without resolving/calling a provider. Production PostgreSQL lock execution is not inferred
+from SQLite coverage; the metadata migration SQL/model are separately reviewed without applying a live migration.
+
+Ai/AnalysisBudgetPostgresTests executes ordered migrations in generated schemas and verifies real owner/advisory locks,
+quota/spend after deletion, live provider capacity, same-lease/recovered reservations, canceled lock waits and consuming
+receipt backfill. Run `./deploy/verification/Test-AiPostgres.ps1`;
+see [isolated verification](../deploy/verification/README.md).
+Default runs skip these tests without an explicitly isolated AUTOMATE_AI_TEST_DB. Six PostgreSQL checks, including the
+production failure-trigger test, pass locally; they do not certify production encryption, HA or provider access.
+
+Ai/AnalysisReadinessTests exercises real empty SQLite metadata queues with bounded SELECT-only probes, current policy
+and credential reload, invalid options, missing queue/analysis/wakeup tables and cancellation at relational execution.
+A provider whose constructor throws verifies metadata readiness never resolves an adapter or makes a provider call.
+
 OpenAiAnalysisProviderTests additionally checks configured output-token limits in the actual synthetic HTTP request and
 zero transport calls for invalid runtime timeout/output settings, including custom monitors bypassing startup.
 
 Ai/AnalysisConsentTests verifies exact-project consent persistence/revocation through fresh SQLite contexts, sibling
-isolation, owner authorization, application/project membership and missing configuration. It uses no provider traffic.
+isolation, owner authorization, application/project membership and missing configuration. Remote projects can create
+their missing configuration during explicit consent editing; local missing configuration remains denied. It uses no
+provider traffic.
 
 AnalysisPersistenceTests additionally verifies actual worker telemetry outcomes for success/failure/invalid/skip/retry/
 cancellation, provider-reported usage and balanced active slots using scoped activity/meter listeners.
@@ -43,6 +62,9 @@ and cleans up only its disposable container IDs. Supervision tests use SQLite fo
 `Ai/AnalysisResultTests`, `OpenAiAnalysisProviderTests` and `AnalysisPersistenceTests` verify bounded result validation,
 central redaction, safe HTTP/error handling, real SQLite metadata persistence, legacy safety and authorized retrieval.
 All credentials/envelopes are synthetic and no LLM request is made.
+
+OpenAiAnalysisProviderTests additionally uses real options/configuration reload to disable the feature or provider
+egress during synthetic headers/body waits. Active HTTP I/O cancels as Unavailable and subsequent calls never send.
 
 `AnalysisPersistenceTests` also covers bounded retention cleanup, every expired state, owner deletion, active conflicts,
 queue cascades, immediate expiry exclusion, cancellation and in-flight completion after expiry/deletion.
@@ -124,3 +146,15 @@ a second synthetic registered provider, reloaded policy during resolution, dupli
 provenance. Admission tests verify concurrent stable-key skipped results with no work/quota charge, deletion replay,
 owner scoping and hostile saved fields. Persistence tests prove empty context skips before provider invocation. Existing
 OpenAI transport and middleware checks remain credential-free; no live provider is called.
+
+## Azure OpenAI adapter acceptance
+
+`ResponsesAnalysisProviderContractTests` runs the same transport/redaction/context/evidence/provenance/error and
+headers/body shutdown cases through both `OpenAiAnalysisProviderTests` and `AzureOpenAiAnalysisProviderTests`.
+Azure-specific fixtures cover exact resource URLs, API-key isolation/invalid configuration, numeric 429 retry hints and
+real nested credential/resource reload. All use synthetic HTTP and contain no usable provider credentials.
+
+Budget regression coverage now includes distinct missing/invalid/currency denials, sequential local/cloud reservations,
+UTC reset and a real relational-query configuration reload without a charge. Worker persistence tests assert denied work
+never calls the provider and no Skipped analysis emits a Completed audit. Shared safe logging is used by the worker
+fixture.

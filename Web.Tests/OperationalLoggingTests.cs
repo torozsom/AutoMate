@@ -132,7 +132,7 @@ public sealed class OperationalLoggingTests
         ((PortProxy)live).Call = (_, _) => Task.CompletedTask;
         await using var services = new ServiceCollection().AddSingleton(store).AddSingleton(live)
             .AddSingleton(Options.Create(new TelemetryStorageOptions
-            { Backend = "LokiMimir", DeliveryMode = "DiskGateway" }))
+                { Backend = "LokiMimir", DeliveryMode = "DiskGateway" }))
             .AddLogging(logging => logging.AddOpenTelemetry(options =>
             {
                 options.IncludeScopes = true;
@@ -176,8 +176,10 @@ public sealed class OperationalLoggingTests
     public async Task Diagnostic_success_export_omits_payload_in_every_delivery_mode(string deliveryMode)
     {
         using var exporter = new SnapshotExporter();
-        var persisted = new TaskCompletionSource<DeploymentDiagnosticEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var delivered = new TaskCompletionSource<DeploymentTerminalLog>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var persisted =
+            new TaskCompletionSource<DeploymentDiagnosticEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var delivered =
+            new TaskCompletionSource<DeploymentTerminalLog>(TaskCreationOptions.RunContinuationsAsynchronously);
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
         ((PortProxy)store).Call = (_, args) =>
         {
@@ -207,11 +209,13 @@ public sealed class OperationalLoggingTests
             Options.Create(new DeploymentDiagnosticOptions()), factory.CreateLogger<DeploymentDiagnosticPublisher>(),
             services.GetRequiredService<IServiceScopeFactory>());
         using var worker = new DeploymentDiagnosticDispatcher(publisher, live,
-            services.GetRequiredService<IServiceScopeFactory>(), factory.CreateLogger<DeploymentDiagnosticDispatcher>());
+            services.GetRequiredService<IServiceScopeFactory>(),
+            factory.CreateLogger<DeploymentDiagnosticDispatcher>());
         var observation = new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(),
             DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Log,
             DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
-            "private-terminal-body password=private-value", new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
+            "private-terminal-body password=private-value",
+            new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
         await worker.StartAsync(CancellationToken.None);
         try
         {
@@ -250,7 +254,7 @@ public sealed class OperationalLoggingTests
             return Task.FromResult<(LocalUser?, string?)>(accepted
                 ? (
                     new LocalUser
-                    { Id = Guid.NewGuid(), Username = "private-user", Email = "private-email@example.invalid" },
+                        { Id = Guid.NewGuid(), Username = "private-user", Email = "private-email@example.invalid" },
                     null)
                 : (null, "private-auth-error"));
         };
@@ -275,8 +279,8 @@ public sealed class OperationalLoggingTests
             Results.Text(antiforgery.GetAndStoreTokens(context).RequestToken!));
         await app.StartAsync();
         using var client = new HttpClient(new HttpClientHandler
-        { AllowAutoRedirect = false, CookieContainer = new CookieContainer() })
-        { BaseAddress = new Uri(app.Urls.Single()) };
+                { AllowAutoRedirect = false, CookieContainer = new CookieContainer() })
+            { BaseAddress = new Uri(app.Urls.Single()) };
         var token = await client.GetStringAsync("/fixture-token");
         using var response = await client.PostAsync("/api/auth/login", new FormUrlEncodedContent(
             new Dictionary<string, string>

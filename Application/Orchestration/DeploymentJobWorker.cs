@@ -30,6 +30,7 @@ public sealed class DeploymentJobWorker(
 
     private readonly int _pendingLimit = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
 
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var pending = new List<QueuedDeploymentJob>();
@@ -69,7 +70,7 @@ public sealed class DeploymentJobWorker(
         }
         catch (Exception ex)
         {
-            logger.LogCritical("Deployment job scheduler stopped unexpectedly: {FailureType}.", ex.GetType().Name);
+            logger.LogCritical(ex, "Deployment job scheduler stopped unexpectedly: {FailureType}.", ex.GetType().Name);
         }
         finally
         {
@@ -175,6 +176,7 @@ public sealed class DeploymentJobWorker(
                 new KeyValuePair<string, object?>("lane", lane));
     }
 
+    /// <summary>Isolates job failures and passes exceptions to the host's redacted console diagnostics boundary.</summary>
     private async Task<bool> ProcessJobSafelyAsync(DeploymentJob job, CancellationToken cancellationToken)
     {
         try
@@ -190,13 +192,14 @@ public sealed class DeploymentJobWorker(
         }
         catch (Exception ex)
         {
-            logger.LogError("Deployment job {JobType} failed for project {ProjectId}: {FailureType}.",
+            logger.LogError(ex, "Deployment job {JobType} failed for project {ProjectId}: {FailureType}.",
                 job.GetType().Name, job.ProjectId, ex.GetType().Name);
             if (job is not StopLocalDeploymentJob) NotifyFailureStatus(job.ProjectId);
             return false;
         }
     }
 
+    /// <summary>Publishes safe status changes while isolating and diagnosing subscriber failures.</summary>
     private void NotifyFailureStatus(Guid projectId)
     {
         try
@@ -205,7 +208,7 @@ public sealed class DeploymentJobWorker(
         }
         catch (Exception ex)
         {
-            logger.LogWarning("Failed to publish deployment failure for project {ProjectId}: {FailureType}.",
+            logger.LogWarning(ex, "Failed to publish deployment failure for project {ProjectId}: {FailureType}.",
                 projectId, ex.GetType().Name);
         }
     }

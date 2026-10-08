@@ -145,6 +145,11 @@ public sealed class DeploymentAnalysisService(
         await using var transaction = dbContext.Database.IsNpgsql()
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, token)
             : await dbContext.Database.BeginTransactionAsync(token);
+        // Owner guard precedes the project guard so cross-project quotas cannot race across instances.
+        if (await dbContext.Users.Where(item => item.Id == ownerId)
+                .ExecuteUpdateAsync(update => update.SetProperty(item => item.Username, item => item.Username),
+                    token) == 0)
+            return new DeploymentAnalysisRequestResult(false, "Deployment not found.");
         // The no-op UPDATE obtains a database row lock without changing project configuration or audit timestamps.
         // All admissions for this project observe committed receipts after acquiring the same guard (Read Committed).
         if (await dbContext.CsProjects.Where(item => item.Id == scope.CsProjectId && item.Application.UserId == ownerId)
@@ -215,6 +220,8 @@ public sealed class DeploymentAnalysisService(
                 item.AdmissionDay == day && item.ConsumesQuota, token) >=
             Math.Clamp(settings.DailyProjectLimit, 0, 1_000))
             skip = AnalysisSkipReason.ProjectQuotaExceeded;
+        if (skip is null && existing is null)
+            skip = await AnalysisBudgetGuard.AdmissionReasonAsync(dbContext, ownerId, settings, now, token);
         if (failure is not null && await dbContext.FailedDeploymentAnalysisEvents
                 .Where(item => item.DeploymentId == deploymentId && item.CompletedAt == null)
                 .ExecuteUpdateAsync(update => update.SetProperty(item => item.CompletedAt, now), token) == 0)
@@ -247,6 +254,18 @@ public sealed class DeploymentAnalysisService(
             ExpiresAt = now.AddDays(90)
         };
         dbContext.AiAnalysisRequests.Add(newReceipt);
+        var usage = work is null
+            ? null
+            : new AiAnalysisBudgetEntry
+            {
+                Id = analysis.Id,
+                TenantId = ownerId,
+                AnalysisId = analysis.Id,
+                AccountingDay = day,
+                OccurredAt = now,
+                Currency = settings.BudgetCurrency
+            };
+        if (usage is not null) dbContext.AiAnalysisBudgetEntries.Add(usage);
         try
         {
             await dbContext.SaveChangesAsync(token);
@@ -256,9 +275,16 @@ public sealed class DeploymentAnalysisService(
         {
             // Remove only this admission's entities so a reused scoped context cannot later save a failed request.
             dbContext.Entry(newReceipt).State = EntityState.Detached;
+            if (usage is not null) dbContext.Entry(usage).State = EntityState.Detached;
             if (work is not null) dbContext.Entry(work).State = EntityState.Detached;
             if (admitted) dbContext.Entry(analysis).State = EntityState.Detached;
             throw;
+        }
+
+        if (skip is not null)
+        {
+            using var correlation = OperationalLog.BeginCorrelation(logger, deploymentId, analysis.Id);
+            OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Denied);
         }
 
         return new DeploymentAnalysisRequestResult(skip is null, skip is null
@@ -275,7 +301,8 @@ public sealed class DeploymentAnalysisService(
         if (item.Status == AiAnalysisStatus.Skipped)
             return new DeploymentAnalysisView(item.Id, item.DeploymentId, item.Status, item.Trigger,
                 AnalysisSkipPolicy.Message(item.FailureCode), [], [],
-                item.FailureCode is "unavailable" or "quota_exceeded" or "unsupported_data"
+                item.FailureCode is "unavailable" or "quota_exceeded" or "unsupported_data" or "tenant_quota_exceeded"
+                    or "rate_limited" or "concurrency_exceeded" or "budget_exceeded"
                     ? item.FailureCode
                     : "unavailable",
                 item.CreatedAt, item.CompletedAt);

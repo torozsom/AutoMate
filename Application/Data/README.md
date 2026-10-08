@@ -16,5 +16,6 @@ Application/Abstractions.
 - [Solution navigation map](../../.agents/navigation.md)
 
 Apps/IApplicationService exposes owner-authorized AI diagnostic egress consent. The exact-project overload requires
-application ID, owner ID and C# project ID; Web uses it for the current deployment. The legacy application-level
+application ID, owner ID and C# project ID; Web uses it for the current deployment. Missing remote configuration is
+created only during an explicit owner consent edit; no provider request is triggered. The legacy application-level
 overload retains its first-configured-project behavior for existing callers. Consent does not enqueue analysis.

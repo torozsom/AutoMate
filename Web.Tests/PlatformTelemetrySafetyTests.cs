@@ -9,6 +9,7 @@ using Infrastructure.Observability;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenTelemetry;
@@ -114,7 +115,12 @@ public sealed class PlatformTelemetrySafetyTests
                 options.AddProcessor(new SimpleLogRecordExportProcessor(exporter));
             });
         });
-        using var factory = new SafeLoggerFactory(inner, policy);
+        using var console = new StringWriter();
+        var credentials = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+                { ["AiAnalysis:AzureOpenAi:ApiKey"] = "private-exception" }).Build();
+        using var factory = new SafeLoggerFactory(inner, policy,
+            new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), credentials, console));
         var logger = factory.CreateLogger("private-category-token");
         var project = Guid.NewGuid();
         var scope = new Dictionary<string, object?>
@@ -131,6 +137,8 @@ public sealed class PlatformTelemetrySafetyTests
                 (_, _) => throw new InvalidOperationException("Caller formatter must not be invoked."));
         }
 
+        Assert.Contains("exception diagnostics", console.ToString());
+        Assert.DoesNotContain("private", console.ToString());
         Assert.Equal(4, capture.Records.Count);
         Assert.Equal(4, exporter.Records.Count);
         Assert.All(capture.Records, record => Assert.DoesNotContain("private", JsonSerializer.Serialize(record)));

@@ -70,7 +70,7 @@ public interface IApplicationService
     Task<bool> SetAiDiagnosticEgressConsentAsync(Guid projectId, Guid userId, bool consented,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Updates only the specified C# project's consent after verifying application membership and ownership.</summary>
+    /// <summary>Updates exact owned project consent, creating missing remote configuration with default settings.</summary>
     Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, Guid csProjectId, bool consented,
         CancellationToken cancellationToken = default);
 }

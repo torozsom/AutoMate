@@ -1,5 +1,10 @@
 # Entities
 
+`AiAnalysisBudgetEntry` stores owner-account admission/attempt accounting independently of project/deployment/result
+lifetime. It holds analysis/lease IDs, kind, accounting day/time and conservative integer monetary reservation/currency.
+Only account deletion cascades. It contains no diagnostic payload or provider response. Ninety-day bounded retention
+is implemented in Infrastructure; these reservations do not assert provider billing or actual model cost.
+
 Persisted business entities with no EF Core or transport dependencies.
 
 ## Source inventory

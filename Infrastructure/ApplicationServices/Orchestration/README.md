@@ -44,3 +44,7 @@ project-only UI events. It covers DeploymentStatusUpdater, SaaS cloud monitoring
 Local failure outcome publication/persistence uses an independent token so caller cancellation after deployment creation
 cannot suppress Failed persistence. Failures before any deployment is persisted do not invent an ID or fail an unrelated
 latest deployment. The first cloud preparation diagnostic runs inside the existing failure handler.
+
+Deployment failure handlers now pass exceptions to ILogger so the host can produce a bounded redacted console snapshot.
+The shared ordinary-provider/export boundary remains metadata-only. Customer-visible cloud/local failure guidance,
+statuses, cancellation and retry behavior are unchanged.

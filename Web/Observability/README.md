@@ -1,5 +1,10 @@
 # Platform telemetry safety
 
+See [AI analysis and security monitoring](../../docs/ai-analysis-operations.md) for platform collector/backend
+requirements, safe dashboard dimensions, initial alerts and incident response. The existing deployment Grafana setup
+does not automatically receive platform OTLP logs, metrics or traces. Internal GUIDs remain restricted correlation
+metadata and are excluded from notification bodies and metric dimensions.
+
 Web/Configs/OpenTelemetryOptionsValidator startup-validates optional collector URLs and bounded resource labels without
 echoing configured values. Malformed/non-HTTP (S) endpoints or embedded credentials/query/fragment are rejected before
 exporters are configured, rather than silently disabling export. Approved existing URLs and default-off console export
@@ -99,3 +104,13 @@ bounded resource labels. Hosting-profile tests verify identical four-field resou
 The [SDK metric view/exemplar guide](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/docs/metrics/customizing-the-sdk/README.md)
 and [.NET runtime metric definitions](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/built-in-metrics-runtime)
 describe the underlying export and finite runtime dimension contracts.
+
+## Redacted console exception snapshots
+
+The shared ConsoleExceptionDiagnostics sink is enabled in all environments. Deployment/job and AI execution failures
+pass their exception to SafeLoggerFactory; ordinary providers and SDK exports still receive only approved metadata.
+The additional stderr record contains bounded redacted messages, inner exceptions, HTTP status and compiled stack
+symbols with safe correlation, never source paths, exception Data or provider bodies. Configuration credentials are
+masked before output. Limits and exclusions are documented in Infrastructure/Observability/README.md.
+Operator/container console capture must follow restricted access and retention; these records are not approved OTLP
+payloads. Customer-facing failure guidance and AI summaries remain authored/redacted independently.

@@ -19,7 +19,7 @@
             </button>
             @if (!CanEditConsent)
             {
-                <p class="mt-2">Consent can be changed when the current deployment has a configured project.</p>
+                <p class="mt-2">Consent can be changed when the current deployment has an eligible project.</p>
             }
         </div>
         <p role="status" aria-live="polite" aria-atomic="true"><strong>@StatusLabel</strong> @Explanation</p>
@@ -133,7 +133,7 @@
     [Parameter]
     public bool Consented { get; set; }
 
-    /// <summary>Whether the current deployment has an exact configured project whose consent can be edited.</summary>
+    /// <summary>Whether the current deployment has an exact eligible project whose consent can be edited.</summary>
     [Parameter]
     public bool CanEditConsent { get; set; }
 

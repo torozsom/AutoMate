@@ -115,11 +115,11 @@ public sealed class LocalDeploymentOrchestrator(
                 }
                 catch (Exception diagnosticError)
                 {
-                    logger.LogWarning("Local resource conflict diagnostic unavailable: {FailureType}.",
+                    logger.LogWarning(diagnosticError, "Local resource conflict diagnostic unavailable: {FailureType}.",
                         diagnosticError.GetType().Name);
                 }
 
-            logger.LogError("Local deployment failed: {FailureType}.", ex.GetType().Name);
+            logger.LogError(ex, "Local deployment failed: {FailureType}.", ex.GetType().Name);
             await PublishPhaseAsync(config.ProjectId, deployment.Id, "outcome",
                 "Local deployment failed. Review the preceding build and lifecycle diagnostics.",
                 CancellationToken.None,
@@ -178,7 +178,8 @@ public sealed class LocalDeploymentOrchestrator(
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning("Stop lifecycle collection unavailable: {FailureType}.", exception.GetType().Name);
+                logger.LogWarning(exception, "Stop lifecycle collection unavailable: {FailureType}.",
+                    exception.GetType().Name);
             }
 
         var isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName, projectId,
@@ -326,7 +327,8 @@ public sealed class LocalDeploymentOrchestrator(
         }
         catch (Exception exception) when (!token.IsCancellationRequested)
         {
-            logger.LogWarning("Local phase diagnostic unavailable: {FailureType}.", exception.GetType().Name);
+            logger.LogWarning(exception, "Local phase diagnostic unavailable: {FailureType}.",
+                exception.GetType().Name);
         }
     }
 }

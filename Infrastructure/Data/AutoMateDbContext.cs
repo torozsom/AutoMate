@@ -118,6 +118,9 @@ public class AutoMateDbContext(
 
     public DbSet<DeploymentAnalysisWorkItem> DeploymentAnalysisWorkItems => Set<DeploymentAnalysisWorkItem>();
 
+    /// <summary>Tenant-wide admission and non-refundable provider reservations, independent of result/project lifetime.</summary>
+    public DbSet<AiAnalysisBudgetEntry> AiAnalysisBudgetEntries => Set<AiAnalysisBudgetEntry>();
+
     /// <summary>Durable checkpoints for GitHub Actions diagnostic streaming.</summary>
     public DbSet<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints => Set<GitHubWorkflowCheckpoint>();
 
@@ -430,6 +433,14 @@ public class AutoMateDbContext(
             .OnDelete(DeleteBehavior.Cascade);
 
         var work = modelBuilder.Entity<DeploymentAnalysisWorkItem>();
+        var budget = modelBuilder.Entity<AiAnalysisBudgetEntry>();
+        budget.HasIndex(item => new { item.TenantId, item.AccountingDay, item.IsProviderAttempt });
+        budget.HasIndex(item => new { item.TenantId, item.IsProviderAttempt, item.OccurredAt });
+        budget.HasIndex(item => item.OccurredAt);
+        budget.HasIndex(item => item.LeaseId).IsUnique();
+        budget.Property(item => item.Currency).HasMaxLength(3).IsRequired();
+        budget.HasOne(item => item.Tenant).WithMany().HasForeignKey(item => item.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
         work.HasIndex(item => item.AnalysisId).IsUnique();
         work.HasIndex(item => new { item.CompletedAt, item.NextAttemptAt, item.LeaseUntil, item.CreatedAt });
         work.Property(item => item.AttemptCount).HasDefaultValue(0);

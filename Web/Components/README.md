@@ -98,7 +98,9 @@ theme tokens and wrapping touch targets. Actual deployment consent and operator 
 server ports continue to enforce authorization and egress policy. ProjectDetails retains a stable request GUID only
 when admission is uncertain, serializes owner actions and displays fixed errors without exception payloads. Explicit
 consent editing targets only the current deployment's configured C# project through the exact-project Application
-overload. Cancel uses the existing owner-authorized idempotent cancellation and saved readback; it remains available
+overload. Remote projects without configuration can edit consent; the service creates their missing configuration,
+and the page reads it back before enabling analysis. Cancel uses the existing owner-authorized idempotent cancellation
+and saved readback; it remains available
 for queued/running work when AI or consent is disabled. Consent changes do not enqueue work or change operator policy.
 Linked consent guidance explains data egress and revocation limits. Both handlers fence stale feedback and use fresh
 scopes; uncertain cancellation can safely be retried for the same analysis. Native controls include visible focus

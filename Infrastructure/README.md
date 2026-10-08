@@ -13,7 +13,21 @@ behavior.
 
 ## Related documentation
 
-- [Domain](../Domain/README.md)`n- [Application](../Application/README.md)`n- [Web](../Web/README.md)
+- [Domain](../Domain/README.md)
+- [Application](../Application/README.md)
+- [Web](../Web/README.md)
+
+## Deployment analysis
+
+[Ai](Ai/README.md) implements Application ports with EF metadata admission, renewable leases, durable retries,
+automatic wakeup dispatch, bounded retention, current-consent authorization, shared owner-account quotas/capacity/
+cost reservations and provider-free readiness. The provider catalog routes approved direct OpenAI regional endpoints and
+exact Azure OpenAI resource endpoints.
+Both adapters share bounded Responses validation/redaction and cancel local I/O on policy reload. Each worker slot owns
+a
+fresh scope/context. No context payload is queued or persisted.
+See [onboarding and ordered metadata migrations](../docs/ai-analysis.md)
+and [execution/rollout ADR](../docs/adr/0003-ai-analysis-execution-and-rollout.md); provider approval remains pending.
 
 ## Deployment telemetry update
 

@@ -14,13 +14,22 @@ public sealed class AnalysisEgressPolicyTests
         string region = "eu", string[]? categories = null, bool egressEnabled = true,
         bool regionalApproval = true, string? provider = "openai", string[]? approvedRegions = null,
         int retentionDays = 90, string model = "gpt-5-mini", int dailyLimit = 5, bool automatic = false,
-        int concurrency = 1)
+        int concurrency = 1, int tenantLimit = 100_000, int rateLimit = 1000,
+        int tenantConcurrency = 256, int globalConcurrency = 4096, decimal dailyBudget = 1000,
+        decimal attemptCost = 1, string currency = "USD")
     {
         return new AiAnalysisOptions
         {
             Enabled = enabled,
             AutomaticAnalysisEnabled = automatic,
             MaximumConcurrency = concurrency,
+            DailyTenantCostBudget = dailyBudget,
+            MaximumProviderAttemptCost = attemptCost,
+            DailyTenantLimit = tenantLimit,
+            TenantRequestsPerMinute = rateLimit,
+            MaximumTenantProviderConcurrency = tenantConcurrency,
+            MaximumGlobalProviderConcurrency = globalConcurrency,
+            BudgetCurrency = currency,
             ProviderEgressEnabled = egressEnabled,
             Provider = provider,
             RegionalProcessingApproved = regionalApproval,

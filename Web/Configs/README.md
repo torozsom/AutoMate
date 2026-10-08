@@ -1,5 +1,43 @@
 # Configs
 
+M8 shared limits use owner accounts as tenants. Startup validates daily tenant quota, rolling admission rate, shared
+provider concurrency, exact eight-decimal cost budgets and uppercase currency even while AI is disabled. Defaults are
+100 admissions/day, 10/minute, two provider attempts per tenant and sixteen globally. USD budgets default to zero;
+execution needs a configured daily allowance and operator-approved worst-case per-attempt amount. See
+[limits and migration semantics](../../Infrastructure/Ai/README.md). Both profiles register scoped
+`IAnalysisBudgetGuard`.
+Readiness verifies the new accounting schema and treats enabled egress without a positive sufficient spending
+allowance as Unavailable/503. This does not contact the provider or inspect private account usage.
+
+The [operator monitoring guide](../../docs/ai-analysis-operations.md) documents export setup, readiness alert handling,
+security/AI panels, initial thresholds and monitoring acceptance. Readiness alone does not establish worker progress;
+the guide includes a separate read-only queue snapshot and telemetry freshness checks.
+
+## Liveness and AI readiness
+
+Both hosting profiles register `AnalysisReadinessHealthCheck` through the Application readiness port with a five-second
+timeout. `/health` remains lightweight liveness and excludes the AI check. `/health/ready` runs the tagged AI check and
+returns uncached JSON with only `status`, `configuration` and `queue`. Exceptions, descriptions, provider identifiers,
+endpoints, tenant IDs, credentials and queue payloads are excluded.
+
+| Configuration / queue                                            | Health status                        | HTTP |
+|------------------------------------------------------------------|--------------------------------------|------|
+| AI disabled, metadata readable                                   | Healthy; Disabled / Available        | 200  |
+| Approved routing and local credential present, metadata readable | Healthy; Ready / Available           | 200  |
+| AI enabled, provider egress disabled                             | Degraded; EgressDisabled / Available | 503  |
+| AI enabled, missing provider approval/route/credential           | Degraded; Unavailable / Available    | 503  |
+| Invalid reloaded options                                         | Unhealthy; Invalid / Available       | 503  |
+| Missing/unavailable metadata schema or storage                   | Unhealthy; queue Unavailable         | 503  |
+| Timeout or unexpected probe failure                              | Unhealthy; Unavailable / Unavailable | 503  |
+
+Use `/health` for process restart probes and `/health/ready` when AI dependency readiness should gate routing or alerts.
+An intentionally closed egress switch with AI enabled fails AI readiness without stopping deployment operations. Queue
+checks still run while AI is disabled because automatic wakeup dispatch and retention remain active. The probe is
+read-only and never resolves or invokes an LLM, checks remote credentials, claims work, loads diagnostics or changes
+consent. Ready confirms local configuration and metadata reads only; provider reachability, trigger installation,
+write permissions, worker progress, Loki/Mimir availability and deployment readiness are outside its scope. Protect
+probe routing and cadence using the hosting network/reverse proxy; the finite probe response contains no tenant data.
+
 Both profiles explicitly register the AutoMate.Analysis activity source and meter alongside existing deployment/security
 sources. The shared export policy allows only fixed analysis operations/outcomes and dimensionless usage/wait/active
 measurements. Registration does not enable AI or change provider/consent policy.
@@ -90,12 +128,18 @@ ports. AiAnalysis options add MaximumContextBytes (48,000) and MaximumContextTok
 alongside
 MaximumContextCharacters (24,000). These limit encoded diagnostic input; they do not count whole-request/schema/output
 cost. Context acquisition does not invoke an LLM; AI remains default-off and provider/tenant/region egress remains gated
-by the outstanding policy work in PLAN.md.
+by implemented operator/consent gates and unresolved real provider approvals in PLAN.md.
 
 AI egress options bind with startup validation when ProviderEgressEnabled is requested. Shared runtime policy uses
 IOptionsMonitor and a scoped fresh-metadata IAnalysisEgressAuthorizer in both profiles. The initial OpenAI typed client
 has redirects and automatic HTTP retries disabled, so a retry cannot reuse an earlier consent decision. Defaults and
 operator onboarding are documented in Infrastructure/Ai/README.md; enabling AI is not a provider/region approval.
+
+The [staged rollout procedure](../../docs/ai-analysis-operations.md#staged-feature-enablement-and-shutdown) uses the
+approved owner cohort and independent feature/automatic/egress flags. Standard appsettings JSON reload propagates to
+IOptionsMonitor and cancels active OpenAI and Azure OpenAI requests; effective environment/command-line overrides
+require restart.
+Verify shutdown on every replica. This is a local cancellation control, not remote recall or a cluster barrier.
 
 AI startup options independently validate LeaseDurationSeconds (30–900) and MaximumRecoveryAttempts (1–10), even
 while AI remains disabled. These configure renewable ownership and bounded interruption recovery, without enabling
@@ -134,3 +178,9 @@ Environment has the same bound. SafeResourceDetector still sanitizes labels. Inv
 with an exporter and fail startup using fixed messages that omit supplied values. Valid endpoints retain existing
 export behavior; changing OTLP export/resource configuration requires restart. The standard configuration binder still
 handles type conversion; validators handle typed settings and policy bounds.
+
+Both profiles register `azure-openai` as a separate typed HttpClient behind the existing catalog, with redirects
+disabled
+and factory HTTP loggers removed. Exact Azure resource routing and protected key presence use `AzureOpenAiOptions`;
+unknown providers and mismatched routes remain unavailable. No SDK, migration or Application contract change is needed.
+See [Azure setup](../../docs/azure-openai-setup.md) for the complete manual pilot configuration.
