@@ -37,6 +37,7 @@ public sealed class DeploymentAnalysisSectionTests
         Set(component, "Logger", NullLogger<DeploymentAnalysisSection>.Instance);
         Set(component, "_identity", (owner, project, (Guid?)deployment));
         var read = (Task)typeof(DeploymentAnalysisSection).GetMethod("RefreshAsync", Flags)!.Invoke(component, null)!;
+        Assert.Equal(1, port.ReadCalls);
         if (dispose)
         {
             await component.DisposeAsync();
@@ -68,14 +69,25 @@ public sealed class DeploymentAnalysisSectionTests
     {
         public Task<DeploymentAnalysisView?> Read { get; set; } = Task.FromResult<DeploymentAnalysisView?>(null);
 
+        /// <summary>Ensures stale-response assertions actually reach the deferred read.</summary>
+        public int ReadCalls { get; private set; }
+
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             return method?.Name switch
             {
-                "GetLatestAsync" => Read,
+                "GetPreferencesAsync" => Task.FromResult<AssessmentPreferences?>(null),
+                "GetLatestAsync" => ReadLatest(),
                 "ListAsync" => Task.FromResult<IReadOnlyList<DeploymentAnalysisView>>([]),
                 _ => throw new NotSupportedException()
             };
+        }
+
+        /// <summary>Records deferred result reads independently of catalog queries.</summary>
+        private Task<DeploymentAnalysisView?> ReadLatest()
+        {
+            ReadCalls++;
+            return Read;
         }
     }
 }

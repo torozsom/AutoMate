@@ -1,0 +1,242 @@
+@using System.Globalization
+@using Application.Abstractions.Ai
+@using Application.Ai
+@using Domain.Enums
+<fieldset class="assessment-context" disabled="@Disabled">
+    <legend class="h6">Assessment context</legend>
+    <div class="assessment-options">
+        <label>Assessment focus
+            <select class="form-select" value="@((int)Selection.Kind)" @onchange="KindChanged">
+                <option value="0">Automatic</option>
+                <option value="1">Startup assessment</option>
+                <option value="2">Failure diagnosis</option>
+                <option value="3">Runtime overview</option>
+                <option value="4">Historical review</option>
+            </select>
+        </label>
+        <label>Time range
+            <select class="form-select" value="@((int)Selection.Range)" @onchange="RangeChanged">
+                <option value="0">Automatic for status</option>
+                <option value="1">Last 15 minutes</option>
+                <option value="2">Last hour</option>
+                <option value="3">Last 24 hours</option>
+                <option value="4">Deployment lifetime</option>
+                <option value="5">Custom UTC range</option>
+            </select>
+        </label>
+    </div>
+    <p class="small text-muted">Automatic currently selects @FocusLabel(Selection.Resolve(Status)). The worker checks
+        the status again when it collects evidence.
+        Default
+        range: @(Status is DeploymentStatus.Starting or DeploymentStatus.Running ? "Last hour" : "Deployment lifetime").</p>
+    @if (Selection.Range == AssessmentRange.Custom)
+    {
+        <div class="assessment-options">
+            <label>From (UTC)<input class="form-control" type="datetime-local" value="@UtcValue(Selection.Start)"
+                                    @onchange="StartChanged"/></label>
+            <label>Until (UTC)<input class="form-control" type="datetime-local" value="@UtcValue(Selection.End)"
+                                     @onchange="EndChanged"/></label>
+        </div>
+    }
+    <p class="small">A single range covers at most 365 days. Longer deployment lifetimes use their latest 365 days, with
+        a saved truncation notice.</p>
+    <div class="assessment-sources">
+        @foreach (var source in Sources)
+        {
+            <div>
+                <label><input type="checkbox" disabled="@UnsupportedSources.HasFlag(source)"
+                              checked="@Selection.Sources.HasFlag(source)" @onchange="e => SourceChanged(source, e)"/>
+                    @SourceLabel(source)</label>
+                @if (UnsupportedSources.HasFlag(source))
+                {
+                    <span class="small text-muted"> — Unsupported for this recorded deployment</span>
+                }
+                else if (!Channels.Any(c => c.Source == source))
+                {
+                    <span class="small text-muted"> — No recorded output yet</span>
+                }
+                @if (source is AssessmentSources.Web or AssessmentSources.Database)
+                {
+                    @foreach (var channel in Channels.Where(c => c.Source == source))
+                    {
+                        <label class="assessment-container"><input type="checkbox"
+                                                                   disabled="@(!Selection.Sources.HasFlag(source))"
+                                                                   checked="@(Selection.LogContainers is null || Selection.LogContainers.Contains(channel.Channel))"
+                                                                   @onchange="e => LogContainerChanged(channel.Channel, e)"/> @channel.Channel
+                        </label>
+                    }
+                }
+            </div>
+        }
+    </div>
+    <p class="small text-muted">Web server includes Azure application console output. Azure platform/system selects
+        platform and revision events.
+        Other includes legacy output whose source cannot be identified from recorded metadata.</p>
+    <label><input type="checkbox" checked="@Selection.IncludeMetrics" @onchange="MetricsChanged"/> Include recorded
+        resource metrics</label>
+    @if (Selection.IncludeMetrics)
+    {
+        @foreach (var container in MetricContainers)
+        {
+            <label class="assessment-container"><input type="checkbox"
+                                                       checked="@(Selection.MetricContainers is null || Selection.MetricContainers.Contains(container))"
+                                                       @onchange="e => MetricContainerChanged(container, e)"/> @container
+            </label>
+        }
+
+        @if (MetricContainers.Count == 0)
+        {
+            <p class="small text-muted">No metric containers are recorded yet.</p>
+        }
+    }
+    <p class="small">Only selected, bounded, redacted evidence and recorded configuration are sent. No diagnostic
+        evidence means no provider call.</p>
+</fieldset>
+
+@code {
+
+    /// <summary>Editable owner choices; the presenter stores a separate immutable submission.</summary>
+    [Parameter]
+    public AssessmentSelection Selection { get; set; } = new();
+
+    /// <summary>Current persisted status used for a preview of Automatic resolution.</summary>
+    [Parameter]
+    public DeploymentStatus Status { get; set; }
+
+    /// <summary>Recorded source/channel catalog, never inferred from log prose.</summary>
+    [Parameter]
+    public IReadOnlyList<AssessmentChannel> Channels { get; set; } = [];
+
+    /// <summary>Recorded metric identities selectable independently of log channels.</summary>
+    [Parameter]
+    public IReadOnlyList<string> MetricContainers { get; set; } = [];
+
+    /// <summary>Sources unsupported by the recorded deployment provider and source snapshot.</summary>
+    [Parameter]
+    public AssessmentSources UnsupportedSources { get; set; }
+
+    /// <summary>Freezes every control while admission or execution is pending.</summary>
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    /// <summary>Returns a new draft without modifying an existing result or submitted options.</summary>
+    [Parameter]
+    public EventCallback<AssessmentSelection> OnChange { get; set; }
+
+    /// <summary>Fixed finite source families displayed in a consistent order.</summary>
+    private static readonly AssessmentSources[] Sources =
+    [
+        AssessmentSources.Build, AssessmentSources.Web, AssessmentSources.Database,
+        AssessmentSources.GitHub, AssessmentSources.Azure, AssessmentSources.Deployment, AssessmentSources.Other
+    ];
+
+    /// <summary>Owner-facing labels for the finite focus choices.</summary>
+    public static string FocusLabel(AssessmentKind kind)
+    {
+        return kind switch
+        {
+            AssessmentKind.Startup => "Startup assessment",
+            AssessmentKind.FailureDiagnosis => "Failure diagnosis", AssessmentKind.RuntimeOverview => "Runtime overview",
+            AssessmentKind.HistoricalReview => "Historical review", _ => "Automatic"
+        };
+    }
+
+    /// <summary>Owner-facing labels that distinguish application output from Azure platform events.</summary>
+    public static string SourceLabel(AssessmentSources source)
+    {
+        return source switch
+        {
+            AssessmentSources.Build => "Container build",
+            AssessmentSources.Web => "Web server", AssessmentSources.Database => "Database server", AssessmentSources.GitHub => "GitHub Actions",
+            AssessmentSources.Azure => "Azure platform/system", AssessmentSources.Deployment => "Deployment events", _ => "Other / unknown"
+        };
+    }
+
+    /// <summary>Suppresses stale control events while the submission is frozen.</summary>
+    private Task Emit(AssessmentSelection value)
+    {
+        return Disabled ? Task.CompletedTask : OnChange.InvokeAsync(value);
+    }
+
+    /// <summary>Changes emphasis without changing the persisted status supplied to the model.</summary>
+    private Task KindChanged(ChangeEventArgs e)
+    {
+        return Emit(Selection with { Kind = (AssessmentKind)int.Parse(e.Value!.ToString()!) });
+    }
+
+    /// <summary>Initializes UTC custom bounds or clears dates for a relative range.</summary>
+    private Task RangeChanged(ChangeEventArgs e)
+    {
+        var range = (AssessmentRange)int.Parse(e.Value!.ToString()!);
+        return Emit(Selection with
+        {
+            Range = range, Start = range == AssessmentRange.Custom ? DateTimeOffset.UtcNow.AddHours(-1) : null,
+            End = range == AssessmentRange.Custom ? DateTimeOffset.UtcNow : null
+        });
+    }
+
+    /// <summary>Changes one source flag independently of metrics.</summary>
+    private Task SourceChanged(AssessmentSources source, ChangeEventArgs e)
+    {
+        return Emit(Selection with { Sources = (bool)e.Value! ? Selection.Sources | source : Selection.Sources & ~source });
+    }
+
+    /// <summary>Enables or excludes numeric evidence independently of log selection.</summary>
+    private Task MetricsChanged(ChangeEventArgs e)
+    {
+        return Emit(Selection with { IncludeMetrics = (bool)e.Value! });
+    }
+
+    /// <summary>Replaces all-channel selection with explicit recorded web/database channels.</summary>
+    private Task LogContainerChanged(string channel, ChangeEventArgs e)
+    {
+        return Emit(Selection with
+        {
+            LogContainers = Toggle(Selection.LogContainers, Channels.Where(c => c.Source is AssessmentSources.Web or AssessmentSources.Database)
+                .Select(c => c.Channel), channel, (bool)e.Value!)
+        });
+    }
+
+    /// <summary>Replaces all-container selection with explicit recorded metric identities.</summary>
+    private Task MetricContainerChanged(string container, ChangeEventArgs e)
+    {
+        return Emit(Selection with { MetricContainers = Toggle(Selection.MetricContainers, MetricContainers, container, (bool)e.Value!) });
+    }
+
+    /// <summary>Keeps null as all until an individual checkbox changes, then emits sorted identities.</summary>
+    private static string[] Toggle(string[]? selected, IEnumerable<string> available, string name, bool enabled)
+    {
+        var values = new HashSet<string>(selected ?? available.ToArray(), StringComparer.Ordinal);
+        if (enabled) values.Add(name);
+        else values.Remove(name);
+        return values.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    /// <summary>Formats an absolute UTC instant for an unlabeled-zone browser datetime control.</summary>
+    private static string UtcValue(DateTimeOffset? value)
+    {
+        return value?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm") ?? "";
+    }
+
+    /// <summary>Interprets the explicitly UTC-labeled input without applying local time conversion.</summary>
+    private static DateTimeOffset? ParseUtc(object? value)
+    {
+        return DateTime.TryParse(value?.ToString(), CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var time)
+            ? new DateTimeOffset(time)
+            : null;
+    }
+
+    /// <summary>Changes the custom UTC start; server admission validates the completed range.</summary>
+    private Task StartChanged(ChangeEventArgs e)
+    {
+        return Emit(Selection with { Start = ParseUtc(e.Value) });
+    }
+
+    /// <summary>Changes the custom UTC end; future and oversized ranges are rejected by admission.</summary>
+    private Task EndChanged(ChangeEventArgs e)
+    {
+        return Emit(Selection with { End = ParseUtc(e.Value) });
+    }
+
+}

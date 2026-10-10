@@ -19,7 +19,13 @@
         <div class="telemetry-toolbar">
             <div><p class="telemetry-eyebrow">DEPLOYMENT</p>
                 <h1>Deployment Details</h1></div>
-            <span class="history-id">@DeploymentId.ToString("N")[..8]</span></div>
+            <div class="deployment-identity-status"><span class="history-id">@DeploymentId.ToString("N")[..8]</span>
+                @if (_authorized && _deployment is not null)
+                {
+                    <DeploymentBadge Status="_deployment.Status"/>
+                }
+            </div>
+        </div>
         <details class="history-identity">
             <summary>Deployment details</summary>
             <p>Deployment ID: <code>@DeploymentId</code></p></details>
@@ -34,7 +40,6 @@
             <h2>Deployment overview</h2>
             @if (_deployment is not null)
             {
-                <DeploymentBadge Status="_deployment.Status"/>
                 <p>@(_deployment.CsProject?.Name) · Started @_deployment.CreatedAt.ToString("u") ·
                     Outcome @_deployment.Outcome</p>
                 <p>Finished: @(_deployment.FinishedAt?.ToString("u") ?? "Not recorded")</p>
@@ -79,15 +84,10 @@
         <section class="telemetry-panel" aria-labelledby="history-metrics-title" aria-busy="@_metricBusy">
             <div class="telemetry-toolbar">
                 <div><h2 id="history-metrics-title">Resource overview</h2>
-                    <p class="telemetry-muted">Summaries of returned interval aggregates</p></div>
+                    <p class="telemetry-muted">Recorded sample and imported interval summaries</p></div>
                 <div class="telemetry-controls">
-                    <label class="telemetry-control">Period<select class="form-select" @bind="_metricDays"
-                                                                   @bind:after="LoadMetricsAsync">
-                            <option value="1">24 hours</option>
-                            <option value="7">7 days</option>
-                            <option value="30">30 days</option>
-                            <option value="0">Deployment lifetime</option>
-                        </select></label>
+                    <MetricRangePicker @key="DeploymentId" Default="lifetime" LifetimeStart="_start" LifetimeEnd="_end"
+                                       Changed="MetricRangeChangedAsync"/>
                     <label class="telemetry-control">Container<select class="form-select" @bind="_metricContainer"
                                                                       disabled="@(_metrics.Count == 0)">
                             @foreach (var name in _metrics.Select(p => p.Container).Distinct().Order())
@@ -103,13 +103,13 @@
             }
             <div class="telemetry-kpis">
                 <div class="telemetry-kpi">
-                    <span>Average CPU</span><strong>@Value(TelemetryPresentation.Cpu, false)</strong><small>Observed
-                        intervals</small></div>
+                    <span>Average CPU</span><strong>@Value(TelemetryPresentation.Cpu, false)</strong><small>Recorded
+                        observations</small></div>
                 <div class="telemetry-kpi"><span>Peak CPU</span><strong>@Value(TelemetryPresentation.Cpu, true)</strong><small>Observed
                         maximum</small></div>
                 <div class="telemetry-kpi">
-                    <span>Average memory</span><strong>@Value(TelemetryPresentation.Memory, false)</strong><small>Observed
-                        intervals</small></div>
+                    <span>Average memory</span><strong>@Value(TelemetryPresentation.Memory, false)</strong><small>Recorded
+                        observations</small></div>
                 <div class="telemetry-kpi">
                     <span>Peak memory</span><strong>@Value(TelemetryPresentation.Memory, true)</strong><small>Observed
                         maximum</small></div>
@@ -132,50 +132,15 @@
             }
             <details class="telemetry-explore">
                 <summary>Explore metrics <span>CPU, memory and numeric observations</span></summary>
-                <div class="telemetry-chart-grid">
-                    <TelemetryChart Title="CPU usage" Metric="@TelemetryPresentation.Cpu"
-                                    Points="@ChartPoints(TelemetryPresentation.Cpu)"
-                                    Start="_metricStart" End="_end" Gap="@ChartGap"/>
-                    <TelemetryChart Title="Memory usage" Metric="@TelemetryPresentation.Memory"
-                                    Points="@ChartPoints(TelemetryPresentation.Memory)"
-                                    Start="_metricStart" End="_end" Gap="@ChartGap"/>
-                </div>
-                <details class="telemetry-table-details">
-                    <summary>Numeric observations</summary>
-                    <div class="table-responsive">
-                        <table class="table telemetry-table">
-                            <caption>Returned interval aggregates for @_metricContainer. Sample counts are not supplied
-                                by this history query.
-                            </caption>
-                            <thead>
-                            <tr>
-                                <th>UTC</th>
-                                <th>Metric</th>
-                                <th>Average</th>
-                                <th>Minimum</th>
-                                <th>Maximum</th>
-                            </tr>
-                            </thead>
-                            <tbody>@foreach (var point in _metrics.Where(p => p.Container == _metricContainer).OrderBy(p => p.Timestamp).ThenBy(p => p.Name))
-                            {
-                                <tr>
-                                    <td>@point.Timestamp.ToString("u")</td>
-                                    <td><span title="@point.Name">@TelemetryPresentation.Label(point.Name)</span></td>
-                                    <td>@TelemetryPresentation.Format(point.Average, point.Name)</td>
-                                    <td>@TelemetryPresentation.Format(point.Minimum, point.Name)</td>
-                                    <td>@TelemetryPresentation.Format(point.Maximum, point.Name)</td>
-                                </tr>
-                            }
-                            </tbody>
-                        </table>
-                    </div>
-                </details>
+                <MetricStatisticsView Data="@ContainerObservations"
+                                      Range="@(new MetricTimeRange(_metricStart, _metricEnd))"
+                                      Availability="@_metricAvailability"/>
             </details>
         </section>
         <section class="telemetry-panel"><h2>Collection settings</h2>
             <TelemetryPreferences ProjectId="ProjectId"/>
         </section>
-        <section class="telemetry-panel">
+        <section class="telemetry-panel ai-analysis-accent">
             <h2>AI Analysis</h2>
             <DeploymentAnalysisSection @key="DeploymentId" OwnerId="_owner" ProjectId="ProjectId"
                                        DeploymentId="DeploymentId"
@@ -244,8 +209,49 @@
     /// <summary>Displayed metric range beginning.</summary>
     private DateTimeOffset _metricStart = DateTimeOffset.UtcNow.AddDays(-30);
 
+    /// <summary>Last filtered container data identity for independent table paging.</summary>
+    private IReadOnlyList<MetricObservation>? _filteredSource;
+
+    /// <summary>Cached numeric and chart observations for the selected container.</summary>
+    private IReadOnlyList<MetricObservation> _filtered = [];
+
+    /// <summary>Container associated with the cached selection.</summary>
+    private string _filteredContainer = "";
+
+    /// <summary>Changes the data identity only when the container or observation response changes.</summary>
+    private IReadOnlyList<MetricObservation> ContainerObservations
+    {
+        get
+        {
+            if (!ReferenceEquals(_filteredSource, _observations) || _filteredContainer != _metricContainer)
+            {
+                _filteredSource = _observations;
+                _filteredContainer = _metricContainer;
+                _filtered = _observations.Where(p => p.Container == _metricContainer).ToArray();
+            }
+
+            return _filtered;
+        }
+    }
+
+    /// <summary>Selected and displayed metric window ends do not change the recorded deployment activity window.</summary>
+    private DateTimeOffset _metricEnd = DateTimeOffset.UtcNow;
+
+    /// <summary>Frozen current chart selection.</summary>
+    private MetricTimeRange? _requestedRange;
+
+    /// <summary>Detached recorded observations, preserving counts and provenance.</summary>
+    private IReadOnlyList<MetricObservation> _observations = [];
+
+    /// <summary>Loads a validated selection while retaining the saved terminal state.</summary>
+    private async Task MetricRangeChangedAsync(MetricTimeRange range)
+    {
+        _requestedRange = range;
+        await LoadMetricsAsync();
+    }
+
     /// <summary>Includes retained older deployments by default, with bounded zoom choices.</summary>
-    private int _metricDays;
+    private readonly int _metricDays = 0;
 
     /// <summary>Range belonging to the displayed response while a newer range is loading.</summary>
     private int _loadedMetricDays = 30;
@@ -266,7 +272,7 @@
     private CancellationTokenSource? _logLoad;
 
     /// <summary>Gap threshold consistent with the bounded history query interval.</summary>
-    private TimeSpan ChartGap => TimeSpan.FromSeconds(Math.Max(60, (_end - _metricStart).TotalSeconds / 120d) + 5);
+    private TimeSpan ChartGap => new MetricTimeRange(_metricStart, _metricEnd).Interval + TimeSpan.FromSeconds(5);
 
     /// <summary>Orders the selected container's observations for a metric.</summary>
     private IEnumerable<DeploymentMetricPoint> Selected(string name)
@@ -278,7 +284,16 @@
     private string Value(string metric, bool peak)
     {
         var points = Selected(metric).ToArray();
-        return TelemetryPresentation.Format(points.Length == 0 ? null : peak ? points.Max(p => p.Maximum) : points.Average(p => p.Average), metric);
+        return TelemetryPresentation.Format(points.Length == 0 ? null : peak ? points.Max(p => p.Maximum) : ObservedAverage(metric), metric);
+    }
+
+    /// <summary>Raw samples are weighted by their recorded count; imported intervals stay separate.</summary>
+    private double ObservedAverage(string metric)
+    {
+        var points = _observations.Where(p => p.Container == _metricContainer && p.Metric == metric).ToArray();
+        var raw = points.Where(p => p.Samples > 0).ToArray();
+        var selected = raw.Length > 0 ? raw : points;
+        return selected.Sum(p => p.Sum) / Math.Max(1, selected.Sum(p => p.Samples > 0 ? p.Samples : p.ImportedIntervals));
     }
 
     /// <summary>Adapts existing aggregates to the reusable presentation component.</summary>
@@ -300,6 +315,8 @@
         _logLoad?.Cancel();
         _metricLoad?.Cancel();
         _metrics = [];
+        _observations = [];
+        _requestedRange = null;
         _channel = "";
         _authorized = false;
         var owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication, Users);
@@ -408,13 +425,39 @@
         {
             await using var scope = ServiceScopes.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>();
-            var rangeStart = days == 0 ? _start : _end.AddDays(-days);
-            var result = await service.ReadMetricsAsync(_owner, route.ProjectId, route.DeploymentId, rangeStart, _end, 120, request.Token);
+            var rangeEnd = _requestedRange?.End ?? (_end < DateTimeOffset.UtcNow ? _end : DateTimeOffset.UtcNow);
+            var rangeStart = _requestedRange?.Start ?? (days == 0 ? _start : rangeEnd.AddDays(-days));
+            var truncatedLifetime = rangeStart < rangeEnd.AddYears(-5);
+            if (truncatedLifetime) rangeStart = rangeEnd.AddYears(-5);
+            if (rangeEnd - rangeStart < TimeSpan.FromMinutes(5)) rangeStart = rangeEnd.AddMinutes(-5);
+            var exploration = scope.ServiceProvider.GetService<IMetricExploration>();
+            DeploymentMetricHistory result;
+            IReadOnlyList<MetricObservation> observations;
+            if (exploration is not null)
+            {
+                var observed = await exploration.ReadAsync(new MetricExplorationQuery(_owner, new MetricTimeRange(rangeStart, rangeEnd), route.ProjectId, route.DeploymentId), request.Token);
+                observations = observed.Chart;
+                result = new DeploymentMetricHistory(observations.Select(p => new DeploymentMetricPoint(p.Container, p.Metric, p.Unit,
+                    p.Timestamp, p.Average, p.Minimum, p.Maximum)).ToArray(), observed.Availability);
+            }
+            else
+            {
+                result = await service.ReadMetricsAsync(_owner, route.ProjectId, route.DeploymentId, rangeStart, rangeEnd, 240, request.Token);
+                var window = new MetricTimeRange(rangeStart, rangeEnd);
+                observations = result.Points.GroupBy(p => new { p.Container, p.Name, p.Unit, Time = window.Bucket(p.Timestamp) })
+                    .Select(g => new MetricObservation(route.ProjectId, route.DeploymentId, g.Key.Container, g.Key.Name,
+                        g.Key.Unit, g.Key.Time, 0, g.Sum(p => p.Average), g.Min(p => p.Minimum),
+                        g.Max(p => p.Maximum), false, g.Count())).ToArray();
+            }
+
             if (request.IsCancellationRequested || route != (ProjectId, DeploymentId)) return;
             _metrics = result.Points;
+            _observations = observations;
+            _metricEnd = rangeEnd;
             _loadedMetricDays = days;
             _metricStart = rangeStart;
-            _metricAvailability = result.Availability;
+            _metricAvailability = (result.Availability + (truncatedLifetime ? " Deployment lifetime is truncated to the most recent five years." : "")).Trim();
+            if (_metricAvailability.Length == 0) _metricAvailability = null;
             if (!_metrics.Any(p => p.Container == _metricContainer))
                 _metricContainer = _metrics.Select(p => p.Container).Distinct().Order().FirstOrDefault() ?? "";
         }

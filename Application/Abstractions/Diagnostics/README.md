@@ -35,7 +35,8 @@ Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployme
 writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
 gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
-Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+Operational backends retain 30 days; archived deployment history and daily summaries retain until owner deletion. See
+the root navigation.md for new module entry
 points.
 
 `DeploymentTerminalLog` carries additive optional stream, severity, timestamp, source-instance and source-cursor
@@ -55,3 +56,9 @@ metadata; RedactTerminal accepts only canonical hexadecimal trace identity. Lega
 time/severity/sequence without assigning invented event GUIDs. The analysis worker now uses
 IDeploymentAnalysisContextBuilder; BuildContextAsync remains a compatibility text API without grounded evidence
 semantics.
+
+## Metric exploration
+
+MetricExploration.cs owns frozen UTC windows, per-container/deployment sufficient statistics, paginated numeric reads
+and private batch projections. The range policy is independent of AI context limits. See
+../../../docs/metric-exploration.md.

@@ -122,3 +122,28 @@ explicit. Deployment Details presents selected-deployment logs before historical
 Project Details ignores saved metric recovery callbacks and late provider replies after page disposal. Lifetime
 cancellation remains available until hub disposal completes; expected navigation cancellation/disposal does not emit a
 recovery failure. Real provider failures retain redacted exception diagnostics.
+
+## Status-aware assessment presenter (2026-10-09)
+
+`AssessmentContextControls` is shared through `DeploymentAnalysisSection` on both deployment surfaces. It edits focus,
+source/channel/metric selection and UTC range; per-deployment preferences are separate from immutable pending requests.
+Submitted controls freeze while pending. Route/disposal fencing and five-second result polling remain; context catalog
+refresh is bounded to once per minute. `AssessmentResultSection` and `DeploymentAnalysisPanel` render validated v2
+sections and saved provenance while retaining legacy layouts. See
+[status-aware assessments](../../docs/status-aware-assessments.md).
+
+## Workspace console
+
+WorkspaceOverviewPanel reads IWorkspaceQuery in independent scopes, refreshes visible pages every thirty seconds and
+fences replies against identity changes/disposal. WorkspaceOverviewView, KpiCard and ProjectInventoryTable are passive
+read-model presenters. Dashboard URL parameters preserve inventory selection; an owned entity is loaded only for the
+selected deployment action. ConsoleDialog and js/console-ui.js own keyboard focus, Escape and restoration; native auth
+forms keep antiforgery. RecordedValueRow copies explicit non-secret deployment metadata. See docs/ui-modernization.md.
+
+## Shared range and numeric controls
+
+MetricRangePicker freezes UTC bounds, validates future/calendar-year limits, and explicitly clips long deployment
+lifetimes. MetricStatisticsView renders bounded sample-weighted charts and paginated per-container/deployment
+statistics; StatisticsPager changes only numeric rows. Overview relative selections advance on visible refresh; custom
+ranges remain fixed. Project/history requests cancel obsolete reads and discard stale responses. These chart controls
+do not edit AI context preferences or saved results.

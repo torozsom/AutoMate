@@ -398,7 +398,8 @@
                     <ProjectTelemetrySummary ProjectId="ProjectId" UserId="_currentUserId"/>
                 </section>
 
-                <section id="ai-analysis" class="console-section" aria-labelledby="ai-analysis-title">
+                <section id="ai-analysis" class="console-section ai-analysis-accent"
+                         aria-labelledby="ai-analysis-title">
                     <h2 id="ai-analysis-title">AI Analysis</h2>
                     <DeploymentAnalysisSection OwnerId="_currentUserId" ProjectId="ProjectId"
                                                DeploymentId="@(latestDeployment?.Id)"
@@ -448,24 +449,35 @@
                         }
                         else
                         {
-                            @foreach (var deployment in recentDeployments)
-                            {
-                                <div class="deployment-row">
-                                    <DeploymentBadge Status="@deployment.Status"/>
-                                    <div class="min-w-0">
-                                        <div class="deployment-name text-truncate" title="@deployment.CsProject?.Name">
-                                            @(deployment.CsProject?.Name ?? _app.Name)
-                                        </div>
-                                        <div class="deployment-meta text-truncate"
-                                             title="@GetDeploymentMeta(deployment)">
-                                            @GetDeploymentMeta(deployment)
-                                        </div>
-                                    </div>
-                                    <div class="deployment-date">@FormatTimestamp(deployment.CreatedAt)</div>
-                                    <a class="btn btn-sm btn-outline-secondary"
-                                       href="@($"/project/{ProjectId}/deployment/{deployment.Id}")">View Details</a>
-                                </div>
-                            }
+                            <table class="table console-table responsive-inventory">
+                                <caption class="visually-hidden">Deployment history for this project</caption>
+                                <thead>
+                                <tr>
+                                    <th scope="col">Deployment</th>
+                                    <th scope="col">Outcome</th>
+                                    <th scope="col">Runtime</th>
+                                    <th scope="col">Started UTC</th>
+                                    <th scope="col">Details</th>
+                                </tr>
+                                </thead>
+                                <tbody>@foreach (var deployment in recentDeployments)
+                                {
+                                    <tr>
+                                        <td data-label="Deployment">
+                                            <strong>@(deployment.CsProject?.Name ?? _app.Name)</strong><small
+                                                class="console-subtext">@deployment.Id.ToString("N")[..8]</small></td>
+                                        <td data-label="Outcome">@deployment.Outcome</td>
+                                        <td data-label="Runtime">
+                                            <DeploymentBadge Status="@deployment.Status"/>
+                                        </td>
+                                        <td data-label="Started UTC">@deployment.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td data-label="Details"><a
+                                                href="@($"/project/{ProjectId}/deployment/{deployment.Id}")">View
+                                                Details</a></td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
                         }
                     </div>
                     <div class="history-pagination">

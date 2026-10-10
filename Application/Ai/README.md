@@ -110,6 +110,11 @@ available without expanding the Application workflow to a provider registry.
 
 ## Spending denial codes
 
+Status-aware manual assessment contracts, source classification, frozen ranges and v2 result bounds are documented
+in [status-aware assessments](../../docs/status-aware-assessments.md). `AssessmentSelection` canonicalizes request
+options; the context selector uses effective focus for ranking and preserves separate container metric groups.
+Empty configuration-only context never qualifies as evidence. Existing input/overhead/accounting limits remain.
+
 AnalysisSkipReason appends BudgetNotConfigured, BudgetConfigurationInvalid and BudgetCurrencyMismatch without changing
 existing enum values. AnalysisSkipPolicy maps these to finite authored guidance; budget_exceeded explains shared account
 reservations and the midnight UTC reset. These are AutoMate reservations, not Azure invoice reconciliation.

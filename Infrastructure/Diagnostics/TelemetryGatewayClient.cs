@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
 using Microsoft.Extensions.Options;
 
@@ -10,6 +11,25 @@ namespace Infrastructure.Diagnostics;
 public sealed class TelemetryGatewayClient(IHttpClientFactory clients, IOptions<TelemetryStorageOptions> options)
     : ITelemetryGateway, IDeploymentArchive
 {
+    /// <inheritdoc />
+    public Task<ArchiveMetricBatch> ReadMetricBatchAsync(ArchiveMetricBatchRequest request, CancellationToken token)
+    {
+        return SendArchiveAsync<ArchiveMetricBatch>("archive/metric-batch", request, token);
+    }
+
+    /// <inheritdoc />
+    public Task<ArchiveAssessmentPage> ReadAssessmentAsync(ArchiveAssessmentQuery query, CancellationToken token)
+    {
+        return SendArchiveAsync<ArchiveAssessmentPage>("archive/assessment", query, token);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeploymentMetricPoint>> ReadAssessmentMetricsAsync(ArchiveAssessmentQuery query,
+        CancellationToken token)
+    {
+        return await SendArchiveAsync<DeploymentMetricPoint[]>("archive/assessment-metrics", query, token);
+    }
+
     /// <inheritdoc />
     public Task<DeploymentLogEnvelope> AppendAsync(DeploymentLogEnvelope envelope, CancellationToken token)
     {

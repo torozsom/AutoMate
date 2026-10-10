@@ -220,8 +220,10 @@ public sealed class AnalysisBudgetPostgresTests
         {
             base.OnModelCreating(model);
             model.Entity<Deployment>().Ignore(d => d.ConfigurationSnapshotJson).Ignore(d => d.Outcome)
-                .Ignore(d => d.FinishedAt).Ignore(d => d.ResolvedHostPort);
-            model.Entity<AiDeploymentAnalysis>().Ignore(a => a.RetainUntilDeleted);
+                .Ignore(d => d.FinishedAt).Ignore(d => d.ResolvedHostPort).Ignore(d => d.AiAssessmentPreferencesJson);
+            model.Entity<AiDeploymentAnalysis>().Ignore(a => a.RetainUntilDeleted).Ignore(a => a.RequestedSelectionJson)
+                .Ignore(a => a.AssessmentProvenanceJson).Ignore(a => a.AssessmentSectionsJson);
+            model.Entity<AiAnalysisRequest>().Ignore(a => a.RequestedSelectionJson);
         }
     }
 

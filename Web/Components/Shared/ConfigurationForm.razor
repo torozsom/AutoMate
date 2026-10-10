@@ -1,205 +1,220 @@
-<div class="modal fade show d-block deployment-config-modal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Configure Deployment: @Config.ProjectName</h5>
-                <button type="button" class="btn-close" aria-label="Close" @onclick="OnCancel"></button>
+<ConsoleDialog Title="@($"Configure deployment: {Config.ProjectName}")" Eyebrow="Next deployment" OnClose="OnCancel">
+    <div class="modal-body p-4">
+        @if (!string.IsNullOrWhiteSpace(_validationMessage))
+        {
+            <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <span>@_validationMessage</span>
             </div>
+        }
 
-            <div class="modal-body p-4">
-                @if (!string.IsNullOrWhiteSpace(_validationMessage))
+        <h3 class="text-primary fw-bold mb-3 border-bottom pb-2">Deployment</h3>
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <label class="form-label fw-semibold" for="config-field-1">Environment</label>
+
+                <select id="config-field-1" class="form-select" @bind="SelectedEnvironment">
+                    <option value="Development">Development</option>
+                    <option value="Staging">Staging</option>
+                    <option value="Production">Production</option>
+                </select>
+            </div>
+            @if (IsCloudDeployment)
+            {
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="config-field-2">Azure Region</label>
+
+                    <select id="config-field-2" class="form-select"
+                            @bind="Config.CloudAzureRegion">
+                        <option value="eastus">East US</option>
+                        <option value="eastus2">East US 2</option>
+                        <option value="westus3">West US 3</option>
+                        <option value="centralus">Central US</option>
+                        <option value="westeurope">West Europe</option>
+                        <option value="northeurope">North Europe</option>
+                    </select>
+                </div>
+            }
+            else
+            {
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="config-field-3">Exposed Port (Host)</label>
+
+                    <input id="config-field-3" type="number" class="form-control"
+                           @bind="Config.ExposedPort" placeholder="e.g., 8080" min="1" max="65535"/>
+                </div>
+            }
+        </div>
+
+        @if (IsCloudDeployment)
+        {
+            <h3 class="text-primary fw-bold mb-3 border-bottom pb-2">Azure Settings</h3>
+            @if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+            {
+                <p class="small text-muted">Install the AutoMate GitHub App on this repository and choose an
+                    Azure Container Registry in the resource group below. AutoMate creates a Basic registry if
+                    that name is available; Azure charges your subscription for it.</p>
+                @if (GitHubAppInstallUrl is not null)
                 {
-                    <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                        <span>@_validationMessage</span>
-                    </div>
+                    <a href="@GitHubAppInstallUrl" target="_blank" rel="noopener noreferrer">
+                        Install AutoMate GitHub App
+                    </a>
                 }
+            }
 
-                <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Basic Settings</h6>
-                <div class="row g-3 mb-4">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold">Environment</label>
-                        <select class="form-select" @bind="SelectedEnvironment">
-                            <option value="Development">Development</option>
-                            <option value="Staging">Staging</option>
-                            <option value="Production">Production</option>
-                        </select>
-                    </div>
-                    @if (IsCloudDeployment)
-                    {
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="config-field-4">Resource Group</label>
+
+                    <input id="config-field-4" type="text" class="form-control"
+                           @bind="Config.CloudResourceGroupName" placeholder="rg-my-app" autocomplete="off"/>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="config-field-5">Container App Name</label>
+
+                    <input id="config-field-5" type="text" class="form-control"
+                           @bind="Config.CloudContainerAppName" placeholder="my-app" autocomplete="off"/>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold" for="config-field-6">Registry Server</label>
+
+                    <input id="config-field-6" type="text" class="form-control"
+                           @bind="Config.CloudRegistryName" placeholder="myregistry.azurecr.io"
+                           autocomplete="off"/>
+                </div>
+            </div>
+        }
+
+        <div class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
+            <h3 class="text-primary fw-bold mb-0">Databases</h3>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddEmptyDatabase">
+                <i class="bi bi-plus-lg"></i> Add Database
+            </button>
+        </div>
+
+        @if (Config.Databases is null || Config.Databases.Count == 0)
+        {
+            <p class="text-muted small text-center my-3">No databases defined.</p>
+        }
+        else
+        {
+            @foreach (var db in Config.Databases)
+            {
+                <div
+                    class="config-nested-panel p-3 mb-3 position-relative">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2"
+                            @onclick="@(() => RemoveDatabase(db))" title="Remove database">
+                        <i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Remove</span>
+                    </button>
+
+                    <div class="row g-3 mb-3 mt-1">
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Azure Region</label>
-                            <select class="form-select"
-                                    @bind="Config.CloudAzureRegion">
-                                <option value="eastus">East US</option>
-                                <option value="eastus2">East US 2</option>
-                                <option value="westus3">West US 3</option>
-                                <option value="centralus">Central US</option>
-                                <option value="westeurope">West Europe</option>
-                                <option value="northeurope">North Europe</option>
+                            <label class="form-label fw-semibold"
+                                   for="@("config-field-7-" + Config.Databases.IndexOf(db))">Database Engine</label>
+
+                            <select id="@("config-field-7-" + Config.Databases.IndexOf(db))" class="form-select"
+                                    @bind="db.DbType">
+                                <option value="PostgreSQL">PostgreSQL</option>
+                                <option value="MySQL">MySQL</option>
+                                <option value="SQLServer">Microsoft SQL Server</option>
+                                <option value="MongoDB">MongoDB</option>
+                                <option value="Redis">Redis</option>
                             </select>
                         </div>
-                    }
-                    else
-                    {
                         <div class="col-md-6">
-                            <label class="form-label fw-semibold">Exposed Port (Host)</label>
-                            <input type="number" class="form-control"
-                                   @bind="Config.ExposedPort" placeholder="e.g., 8080" min="1" max="65535"/>
-                        </div>
-                    }
-                </div>
+                            <label class="form-label fw-semibold"
+                                   for="@("config-field-8-" + Config.Databases.IndexOf(db))">Connection String
+                                Name</label>
 
-                @if (IsCloudDeployment)
-                {
-                    <h6 class="text-primary fw-bold mb-3 border-bottom pb-2">Azure Settings</h6>
-                    @if (!DeploymentCapabilities.LocalDeploymentsEnabled)
-                    {
-                        <p class="small text-muted">Install the AutoMate GitHub App on this repository and choose an
-                            Azure Container Registry in the resource group below. AutoMate creates a Basic registry if
-                            that name is available; Azure charges your subscription for it.</p>
-                        @if (GitHubAppInstallUrl is not null)
-                        {
-                            <a href="@GitHubAppInstallUrl" target="_blank" rel="noopener noreferrer">
-                                Install AutoMate GitHub App
-                            </a>
-                        }
-                    }
-
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Resource Group</label>
-                            <input type="text" class="form-control"
-                                   @bind="Config.CloudResourceGroupName" placeholder="rg-my-app" autocomplete="off"/>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Container App Name</label>
-                            <input type="text" class="form-control"
-                                   @bind="Config.CloudContainerAppName" placeholder="my-app" autocomplete="off"/>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Registry Server</label>
-                            <input type="text" class="form-control"
-                                   @bind="Config.CloudRegistryName" placeholder="myregistry.azurecr.io"
+                            <input id="@("config-field-8-" + Config.Databases.IndexOf(db))" type="text"
+                                   class="form-control"
+                                   @bind="db.ConnectionStringName" placeholder="e.g. DefaultConnection"
                                    autocomplete="off"/>
                         </div>
                     </div>
-                }
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold"
+                                   for="@("config-field-9-" + Config.Databases.IndexOf(db))">Database Name</label>
 
-                <div class="d-flex justify-content-between align-items-end mb-3 border-bottom pb-2">
-                    <h6 class="text-primary fw-bold mb-0">Databases</h6>
-                    <button type="button" class="btn btn-sm btn-success" @onclick="AddEmptyDatabase">
-                        <i class="bi bi-plus-lg"></i> Add Database
-                    </button>
-                </div>
-
-                @if (Config.Databases is null || Config.Databases.Count == 0)
-                {
-                    <p class="text-muted small text-center my-3">No databases defined.</p>
-                }
-                else
-                {
-                    @foreach (var db in Config.Databases)
-                    {
-                        <div
-                            class="config-nested-panel p-3 mb-3 position-relative">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2"
-                                    @onclick="@(() => RemoveDatabase(db))" title="Remove database">
-                                <i class="bi bi-trash"></i> X
-                            </button>
-
-                            <div class="row g-3 mb-3 mt-1">
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Database Engine</label>
-                                    <select class="form-select" @bind="db.DbType">
-                                        <option value="PostgreSQL">PostgreSQL</option>
-                                        <option value="MySQL">MySQL</option>
-                                        <option value="SQLServer">Microsoft SQL Server</option>
-                                        <option value="MongoDB">MongoDB</option>
-                                        <option value="Redis">Redis</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label fw-semibold">Connection String Name</label>
-                                    <input type="text" class="form-control"
-                                           @bind="db.ConnectionStringName" placeholder="e.g. DefaultConnection"
-                                           autocomplete="off"/>
-                                </div>
-                            </div>
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Database Name</label>
-                                    <input type="text" class="form-control"
-                                           @bind="db.DbName" placeholder="mydb" autocomplete="off"/>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Username</label>
-                                    <input type="text" class="form-control"
-                                           @bind="db.DbUser" placeholder="admin" autocomplete="off"/>
-                                </div>
-                                <div class="col-md-4">
-                                    <label class="form-label fw-semibold">Password</label>
-                                    <input type="text" class="form-control"
-                                           @bind="db.DbPassword" placeholder="secret" autocomplete="off"/>
-                                </div>
-                            </div>
+                            <input id="@("config-field-9-" + Config.Databases.IndexOf(db))" type="text"
+                                   class="form-control"
+                                   @bind="db.DbName" placeholder="mydb" autocomplete="off"/>
                         </div>
-                    }
-                }
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold"
+                                   for="@("config-field-10-" + Config.Databases.IndexOf(db))">Username</label>
 
-                <div class="d-flex justify-content-between align-items-end mb-3 mt-4 border-bottom pb-2">
-                    <h6 class="text-primary fw-bold mb-0">Custom Environment Variables</h6>
-                    <div class="d-flex gap-2">
-                        @if (!IsCloudDeployment)
-                        {
-                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                                    @onclick="LoadVariablesFromConfigFilesAsync">
-                                <i class="bi bi-file-earmark-arrow-down"></i> Load Variables
-                            </button>
-                        }
-                        <button type="button" class="btn btn-sm btn-success" @onclick="AddEmptyEnvVar">
-                            <i class="bi bi-plus-lg"></i> Add
-                        </button>
+                            <input id="@("config-field-10-" + Config.Databases.IndexOf(db))" type="text"
+                                   class="form-control"
+                                   @bind="db.DbUser" placeholder="admin" autocomplete="off"/>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold"
+                                   for="@("config-field-11-" + Config.Databases.IndexOf(db))">Password</label>
+
+                            <input id="@("config-field-11-" + Config.Databases.IndexOf(db))" type="password"
+                                   class="form-control"
+                                   @bind="db.DbPassword" placeholder="secret" autocomplete="off"/>
+                        </div>
                     </div>
                 </div>
+            }
+        }
 
-                @if (_envVars.Count == 0)
+        <div class="d-flex justify-content-between align-items-end mb-3 mt-4 border-bottom pb-2">
+            <h3 class="text-primary fw-bold mb-0">Environment variables</h3>
+            <div class="d-flex gap-2">
+                @if (!IsCloudDeployment)
                 {
-                    <p class="text-muted small text-center my-3">No custom environment variables defined.</p>
+                    <button type="button" class="btn btn-sm btn-outline-secondary"
+                            @onclick="LoadVariablesFromConfigFilesAsync">
+                        <i class="bi bi-file-earmark-arrow-down"></i> Load Variables
+                    </button>
                 }
-                else
-                {
-                    @foreach (var item in _envVars)
-                    {
-                        <div class="row g-2 mb-2 align-items-center">
-                            <div class="col-5">
-                                <input type="text"
-                                       class="form-control font-monospace"
-                                       placeholder="KEY (e.g. API_TOKEN)" @bind="item.Key" autocomplete="off"/>
-                            </div>
-                            <div class="col-6">
-                                <input type="text"
-                                       class="form-control font-monospace"
-                                       placeholder="Value" @bind="item.Value" autocomplete="off"/>
-                            </div>
-                            <div class="col-1 text-end">
-                                <button type="button" class="btn btn-sm btn-outline-danger"
-                                        @onclick="@(() => RemoveEnvVar(item))" title="Remove variable">
-                                    <i class="bi bi-trash"></i> X
-                                </button>
-                            </div>
-                        </div>
-                    }
-                }
-            </div>
-
-            <div class="modal-footer border-top">
-                <button type="button" class="btn btn-secondary" @onclick="OnCancel">Cancel</button>
-                <button type="button" class="btn btn-primary" @onclick="ConfirmDeploy">
-                    <i class="bi bi-rocket-takeoff me-1"></i> Start Deployment
+                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddEmptyEnvVar">
+                    <i class="bi bi-plus-lg"></i> Add
                 </button>
             </div>
         </div>
+
+        @if (_envVars.Count == 0)
+        {
+            <p class="text-muted small text-center my-3">No custom environment variables defined.</p>
+        }
+        else
+        {
+            @foreach (var item in _envVars)
+            {
+                <div class="row g-2 mb-2 align-items-center">
+                    <div class="col-5">
+                        <input type="text"
+                               class="form-control font-monospace"
+                               aria-label="Environment variable name" placeholder="KEY (e.g. API_TOKEN)"
+                               @bind="item.Key" autocomplete="off"/>
+                    </div>
+                    <div class="col-6">
+                        <input type="text"
+                               class="form-control font-monospace"
+                               aria-label="Environment variable value" placeholder="Value" @bind="item.Value"
+                               autocomplete="off"/>
+                    </div>
+                    <div class="col-1 text-end">
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                @onclick="@(() => RemoveEnvVar(item))" title="Remove variable">
+                            <i class="bi bi-trash" aria-hidden="true"></i><span class="visually-hidden">Remove</span>
+                        </button>
+                    </div>
+                </div>
+            }
+        }
     </div>
-</div>
+
+    <div class="modal-footer border-top">
+        <button type="button" class="btn btn-secondary" @onclick="OnCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" @onclick="ConfirmDeploy">
+            <i class="bi bi-rocket-takeoff me-1"></i> Start Deployment
+        </button>
+    </div>
+</ConsoleDialog>

@@ -28,7 +28,7 @@
 
 .form-label {
     color: var(--am-text);
-    font-weight: 750;
+    font-weight: 600;
 }
 
 .form-control {
@@ -67,4 +67,14 @@
 
 [data-bs-theme="dark"] .btn-primary-custom {
     color: #07111f;
+}
+
+.login-card {
+    width: min(100%, 440px);
+    box-shadow: none;
+    border-radius: 8px;
+}
+
+.login-header {
+    margin-bottom: 24px;
 }

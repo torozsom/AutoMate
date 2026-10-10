@@ -98,3 +98,8 @@
         padding: 1rem .75rem;
     }
 }
+
+.project-console, .telemetry-panel {
+    box-shadow: none;
+    border-color: var(--am-border);
+}

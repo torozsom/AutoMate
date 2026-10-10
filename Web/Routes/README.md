@@ -48,3 +48,9 @@ cookie/token, resolves owner identity through IUserService and calls IDeployment
 antiforgery,
 and 403 unresolved owner. Cancellation is available with AI disabled. It does not delete results or alter deployments;
 the project analysis panel also exposes cancellation through the Application port.
+
+## Assessment request routes (2026-10-09)
+
+`DeploymentAnalysisEndpoint` also exposes authenticated GET/PUT deployment analysis preferences and POST typed analysis
+requests. PUT/POST require antiforgery tokens; owner identity comes from the authenticated user service. Option-conflict
+retries return HTTP 409. The [assessment guide](../../docs/status-aware-assessments.md) documents request bodies.

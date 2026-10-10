@@ -183,3 +183,26 @@
         overflow-y: auto;
     }
 }
+
+.mobile-nav-toggle {
+    display: none;
+    border: 1px solid var(--am-border);
+    background: var(--am-surface);
+    color: var(--am-text);
+    min-height: 44px;
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+@media (max-width: 640px) {
+    .mobile-nav-toggle {
+        display: block;
+        position: absolute;
+        top: 12px;
+        right: 16px;
+    }
+
+    .nav-scrollable.nav-open {
+        display: block;
+    }
+}

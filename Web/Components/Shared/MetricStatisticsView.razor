@@ -1,0 +1,143 @@
+@using Application.Abstractions.Diagnostics
+<div class="metric-statistics-view">
+    @if (Availability is not null)
+    {
+        <p class="telemetry-notice" role="status">@Availability</p>
+    }
+    <p class="telemetry-muted">Average observed container usage · @Range.Aggregation. Missing observations remain gaps.
+        @Data.Sum(p => p.Samples) observed samples · @Data.Select(p => p.Timestamp).Distinct().Count() aggregation
+        buckets containing observations.
+        @if (Data.Any(p => p.ImportedIntervals > 0))
+        {
+            <span>Imported interval averages have no raw sample counts.</span>
+        }
+    </p>
+    <div class="telemetry-chart-grid">
+        <TelemetryChart Title="CPU usage" Metric="@TelemetryPresentation.Cpu"
+                        Points="@Points(TelemetryPresentation.Cpu)"
+                        Start="Range.Start" End="Range.End" Gap="@(Range.Interval + TimeSpan.FromSeconds(5))"/>
+        <TelemetryChart Title="Memory usage" Metric="@TelemetryPresentation.Memory"
+                        Points="@Points(TelemetryPresentation.Memory)"
+                        Start="Range.Start" End="Range.End" Gap="@(Range.Interval + TimeSpan.FromSeconds(5))"/>
+    </div>
+    <details class="telemetry-table-details">
+        <summary>Numeric metric statistics</summary>
+        <div class="table-responsive">
+            <table class="table telemetry-table">
+                <caption>UTC @Range.Aggregation by deployment and container; first and last buckets are clipped to the
+                    selected range; pagination does not change charts
+                </caption>
+                <thead>
+                <tr>
+                    <th scope="col">UTC bucket</th>
+                    <th scope="col">Deployment</th>
+                    <th scope="col">Container</th>
+                    <th scope="col">Metric</th>
+                    <th scope="col">Average</th>
+                    <th scope="col">Minimum</th>
+                    <th scope="col">Maximum</th>
+                    <th scope="col">Samples / imported intervals</th>
+                    <th scope="col">Quality</th>
+                </tr>
+                </thead>
+                <tbody>@foreach (var row in Rows)
+                {
+                    <tr>
+                        <td>@row.Timestamp.ToString("u")</td>
+                        <td>
+                            <a href="@($"/project/{row.Project}/deployment/{row.Deployment}")">@row.Deployment.ToString("N")[..8]</a>
+                        </td>
+                        <td>@row.Container</td>
+                        <td>@TelemetryPresentation.Label(row.Metric)</td>
+                        <td>@TelemetryPresentation.Format(row.Average, row.Metric)</td>
+                        <td>@TelemetryPresentation.Format(row.Minimum, row.Metric)</td>
+                        <td>@TelemetryPresentation.Format(row.Maximum, row.Metric)</td>
+                        <td>@(row.ImportedIntervals > 0 ? $"{row.ImportedIntervals} imported intervals" : $"{row.Samples} samples")</td>
+                        <td>@(row.Incomplete ? "Partial" : "Observed")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <StatisticsPager Label="Metric statistics pages" Total="Data.Count" Page="_page" Size="_size"
+                         Change="SetPage" SizeChanged="SetSize"/>
+    </details>
+</div>
+
+@code {
+
+    /// <summary>Bounded immutable container aggregates for the displayed range.</summary>
+    [Parameter]
+    public IReadOnlyList<MetricObservation> Data { get; set; } = [];
+
+    /// <summary>Frozen bounds shared by charts, coverage and the numeric alternative.</summary>
+    [Parameter]
+    public MetricTimeRange Range { get; set; } = MetricTimeRange.Preset("30d", DateTimeOffset.UtcNow);
+
+    /// <summary>Partial or unavailable recorded evidence guidance.</summary>
+    [Parameter]
+    public string? Availability { get; set; }
+
+    /// <summary>Independent table page and row count.</summary>
+    private int _page = 1, _size = 25;
+
+    /// <summary>Resets page when the data identity or range changes.</summary>
+    private IReadOnlyList<MetricObservation>? _previous;
+
+    /// <summary>Selected table rows never restrict chart input.</summary>
+    private IEnumerable<MetricObservation> Rows => _ordered.Skip((_page - 1) * _size).Take(_size);
+
+    /// <summary>Ordering is computed only when new observations arrive.</summary>
+    private MetricObservation[] _ordered = [];
+
+    /// <summary>Complete chart input remains stable across numeric page changes.</summary>
+    private IReadOnlyList<TelemetryChartPoint> _cpu = [], _memory = [];
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (!ReferenceEquals(_previous, Data))
+        {
+            _previous = Data;
+            _page = 1;
+            _ordered = Data.OrderByDescending(p => p.Timestamp).ThenBy(p => p.Deployment)
+                .ThenBy(p => p.Container, StringComparer.Ordinal).ThenBy(p => p.Metric, StringComparer.Ordinal).ToArray();
+            _cpu = BuildPoints(TelemetryPresentation.Cpu);
+            _memory = BuildPoints(TelemetryPresentation.Memory);
+        }
+    }
+
+    /// <summary>Changes only the numeric alternative's page.</summary>
+    private void SetPage(int page)
+    {
+        _page = page;
+    }
+
+    /// <summary>Resizing begins at page one.</summary>
+    private void SetSize(int size)
+    {
+        _size = size;
+        _page = 1;
+    }
+
+    /// <summary>Reads cached full evidence rather than rebuilding charts when a numeric page changes.</summary>
+    private IReadOnlyList<TelemetryChartPoint> Points(string metric)
+    {
+        return metric == TelemetryPresentation.Cpu ? _cpu : _memory;
+    }
+
+    /// <summary>Sample-weighted population observations; imported interval means stay explicitly qualified.</summary>
+    private IReadOnlyList<TelemetryChartPoint> BuildPoints(string metric)
+    {
+        return Data.Where(p => p.Metric == metric)
+            .GroupBy(p => p.Timestamp).OrderBy(g => g.Key).Select(g =>
+            {
+                var raw = g.Where(p => p.Samples > 0).ToArray();
+                var selected = raw.Length > 0 ? raw : g.ToArray();
+                var weight = selected.Sum(p => p.Samples > 0 ? p.Samples : p.ImportedIntervals);
+                return new TelemetryChartPoint(g.Key, selected.Sum(p => p.Sum) / Math.Max(1, weight),
+                    selected.Min(p => p.Minimum), selected.Max(p => p.Maximum));
+            }).ToArray();
+    }
+
+}

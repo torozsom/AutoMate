@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
 using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
@@ -28,6 +31,41 @@ public sealed class LokiDeploymentLogs(
             double.IsFinite(value) && value >= 0
                 ? (long)value
                 : 0);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAssessmentAsync(ArchiveAssessmentQuery request,
+        CancellationToken token)
+    {
+        var selection = request.Selection.Normalize();
+        if (selection.Sources == AssessmentSources.None) return [];
+        var clauses = new List<string>();
+        var containers = selection.LogContainers is null
+            ? ""
+            : " and channel=~" + JsonSerializer.Serialize(selection.LogContainers.Length == 0
+                ? "a^"
+                : string.Join("|", selection.LogContainers.Select(Regex.Escape)));
+        if (selection.Sources.HasFlag(AssessmentSources.Build))
+            clauses.Add("(source=\"DockerCompose\" or (source=\"DockerContainer\" and ai_component=\"3\"))");
+        if (selection.Sources.HasFlag(AssessmentSources.Web))
+            clauses.Add(
+                "(((source=\"DockerContainer\" and ai_component=\"4\") or (source=\"AzureContainerApps\" and ai_stream=~\"1|2\"))" +
+                containers + ")");
+        if (selection.Sources.HasFlag(AssessmentSources.Database))
+            clauses.Add("(source=\"DockerContainer\" and ai_component=\"5\"" + containers + ")");
+        if (selection.Sources.HasFlag(AssessmentSources.GitHub)) clauses.Add("(source=\"GitHubActions\")");
+        if (selection.Sources.HasFlag(AssessmentSources.Azure))
+            clauses.Add("(source=\"AzureContainerApps\" and ai_stream=~\"0|3\")");
+        if (selection.Sources.HasFlag(AssessmentSources.Deployment)) clauses.Add("(source=~\"AutoMate|DockerDaemon\")");
+        if (selection.Sources.HasFlag(AssessmentSources.Other))
+            clauses.Add(
+                "((source=\"DockerContainer\" and ai_component!~\"3|4|5\") or (source=\"AzureContainerApps\" and ai_stream!~\"0|1|2|3\"))");
+        var filter = $" | project_id=\"{request.Project:N}\" | deployment_id=\"{request.Deployment:N}\"" +
+                     " | json ai_component=\"event.sourceIdentity.component\", ai_stream=\"event.sourceIdentity.stream\", ai_kind=\"event.kind\", ai_channel=\"channel\"" +
+                     " | ai_kind!=\"6\" | ai_channel!=\"\" | (" + string.Join(" or ", clauses) + ")";
+        var entries = await QueryAsync(request.Tenant, filter, true, Math.Clamp(request.Limit + 1, 1, 1001), token,
+            request.Window.Start, request.Window.End);
+        return entries.Where(e => AssessmentClassification.Matches(e, selection, request.Window)).ToArray();
     }
 
     /// <inheritdoc />
@@ -95,13 +133,16 @@ public sealed class LokiDeploymentLogs(
 
     /// <summary>Bounds time and results, and rejects unsuccessful query responses.</summary>
     private async Task<IReadOnlyList<DeploymentLogEnvelope>> QueryAsync(Guid tenantId, string filter,
-        bool backwards, int limit, CancellationToken cancellationToken, DateTimeOffset? start = null)
+        bool backwards, int limit, CancellationToken cancellationToken, DateTimeOffset? start = null,
+        DateTimeOffset? end = null)
     {
         var now = DateTimeOffset.UtcNow;
         var earliest = start.HasValue && start > now.AddDays(-30) ? start.Value : now.AddDays(-30);
+        var until = end is { } upper && upper < now ? upper : now;
+        if (until <= earliest) return [];
         var query = "{service_name=\"automate\"}" + filter + $" | expires_at > {now.ToUnixTimeSeconds()}";
         using var response = await transport.SendAsync(Url("loki/api/v1/query_range") +
-                                                       $"?query={Uri.EscapeDataString(query)}&start={Nanoseconds(earliest)}&end={Nanoseconds(now)}" +
+                                                       $"?query={Uri.EscapeDataString(query)}&start={Nanoseconds(earliest)}&end={Nanoseconds(until)}" +
                                                        $"&direction={(backwards ? "backward" : "forward")}&limit={limit}",
             tenantId, null, cancellationToken);
         if (response.RootElement.GetProperty("status").GetString() != "success")

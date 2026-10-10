@@ -45,3 +45,15 @@ reviewed spend limits still govern provider execution. Web already has the requi
 Project Details anchors follow Overview, Live Logs, Live Resource Utilization, Project Analytics, AI Analysis,
 Configuration and Deployment History. Each six-item history page opens View Details on the existing deployment route.
 Recorded configuration is separate from next-deployment settings.
+
+## Console modernization
+
+Signed-in Home is Overview and /dashboard is Projects. Public pages use a lightweight header; shared local theme tokens
+and console.css provide compact tables, KPI cards and responsive surfaces.
+See [behavior and verification](../docs/ui-modernization.md).
+
+## Metric refinements
+
+Every chart group uses a shared UTC range picker (10-minute through five-year presets, custom five-minute minimum).
+Numeric metric/outcome tables use independent 10/25/50-row pagination. AI sections have a purple border; repository
+source pages retain their earlier card presentation. See ../docs/metric-exploration.md.

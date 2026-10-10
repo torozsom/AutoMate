@@ -1,3 +1,5 @@
+using Application.Abstractions.Ai;
+
 namespace Application.Abstractions.Diagnostics;
 
 /// <summary>Private gateway request for bounded archived metric aggregation.</summary>
@@ -22,6 +24,37 @@ public sealed record ArchiveMetricImport(
 /// <summary>Permanent redacted deployment history, separate from the operational telemetry retention window.</summary>
 public interface IDeploymentArchive
 {
+    /// <summary>Filters before pagination and returns recorded source metadata without diagnostic prose in catalogs.</summary>
+    Task<ArchiveAssessmentPage> ReadAssessmentAsync(
+        ArchiveAssessmentQuery query, CancellationToken token)
+    {
+        throw new NotSupportedException("Archive assessment selection is unavailable.");
+    }
+
+    /// <summary>Filters container identities before bounded metric aggregation.</summary>
+    async Task<IReadOnlyList<DeploymentMetricPoint>> ReadAssessmentMetricsAsync(
+        ArchiveAssessmentQuery query, CancellationToken token)
+    {
+        return (await ReadMetricsAsync(query.Tenant, query.Project, query.Deployment, query.Window.Start,
+                query.Window.End, 100, token))
+            .Where(p => query.Selection.MetricContainers is null ||
+                        query.Selection.MetricContainers.Contains(p.Container, StringComparer.Ordinal)).ToArray();
+    }
+
+    /// <summary>Reads a bounded numeric partition through the rebuildable lookup.</summary>
+    Task<ArchiveMetricBatch> ReadIndexedMetricsAsync(Guid tenant, Guid project, Guid deployment,
+        MetricTimeRange range, string? container, CancellationToken token)
+    {
+        return Task.FromResult(new ArchiveMetricBatch([], null, "Detailed metric lookup is unavailable."));
+    }
+
+    /// <summary>Returns a private owner-authorized page of numeric deployment partitions.</summary>
+    Task<ArchiveMetricBatch> ReadMetricBatchAsync(ArchiveMetricBatchRequest request, CancellationToken token)
+    {
+        return Task.FromResult(new ArchiveMetricBatch([], null,
+            "Detailed metric exploration is unavailable on this archive host."));
+    }
+
     /// <summary>Durably appends an immutable event; duplicate identities return the original receipt.</summary>
     Task<DeploymentLogEnvelope> AppendAsync(DeploymentLogEnvelope envelope, CancellationToken token);
 

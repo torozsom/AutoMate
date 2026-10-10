@@ -35,7 +35,8 @@ Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployme
 writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
 gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
-Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+Operational detailed data expires after 30 days; permanent archives and daily summaries retain until project deletion.
+See the root navigation.md for new module entry
 points.
 
 Infrastructure/Observability owns the shared SDK-independent logger factory, literal catalog and typed policy used by

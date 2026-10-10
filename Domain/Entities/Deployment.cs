@@ -8,6 +8,9 @@ namespace Domain.Entities;
 /// </summary>
 public class Deployment : BaseEntity
 {
+    /// <summary>Last owner-saved assessment choices; never credentials or diagnostics.</summary>
+    public string? AiAssessmentPreferencesJson { get; set; }
+
     /// <summary>Serialized immutable non-secret configuration; null for legacy deployments.</summary>
     public string? ConfigurationSnapshotJson { get; set; }
 

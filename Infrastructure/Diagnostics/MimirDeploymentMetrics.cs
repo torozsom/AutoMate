@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
 using Microsoft.Extensions.Options;
 
@@ -57,43 +59,21 @@ public sealed class MimirDeploymentMetrics(
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,
+    public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken)
     {
-        maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
-        var interval = Math.Max(60, (int)Math.Ceiling((end - start).TotalSeconds / maximumPoints));
-        var earliest = DateTimeOffset.UtcNow.AddDays(-30).AddSeconds(interval);
-        if (start < earliest) start = earliest;
-        start = end.AddSeconds(-Math.Floor((end - start).TotalSeconds / interval) * interval);
-        var points = new Dictionary<(string Container, string Name, DateTimeOffset Time), double[]>();
-        foreach (var name in Units.Keys)
-        {
-            var selector = Selector(name, projectId, deploymentId);
-            var aggregation = new[] { "avg_over_time", "min_over_time", "max_over_time" };
-            for (var i = 0; i < aggregation.Length; i++)
-            {
-                var query = $"{aggregation[i]}({selector}[{interval}s])";
-                using var response = await QueryAsync(tenantId, "query_range", query,
-                    $"&start={Seconds(start)}&end={Seconds(end)}&step={interval}", cancellationToken);
-                foreach (var series in response.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
-                foreach (var pair in series.GetProperty("values").EnumerateArray())
-                {
-                    var container = series.GetProperty("metric").GetProperty("container").GetString()!;
-                    var time = DateTimeOffset.FromUnixTimeMilliseconds((long)(pair[0].GetDouble() * 1000));
-                    if (!double.TryParse(pair[1].GetString(), CultureInfo.InvariantCulture, out var value) ||
-                        !double.IsFinite(value)) continue;
-                    var key = (container, name, time);
-                    if (!points.TryGetValue(key, out var values))
-                        points[key] = values = [double.NaN, double.NaN, double.NaN];
-                    values[i] = value;
-                }
-            }
-        }
+        return ReadCoreAsync(tenantId, projectId, deploymentId, start, end, maximumPoints, cancellationToken, null);
+    }
 
-        return points.Where(p => p.Value.All(double.IsFinite)).Select(p => new DeploymentMetricPoint(
-                redactor.RedactText(p.Key.Container, 128), p.Key.Name, Units[p.Key.Name], p.Key.Time, p.Value[0],
-                p.Value[1], p.Value[2]))
-            .OrderBy(p => p.Timestamp).ToArray();
+    /// <inheritdoc />
+    public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAssessmentAsync(ArchiveAssessmentQuery query,
+        CancellationToken token)
+    {
+        return !query.Selection.Normalize().IncludeMetrics
+            ? Task.FromResult<IReadOnlyList<DeploymentMetricPoint>>([])
+            : ReadCoreAsync(query.Tenant, query.Project, query.Deployment, query.Window.Start, query.Window.End, 100,
+                token,
+                query.Selection.Normalize().MetricContainers);
     }
 
     /// <inheritdoc />
@@ -156,6 +136,53 @@ public sealed class MimirDeploymentMetrics(
         if (response.RootElement.TryGetProperty("partialSuccess", out var partial) &&
             partial.TryGetProperty("rejectedDataPoints", out var rejected) && rejected.ToString() != "0")
             throw new InvalidOperationException("Telemetry metric batch was partially rejected.");
+    }
+
+    /// <summary>Filters metric labels before interval aggregation.</summary>
+    private async Task<IReadOnlyList<DeploymentMetricPoint>> ReadCoreAsync(Guid tenantId, Guid projectId,
+        Guid deploymentId,
+        DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken,
+        string[]? selected)
+    {
+        if (selected is { Length: 0 }) return [];
+        maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
+        var interval = Math.Max(60, (int)Math.Ceiling((end - start).TotalSeconds / maximumPoints));
+        var earliest = DateTimeOffset.UtcNow.AddDays(-30).AddSeconds(interval);
+        if (start < earliest) start = earliest;
+        if (end <= start) return [];
+        start = end.AddSeconds(-Math.Floor((end - start).TotalSeconds / interval) * interval);
+        var points = new Dictionary<(string Container, string Name, DateTimeOffset Time), double[]>();
+        foreach (var name in Units.Keys)
+        {
+            var selector = Selector(name, projectId, deploymentId);
+            if (selected is not null)
+                selector = selector[..^1] + ",container=~" +
+                           JsonSerializer.Serialize(string.Join("|", selected.Select(Regex.Escape))) + "}";
+            var aggregation = new[] { "avg_over_time", "min_over_time", "max_over_time" };
+            for (var i = 0; i < aggregation.Length; i++)
+            {
+                var query = $"{aggregation[i]}({selector}[{interval}s])";
+                using var response = await QueryAsync(tenantId, "query_range", query,
+                    $"&start={Seconds(start)}&end={Seconds(end)}&step={interval}", cancellationToken);
+                foreach (var series in response.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
+                foreach (var pair in series.GetProperty("values").EnumerateArray())
+                {
+                    var container = series.GetProperty("metric").GetProperty("container").GetString()!;
+                    var time = DateTimeOffset.FromUnixTimeMilliseconds((long)(pair[0].GetDouble() * 1000));
+                    if (!double.TryParse(pair[1].GetString(), CultureInfo.InvariantCulture, out var value) ||
+                        !double.IsFinite(value)) continue;
+                    var key = (container, name, time);
+                    if (!points.TryGetValue(key, out var values))
+                        points[key] = values = [double.NaN, double.NaN, double.NaN];
+                    values[i] = value;
+                }
+            }
+        }
+
+        return points.Where(p => p.Value.All(double.IsFinite)).Select(p => new DeploymentMetricPoint(
+                redactor.RedactText(p.Key.Container, 128), p.Key.Name, Units[p.Key.Name], p.Key.Time, p.Value[0],
+                p.Value[1], p.Value[2]))
+            .OrderBy(p => p.Timestamp).ToArray();
     }
 
     /// <summary>Rejects unsupported or nonfinite samples before store writes and visibility queries.</summary>

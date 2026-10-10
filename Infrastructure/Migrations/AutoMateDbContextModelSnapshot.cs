@@ -131,6 +131,10 @@ namespace Infrastructure.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("request_key");
 
+                    b.Property<string>("RequestedSelectionJson")
+                        .HasColumnType("text")
+                        .HasColumnName("requested_selection_json");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -157,6 +161,14 @@ namespace Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("AssessmentProvenanceJson")
+                        .HasColumnType("text")
+                        .HasColumnName("assessment_provenance_json");
+
+                    b.Property<string>("AssessmentSectionsJson")
+                        .HasColumnType("text")
+                        .HasColumnName("assessment_sections_json");
 
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
@@ -237,6 +249,10 @@ namespace Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("requested_model");
+
+                    b.Property<string>("RequestedSelectionJson")
+                        .HasColumnType("text")
+                        .HasColumnName("requested_selection_json");
 
                     b.Property<int?>("ResultSchemaVersion")
                         .HasColumnType("integer")
@@ -818,6 +834,10 @@ namespace Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("AiAssessmentPreferencesJson")
+                        .HasColumnType("text")
+                        .HasColumnName("ai_assessment_preferences_json");
 
                     b.Property<string>("CloudAppUrl")
                         .HasColumnType("text")

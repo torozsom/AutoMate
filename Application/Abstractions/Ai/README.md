@@ -74,3 +74,11 @@ Infrastructure registry routing does not change Application workflow or UI contr
 
 Spending denials distinguish absent/invalid amounts, currency mismatch and genuinely exhausted account reservations.
 IAnalysisBudgetGuard keeps its existing nullable finite-reason signature. No metadata schema migration is needed.
+
+## Status-aware assessments (2026-10-09)
+
+Typed `AssessmentSelection` admission, owner-authorized per-deployment preferences and optional `AssessmentProvenance`/
+`AssessmentSections` extend the existing ports. Choices are canonicalized and stored separately on receipts/results.
+Different options under the same request ID return Conflict. Context remains ephemeral; only selection/status/window
+metadata and validated authored results persist. Skipped results may include collection provenance, with fixed safe
+guidance. See [contracts and rollout](../../../docs/status-aware-assessments.md).

@@ -1,0 +1,79 @@
+@using Application.Data.Apps
+@using Domain.Enums
+@if (Inventory is { } inventory)
+{
+    <table class="table console-table responsive-inventory project-inventory">
+        <caption class="visually-hidden">Saved projects, latest deployment status and actions</caption>
+        <thead>
+        <tr>
+            <th scope="col">Project / source</th>
+            <th scope="col">Composition</th>
+            <th scope="col">Latest deployment UTC</th>
+            <th scope="col">Status</th>
+            <th scope="col">Actions</th>
+        </tr>
+        </thead>
+        <tbody>@foreach (var project in inventory.Items)
+        {
+            var deploying = IsDeploying(project.Id);
+            var disabled = deploying || (project.SourceType == SourceType.Remote ? !AzureConnected : !LocalEnabled);
+            <tr @key="project.Id">
+                <td data-label="Project"><a class="inventory-name" href="@($"/project/{project.Id}")"><i
+                            class="bi @(project.SourceType == SourceType.Remote ? "bi-github" : "bi-folder2-open")"
+                            aria-hidden="true"></i> @project.Name</a><small class="console-subtext inventory-source"
+                                                                            title="@project.Source">@project.Source</small>
+                </td>
+                <td data-label="Composition">
+                    <div class="inventory-cell">@project.Components components<small
+                            class="console-subtext">@project.WebApps web apps
+                            · @(project.SourceType == SourceType.Remote ? "GitHub / Azure" : "Local / Docker")</small>
+                    </div>
+                </td>
+                <td data-label="Latest deployment">@(project.LatestAt?.ToString("MMM d, yyyy HH:mm") ?? "No deployments")</td>
+                <td data-label="Status">
+                    <DeploymentBadge Status="project.Status"/>
+                </td>
+                <td data-label="Actions">
+                    <div class="console-row-actions">
+                        <button class="btn btn-sm btn-primary" disabled="@disabled"
+                                @onclick="() => OnDeploy.InvokeAsync(project.Id)"
+                                title="@(project.SourceType == SourceType.Remote && !AzureConnected ? "Connect Azure to deploy" : "Deploy project")">@(deploying ? "Queued / deploying…" : "Deploy")</button>
+                        <button class="btn btn-sm btn-outline-danger" disabled="@deploying"
+                                @onclick="() => OnRemove.InvokeAsync(project.Id)"
+                                aria-label="@($"Remove {project.Name}")"><i class="bi bi-trash3" aria-hidden="true"></i><span>Remove</span>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+
+    /// <summary>Bounded owner-authorized page.</summary>
+    [Parameter]
+    public ProjectInventoryPage? Inventory { get; set; }
+
+    /// <summary>Connected Azure account required by cloud admission.</summary>
+    [Parameter]
+    public bool AzureConnected { get; set; }
+
+    /// <summary>Local hosting capability.</summary>
+    [Parameter]
+    public bool LocalEnabled { get; set; }
+
+    /// <summary>Existing process-local admission state.</summary>
+    [Parameter]
+    public Func<Guid, bool> IsDeploying { get; set; } = _ => false;
+
+    /// <summary>Prepares one selected owned project.</summary>
+    [Parameter]
+    public EventCallback<Guid> OnDeploy { get; set; }
+
+    /// <summary>Requests existing project deletion.</summary>
+    [Parameter]
+    public EventCallback<Guid> OnRemove { get; set; }
+
+}

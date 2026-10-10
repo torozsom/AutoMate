@@ -548,6 +548,7 @@ public static class ServiceConfiguration
             services.AddScoped<IDeploymentHistoryService, DeploymentHistoryService>();
             services.AddScoped<IDeploymentDetailsService, DeploymentDetailsService>();
             services.AddScoped<IProjectTelemetryAnalytics, ProjectTelemetryAnalyticsService>();
+            services.AddScoped<IMetricExploration, MetricExplorationService>();
             services.AddHostedService<TelemetryDeliveryWorker>();
             services.AddScoped<IAnalysisEgressAuthorizer, AnalysisEgressAuthorizer>();
             services.AddScoped<DeploymentAnalysisService>();
@@ -822,6 +823,7 @@ public static class ServiceConfiguration
 
             // Business & Utilities
             services.AddScoped<IApplicationService, ApplicationService>();
+            services.AddScoped<IWorkspaceQuery, WorkspaceQuery>();
             services.AddScoped<IUserService, UserService>();
             services.AddScoped<ILocalSystemScannerService, LocalSystemScannerService>();
             services.AddScoped<IProjectScannerService, ProjectScannerService>();

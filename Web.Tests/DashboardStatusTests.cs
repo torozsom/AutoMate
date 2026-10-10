@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Application.Data.Apps;
 using Application.Orchestration;
 using Domain.Entities;
 using Domain.Enums;
@@ -64,6 +65,75 @@ public sealed class DashboardStatusTests
         void Set(string field, object value)
         {
             typeof(Dashboard).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
+                value);
+        }
+    }
+
+    /// <summary>Notifications refresh the bounded inventory even after deployment preparation cached an entity.</summary>
+    [Fact]
+    public async Task Selected_project_status_refreshes_inventory_projection()
+    {
+        var owner = Guid.NewGuid();
+        var project = Guid.NewGuid();
+        var deployment = new Deployment { Status = DeploymentStatus.Starting };
+        var app = new Domain.Entities.Application
+        {
+            Id = project, Name = "fixture", SourceType = SourceType.Local, SourcePathOrUrl = "fixture",
+            CsProjects = [new CsProject { Deployments = [deployment] }]
+        };
+        var initial = new ProjectInventoryPage(
+            [
+                new ProjectInventoryRow(project, "fixture", "fixture", SourceType.Local, 1, 1, DateTimeOffset.UtcNow,
+                    null,
+                    DeploymentStatus.Starting)
+            ],
+            1, 1, 1, 0, 0, 1);
+        var updated = initial with { Items = [initial.Items[0] with { Status = DeploymentStatus.Failed }] };
+        var query = DispatchProxy.Create<IWorkspaceQuery, OperationalLoggingTests.PortProxy>();
+        var reads = 0;
+        ((OperationalLoggingTests.PortProxy)query).Call = (method, args) =>
+        {
+            Assert.Equal(nameof(IWorkspaceQuery.ProjectsAsync), method!.Name);
+            Assert.Equal(owner, args![0]);
+            reads++;
+            return Task.FromResult(updated);
+        };
+        using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
+        await using var renderer = new TestRenderer(services);
+        var component = new FixtureDashboard();
+        Set("_apps", new List<Domain.Entities.Application> { app });
+        Set("_inventory", initial);
+        Set("_currentUserId", owner);
+        Property("ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
+        Property("Logger", NullLogger<Dashboard>.Instance);
+        Property("DeploymentStatusNotifier",
+            new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
+        var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
+        ((OperationalLoggingTests.PortProxy)queue).Call = (_, _) => null;
+        Property("DeploymentJobQueue", queue);
+        await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
+        reads = 0;
+        var handler =
+            typeof(Dashboard).GetMethod("DispatchStatusChangedAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        await Task.Run(async () => await (Task)handler.Invoke(component, [project, DeploymentStatus.Failed])!);
+        Assert.Equal(1, reads);
+        Assert.Equal(DeploymentStatus.Failed,
+            ((ProjectInventoryPage)typeof(Dashboard).GetField("_inventory",
+                BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(component)!).Items[0].Status);
+        Assert.Equal(DeploymentStatus.Failed, deployment.Status);
+        Assert.Empty(renderer.Errors);
+
+        /// <summary>Seeds actual notification state.</summary>
+        void Set(string name, object value)
+        {
+            typeof(Dashboard).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(component, value);
+        }
+
+        /// <summary>Supplies provider-free Application ports.</summary>
+        void Property(string name, object value)
+        {
+            typeof(Dashboard).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
                 value);
         }
     }

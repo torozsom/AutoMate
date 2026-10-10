@@ -1,0 +1,51 @@
+<nav class="statistics-pager" aria-label="@Label">
+    <label>Rows per page <select class="form-select" value="@Size" @onchange="ResizeAsync">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+        </select></label>
+    <span role="status">Page @Page of @Pages · @Total rows</span>
+    <button type="button" class="btn btn-outline-secondary" disabled="@(Page <= 1)"
+            @onclick="() => Change.InvokeAsync(Page - 1)">Previous
+    </button>
+    <button type="button" class="btn btn-outline-secondary" disabled="@(Page >= Pages)"
+            @onclick="() => Change.InvokeAsync(Page + 1)">Next
+    </button>
+</nav>
+
+@code {
+
+    /// <summary>Distinct accessible pagination label.</summary>
+    [Parameter]
+    public string Label { get; set; } = "Statistics pages";
+
+    /// <summary>Total filtered rows.</summary>
+    [Parameter]
+    public int Total { get; set; }
+
+    /// <summary>Current one-based page.</summary>
+    [Parameter]
+    public int Page { get; set; } = 1;
+
+    /// <summary>Current approved page size.</summary>
+    [Parameter]
+    public int Size { get; set; } = 25;
+
+    /// <summary>Requested page, independent of chart aggregation.</summary>
+    [Parameter]
+    public EventCallback<int> Change { get; set; }
+
+    /// <summary>Page size callback; parents reset to page one.</summary>
+    [Parameter]
+    public EventCallback<int> SizeChanged { get; set; }
+
+    /// <summary>Empty tables still have a stable page one.</summary>
+    private int Pages => Math.Max(1, (Total + Size - 1) / Size);
+
+    /// <summary>Only the finite supported row counts are accepted.</summary>
+    private Task ResizeAsync(ChangeEventArgs args)
+    {
+        return SizeChanged.InvokeAsync(int.TryParse(args.Value?.ToString(), out var size) && size is 10 or 25 or 50 ? size : 25);
+    }
+
+}

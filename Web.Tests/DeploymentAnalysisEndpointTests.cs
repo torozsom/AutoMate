@@ -1,8 +1,10 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Application.Abstractions.Ai;
+using Application.Ai;
 using Application.Data.Users;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -23,6 +25,32 @@ namespace Web.Tests;
 /// </summary>
 public sealed class DeploymentAnalysisEndpointTests
 {
+    /// <summary>New admissions require authentication/antiforgery and expose immutable option conflicts.</summary>
+    [Theory]
+    [InlineData(false, true, false, 401)]
+    [InlineData(true, false, false, 400)]
+    [InlineData(true, true, false, 200)]
+    [InlineData(true, true, true, 409)]
+    public async Task Assessment_request_enforces_security_and_maps_option_conflicts(bool authenticated, bool csrf,
+        bool conflict, int status)
+    {
+        await VerifyRouteAsync(authenticated, csrf,
+            new DeploymentAnalysisRequestResult(!conflict, "fixed guidance", null, conflict), status,
+            "RequestManualAsync");
+    }
+
+    /// <summary>Preference mutations preserve authenticated owner and forgery checks.</summary>
+    [Theory]
+    [InlineData(false, true, true, 401)]
+    [InlineData(true, false, true, 400)]
+    [InlineData(true, true, true, 204)]
+    [InlineData(true, true, false, 404)]
+    public async Task Assessment_preferences_enforce_security_and_owner_scoped_write(bool authenticated, bool csrf,
+        bool exists, int status)
+    {
+        await VerifyRouteAsync(authenticated, csrf, exists, status, "SavePreferencesAsync");
+    }
+
     /// <summary>Deletion requires authentication/antiforgery and maps the owner-scoped use-case result.</summary>
     [Theory]
     [InlineData(false, true, DeploymentAnalysisDeletionResult.Deleted, 401)]
@@ -70,11 +98,16 @@ public sealed class DeploymentAnalysisEndpointTests
             Assert.Equal(methodName, method!.Name);
             Assert.Equal(owner, args![0]);
             Assert.Equal(deployment, args[1]);
-            Assert.Equal(analysis, args[2]);
+            if (methodName == "SavePreferencesAsync") Assert.IsType<AssessmentSelection>(args[2]);
+            else Assert.Equal(analysis, args[2]);
             calls++;
-            return methodName == "CancelAsync"
-                ? Task.FromResult((DeploymentAnalysisCancellationResult)outcome)
-                : Task.FromResult((DeploymentAnalysisDeletionResult)outcome);
+            return methodName switch
+            {
+                "CancelAsync" => Task.FromResult((DeploymentAnalysisCancellationResult)outcome),
+                "RequestManualAsync" => Task.FromResult((DeploymentAnalysisRequestResult)outcome),
+                "SavePreferencesAsync" => Task.FromResult((bool)outcome),
+                _ => Task.FromResult((DeploymentAnalysisDeletionResult)outcome)
+            };
         };
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
@@ -98,9 +131,15 @@ public sealed class DeploymentAnalysisEndpointTests
         var requestToken = await client.GetStringAsync("/fixture-token");
         if (csrf) client.DefaultRequestHeaders.Add("RequestVerificationToken", requestToken);
         var path = $"/api/deployments/{deployment}/analyses/{analysis}";
-        var response = methodName == "CancelAsync"
-            ? await client.PostAsync(path + "/cancel", null)
-            : await client.DeleteAsync(path);
+        var response = methodName switch
+        {
+            "CancelAsync" => await client.PostAsync(path + "/cancel", null),
+            "RequestManualAsync" => await client.PostAsJsonAsync($"/api/deployments/{deployment}/analyses",
+                new DeploymentAnalysisEndpoint.AssessmentRequest(analysis, new AssessmentSelection())),
+            "SavePreferencesAsync" => await client.PutAsJsonAsync($"/api/deployments/{deployment}/analyses/preferences",
+                new AssessmentSelection()),
+            _ => await client.DeleteAsync(path)
+        };
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(authenticated && csrf && validOwner ? 1 : 0, calls);
     }

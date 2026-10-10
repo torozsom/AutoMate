@@ -2,12 +2,12 @@
     color-scheme: light;
     --am-font-sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
     --am-font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    --am-bg: #e9eef5;
-    --am-surface: #fbfdff;
-    --am-surface-muted: #eef4fb;
-    --am-surface-subtle: #dfe8f2;
-    --am-border: #bfccdb;
-    --am-border-strong: #94a6bb;
+    --am-bg: #f6f7f9;
+    --am-surface: #ffffff;
+    --am-surface-muted: #f3f4f6;
+    --am-surface-subtle: #e9ebef;
+    --am-border: #dce0e6;
+    --am-border-strong: #b3bac6;
     --am-text: #101828;
     --am-text-muted: #475569;
     --am-text-subtle: #617089;
@@ -42,12 +42,12 @@
 
 [data-bs-theme="dark"] {
     color-scheme: dark;
-    --am-bg: #111923;
-    --am-surface: #192331;
-    --am-surface-muted: #223044;
-    --am-surface-subtle: #2d3d53;
-    --am-border: #42546b;
-    --am-border-strong: #5b6f89;
+    --am-bg: #12151b;
+    --am-surface: #1b1f27;
+    --am-surface-muted: #242a34;
+    --am-surface-subtle: #303744;
+    --am-border: #39414f;
+    --am-border-strong: #596579;
     --am-text: #f3f7fc;
     --am-text-muted: #c8d2df;
     --am-text-subtle: #aebacd;
@@ -117,7 +117,7 @@ h4,
 h5,
 h6 {
     color: var(--am-text);
-    font-weight: 750;
+    font-weight: 600;
     letter-spacing: 0;
     text-wrap: balance;
 }
@@ -316,7 +316,7 @@ button:focus-visible {
 .page-eyebrow {
     color: var(--am-primary);
     font-size: 0.78rem;
-    font-weight: 850;
+    font-weight: 650;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
@@ -439,7 +439,7 @@ button:focus-visible {
 
 .workflow-banner h6 {
     font-size: 1rem;
-    font-weight: 800;
+    font-weight: 650;
 }
 
 .workflow-banner small {

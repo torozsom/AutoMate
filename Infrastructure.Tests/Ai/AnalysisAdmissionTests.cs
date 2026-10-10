@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
@@ -17,12 +18,81 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Ai;
 
 /// <summary>Verifies admission/idempotency/quotas through the production service and independent relational connections.</summary>
 public sealed class AnalysisAdmissionTests
 {
+    /// <summary>Queued Automatic choices resolve from current persisted status and configuration alone is not evidence.</summary>
+    [Theory]
+    [InlineData(DeploymentStatus.Starting, AssessmentKind.Startup)]
+    [InlineData(DeploymentStatus.Failed, AssessmentKind.FailureDiagnosis)]
+    [InlineData(DeploymentStatus.Running, AssessmentKind.RuntimeOverview)]
+    [InlineData(DeploymentStatus.Stopped, AssessmentKind.HistoricalReview)]
+    public async Task Queued_selection_uses_collection_status_and_empty_diagnostics_skip(DeploymentStatus status,
+        AssessmentKind expected)
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var db = fixture.NewDb();
+        var deploymentId = fixture.Deployments[0];
+        var selection = new AssessmentSelection(IncludeMetrics: false);
+        var admission = await fixture.Service(db)
+            .RequestManualAsync(fixture.OwnerId, deploymentId, Guid.NewGuid(), selection);
+        Assert.True(admission.Accepted);
+        var now = DateTimeOffset.UtcNow;
+        var snapshot = JsonSerializer.Serialize(new DeploymentConfigurationSnapshot("recorded", "Docker Compose",
+            null, null, null, "Production", "net10.0", 8080, false, null, null, null, null));
+        await db.Deployments.Where(d => d.Id == deploymentId).ExecuteUpdateAsync(update => update
+            .SetProperty(d => d.Status, status).SetProperty(d => d.CreatedAt, now.AddHours(-2))
+            .SetProperty(d => d.UpdatedAt, now).SetProperty(d => d.ConfigurationSnapshotJson, snapshot));
+        var builder = new DeploymentAnalysisContextBuilder(db, null!, null!, new DiagnosticRedactor(),
+            Options.Create(new AiAnalysisOptions()),
+            Options.Create(new TelemetryStorageOptions()), TimeProvider.System);
+        var context = await builder.BuildAsync(deploymentId, selection);
+        Assert.Equal("", context.Text);
+        Assert.Empty(context.EvidenceReferences);
+        Assert.Equal(expected, context.Provenance!.EffectiveKind);
+        Assert.Equal(status, context.Provenance.ObservedStatus);
+        var requested = await db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+        Assert.Equal(selection.CanonicalJson(), requested.RequestedSelectionJson);
+        Assert.False(await db.AiAnalysisBudgetEntries.AnyAsync(entry => entry.IsProviderAttempt));
+        Assert.All(await db.AiAnalysisBudgetEntries.ToListAsync(), entry => Assert.Equal(0, entry.ReservedCostUnits));
+    }
+
+    /// <summary>Preferences remain mutable while admission options and idempotency are immutable and owner scoped.</summary>
+    [Fact]
+    public async Task Assessment_preferences_and_request_options_are_independent_and_conflicting_replay_is_denied()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        await using var db = fixture.NewDb();
+        var service = fixture.Service(db);
+        var deployment = fixture.Deployments[0];
+        var request = Guid.NewGuid();
+        var chosen = new AssessmentSelection(AssessmentKind.RuntimeOverview, AssessmentSources.Web,
+            false, AssessmentRange.LastHour);
+        Assert.True(await service.SavePreferencesAsync(fixture.OwnerId, deployment, chosen));
+        Assert.Equal(chosen.CanonicalJson(),
+            (await service.GetPreferencesAsync(fixture.OwnerId, deployment))!.Selection.CanonicalJson());
+        Assert.Null(await service.GetPreferencesAsync(Guid.NewGuid(), deployment));
+        Assert.False(await service.SavePreferencesAsync(Guid.NewGuid(), deployment, new AssessmentSelection()));
+        var accepted = await service.RequestManualAsync(fixture.OwnerId, deployment, request, chosen);
+        Assert.True(accepted.Accepted);
+        var changed = chosen with { Sources = AssessmentSources.Database, Kind = AssessmentKind.HistoricalReview };
+        Assert.True(await service.SavePreferencesAsync(fixture.OwnerId, deployment, changed));
+        Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, chosen)).Accepted);
+        Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, changed)).Conflict);
+        var saved = await db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+        Assert.Equal(chosen.CanonicalJson(), saved.RequestedSelectionJson);
+        Assert.Single(await db.AiAnalysisBudgetEntries.ToArrayAsync());
+        await db.AiAnalysisRequests.ExecuteDeleteAsync();
+        Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, changed)).Conflict);
+        Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, chosen)).Accepted);
+        Assert.Single(await db.AiDeploymentAnalyses.ToArrayAsync());
+    }
+
+
     /// <summary>
     ///     Stable-ID skips coalesce concurrently, consume no quota/work and replay safe guidance without exposing saved
     ///     payloads.

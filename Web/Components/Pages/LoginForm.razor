@@ -8,7 +8,7 @@
     <div class="login-card">
         <div class="login-header">
             <div class="page-eyebrow">Account access</div>
-            <h2 class="login-title">Welcome back!</h2>
+            <h1 class="login-title">Welcome back</h1>
         </div>
 
         @if (!string.IsNullOrEmpty(ErrorMessage))
@@ -40,17 +40,17 @@
                        placeholder="Enter your password" required autocomplete="current-password">
             </div>
 
-            <div class="row g-3 mt-1">
-                <div class="col-md-6">
-                    <button type="submit" class="btn btn-primary-custom text-white w-100 h-100">
-                        Login to your account
+            <div class="row g-3 mt-1 auth-actions">
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary w-100 h-100">
+                        Sign in
                     </button>
                 </div>
-                <div class="col-md-6">
+                <div class="col-12">
                     <a href="/api/auth/github-login"
                        class="btn btn-github w-100 h-100 d-flex align-items-center justify-content-center gap-2">
                         <i class="bi bi-github fs-4"></i>
-                        Login with GitHub
+                        Continue with GitHub
                     </a>
                 </div>
             </div>

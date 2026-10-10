@@ -61,11 +61,47 @@
                     }
                 }
             </dl>
+            @if (result.Assessment is { } assessment)
+            {
+                <p class="small"><strong>@AssessmentContextControls.FocusLabel(assessment.EffectiveKind)</strong> ·
+                    Observed @assessment.ObservedStatus / @assessment.ObservedOutcome at @Timestamp(assessment.CollectedAt).
+                </p>
+                <p class="small">Evidence
+                    range: @Timestamp(assessment.Window.Start) – @Timestamp(assessment.Window.End).
+                    Sources: @assessment.Requested.Sources.
+                    Metrics: @(assessment.Requested.IncludeMetrics ? "Included" : "Excluded").</p>
+                <p class="small text-break">Requested
+                    focus: @AssessmentContextControls.FocusLabel(assessment.Requested.Kind).
+                    Log
+                    containers: @(assessment.Requested.LogContainers is null ? "All recorded" : assessment.Requested.LogContainers.Length == 0 ? "None" : string.Join(", ", assessment.Requested.LogContainers)).
+                    Metric
+                    containers: @(assessment.Requested.MetricContainers is null ? "All recorded" : assessment.Requested.MetricContainers.Length == 0 ? "None" : string.Join(", ", assessment.Requested.MetricContainers)).</p>
+                @if (assessment.Window.Truncated)
+                {
+                    <p>Deployment lifetime exceeded 365 days; this assessment covers its latest 365 days.</p>
+                }
+            }
+            else
+            {
+                <p class="small text-muted">Collected context choices and observed deployment status are unknown for
+                    this run.</p>
+            }
+
             @if (result.Status == AiAnalysisStatus.Completed)
             {
-                <h3 class="h6">Summary</h3>
+                <h3 class="h6">@(result.Sections is null ? "Summary" : "Overview")</h3>
                 <p class="text-break" style="white-space: pre-wrap">@result.Summary</p>
-                <h3 class="h6">Recommended steps</h3>
+                @if (result.Sections is { } sections)
+                {
+                    <AssessmentResultSection Title="Observations" Items="sections.Observations"
+                                             EmptyMessage="No additional observations were recorded."/>
+                    <AssessmentResultSection Title="Metrics assessment" Items="sections.MetricsAssessment"
+                                             EmptyMessage="No metric assessment was supported by the selected evidence."/>
+                    <AssessmentResultSection Title="Potential issues" Items="sections.PotentialIssues"
+                                             EmptyMessage="No potential issues were identified in the selected evidence; this is not proof of overall health."/>
+                }
+
+                <h3 class="h6">@(result.Sections is null ? "Recommended steps" : "Recommendations")</h3>
                 @if (result.RecommendedSteps.Count == 0)
                 {
                     <p>No recommended steps were recorded.</p>
@@ -77,6 +113,12 @@
                             <li class="text-break">@step</li>
                         }
                     </ol>
+                }
+
+                @if (result.Sections is { } bounded)
+                {
+                    <AssessmentResultSection Title="Limitations" Items="bounded.Limitations"
+                                             EmptyMessage="No additional limitations were recorded; conclusions apply only to the selected evidence."/>
                 }
 
                 <h3 class="h6">Evidence references</h3>

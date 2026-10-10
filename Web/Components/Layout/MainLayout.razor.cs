@@ -1,4 +1,5 @@
 using Application.Abstractions.Docker;
+using Application.Abstractions.Hosting;
 using Microsoft.AspNetCore.Components;
 
 namespace Web.Components.Layout;
@@ -7,6 +8,10 @@ public partial class MainLayout : LayoutComponentBase
 {
     private bool _hasCheckedDocker;
     private bool? _isDockerRunning;
+
+    /// <summary>Hosting capabilities gate local connectivity checks.</summary>
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
     [Inject] private IDockerService DockerService { get; set; } = null!;
 
@@ -20,7 +25,7 @@ public partial class MainLayout : LayoutComponentBase
     /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !_hasCheckedDocker)
+        if (firstRender && !_hasCheckedDocker && DeploymentCapabilities.LocalDeploymentsEnabled)
         {
             _hasCheckedDocker = true;
             await CheckDockerStatusAsync();

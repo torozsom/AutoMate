@@ -1,0 +1,21 @@
+@inject IJSRuntime JS
+<button type="button" class="btn btn-outline-secondary" @onclick="ToggleAsync" aria-label="Toggle light and dark theme">
+    <i class="bi bi-circle-half" aria-hidden="true"></i> Theme
+</button>
+
+@code {
+
+    /// <summary>Preserves the existing local theme storage contract.</summary>
+    private async Task ToggleAsync()
+    {
+        try
+        {
+            var current = await JS.InvokeAsync<string>("window.getTheme");
+            await JS.InvokeVoidAsync("window.setTheme", current == "dark" ? "light" : "dark");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+}

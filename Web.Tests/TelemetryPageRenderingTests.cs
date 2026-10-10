@@ -2,7 +2,9 @@ using System.Reflection;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Domain.Entities;
@@ -32,6 +34,7 @@ public sealed class TelemetryPageRenderingTests
             .AddSingleton<IDeploymentHistoryService, FixtureHistory>()
             .AddSingleton<IProjectTelemetryAnalytics, FixtureAnalytics>()
             .AddSingleton<IDeploymentDetailsService, FixtureDetails>()
+            .AddSingleton(DispatchProxy.Create<IDeploymentAnalysisService, FixtureAssessments>())
             .AddSingleton<NavigationManager, FixtureNavigation>();
         foreach (var property in typeof(ProjectDetails).GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
                      .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
@@ -59,6 +62,8 @@ public sealed class TelemetryPageRenderingTests
             previous = position;
         }
 
+        Assert.DoesNotContain("_notice", details);
+        Assert.DoesNotContain("_metricAvailability", history);
         Assert.Contains("Total deployments", details);
         Assert.Contains("View Details", details);
         Assert.Contains("/actions/runs/42", details);
@@ -99,7 +104,7 @@ public sealed class TelemetryPageRenderingTests
     private static string Wrap(string content)
     {
         return
-            "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'></head><body><div style='max-width:1120px;margin:auto;padding:16px'><small>UI verification · example provider data</small><button style='margin-left:16px' onclick=\"document.documentElement.dataset.bsTheme=document.documentElement.dataset.bsTheme==='dark'?'light':'dark'\">Toggle theme</button><button onclick=\"document.documentElement.style.fontSize='200%'\">200% text</button>" +
+            "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'><link rel='stylesheet' href='/console.css'></head><body><div style='max-width:1120px;margin:auto;padding:16px'><small>UI verification · example provider data</small><button style='margin-left:16px' onclick=\"document.documentElement.dataset.bsTheme=document.documentElement.dataset.bsTheme==='dark'?'light':'dark'\">Toggle theme</button><button onclick=\"document.documentElement.style.fontSize='200%'\">200% text</button>" +
             content +
             "</div><script type='module'>import {attach} from '/js/telemetry-chart.js';document.querySelectorAll('.telemetry-chart').forEach(attach);import {attach as attachSections} from '/js/project-sections.js';document.querySelectorAll('.project-section-tabs').forEach(attachSections);</script></body></html>";
     }
@@ -234,6 +239,39 @@ public sealed class TelemetryPageRenderingTests
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             throw new InvalidOperationException("Unexpected user lookup");
+        }
+    }
+
+    /// <summary>Recorded channels and a v2 historical result make both provider-free page previews representative.</summary>
+    public class FixtureAssessments : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            var now = DateTimeOffset.UtcNow;
+            return method?.Name switch
+            {
+                "GetPreferencesAsync" => Task.FromResult<AssessmentPreferences?>(new AssessmentPreferences(
+                    new AssessmentSelection(),
+                    [
+                        new AssessmentChannel(AssessmentSources.Build, "build"),
+                        new AssessmentChannel(AssessmentSources.Web, "web"),
+                        new AssessmentChannel(AssessmentSources.Database, "db")
+                    ],
+                    ["web", "db"], DeploymentStatus.Stopped)),
+                "GetLatestAsync" => Task.FromResult<DeploymentAnalysisView?>(new DeploymentAnalysisView(Guid.NewGuid(),
+                    (Guid)args![1]!,
+                    AiAnalysisStatus.Completed, AiAnalysisTrigger.Manual,
+                    "The saved activity completed successfully. The application is now stopped.",
+                    [], ["order:1"], null, now, now, ResultSchemaVersion: 2,
+                    Sections: new AssessmentSections(["The recorded build completed."],
+                        ["The selected web metrics show observed usage, not proof of health."], [],
+                        ["Only selected recorded evidence was assessed."]),
+                    Assessment: new AssessmentProvenance(new AssessmentSelection(), AssessmentKind.HistoricalReview,
+                        DeploymentStatus.Stopped, DeploymentOutcome.Succeeded,
+                        now, new AssessmentWindow(now.AddHours(-1), now, false)))),
+                "ListAsync" => Task.FromResult<IReadOnlyList<DeploymentAnalysisView>>([]),
+                _ => throw new NotSupportedException()
+            };
         }
     }
 

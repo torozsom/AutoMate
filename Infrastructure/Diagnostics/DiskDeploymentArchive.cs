@@ -1,16 +1,22 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
 /// <summary>Checksummed immutable per-event segments on the telemetry volume, retained until owner deletion.</summary>
-public sealed class DiskDeploymentArchive : IDeploymentArchive, IDisposable
+public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposable
 {
     /// <summary>Serializes writes, queries and deletion within the volume's single-writer host.</summary>
     private readonly SemaphoreSlim _gate = new(1);
+
+    /// <summary>Operator diagnostics remain behind the shared safe logging boundary.</summary>
+    private readonly ILogger<DiskDeploymentArchive>? _logger;
 
     /// <summary>Current mandatory read/write masking policy.</summary>
     private readonly IDiagnosticRedactor _redactor;
@@ -19,12 +25,75 @@ public sealed class DiskDeploymentArchive : IDeploymentArchive, IDisposable
     private readonly string _root;
 
     /// <summary>Uses a child of the existing persistent spool volume.</summary>
-    public DiskDeploymentArchive(IOptions<DiskSpoolOptions> options, IDiagnosticRedactor redactor)
+    public DiskDeploymentArchive(IOptions<DiskSpoolOptions> options, IDiagnosticRedactor redactor,
+        ILogger<DiskDeploymentArchive>? logger = null)
     {
         if (!Path.IsPathFullyQualified(options.Value.Directory))
             throw new InvalidOperationException("Archive requires an absolute persistent spool directory.");
         _root = Path.Combine(Path.GetFullPath(options.Value.Directory), "archive");
         _redactor = redactor;
+        _logger = logger;
+    }
+
+    /// <inheritdoc />
+    public async Task<ArchiveAssessmentPage> ReadAssessmentAsync(ArchiveAssessmentQuery query, CancellationToken token)
+    {
+        var selection = query.Selection.Normalize();
+        if (query.Window.End < query.Window.Start || query.Window.End - query.Window.Start > TimeSpan.FromDays(365) ||
+            query.Limit is < 1 or > 1000) throw new ArgumentException("Invalid archive selection.");
+        await _gate.WaitAsync(token);
+        try
+        {
+            var channels = new HashSet<AssessmentChannel>();
+            var containers = new SortedSet<string>(StringComparer.Ordinal);
+            var page = new SortedDictionary<long, DeploymentLogEnvelope>();
+            var omitted = false;
+            foreach (var path in Files(query.Tenant, query.Project, query.Deployment))
+            {
+                token.ThrowIfCancellationRequested();
+                var entry = await ReadSegmentAsync(path, token);
+                if (entry.Channel is { } channel && entry.Event.Kind != DeploymentDiagnosticKind.Metric &&
+                    channels.Count < 128)
+                    channels.Add(new AssessmentChannel(AssessmentClassification.Source(entry.Event), channel));
+                if (entry.Event.Metrics?.Count > 0 && containers.Count < 64)
+                    containers.Add(entry.Event.TerminalChannel.Target ?? "unknown");
+                if (query.CatalogOnly || !AssessmentClassification.Matches(entry, selection, query.Window)) continue;
+                page.TryAdd(entry.OrderId, entry);
+                if (page.Count > query.Limit)
+                {
+                    page.Remove(page.First().Key);
+                    omitted = true;
+                }
+            }
+
+            var directory = Partition(query.Tenant, query.Project, query.Deployment);
+            if (Directory.Exists(directory))
+                foreach (var path in Directory.EnumerateFiles(directory, "*.metric"))
+                {
+                    token.ThrowIfCancellationRequested();
+                    var point = JsonSerializer.Deserialize<DeploymentMetricPoint>(await ReadPayloadAsync(path, token),
+                        TelemetryHttpTransport.Json)!;
+                    if (containers.Count < 64) containers.Add(point.Container);
+                }
+
+            return new ArchiveAssessmentPage(page.Values.ToArray(),
+                channels.OrderBy(c => c.Source).ThenBy(c => c.Channel, StringComparer.Ordinal).ToArray(),
+                containers.ToArray(), omitted);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAssessmentMetricsAsync(ArchiveAssessmentQuery query,
+        CancellationToken token)
+    {
+        return !query.Selection.Normalize().IncludeMetrics
+            ? Task.FromResult<IReadOnlyList<DeploymentMetricPoint>>([])
+            : ReadMetricsCoreAsync(query.Tenant, query.Project, query.Deployment,
+                query.Window.Start, query.Window.End, 100, token, query.Selection.Normalize().MetricContainers);
     }
 
     /// <inheritdoc />
@@ -56,7 +125,10 @@ public sealed class DiskDeploymentArchive : IDeploymentArchive, IDisposable
                 stream.Flush(true);
             }
 
+            var ready = Path.Combine(directory, "metric-index", "ready");
+            if (File.Exists(ready)) File.Delete(ready);
             File.Move(temporary, path);
+            await IndexMetricEnvelopeAsync(envelope, token);
             return envelope;
         }
         finally
@@ -97,69 +169,10 @@ public sealed class DiskDeploymentArchive : IDeploymentArchive, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<DeploymentMetricPoint>> ReadMetricsAsync(Guid tenant, Guid project, Guid deployment,
+    public Task<IReadOnlyList<DeploymentMetricPoint>> ReadMetricsAsync(Guid tenant, Guid project, Guid deployment,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken token)
     {
-        if (end <= start) throw new ArgumentException("Metric range must be positive.");
-        maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
-        var interval = Math.Max(60, Math.Ceiling((end - start).TotalSeconds / maximumPoints));
-        await _gate.WaitAsync(token);
-        try
-        {
-            var buckets = new Dictionary<(string Container, string Name, string Unit, long Bucket), Aggregate>();
-            foreach (var path in Files(tenant, project, deployment))
-            {
-                token.ThrowIfCancellationRequested();
-                var entry = await ReadSegmentAsync(path, token);
-                var time = entry.Event.TimestampUtc;
-                if (time < start || time > end) continue;
-                foreach (var metric in entry.Event.Metrics ?? [])
-                {
-                    if (!double.IsFinite(metric.Value)) continue;
-                    var bucket = Math.Min(maximumPoints - 1, (long)((time - start).TotalSeconds / interval));
-                    var key = (entry.Event.TerminalChannel.Target ?? "unknown", metric.Name, metric.Unit, bucket);
-                    if (!buckets.TryGetValue(key, out var aggregate))
-                    {
-                        if (buckets.Count >= 300_000)
-                            throw new InvalidOperationException("Narrow the archived metric range.");
-                        buckets[key] = aggregate = new Aggregate();
-                    }
-
-                    aggregate.Add(metric.Value);
-                }
-            }
-
-            var rawKeys = buckets.Keys.ToHashSet();
-            var directory = Partition(tenant, project, deployment);
-            if (Directory.Exists(directory))
-                foreach (var path in Directory.EnumerateFiles(directory, "*.metric"))
-                {
-                    var point = JsonSerializer.Deserialize<DeploymentMetricPoint>(await ReadPayloadAsync(path, token),
-                        TelemetryHttpTransport.Json)!;
-                    if (point.Timestamp < start || point.Timestamp > end) continue;
-                    var bucket = Math.Min(maximumPoints - 1, (long)((point.Timestamp - start).TotalSeconds / interval));
-                    var key = (point.Container, point.Name, point.Unit, bucket);
-                    if (rawKeys.Contains(key))
-                        continue; // Raw samples already persisted by live ingestion take precedence.
-                    if (!buckets.TryGetValue(key, out var aggregate))
-                    {
-                        if (buckets.Count >= 300_000)
-                            throw new InvalidOperationException("Narrow the archived metric range.");
-                        buckets[key] = aggregate = new Aggregate();
-                    }
-
-                    aggregate.Add(point.Average, point.Minimum, point.Maximum);
-                }
-
-            return buckets.Select(p => new DeploymentMetricPoint(p.Key.Container, p.Key.Name, p.Key.Unit,
-                    start.AddSeconds(p.Key.Bucket * interval), p.Value.Sum / p.Value.Count, p.Value.Minimum,
-                    p.Value.Maximum))
-                .OrderBy(p => p.Timestamp).ToArray();
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        return ReadMetricsCoreAsync(tenant, project, deployment, start, end, maximumPoints, token, null);
     }
 
     /// <inheritdoc />
@@ -206,6 +219,8 @@ public sealed class DiskDeploymentArchive : IDeploymentArchive, IDisposable
                     stream.Flush(true);
                 }
 
+                var ready = Path.Combine(directory, "metric-index", "ready");
+                if (File.Exists(ready)) File.Delete(ready);
                 File.Move(path + ".tmp", path);
             }
         }
@@ -245,6 +260,76 @@ public sealed class DiskDeploymentArchive : IDeploymentArchive, IDisposable
     public void Dispose()
     {
         _gate.Dispose();
+    }
+
+    /// <summary>Container selection applies before aggregation limits, independently of selected log families.</summary>
+    private async Task<IReadOnlyList<DeploymentMetricPoint>> ReadMetricsCoreAsync(Guid tenant, Guid project,
+        Guid deployment,
+        DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken token, string[]? selected)
+    {
+        if (end <= start) throw new ArgumentException("Metric range must be positive.");
+        maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
+        var interval = Math.Max(60, Math.Ceiling((end - start).TotalSeconds / maximumPoints));
+        await _gate.WaitAsync(token);
+        try
+        {
+            var buckets = new Dictionary<(string Container, string Name, string Unit, long Bucket), Aggregate>();
+            foreach (var path in Files(tenant, project, deployment))
+            {
+                token.ThrowIfCancellationRequested();
+                var entry = await ReadSegmentAsync(path, token);
+                var time = entry.Event.TimestampUtc;
+                if (time < start || time > end || (selected is not null &&
+                                                   !selected.Contains(entry.Event.TerminalChannel.Target ?? "unknown",
+                                                       StringComparer.Ordinal))) continue;
+                foreach (var metric in entry.Event.Metrics ?? [])
+                {
+                    if (!double.IsFinite(metric.Value)) continue;
+                    var bucket = Math.Min(maximumPoints - 1, (long)((time - start).TotalSeconds / interval));
+                    var key = (entry.Event.TerminalChannel.Target ?? "unknown", metric.Name, metric.Unit, bucket);
+                    if (!buckets.TryGetValue(key, out var aggregate))
+                    {
+                        if (buckets.Count >= 300_000)
+                            throw new InvalidOperationException("Narrow the archived metric range.");
+                        buckets[key] = aggregate = new Aggregate();
+                    }
+
+                    aggregate.Add(metric.Value);
+                }
+            }
+
+            var rawKeys = buckets.Keys.ToHashSet();
+            var directory = Partition(tenant, project, deployment);
+            if (Directory.Exists(directory))
+                foreach (var path in Directory.EnumerateFiles(directory, "*.metric"))
+                {
+                    var point = JsonSerializer.Deserialize<DeploymentMetricPoint>(await ReadPayloadAsync(path, token),
+                        TelemetryHttpTransport.Json)!;
+                    if (point.Timestamp < start || point.Timestamp > end ||
+                        (selected is not null && !selected.Contains(point.Container, StringComparer.Ordinal))) continue;
+                    var bucket = Math.Min(maximumPoints - 1, (long)((point.Timestamp - start).TotalSeconds / interval));
+                    var key = (point.Container, point.Name, point.Unit, bucket);
+                    if (rawKeys.Contains(key))
+                        continue; // Raw samples already persisted by live ingestion take precedence.
+                    if (!buckets.TryGetValue(key, out var aggregate))
+                    {
+                        if (buckets.Count >= 300_000)
+                            throw new InvalidOperationException("Narrow the archived metric range.");
+                        buckets[key] = aggregate = new Aggregate();
+                    }
+
+                    aggregate.Add(point.Average, point.Minimum, point.Maximum);
+                }
+
+            return buckets.Select(p => new DeploymentMetricPoint(p.Key.Container, p.Key.Name, p.Key.Unit,
+                    start.AddSeconds(p.Key.Bucket * interval), p.Value.Sum / p.Value.Count, p.Value.Minimum,
+                    p.Value.Maximum))
+                .OrderBy(p => p.Timestamp).ToArray();
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     /// <summary>Constructs paths exclusively from typed GUIDs, never provider names or user paths.</summary>

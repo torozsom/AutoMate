@@ -1,0 +1,261 @@
+@using System.Globalization
+@using Application.Abstractions.Diagnostics
+@using Application.Data.Apps
+@if (Data is { } data)
+{
+    <div class="console-kpis">
+        <KpiCard Label="Saved projects" Value="@data.SavedProjects.ToString()" Detail="Across your workspace"/>
+        <KpiCard Label="Running deployments" Value="@data.RunningDeployments.ToString()"
+                 Detail="Recorded runtime state"/>
+        <KpiCard Label="Deployment attempts" Value="@data.Attempts.ToString()" Detail="In the selected UTC period"/>
+        <KpiCard Label="Success rate" Value="@SuccessRate"
+                 Detail="@($"{data.Succeeded} successful · {data.Failed} failed · {data.Unknown} unknown")"/>
+    </div>
+    <div class="overview-grid">
+        <section class="console-panel" aria-labelledby="activity-heading">
+            <div class="console-section-heading">
+                <div><h2 id="activity-heading">Deployment activity</h2>
+                    <p>Recorded outcomes · @(new MetricTimeRange(data.Start, data.End).Aggregation)</p></div>
+                <span class="console-meta">Average completed duration: @Duration(data.AverageDurationSeconds)</span>
+            </div>
+            <div class="activity-legend"><span><i class="activity-success"></i>Succeeded</span><span><i
+                        class="activity-failure"></i>Failed</span><span><i class="activity-unknown"></i>Unknown</span>
+            </div>
+            <div class="activity-chart" role="img"
+                 aria-label="@($"Daily deployment activity: {data.Succeeded} succeeded, {data.Failed} failed, {data.Unknown} unknown. Exact values are in the table below.")">
+                @foreach (var day in data.Activity)
+                {
+                    <div class="activity-column"
+                         title="@($"{day.Day:yyyy-MM-dd} UTC: {day.Succeeded} succeeded, {day.Failed} failed, {day.Unknown} unknown")">
+                        <div class="activity-stack">
+                            <span class="activity-unknown" style="@Height(day.Unknown)"></span>
+                            <span class="activity-failure" style="@Height(day.Failed)"></span>
+                            <span class="activity-success" style="@Height(day.Succeeded)"></span>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="chart-period">
+                <span>@data.Start.ToString("yyyy-MM-dd HH:mm") UTC</span><span>@data.End.ToString("yyyy-MM-dd HH:mm") UTC</span>
+            </div>
+            <details class="console-details">
+                <summary>View outcome counts</summary>
+                <div class="table-responsive">
+                    <table class="table console-table">
+                        <caption>Deployment outcome buckets in UTC</caption>
+                        <thead>
+                        <tr>
+                            <th scope="col">Day</th>
+                            <th scope="col">Succeeded</th>
+                            <th scope="col">Failed</th>
+                            <th scope="col">Unknown</th>
+                        </tr>
+                        </thead>
+                        <tbody>@foreach (var day in data.Activity.Skip((_activityPage - 1) * _activitySize).Take(_activitySize))
+                        {
+                            <tr>
+                                <th scope="row">@day.Day.ToString("yyyy-MM-dd HH:mm")</th>
+                                <td>@day.Succeeded</td>
+                                <td>@day.Failed</td>
+                                <td>@day.Unknown</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <StatisticsPager Label="Deployment activity pages" Total="data.Activity.Count" Page="_activityPage"
+                                 Size="_activitySize"
+                                 Change="p => _activityPage = p"
+                                 SizeChanged="s => { _activitySize = s; _activityPage = 1; }"/>
+            </details>
+        </section>
+        <section class="console-panel" aria-labelledby="attention-heading">
+            <div class="console-section-heading">
+                <div><h2 id="attention-heading">Needs attention</h2>
+                    <p>Latest component state and queued cloud work</p></div>
+            </div>
+            @if (data.Attention.Count == 0)
+            {
+                <div class="console-empty"><i class="bi bi-check2-circle" aria-hidden="true"></i><strong>No starting or
+                        failed deployments recorded</strong>
+                    <p>This reflects saved state, not a live health check.</p></div>
+            }
+            else
+            {
+                <ul class="attention-list">@foreach (var item in data.Attention)
+                    {
+                        <li>
+                            <div>
+                                <a href="@Link(item.ProjectId, item.DeploymentId)">@item.Project</a><small>@(item.DeploymentId is null ? "Cloud queue · awaiting launch" : "Latest recorded deployment")</small>
+                            </div>
+                            <span class="badge deployment-badge deployment-badge-neutral">@item.State</span></li>
+                    }
+                </ul>
+            }
+            <a class="console-text-link" href="/dashboard">Manage projects →</a>
+        </section>
+    </div>
+    <section class="console-panel" aria-labelledby="resources-heading">
+        <div class="console-section-heading">
+            <div><h2 id="resources-heading">Resource usage</h2>
+                <p>Average observed container usage · sample-weighted observations</p></div>
+        </div>
+        @if (data.ResourceNotice is { } notice)
+        {
+            <p class="telemetry-notice" role="status">@notice</p>
+        }
+        @if (data.Observations is { } observed)
+        {
+            <MetricStatisticsView Data="observed.Chart" Range="observed.Range" Availability="@observed.Availability"/>
+        }
+        else
+        {
+            <div class="telemetry-chart-grid">
+                <TelemetryChart Title="CPU usage" Metric="@TelemetryPresentation.Cpu"
+                                Points="@Points(TelemetryPresentation.Cpu)" Start="data.Start" End="data.End"
+                                Gap="@(new MetricTimeRange(data.Start, data.End).Interval + TimeSpan.FromSeconds(5))"/>
+                <TelemetryChart Title="Memory usage" Metric="@TelemetryPresentation.Memory"
+                                Points="@Points(TelemetryPresentation.Memory)" Start="data.Start" End="data.End"
+                                Gap="@(new MetricTimeRange(data.Start, data.End).Interval + TimeSpan.FromSeconds(5))"/>
+            </div>
+            <p class="console-meta">@data.Resources.Sum(r => r.Samples).ToString("N0") metric observations
+                across @data.Resources.Select(r => r.Day).Distinct().Count() observed UTC days. Missing days remain
+                gaps.
+                These averages do not represent total workspace consumption or prove application health.</p>
+            <details class="console-details">
+                <summary>View observed resource statistics</summary>
+                <div class="table-responsive">
+                    <table class="table console-table">
+                        <caption>Recorded daily resource samples; extrema across observed containers</caption>
+                        <thead>
+                        <tr>
+                            <th scope="col">Day UTC</th>
+                            <th scope="col">Metric</th>
+                            <th scope="col">Average</th>
+                            <th scope="col">Minimum</th>
+                            <th scope="col">Maximum</th>
+                            <th scope="col">Samples</th>
+                            <th scope="col">Coverage</th>
+                        </tr>
+                        </thead>
+                        <tbody>@foreach (var row in data.Resources.Skip((_resourcePage - 1) * _resourceSize).Take(_resourceSize))
+                        {
+                            <tr>
+                                <th scope="row">@row.Day.ToString("yyyy-MM-dd HH:mm")</th>
+                                <td>@TelemetryPresentation.Label(row.Metric)</td>
+                                <td>@TelemetryPresentation.Format(row.Average, row.Metric)</td>
+                                <td>@TelemetryPresentation.Format(row.Minimum, row.Metric)</td>
+                                <td>@TelemetryPresentation.Format(row.Maximum, row.Metric)</td>
+                                <td>@row.Samples</td>
+                                <td>@(row.Incomplete ? "Incomplete" : "Recorded")</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <StatisticsPager Label="Resource statistics pages" Total="data.Resources.Count" Page="_resourcePage"
+                                 Size="_resourceSize"
+                                 Change="p => _resourcePage = p"
+                                 SizeChanged="s => { _resourceSize = s; _resourcePage = 1; }"/>
+            </details>
+        }
+    </section>
+    <section class="console-panel" aria-labelledby="recent-heading">
+        <div class="console-section-heading">
+            <div><h2 id="recent-heading">Latest deployment runs</h2>
+                <p>Your ten most recent deployments across all dates</p></div>
+            <a href="/dashboard">View projects →</a></div>
+        @if (data.Recent.Count == 0)
+        {
+            <div class="console-empty"><strong>Your deployment activity will appear here</strong>
+                <p>Import a project to start your first deployment.</p><a href="/github-repos" class="btn btn-primary">Import
+                    repository</a></div>
+        }
+        else
+        {
+            <table class="table console-table responsive-inventory">
+                <caption class="visually-hidden">Latest deployments across your projects</caption>
+                <thead>
+                <tr>
+                    <th scope="col">Project</th>
+                    <th scope="col">Provider</th>
+                    <th scope="col">Started UTC</th>
+                    <th scope="col">Outcome</th>
+                    <th scope="col">Runtime</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">Details</th>
+                </tr>
+                </thead>
+                <tbody>@foreach (var run in data.Recent)
+                {
+                    <tr>
+                        <td data-label="Project"><a href="@($"/project/{run.ProjectId}")">@run.Project</a><small
+                                class="console-subtext">@run.DeploymentId.ToString("N")[..8]</small></td>
+                        <td data-label="Provider">@run.Provider</td>
+                        <td data-label="Started UTC">@run.StartedAt.ToString("MMM d, HH:mm")</td>
+                        <td data-label="Outcome">@run.Outcome</td>
+                        <td data-label="Runtime">
+                            <DeploymentBadge Status="run.Status"/>
+                        </td>
+                        <td data-label="Duration">@Duration(run.DurationSeconds)</td>
+                        <td data-label="Details"><a href="@Link(run.ProjectId, run.DeploymentId)">View Details</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+
+@code {
+
+    /// <summary>Independent numeric alternative page state.</summary>
+    private int _activityPage = 1, _resourcePage = 1, _activitySize = 25, _resourceSize = 25;
+
+    /// <summary>Resets table pages when the frozen statistics window changes.</summary>
+    private DateTimeOffset _lastStart, _lastEnd;
+
+    /// <inheritdoc />
+    protected override void OnParametersSet()
+    {
+        if (_lastStart != Data?.Start || _lastEnd != Data?.End)
+        {
+            _activityPage = _resourcePage = 1;
+            _lastStart = Data?.Start ?? default;
+            _lastEnd = Data?.End ?? default;
+        }
+    }
+
+
+    /// <summary>Authorized immutable workspace read model.</summary>
+    [Parameter]
+    public WorkspaceOverview? Data { get; set; }
+
+    /// <summary>Known terminal outcomes form the success-rate denominator.</summary>
+    private string SuccessRate => Data is { } d && d.Succeeded + d.Failed > 0 ? $"{100d * d.Succeeded / (d.Succeeded + d.Failed):0.#}%" : "—";
+
+    /// <summary>Scales a bar against the largest recorded daily total.</summary>
+    private string Height(int count)
+    {
+        return $"height:{(160d * count / Math.Max(1, Data!.Activity.Max(d => d.Succeeded + d.Failed + d.Unknown))).ToString("0.##", CultureInfo.InvariantCulture)}px";
+    }
+
+    /// <summary>Builds chart points only for observed days.</summary>
+    private IReadOnlyList<TelemetryChartPoint> Points(string metric)
+    {
+        return Data!.Resources.Where(r => r.Metric == metric).Select(r => new TelemetryChartPoint(r.Day, r.Average, r.Minimum, r.Maximum)).ToArray();
+    }
+
+    /// <summary>Links the selected deployment, or its project before launch.</summary>
+    private static string Link(Guid project, Guid? deployment)
+    {
+        return deployment is { } id ? $"/project/{project}/deployment/{id}" : $"/project/{project}";
+    }
+
+    /// <summary>Unavailable durations are not represented as zero.</summary>
+    private static string Duration(double? seconds)
+    {
+        return seconds is { } value ? TimeSpan.FromSeconds(value).ToString(@"hh\:mm\:ss") : "Not recorded";
+    }
+
+}

@@ -42,6 +42,10 @@ const server = http.createServer((req, res) => {
         await page.goto(address + '/details.html#configuration');
         await page.waitForFunction(() => document.activeElement?.id === 'configuration-title');
         assert.equal(await page.locator('.project-section-tabs a').count(), 7);
+        assert.equal(await page.locator('.assessment-context select').count(), 2);
+        assert.equal(await page.locator('.assessment-context select').first().locator('option').count(), 5);
+        assert.equal(await page.locator('.assessment-context select').last().locator('option').count(), 6);
+        assert.ok(await page.locator('.assessment-context').innerText().then(text => text.includes('Azure application console output')));
         await page.locator('a.terminal-ai-shortcut').click();
         await page.waitForFunction(() => location.hash === '#ai-analysis' && document.activeElement?.id === 'ai-analysis-title');
         await page.locator('.project-section-tabs a[href="#logs"]').click();
@@ -65,6 +69,7 @@ const server = http.createServer((req, res) => {
         }), 'AI shortcut remains visible on mobile');
         await page.screenshot({path: path.join(preview, 'details-mobile.png'), fullPage: true});
         await page.goto(address + '/history.html');
+        assert.equal(await page.locator('.assessment-context').count(), 1);
         assert.ok(await page.locator('#history-logs-title').evaluate(logs =>
             logs.getBoundingClientRect().top < document.querySelector('#history-metrics-title').getBoundingClientRect().top));
         await page.screenshot({path: path.join(preview, 'history-mobile.png'), fullPage: true});

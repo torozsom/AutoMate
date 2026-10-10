@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
@@ -32,6 +33,7 @@ public static class TelemetryApplication
         builder.Services.AddOptions<DiskSpoolOptions>().BindConfiguration("DiskSpool").ValidateOnStart();
         builder.Services.AddSingleton<DiskTelemetrySpool>();
         builder.Services.AddSingleton<IDeploymentArchive, DiskDeploymentArchive>();
+        builder.Services.AddScoped<ArchiveMetricBatchReader>();
         builder.Services.AddSingleton<TelemetryAdmissionPolicy>();
         builder.Services.AddSingleton<TelemetryProjectPolicyCache>();
         builder.Services.AddHostedService(s => s.GetRequiredService<DiskTelemetrySpool>());
@@ -136,6 +138,44 @@ public static class TelemetryApplication
             return Results.Ok(await spool.PendingAsync(tenant, project, deployment, token));
         });
 
+        app.MapPost("/archive/assessment", async (ArchiveAssessmentQuery request, AutoMateDbContext db,
+            IDeploymentArchive archive, CancellationToken token) =>
+        {
+            if (!await db.Deployments.AnyAsync(d =>
+                    d.Id == request.Deployment && d.CsProject!.AppId == request.Project &&
+                    d.CsProject.Application.UserId == request.Tenant &&
+                    (!builder.Configuration.GetValue<bool>("TelemetryStorage:ManagedService") ||
+                     d.CsProject.Application.ManagedTelemetryConsent), token)) return Results.StatusCode(403);
+            try
+            {
+                return Results.Ok(await archive.ReadAssessmentAsync(request, token));
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest();
+            }
+        });
+        app.MapPost("/archive/assessment-metrics", async (ArchiveAssessmentQuery request, AutoMateDbContext db,
+            IDeploymentArchive archive, CancellationToken token) =>
+        {
+            if (!await db.Deployments.AnyAsync(d =>
+                    d.Id == request.Deployment && d.CsProject!.AppId == request.Project &&
+                    d.CsProject.Application.UserId == request.Tenant &&
+                    (!builder.Configuration.GetValue<bool>("TelemetryStorage:ManagedService") ||
+                     d.CsProject.Application.ManagedTelemetryConsent), token)) return Results.StatusCode(403);
+            if (request.Window.End <= request.Window.Start ||
+                request.Window.End - request.Window.Start > TimeSpan.FromDays(365))
+                return Results.BadRequest();
+            try
+            {
+                return Results.Ok(await archive.ReadAssessmentMetricsAsync(request, token));
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest();
+            }
+        });
+
         app.MapGet("/archive/{tenant:guid}/{project:guid}/{deployment:guid}", async (Guid tenant, Guid project,
             Guid deployment, long? cursor, bool? backwards, int? limit, string? search,
             AutoMateDbContext db, IDeploymentArchive archive, CancellationToken token) =>
@@ -148,6 +188,22 @@ public static class TelemetryApplication
                 return Results.StatusCode(403);
             return Results.Ok(await archive.ReadAsync(tenant, project, deployment, cursor ?? 0, backwards ?? true,
                 limit ?? 500, search, token));
+        });
+        app.MapPost("/archive/metric-batch", async (ArchiveMetricBatchRequest request, ArchiveMetricBatchReader reader,
+            CancellationToken token) =>
+        {
+            try
+            {
+                return Results.Ok(await reader.ReadAsync(request, token));
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Results.StatusCode(403);
+            }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest();
+            }
         });
         app.MapPost("/archive/metrics", async (ArchiveMetricRequest request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>

@@ -5,6 +5,12 @@ namespace Domain.Entities;
 /// <summary>Stores the status and redacted result of one requested deployment analysis.</summary>
 public sealed class AiDeploymentAnalysis : BaseEntity
 {
+    /// <summary>Immutable admission options, effective collection metadata, and validated v2 result sections.</summary>
+    public string? RequestedSelectionJson { get; set; }
+
+    public string? AssessmentProvenanceJson { get; set; }
+    public string? AssessmentSectionsJson { get; set; }
+
     /// <summary>Retains saved results independently of the finite execution expiry.</summary>
     public bool RetainUntilDeleted { get; set; }
 

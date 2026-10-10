@@ -515,6 +515,12 @@ persisted results and exported telemetry do not contain their prose.
 
 ## Deployment history update (2026-10-08)
 
+The [status-aware assessment workflow](../../docs/status-aware-assessments.md) adds deployment preferences, immutable
+request options, current-status provenance and validated v2 sections. `AssessmentEvidenceReader` merges selected
+archive/retained diagnostics, applying source/container/time filters before candidate bounds. Context construction
+uses recorded non-secret configuration only. Both adapters validate exact evidence; legacy readback remains v1.
+Apply `StatusAwareAssessments`, then deploy filter-capable Telemetry before updated Web/workers.
+
 Saved production results retain until owner deletion; ResultRetentionDays now bounds execution eligibility, not saved
 terminal results. Receipt and spending cleanup remain ninety days. Manual assessment supports every deployment status;
 automatic admission remains failure-only. Historical context uses the exact deployment archive.

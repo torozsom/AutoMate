@@ -145,3 +145,24 @@ DiskDeploymentArchive stores checksummed redacted per-event segments and importe
 deletion. DeploymentArchiveBackfillWorker imports bounded still-retained backend/legacy pages with flushed checkpoints.
 DeploymentArchiveCleanupWorker retries committed deletion outbox items. Archived replay survives backend outages;
 Loki/Mimir remain operational stores with 30-day retention. Reads reapply current redaction.
+
+## Selected assessment evidence (2026-10-09)
+
+The archive exposes bounded assessment/catalog reads and independently selected metric containers. Source/container/
+UTC filters apply before candidate limits and aggregation; checksummed persistence and deletion are unchanged.
+Loki `ReadAssessmentAsync` applies typed metadata predicates inside LogQL before its result limit; Mimir filters
+container labels inside PromQL before interval aggregation. Unsupported old query adapters fail explicitly.
+See [status-aware assessments](../../docs/status-aware-assessments.md) for metadata classification and rollout.
+
+## Metric exploration
+
+MetricExplorationService streams retained full UTC-day rows and combines exact archived boundary fragments, preserving
+container/deployment identity and sample weighting. ArchiveMetricBatchReader resolves ten currently authorized
+partitions
+in SQL per private request and caps output before HTTP serialization. Managed storage rechecks consent.
+
+DiskDeploymentArchive.Metrics keeps a derived day lookup containing checksummed source references, never diagnostic
+prose.
+A sealed checksummed day-count manifest detects missing/corrupt references. Source segments remain authoritative.
+Legacy recovery advances at most 2,000 segments per read and reports partial results until complete. Project archive
+cleanup removes lookup files with the partition. See ../../docs/metric-exploration.md.

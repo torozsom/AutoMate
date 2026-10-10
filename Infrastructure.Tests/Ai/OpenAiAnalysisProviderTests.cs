@@ -29,6 +29,46 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
     /// <summary>Selected adapter identity for the same protocol acceptance cases.</summary>
     private readonly string _providerName = azure ? "azure-openai" : "openai";
 
+    /// <summary>Both provider adapters request and validate the status-aware schema without contacting Azure.</summary>
+    [Theory]
+    [InlineData(AssessmentKind.Startup)]
+    [InlineData(AssessmentKind.FailureDiagnosis)]
+    [InlineData(AssessmentKind.RuntimeOverview)]
+    [InlineData(AssessmentKind.HistoricalReview)]
+    public async Task Status_aware_transport_uses_v2_sections_and_exact_evidence(AssessmentKind kind)
+    {
+        using var handler = new DelegateHttpMessageHandler(request =>
+        {
+            using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var schema = body.RootElement.GetProperty("text").GetProperty("format").GetProperty("schema");
+            Assert.Equal(7, schema.GetProperty("required").GetArrayLength());
+            Assert.True(schema.GetProperty("properties").TryGetProperty("overview", out _));
+            return DelegateHttpMessageHandler.Json(Envelope(
+                """{"overview":"Recorded operation.","observations":["password=private-value"],"metricsAssessment":[],"potentialIssues":[],"recommendedSteps":[],"limitations":["Selected evidence only."],"evidenceReferences":["order:1"]}"""));
+        });
+        using var client = new HttpClient(handler);
+        var result = await Provider(client).AnalyzeAsync(Request("safe", ["order:1"]) with { Kind = kind });
+        Assert.Equal(2, result.ResultSchemaVersion);
+        Assert.NotNull(result.Sections);
+        Assert.DoesNotContain("private-value", result.Sections.Observations[0]);
+        Assert.Equal(["order:1"], result.EvidenceReferences);
+    }
+
+    /// <summary>Incomplete new-schema output and fabricated evidence fail closed on both adapters.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Status_aware_transport_rejects_missing_sections_or_fabricated_evidence(bool fabricated)
+    {
+        var text = fabricated
+            ? """{"overview":"Recorded operation.","observations":[],"metricsAssessment":[],"potentialIssues":[],"recommendedSteps":[],"limitations":[],"evidenceReferences":["order:999"]}"""
+            : """{"overview":"Recorded operation.","recommendedSteps":[],"evidenceReferences":[]}""";
+        using var handler = new DelegateHttpMessageHandler(_ => DelegateHttpMessageHandler.Json(Envelope(text)));
+        using var client = new HttpClient(handler);
+        await Assert.ThrowsAsync<InvalidAnalysisResultException>(() => Provider(client).AnalyzeAsync(
+            Request("safe", ["order:1"]) with { Kind = AssessmentKind.RuntimeOverview }));
+    }
+
     /// <summary>Real configuration reload cancels active headers/body I/O and denies the next call without retry.</summary>
     [Theory]
     [InlineData(false, "ProviderEgressEnabled", "false")]

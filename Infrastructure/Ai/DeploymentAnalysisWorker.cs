@@ -204,8 +204,11 @@ public sealed class DeploymentAnalysisWorker(
                 throw new AnalysisProviderUnavailableException();
             var context = await AnalysisTelemetry.RunAsync(AnalysisOperation.Context, analysis.DeploymentId, analysisId,
                 cancellationToken, () => services.GetRequiredService<IDeploymentAnalysisContextBuilder>()
-                    .BuildAsync(analysis.DeploymentId, cancellationToken),
+                    .BuildAsync(analysis.DeploymentId, AssessmentSelection.Read(analysis.RequestedSelectionJson),
+                        cancellationToken),
                 result => string.IsNullOrWhiteSpace(result.Text) ? AnalysisOutcome.Empty : AnalysisOutcome.Completed);
+            analysis.AssessmentProvenanceJson =
+                context.Provenance is null ? null : JsonSerializer.Serialize(context.Provenance);
             if (string.IsNullOrWhiteSpace(context.Text))
                 throw new AnalysisProviderUnavailableException(AnalysisSkipReason.UnsupportedData);
             var evidence = Array.AsReadOnly(context.EvidenceReferences.ToArray());
@@ -244,7 +247,8 @@ public sealed class DeploymentAnalysisWorker(
                 {
                     var result = await services.GetRequiredService<ILlmAnalysisProvider>()
                         .AnalyzeAsync(
-                            new LlmAnalysisRequest(context.Text, evidence, analysis.DeploymentId, analysis.Trigger),
+                            new LlmAnalysisRequest(context.Text, evidence, analysis.DeploymentId, analysis.Trigger,
+                                context.Provenance?.EffectiveKind ?? AssessmentKind.Automatic),
                             cancellationToken);
                     result = services.GetRequiredService<IAnalysisResultValidator>().Validate(result);
                     result = AnalysisEvidence.Validate(result, evidence);
@@ -255,6 +259,8 @@ public sealed class DeploymentAnalysisWorker(
             analysis.Provider = response.Provider;
             analysis.Model = response.Model;
             analysis.Summary = response.Summary;
+            analysis.AssessmentSectionsJson =
+                response.Sections is null ? null : JsonSerializer.Serialize(response.Sections);
             analysis.RecommendedStepsJson = JsonSerializer.Serialize(response.RecommendedSteps);
             analysis.EvidenceReferencesJson = JsonSerializer.Serialize(response.EvidenceReferences);
             analysis.RequestedModel = response.RequestedModel;
@@ -350,6 +356,8 @@ public sealed class DeploymentAnalysisWorker(
                 .SetProperty(item => item.Provider, analysis.Provider)
                 .SetProperty(item => item.Model, analysis.Model)
                 .SetProperty(item => item.Summary, analysis.Summary)
+                .SetProperty(item => item.AssessmentProvenanceJson, analysis.AssessmentProvenanceJson)
+                .SetProperty(item => item.AssessmentSectionsJson, analysis.AssessmentSectionsJson)
                 .SetProperty(item => item.RecommendedStepsJson, analysis.RecommendedStepsJson)
                 .SetProperty(item => item.EvidenceReferencesJson, analysis.EvidenceReferencesJson)
                 .SetProperty(item => item.RequestedModel, analysis.RequestedModel)

@@ -35,6 +35,12 @@ removes the outbox record; the tombstone remains. Operator recovery may retry cl
 
 ## Rollout
 
+The subsequent [status-aware assessment update](../status-aware-assessments.md) adds nullable preference/provenance
+storage and filtered private archive reads. Those choices do not change permanent retention or deletion semantics.
+Assessment ranges are limited to 365 days, independently of archive age. Recorded configuration uses a small redacted
+whitelist; source classification uses immutable diagnostic metadata. New structured sections receive the same
+redaction and evidence validation as existing summaries. Upgrade private Telemetry before Web/workers.
+
 1. Stop old Web/AI workers and the old Telemetry writer. Mixed versions can delete retained results or acknowledge
    events without archival.
 2. Back up PostgreSQL and the encrypted persistent telemetry volume. Apply migration

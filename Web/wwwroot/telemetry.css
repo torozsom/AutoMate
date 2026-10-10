@@ -357,3 +357,40 @@
         top: 0;
     }
 }
+
+
+.assessment-context {
+    border: 1px solid var(--border-color, #8b8b8b);
+    border-radius: .75rem;
+    padding: 1rem;
+    margin-block: 1rem;
+}
+
+.assessment-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: .75rem;
+}
+
+.assessment-sources {
+    display: grid;
+    gap: .6rem;
+    margin-bottom: .75rem;
+}
+
+.assessment-container {
+    display: block;
+    margin-left: 1.5rem;
+    overflow-wrap: anywhere;
+}
+
+.assessment-context input[type=checkbox] {
+    margin-right: .4rem;
+}
+
+@media (max-width: 600px) {
+    .assessment-options {
+        grid-template-columns: 1fr;
+    }
+}

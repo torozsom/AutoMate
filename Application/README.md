@@ -38,3 +38,15 @@ by Web and Infrastructure without an OpenTelemetry SDK dependency in Application
 IDeploymentArchive defines durable deployment log append, cursor reads, bounded metric aggregation/import and project
 deletion. IDeploymentDetailsService authorizes exact deployment metadata. AI results expose deployment-specific paged
 listing.
+
+## Workspace read models
+
+Data/Apps/IWorkspaceQuery defines owner-scoped Overview analytics and twenty-row project inventory projections.
+Counts use recorded completion outcomes separately from runtime status; resource rows expose sample-weighted observed
+values.
+
+## Metric exploration
+
+The Diagnostics MetricExploration contracts expose absolute UTC chart windows, recorded sufficient statistics and
+independent numeric pagination. IWorkspaceQuery also accepts a frozen window. Chart windows range from five minutes to
+five calendar years; AI selection limits remain separate. See ../docs/metric-exploration.md.
