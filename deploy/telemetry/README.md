@@ -1,5 +1,10 @@
 # Local telemetry and Grafana
 
+For AutoMate platform security and AI workflow monitoring, use the separate
+[operator guide](../../docs/ai-analysis-operations.md). It defines dashboard panels, safe dimensions, initial alerts,
+read-only AI queue queries and incident responses. The deployment dashboards below remain deployment-history views;
+platform OTLP collection, persistent trace storage and alert destinations require operator setup.
+
 ## User → project → deployment navigation
 
 With PostgreSQL, the telemetry stack and Grafana running, use PowerShell 7:

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
 using Application.Diagnostics;
@@ -194,6 +195,29 @@ public sealed class AzureContainerAppRuntimeStreamer(
         {
             target.LastRevision = state.LatestRevision;
             target.LastFqdn = state.Fqdn;
+            if (Uri.CheckHostName(state.Fqdn) == UriHostNameType.Dns)
+            {
+                await using var metadata = scopeFactory.CreateAsyncScope();
+                var db = metadata.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+                var deployment = await db.Deployments.SingleOrDefaultAsync(d => d.Id == target.DeploymentId &&
+                    d.CsProject!.AppId == target.ProjectId, cancellationToken);
+                if (deployment is not null)
+                {
+                    deployment.CloudAppUrl = "https://" + state.Fqdn;
+                    if (deployment.ConfigurationSnapshotJson is { } json && !string.IsNullOrWhiteSpace(state.Image))
+                    {
+                        var snapshot = JsonSerializer.Deserialize<DeploymentConfigurationSnapshot>(json)!;
+                        deployment.ConfigurationSnapshotJson = JsonSerializer.Serialize(snapshot with
+                        {
+                            Image = metadata.ServiceProvider.GetRequiredService<IDiagnosticRedactor>()
+                                .RedactText(state.Image, 512)
+                        });
+                    }
+
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
             await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
                 DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Lifecycle,
                 DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, CreateAvailabilityMessage(state),

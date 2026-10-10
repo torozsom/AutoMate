@@ -281,3 +281,116 @@
         grid-template-columns: 1fr;
     }
 }
+
+.project-section-tabs {
+    display: flex;
+    gap: .5rem;
+    overflow-x: auto;
+    position: sticky;
+    top: 4.5rem;
+    z-index: 9;
+    background: var(--am-surface);
+    padding: .75rem;
+    border-bottom: 1px solid var(--am-border);
+}
+
+.project-section-tabs a {
+    white-space: nowrap;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: .5rem .8rem;
+    color: var(--am-text);
+    text-decoration: none;
+    border-radius: .5rem;
+}
+
+.project-section-tabs a.active {
+    background: var(--am-primary-soft);
+    color: var(--am-primary);
+    box-shadow: inset 0 -3px var(--am-primary);
+}
+
+.project-section-tabs a:focus-visible {
+    outline: 3px solid var(--am-primary);
+    outline-offset: 2px;
+}
+
+.deployment-provider-links, .history-pagination {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+    margin: 1rem 0;
+}
+
+.configuration-grid {
+    display: grid;
+    grid-template-columns:repeat(auto-fit, minmax(12rem, 1fr));
+    gap: .75rem;
+}
+
+.config-item {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    padding: .75rem;
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    overflow-wrap: anywhere;
+}
+
+.config-item span {
+    font-size: .85rem;
+    color: var(--am-text-muted);
+}
+
+.analysis-history details {
+    border: 1px solid var(--am-border);
+    border-radius: var(--am-radius);
+    padding: .75rem;
+    margin-top: .75rem;
+}
+
+@media (max-width: 640px) {
+    .project-section-tabs {
+        top: 0;
+    }
+}
+
+
+.assessment-context {
+    border: 1px solid var(--border-color, #8b8b8b);
+    border-radius: .75rem;
+    padding: 1rem;
+    margin-block: 1rem;
+}
+
+.assessment-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: .75rem;
+}
+
+.assessment-sources {
+    display: grid;
+    gap: .6rem;
+    margin-bottom: .75rem;
+}
+
+.assessment-container {
+    display: block;
+    margin-left: 1.5rem;
+    overflow-wrap: anywhere;
+}
+
+.assessment-context input[type=checkbox] {
+    margin-right: .4rem;
+}
+
+@media (max-width: 600px) {
+    .assessment-options {
+        grid-template-columns: 1fr;
+    }
+}

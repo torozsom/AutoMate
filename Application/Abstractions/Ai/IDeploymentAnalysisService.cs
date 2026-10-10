@@ -1,3 +1,4 @@
+using Application.Ai;
 using Domain.Enums;
 
 namespace Application.Abstractions.Ai;
@@ -23,7 +24,9 @@ public sealed record DeploymentAnalysisView(
     int? InputTokens = null,
     int? OutputTokens = null,
     decimal? EstimatedCost = null,
-    string? CostCurrency = null);
+    string? CostCurrency = null,
+    AssessmentSections? Sections = null,
+    AssessmentProvenance? Assessment = null);
 
 /// <summary>
 ///     Safe manual admission outcome; Accepted=false may include an owner-visible terminal Skipped result without
@@ -32,7 +35,8 @@ public sealed record DeploymentAnalysisView(
 public sealed record DeploymentAnalysisRequestResult(
     bool Accepted,
     string Message,
-    DeploymentAnalysisView? Analysis = null);
+    DeploymentAnalysisView? Analysis = null,
+    bool Conflict = false);
 
 /// <summary>Deletion outcome without disclosing analyses belonging to other owners.</summary>
 public enum DeploymentAnalysisDeletionResult
@@ -63,6 +67,26 @@ public enum DeploymentAnalysisCancellationResult
 /// <summary>Owner-authorized use case for requesting and reading deployment diagnoses.</summary>
 public interface IDeploymentAnalysisService
 {
+    /// <summary>Requests an immutable, status-aware selection with stable idempotency.</summary>
+    Task<DeploymentAnalysisRequestResult> RequestManualAsync(Guid ownerId, Guid deploymentId, Guid requestId,
+        AssessmentSelection selection, CancellationToken token = default)
+    {
+        return RequestManualAsync(ownerId, deploymentId, requestId, token);
+    }
+
+    /// <summary>Reads owner-authorized choices and recorded channels.</summary>
+    Task<AssessmentPreferences?> GetPreferencesAsync(Guid ownerId, Guid deploymentId, CancellationToken token = default)
+    {
+        return Task.FromResult<AssessmentPreferences?>(null);
+    }
+
+    /// <summary>Saves choices independently of running/saved analysis requests.</summary>
+    Task<bool> SavePreferencesAsync(Guid ownerId, Guid deploymentId, AssessmentSelection selection,
+        CancellationToken token = default)
+    {
+        return Task.FromResult(false);
+    }
+
     /// <summary>Coalesces current active work; callers needing replay after completion should supply a stable request ID.</summary>
     Task<DeploymentAnalysisRequestResult> RequestManualAsync(Guid ownerId, Guid deploymentId,
         CancellationToken cancellationToken = default);
@@ -84,4 +108,12 @@ public interface IDeploymentAnalysisService
 
     Task<DeploymentAnalysisView?> GetLatestAsync(Guid ownerId, Guid deploymentId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Reads a bounded page of all saved runs for one owned deployment, newest first.</summary>
+    async Task<IReadOnlyList<DeploymentAnalysisView>> ListAsync(Guid ownerId, Guid deploymentId, int offset = 0,
+        int limit = 20, CancellationToken cancellationToken = default)
+    {
+        var latest = await GetLatestAsync(ownerId, deploymentId, cancellationToken);
+        return offset == 0 && latest is not null ? [latest] : [];
+    }
 }

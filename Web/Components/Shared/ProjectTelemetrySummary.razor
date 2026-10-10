@@ -6,14 +6,8 @@
 <div class="telemetry-panel" aria-labelledby="project-analytics-title" aria-busy="@_busy">
     <div class="telemetry-toolbar">
         <div><h3 id="project-analytics-title">Project analytics</h3>
-            <p class="telemetry-muted">Daily observations across this project's deployments</p></div>
-        <label class="telemetry-control">Period
-            <select class="form-select" @bind="_days" @bind:after="LoadAsync">
-                <option value="7">7 days</option>
-                <option value="30">30 days</option>
-                <option value="365">1 year</option>
-            </select>
-        </label>
+            <p class="telemetry-muted">Recorded observations across this project's deployments</p></div>
+        <MetricRangePicker Changed="RangeChangedAsync"/>
     </div>
     @if (_busy)
     {
@@ -35,10 +29,10 @@
                     container</small></div>
         </div>
         <div class="telemetry-support">
-            <span>Observed log errors: <strong>@(summary.Daily.Any(d => d.Metric == "observed_log_errors") ? summary.Daily.Where(d => d.Metric == "observed_log_errors").Sum(d => d.ObservedErrors).ToString() : "—")</strong> · approximate</span>
+            <span>Observed log errors: <strong>@(summary.CompleteDayLogErrors?.ToString() ?? (summary.Daily.Any(d => d.Metric == "observed_log_errors") ? summary.Daily.Where(d => d.Metric == "observed_log_errors").Sum(d => d.ObservedErrors).ToString() : "—"))</strong> · approximate, complete UTC days</span>
             @if (summary.AverageDeploymentSeconds is { } seconds)
             {
-                <span>Average cloud deployment: @TimeSpan.FromSeconds(seconds).ToString("g") · includes queue</span>
+                <span>Average completed deployment: @TimeSpan.FromSeconds(seconds).ToString("g")</span>
             }
             @if (summary.Daily.Count > 0)
             {
@@ -51,57 +45,9 @@
         }
 
         <details class="telemetry-explore">
-            <summary>Explore metrics <span>CPU, memory and daily statistics</span></summary>
-            <div class="telemetry-chart-grid">
-                <TelemetryChart Title="Daily CPU usage" Metric="@TelemetryPresentation.Cpu"
-                                Points="@Daily(TelemetryPresentation.Cpu)" Start="_start" End="_end"/>
-                <TelemetryChart Title="Daily memory usage" Metric="@TelemetryPresentation.Memory"
-                                Points="@Daily(TelemetryPresentation.Memory)" Start="_start" End="_end"/>
-            </div>
-            <p class="telemetry-muted">Sample-weighted daily averages per observed container. Missing days remain gaps.
-                Daily statistics are retained for one year.</p>
-            <details class="telemetry-table-details">
-                <summary>Daily deployment statistics</summary>
-                <div class="table-responsive">
-                    <table class="table telemetry-table">
-                        <caption>UTC daily statistics by deployment and container</caption>
-                        <thead>
-                        <tr>
-                            <th>Day</th>
-                            <th>Deployment</th>
-                            <th>Container</th>
-                            <th>Metric</th>
-                            <th>Average</th>
-                            <th>Minimum</th>
-                            <th>Maximum</th>
-                            <th>Samples / errors</th>
-                            <th>Quality</th>
-                        </tr>
-                        </thead>
-                        <tbody>@foreach (var row in summary.Daily.Take(500))
-                        {
-                            <tr>
-                                <td>@row.DayUtc.ToString("yyyy-MM-dd")</td>
-                                <td>
-                                    <a href="@($"/project/{ProjectId}/deployment/{row.DeploymentId}")">@row.DeploymentId.ToString("N")[..8]</a>
-                                </td>
-                                <td>@row.Container</td>
-                                <td><span title="@row.Metric">@TelemetryPresentation.Label(row.Metric)</span></td>
-                                <td>@TelemetryPresentation.Format(row.Average, row.Metric)</td>
-                                <td>@TelemetryPresentation.Format(row.Minimum, row.Metric)</td>
-                                <td>@TelemetryPresentation.Format(row.Maximum, row.Metric)</td>
-                                <td>@(row.Metric == "observed_log_errors" ? row.ObservedErrors : row.SampleCount)</td>
-                                <td>@(row.Incomplete ? "Partial / approximate" : "Observed")</td>
-                            </tr>
-                        }
-                        </tbody>
-                    </table>
-                </div>
-                @if (summary.Daily.Count > 500)
-                {
-                    <p>Showing the first 500 rows. Select a shorter period for more detail.</p>
-                }
-            </details>
+            <summary>Explore metrics <span>CPU, memory and paginated statistics</span></summary>
+            <MetricStatisticsView Data="@Observations" Range="@(new MetricTimeRange(_start, _end))"
+                                  Availability="@_notice"/>
         </details>
     }
     else
@@ -120,11 +66,38 @@
     [Parameter]
     public Guid UserId { get; set; }
 
-    private int _days = 30;
+    /// <summary>Frozen range selected by the shared UTC controls.</summary>
+    private MetricTimeRange _range = MetricTimeRange.Preset("30d", DateTimeOffset.UtcNow);
+
+    /// <summary>Changes the range without rewriting saved analysis preferences.</summary>
+    private async Task RangeChangedAsync(MetricTimeRange range)
+    {
+        _range = range;
+        await LoadAsync();
+    }
+
+    /// <summary>Compatible legacy summaries retain their recorded container identity.</summary>
+    private IReadOnlyList<MetricObservation> Observations => _summary?.Observations?.Chart ??
+                                                             _summary?.Daily.Where(p => p.Average is not null).Select(p => new MetricObservation(ProjectId, p.DeploymentId,
+                                                                 p.Container, p.Metric, p.Unit, p.DayUtc, p.SampleCount, p.Average!.Value * Math.Max(1, p.SampleCount),
+                                                                 p.Minimum ?? p.Average.Value, p.Maximum ?? p.Average.Value, p.Incomplete)).ToArray() ?? [];
+
+    /// <summary>Loaded project identity.</summary>
     private Guid _loaded;
+
+    /// <summary>Loaded owner identity.</summary>
+    private Guid _loadedOwner;
+
+    /// <summary>Indicates an independently scoped statistics request.</summary>
     private bool _busy;
+
+    /// <summary>Fixed unavailable or partial-data guidance.</summary>
     private string? _notice;
+
+    /// <summary>Last accepted owner/project/range projection.</summary>
     private ProjectTelemetryAnalytics? _summary;
+
+    /// <summary>Cancels requests on navigation.</summary>
     private readonly CancellationTokenSource _lifetime = new();
 
     /// <summary>Cancellation source for the most recently requested period.</summary>
@@ -136,20 +109,21 @@
     /// <summary>Formats a sample-weighted project resource average.</summary>
     private string Average(string metric)
     {
-        return TelemetryPresentation.Format(
-            TelemetryPresentation.WeightedAverage(_summary!.Daily.Where(r => r.Metric == metric)), metric);
-    }
-
-    /// <summary>Returns observed daily points for a selected resource.</summary>
-    private IReadOnlyList<TelemetryChartPoint> Daily(string metric)
-    {
-        return TelemetryPresentation.DailyPoints(_summary!.Daily.Where(r => r.Metric == metric));
+        var points = Observations.Where(p => p.Metric == metric).ToArray();
+        var raw = points.Where(p => p.Samples > 0).ToArray();
+        var values = raw.Length > 0 ? raw : points;
+        return TelemetryPresentation.Format(values.Length == 0
+            ? null
+            : values.Sum(p => p.Sum) /
+              Math.Max(1, values.Sum(p => p.Samples > 0 ? p.Samples : p.ImportedIntervals)), metric);
     }
 
     /// <inheritdoc />
     protected override async Task OnParametersSetAsync()
     {
-        if (_loaded == ProjectId) return;
+        if (_loaded == ProjectId && _loadedOwner == UserId) return;
+        _loadedOwner = UserId;
+        _summary = null;
         _loaded = ProjectId;
         await LoadAsync();
     }
@@ -166,10 +140,12 @@
             // Blazor children may load while their parent is querying; never share the circuit's EF context.
             await using var scope = ServiceScopes.CreateAsyncScope();
             var analytics = scope.ServiceProvider.GetRequiredService<IProjectTelemetryAnalytics>();
-            var now = DateTimeOffset.UtcNow;
-            var start = now.AddDays(-_days);
-            var result = await analytics.ReadAsync(UserId, ProjectId, start, now, request.Token);
-            if (request.IsCancellationRequested) return;
+            var now = _range.End;
+            var start = _range.Start;
+            var owner = UserId;
+            var project = ProjectId;
+            var result = await analytics.ReadAsync(owner, project, start, now, request.Token);
+            if (request.IsCancellationRequested || owner != UserId || project != ProjectId) return;
             _start = start;
             _end = now;
             _summary = result;

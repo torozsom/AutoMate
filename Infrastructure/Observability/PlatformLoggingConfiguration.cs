@@ -1,8 +1,10 @@
 using Application.Abstractions.Diagnostics;
 using Infrastructure.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Observability;
 
@@ -16,6 +18,9 @@ public static class PlatformLoggingConfiguration
         services.AddLogging();
         services.TryAddSingleton<IDiagnosticRedactor, DiagnosticRedactor>();
         services.TryAddSingleton<PlatformTelemetryPolicy>();
+        services.TryAddSingleton(provider => new ConsoleExceptionDiagnostics(
+            provider.GetRequiredService<IDiagnosticRedactor>(), provider.GetService<IConfiguration>(),
+            filters: provider.GetService<IOptionsMonitor<LoggerFilterOptions>>()));
         services.AddSingleton(new RegistrationMarker());
         services.Configure<LoggerFactoryOptions>(settings => settings.ActivityTrackingOptions =
             ActivityTrackingOptions.TraceId | ActivityTrackingOptions.SpanId | ActivityTrackingOptions.ParentId);
@@ -26,7 +31,8 @@ public static class PlatformLoggingConfiguration
                            originalFactory.ImplementationFactory?.Invoke(provider) as ILoggerFactory ??
                            (ILoggerFactory)ActivatorUtilities.CreateInstance(provider,
                                originalFactory.ImplementationType!);
-            return new SafeLoggerFactory(original, provider.GetRequiredService<PlatformTelemetryPolicy>());
+            return new SafeLoggerFactory(original, provider.GetRequiredService<PlatformTelemetryPolicy>(),
+                provider.GetRequiredService<ConsoleExceptionDiagnostics>());
         }));
         return services;
     }

@@ -82,6 +82,7 @@ public sealed class LocalDeploymentOrchestrator(
         };
 
         // Save the deployment to the database
+        await DeploymentSnapshotCapture.CaptureAsync(dbContext, deployment, config, null, null, cancellationToken);
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync(cancellationToken);
         using var activity = DeploymentTracing.Start(DeploymentOperation.LocalDeploy, config.ProjectId, deployment.Id);
@@ -115,11 +116,11 @@ public sealed class LocalDeploymentOrchestrator(
                 }
                 catch (Exception diagnosticError)
                 {
-                    logger.LogWarning("Local resource conflict diagnostic unavailable: {FailureType}.",
+                    logger.LogWarning(diagnosticError, "Local resource conflict diagnostic unavailable: {FailureType}.",
                         diagnosticError.GetType().Name);
                 }
 
-            logger.LogError("Local deployment failed: {FailureType}.", ex.GetType().Name);
+            logger.LogError(ex, "Local deployment failed: {FailureType}.", ex.GetType().Name);
             await PublishPhaseAsync(config.ProjectId, deployment.Id, "outcome",
                 "Local deployment failed. Review the preceding build and lifecycle diagnostics.",
                 CancellationToken.None,
@@ -178,7 +179,8 @@ public sealed class LocalDeploymentOrchestrator(
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
-                logger.LogWarning("Stop lifecycle collection unavailable: {FailureType}.", exception.GetType().Name);
+                logger.LogWarning(exception, "Stop lifecycle collection unavailable: {FailureType}.",
+                    exception.GetType().Name);
             }
 
         var isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName, projectId,
@@ -270,6 +272,8 @@ public sealed class LocalDeploymentOrchestrator(
 
         logger.LogInformation("[LocalDeploymentOrchestrator] Step 2/4: Scanning project content for dependencies...");
         var metadata = await projectScanner.ScanProjectContentAsync(csProject.Path, cancellationToken);
+        DeploymentSnapshotCapture.Resolve(deployment, metadata.DotNetVersion);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
             "[LocalDeploymentOrchestrator] Step 3/4: Generating Infrastructure-as-Code files (Dockerfile, docker-compose)...");
@@ -304,6 +308,7 @@ public sealed class LocalDeploymentOrchestrator(
                                                 "Check server console for details.");
 
         var systemUrl = $"http://localhost:{config.ExposedPort}";
+        deployment.ResolvedHostPort = config.ExposedPort;
         logger.LogInformation("Deployment finished successfully.");
 
         await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
@@ -326,7 +331,8 @@ public sealed class LocalDeploymentOrchestrator(
         }
         catch (Exception exception) when (!token.IsCancellationRequested)
         {
-            logger.LogWarning("Local phase diagnostic unavailable: {FailureType}.", exception.GetType().Name);
+            logger.LogWarning(exception, "Local phase diagnostic unavailable: {FailureType}.",
+                exception.GetType().Name);
         }
     }
 }

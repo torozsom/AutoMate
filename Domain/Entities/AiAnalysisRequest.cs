@@ -3,6 +3,9 @@ namespace Domain.Entities;
 /// <summary>Metadata-only admission receipt; quota/idempotency survive deletion or expiry of analysis results.</summary>
 public sealed class AiAnalysisRequest : BaseEntity
 {
+    /// <summary>Canonical request options survive result deletion and prevent conflicting replay.</summary>
+    public string? RequestedSelectionJson { get; set; }
+
     /// <summary>Project scope; only project deletion cascades this receipt.</summary>
     public Guid ProjectId { get; set; }
 

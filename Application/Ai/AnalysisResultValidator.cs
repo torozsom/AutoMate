@@ -4,11 +4,11 @@ using Application.Abstractions.Diagnostics;
 
 namespace Application.Ai;
 
-/// <summary>Enforces the version-one result shape and redacts every provider-authored text field.</summary>
+/// <summary>Validates legacy/v2 result shapes and redacts every provider-authored text field.</summary>
 public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor) : IAnalysisResultValidator
 {
     /// <summary>Current version of the persisted structured result contract.</summary>
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     /// <summary>Maximum summary size, compatible with the central redactor's terminal-text limit.</summary>
     public const int MaximumSummaryCharacters = 4096;
@@ -28,7 +28,9 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     /// <inheritdoc />
     public LlmAnalysisResponse Validate(LlmAnalysisResponse response)
     {
-        if (response is null || response.ResultSchemaVersion is not (null or SchemaVersion) ||
+        if (response is null || response.ResultSchemaVersion is not (null or 1 or SchemaVersion) ||
+            (response.ResultSchemaVersion == SchemaVersion && response.Sections is null) ||
+            (response.ResultSchemaVersion == 1 && response.Sections is not null) ||
             response.InputTokens < 0 || response.OutputTokens < 0 ||
             response.EstimatedCost < 0 || response.EstimatedCost > 9_999_999_999.99999999m ||
             (response.EstimatedCost is { } cost && decimal.Round(cost, 8) != cost) ||
@@ -43,8 +45,17 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
             RequestedModel = OptionalIdentifier(response.RequestedModel),
             ModelVersion = OptionalIdentifier(response.ModelVersion),
             PromptVersion = OptionalIdentifier(response.PromptVersion),
-            ResultSchemaVersion = SchemaVersion,
-            Summary = Text(response.Summary, MaximumSummaryCharacters),
+            ResultSchemaVersion = response.Sections is null ? 1 : SchemaVersion,
+            Sections = response.Sections is null
+                ? null
+                : new AssessmentSections(
+                    Items(response.Sections.Observations, 6, 768), Items(response.Sections.MetricsAssessment, 6, 768),
+                    Items(response.Sections.PotentialIssues, 6, 768), Items(response.Sections.Limitations, 6, 768)),
+            Summary = response.Sections is not null &&
+                      response.Summary is { Length: <= MaximumSummaryCharacters } overview &&
+                      string.IsNullOrWhiteSpace(overview)
+                ? "No overview was recorded for the selected evidence."
+                : Text(response.Summary, MaximumSummaryCharacters),
             RecommendedSteps = Items(response.RecommendedSteps, MaximumSteps, MaximumStepCharacters),
             EvidenceReferences = Items(response.EvidenceReferences, MaximumEvidenceReferences,
                 MaximumEvidenceCharacters)

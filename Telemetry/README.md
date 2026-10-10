@@ -28,7 +28,7 @@ Alert on rising losses, age near the 24-hour limit, failed delivery and service 
 returns a bounded pending read for AutoMate's authorized history merge. The read limit is reported as truncation.
 
 Hourly aggregation replaces deployment/day/container/metric rows, rereads the current and previous two UTC dates and
-retains daily summaries for 365 days. It does not claim data before collection started or exact error counts.
+retains daily summaries until project deletion. It does not claim data before collection started or exact error counts.
 
 See [SaaS telemetry rollout](../docs/saas-telemetry.md) and [navigation](../navigation.md).
 
@@ -57,3 +57,26 @@ providers.
 Loki/Mimir adapters apply mandatory final redaction even for direct calls. Legacy PostgreSQL diagnostic writers now
 reject
 new payloads at the method boundary; existing reads/draining remain available through Web.
+
+## Deployment history update (2026-10-08)
+
+The host registers DiskDeploymentArchive before ingesting events: acknowledgments require archive and spool persistence.
+Authenticated archive routes recheck deployment ownership/managed consent. Backfill and cleanup workers run on the same
+exclusive persistent volume. Daily aggregates now retain until project deletion. See ADR 0004 for storage growth, backup
+and rollout requirements.
+
+## Assessment filtering (2026-10-09)
+
+Private authenticated POST `/archive/assessment` and `/archive/assessment-metrics` carry an absolute UTC window and
+immutable selection. Both recheck current database ownership and managed-telemetry consent. Invalid bounds return 400;
+source/container filters precede read limits. Catalog-only reads contain bounded recorded channel metadata. Deploy this
+filter-capable host before updated Web/workers, preserving the archive volume. See
+[status-aware assessments](../docs/status-aware-assessments.md).
+
+## Chart metric batches
+
+Authenticated POST /archive/metric-batch resolves owner/project/deployment membership and managed consent in SQL, reads
+ten partitions per continuation, and returns at most 4,000 metric aggregates. It accepts positive private boundary
+fragments through five calendar years; public Web ranges require at least five minutes. The derived metric-index
+directory and sealed day manifest are rebuildable from checksummed archive segments. Deploy this host before updated
+Web; no database migration or AI secret changes are needed. See ../docs/metric-exploration.md.

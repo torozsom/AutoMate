@@ -277,6 +277,7 @@ public sealed class AnalysisWorkerConcurrencyTests
                 .AddSingleton<IDiagnosticRedactor, DiagnosticRedactor>()
                 .AddSingleton<IAnalysisResultValidator>(AnalysisResultTests.Validator())
                 .AddScoped<IAnalysisEgressAuthorizer, AnalysisEgressAuthorizer>()
+                .AddScoped<IAnalysisBudgetGuard, AnalysisBudgetGuard>()
                 .AddScoped<IDeploymentAnalysisQueue, DeploymentAnalysisQueue>()
                 .AddScoped<IDeploymentAnalysisContextBuilder, Context>().AddScoped<ILlmAnalysisProvider, Provider>()
                 .AddTransient<DeploymentAnalysisWorker>()

@@ -1,4 +1,5 @@
 using Application.Diagnostics;
+using Domain.Enums;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,13 @@ public sealed class DeploymentAnalysisRetentionService(
                     if (count < BatchSize) break;
                 }
 
+                for (var batch = 0; batch < 10; batch++)
+                {
+                    var count = await DeleteBudgetBatchAsync(db, clock.GetUtcNow(), stoppingToken);
+                    removed += count;
+                    if (count < BatchSize) break;
+                }
+
                 if (removed > 0)
                     OperationalLog.Record(logger, AuditOperation.AnalysisRetention, AuditOutcome.Completed);
             }
@@ -57,9 +65,15 @@ public sealed class DeploymentAnalysisRetentionService(
     }
 
     /// <summary>Deletes one bounded expiry batch; database cascades remove its queue rows.</summary>
-    internal static Task<int> DeleteBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
+    internal static async Task<int> DeleteBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
-        return db.AiDeploymentAnalyses.Where(item => item.ExpiresAt <= now)
+        var expiredWork = db.AiDeploymentAnalyses.Where(item => item.RetainUntilDeleted && item.ExpiresAt <= now &&
+                                                                (item.Status == AiAnalysisStatus.Queued ||
+                                                                 item.Status == AiAnalysisStatus.Running));
+        await expiredWork.OrderBy(item => item.ExpiresAt).Take(BatchSize).ExecuteUpdateAsync(update => update
+            .SetProperty(item => item.Status, AiAnalysisStatus.Cancelled)
+            .SetProperty(item => item.CompletedAt, now), token);
+        return await db.AiDeploymentAnalyses.Where(item => item.ExpiresAt <= now && !item.RetainUntilDeleted)
             .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
     }
 
@@ -68,5 +82,12 @@ public sealed class DeploymentAnalysisRetentionService(
     {
         return db.AiAnalysisRequests.Where(item => item.ExpiresAt <= now)
             .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
+    }
+
+    /// <summary>Bounds cleanup of accounting metadata to ninety days, preserving all current-day/window charges.</summary>
+    internal static Task<int> DeleteBudgetBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
+    {
+        return db.AiAnalysisBudgetEntries.Where(item => item.OccurredAt < now.AddDays(-90))
+            .OrderBy(item => item.OccurredAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
     }
 }

@@ -1,5 +1,16 @@
 # Web Tests
 
+DeploymentAnalysisPanelTests covers remote projects without configuration: consent eligibility remains tied to the
+current deployment and explicit saving reads the created configuration back through the owner-authorized port.
+
+HostingProfileRegistrationTests verifies shared budget guard registration in both profiles and rejects unsafe tenant,
+rate, shared concurrency, currency and monetary precision/bounds even with AI disabled, without revealing configured
+private values. Defaults leave spending disabled and use USD.
+
+AnalysisReadinessTests hosts production health middleware over loopback and verifies healthy disabled AI, policy and
+configuration degradation, unavailable queues, cancellation/timeouts, fixed finite JSON and liveness isolation. Both
+hosting profiles verify the scoped Application readiness port and five-second tagged health-check registration.
+
 HostingProfileRegistrationTests exercises real M8 startup validation for AI timeout/context/output/retention bounds,
 exact boundary acceptance while disabled, malformed/credential-bearing OTLP URLs and fixed failure messages. Resource
 labels are bounded without echoing invalid values. Defaults are verified in both hosting profiles. No hosted workers,
@@ -93,3 +104,26 @@ on rejection/uncertainty, owner/deployment/analysis arguments, cancellation read
 retry, duplicate suppression and stale-action fencing. Panel tests cover cancel eligibility independently of AI/consent
 enablement, authored skip guidance and linked egress disclosure. Browser DOM checks use synthetic previews for 375px
 layout at 200% text and light/dark control contrast; they perform no real consent changes or cancellation.
+
+Azure provider registration tests resolve the real typed adapter and catalog in both hosting profiles without starting
+workers or calling Azure. They verify separate Azure credential presence, exact resource mismatch rejection and retained
+default-off startup. Windows Web host tests require Event Log/data-protection access outside a restricted sandbox.
+
+ConsoleExceptionDiagnosticsTests exercises bounded UTF-8 snapshots, credential masking, nested exception/stack/status
+details, approved correlation, payload/path suppression, logging filters and fail-safe writers/getters.
+PlatformTelemetrySafetyTests verifies ordinary and real SDK exports remain metadata-only with the console sink active.
+Both hosting-profile composition fixtures resolve the sink and shared safe logger factory.
+
+## Deployment history update (2026-10-08)
+
+Section navigation and shared history presentation remain provider-free. Fixture HTML supports browser review without
+OAuth. Production external-stack tests retain their explicit opt-in requirements.
+
+The provider-free Project Details and Deployment Details previews are also checked in Edge with
+Web.Tests/Browser/project-sections.test.cjs. Set AUTOMATE_PLAYWRIGHT_MODULE to the installed playwright module and run
+node Web.Tests/Browser/project-sections.test.cjs after TelemetryPageRenderingTests creates .artifacts/metrics-preview.
+These browser checks cover fragments, focus, history navigation, mobile overflow and both themes; they do not require
+OAuth or make provider calls.
+
+ProjectDetailsMetricRecoveryTests covers reconnect callbacks after disposal and delayed metric replies or disposed
+providers after the page closes, without renderer/provider access after cancellation.

@@ -63,8 +63,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     private string? _analysisMessage;
 
-    /// <summary>Independent analysis polling, unaffected by terminal/cloud catch-up failures.</summary>
-    private Task? _analysisPollTask;
 
     /// <summary>Monotonic read/action generation rejects responses overtaken by newer page operations.</summary>
     private long _analysisReadVersion;
@@ -234,15 +232,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _analysisDisposed = true;
         _analysisReadVersion++;
         await _cloudPollCancellation.CancelAsync();
-        if (_analysisPollTask is not null)
-            try
-            {
-                await _analysisPollTask;
-            }
-            catch (OperationCanceledException)
-            {
-            }
-
         if (_cloudPollTask is not null)
             try
             {
@@ -252,7 +241,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             {
             }
 
-        _cloudPollCancellation.Dispose();
         _cloudPollGate.Dispose();
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
@@ -265,6 +253,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             await _hubConnection.DisposeAsync();
         }
 
+        _cloudPollCancellation.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -532,7 +521,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
 
             await RefreshLatestAnalysisAsync();
-            if (_app is not null) _analysisPollTask = PollAnalysisAsync(_cloudPollCancellation.Token);
+            // The shared deployment-scoped presenter owns AI polling on both details pages.
             if (_app is not null && _cloudPollTask is null)
                 _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
 
@@ -841,6 +830,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         return _app?.CsProjects.FirstOrDefault(project => project.Id == GetLatestDeployment()?.CsProjectId);
     }
 
+    /// <summary>Remote projects can save explicit consent before a deployment configuration exists.</summary>
+    private bool CanEditAnalysisConsent()
+    {
+        return GetAnalysisProject() is { } project &&
+               (project.Configuration is not null || _app?.SourceType == SourceType.Remote);
+    }
+
     /// <summary>Refreshes owner-visible persisted state with fixed failure guidance and duplicate-action suppression.</summary>
     private async Task RefreshAnalysisFromUiAsync()
     {
@@ -869,7 +865,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private async Task SetAiConsentAsync(bool consented)
     {
         var project = GetAnalysisProject();
-        if (_analysisDisposed || _analysisBusy || project?.Configuration is null) return;
+        if (_analysisDisposed || _analysisBusy || project is null || !CanEditAnalysisConsent()) return;
         var appId = ProjectId;
         var owner = _currentUserId;
         var projectId = project.Id;
@@ -882,6 +878,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             await using var scope = ScopeFactory.CreateAsyncScope();
             var apps = scope.ServiceProvider.GetRequiredService<IApplicationService>();
             var saved = await apps.SetAiDiagnosticEgressConsentAsync(appId, owner, projectId, consented, token);
+            if (saved && project.Configuration is null)
+            {
+                var refreshed = await apps.GetAppByIdAsync(appId, owner, token);
+                if (!IsCurrentAnalysisAction(version, owner, deploymentId, token) || ProjectId != appId) return;
+                project.Configuration =
+                    refreshed?.CsProjects.FirstOrDefault(item => item.Id == projectId)?.Configuration;
+            }
+
             if (!IsCurrentAnalysisAction(version, owner, deploymentId, token) || ProjectId != appId) return;
             if (saved && GetAnalysisProject() is { Configuration: { } configuration } current &&
                 current.Id == projectId)
@@ -1373,20 +1377,23 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Restores the latest saved numeric samples after reload, without replacing newer live values.</summary>
     private async Task RestoreMetricSnapshotAsync()
     {
-        if (!_terminalDeploymentId.HasValue || _containerMetrics.Count > 0 ||
+        if (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested ||
+            !_terminalDeploymentId.HasValue || _containerMetrics.Count > 0 ||
             DateTimeOffset.UtcNow < _nextMetricReplayAt) return;
         _nextMetricReplayAt = DateTimeOffset.UtcNow.AddSeconds(60);
         var deploymentId = _terminalDeploymentId.Value;
+        var token = _cloudPollCancellation.Token;
         try
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var end = DateTimeOffset.UtcNow;
             var history = await scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>()
                 .ReadMetricsAsync(_currentUserId, ProjectId, deploymentId, end.AddMinutes(-15), end, 15,
-                    _cloudPollCancellation.Token);
+                    token);
+            if (_analysisDisposed || token.IsCancellationRequested) return;
             await InvokeAsync(() =>
             {
-                if (_terminalDeploymentId != deploymentId) return;
+                if (_analysisDisposed || token.IsCancellationRequested || _terminalDeploymentId != deploymentId) return;
                 foreach (var group in history.Points.GroupBy(p => p.Container))
                 {
                     if (_containerMetrics.ContainsKey(group.Key)) continue;
@@ -1398,10 +1405,15 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 StateHasChanged();
             });
         }
-        catch (Exception exception) when (exception is not OperationCanceledException ||
-                                          !_cloudPollCancellation.IsCancellationRequested)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            Logger.LogWarning("Saved metric recovery unavailable: {FailureType}.", exception.GetType().Name);
+        }
+        catch (ObjectDisposedException) when (_analysisDisposed || token.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Saved metric recovery unavailable: {FailureType}.", exception.GetType().Name);
         }
     }
 

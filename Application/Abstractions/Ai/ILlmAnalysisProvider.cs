@@ -1,3 +1,4 @@
+using Application.Ai;
 using Domain.Enums;
 
 namespace Application.Abstractions.Ai;
@@ -14,7 +15,8 @@ public sealed record LlmAnalysisRequest(
     string Context,
     IReadOnlyList<string>? AllowedEvidenceReferences = null,
     Guid? DeploymentId = null,
-    AiAnalysisTrigger Trigger = AiAnalysisTrigger.Manual);
+    AiAnalysisTrigger Trigger = AiAnalysisTrigger.Manual,
+    AssessmentKind Kind = AssessmentKind.Automatic);
 
 /// <summary>Untrusted provider output; every adapter and persistence consumer must validate and redact it.</summary>
 public sealed record LlmAnalysisResponse(
@@ -30,7 +32,8 @@ public sealed record LlmAnalysisResponse(
     string? PromptVersion = null,
     int? ResultSchemaVersion = null,
     decimal? EstimatedCost = null,
-    string? CostCurrency = null);
+    string? CostCurrency = null,
+    AssessmentSections? Sections = null);
 
 /// <summary>Provider-neutral analysis boundary; responses are not implicitly safe to store or display.</summary>
 public interface ILlmAnalysisProvider

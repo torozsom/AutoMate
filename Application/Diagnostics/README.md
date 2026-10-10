@@ -1,5 +1,9 @@
 # Platform observability
 
+The [operator monitoring guide](../../docs/ai-analysis-operations.md) maps these exact metric/audit contracts to
+dashboard panels, alert formulas, queue metadata snapshots and investigation procedures. Backend name normalization,
+attempt-versus-result semantics and missing-data handling are explicit; no AI queue-depth metric is assumed.
+
 `AutoMateTelemetry` owns stable deployment/security activity sources and meters. Metrics use finite source/kind/channel
 labels; identifiers belong in approved log/trace correlation, never metric dimensions.
 

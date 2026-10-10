@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -27,6 +28,87 @@ namespace Web.Tests;
 /// <summary>Verifies profile-specific validation using the production Web composition root.</summary>
 public sealed class HostingProfileRegistrationTests
 {
+    /// <summary>Production composition selects Azure in either profile and checks its own key without provider I/O.</summary>
+    [Theory]
+    [InlineData("SelfHosted")]
+    [InlineData("SaaS")]
+    public void Azure_provider_registration_uses_exact_resource_and_separate_credentials(string profile)
+    {
+        var certificatePath = profile == "SaaS" ? CreateTestCertificate() : null;
+        try
+        {
+            var builder = CreateBuilder(profile);
+            if (certificatePath is not null)
+                builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["SaaS:DataProtectionCertificatePath"] = certificatePath,
+                    ["SaaS:DataProtectionCertificatePassword"] = "test-only"
+                });
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["AiAnalysis:AzureOpenAi:ResourceName"] = "automate-test",
+                ["AiAnalysis:ApiKey"] = "direct-key-is-not-an-Azure-key"
+            });
+            builder.AddApplicationServices();
+            using var services = builder.Services.BuildServiceProvider();
+            using var scope = services.CreateScope();
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<AzureOpenAiAnalysisProvider>());
+            Assert.NotNull(services.GetRequiredService<ConsoleExceptionDiagnostics>());
+            Assert.IsType<SafeLoggerFactory>(services.GetRequiredService<ILoggerFactory>());
+            var catalog = services.GetRequiredService<AnalysisProviderCatalog>();
+            var settings = new AiAnalysisOptions
+            {
+                Enabled = true,
+                ProviderEgressEnabled = true,
+                Provider = "azure-openai",
+                RegionalProcessingApproved = true,
+                ProcessingRegion = "eu",
+                ApprovedRegions = ["eu"],
+                ApprovedTenantIds = [Guid.NewGuid()],
+                AllowedDataCategories = ["logs", "metrics", "traceCorrelation"],
+                Endpoint = "https://automate-test.openai.azure.com/openai/v1/",
+                Model = "analysis-deployment"
+            };
+            var selected = Assert.IsType<AnalysisProviderRegistration>(catalog.Select(settings));
+            Assert.Equal(typeof(AzureOpenAiAnalysisProvider), selected.ImplementationType);
+            Assert.False(selected.CredentialsConfigured!());
+            builder.Configuration["AiAnalysis:AzureOpenAi:ApiKey"] = "synthetic-Azure-key";
+            Assert.True(selected.CredentialsConfigured());
+            builder.Configuration["AiAnalysis:AzureOpenAi:ResourceName"] = "other-resource";
+            Assert.Null(catalog.Select(settings));
+            Assert.False(services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value.Enabled);
+        }
+        finally
+        {
+            if (certificatePath is not null) File.Delete(certificatePath);
+        }
+    }
+
+    /// <summary>Shared quota/currency/precision limits fail startup even when AI is disabled.</summary>
+    [Theory]
+    [InlineData("DailyTenantLimit", "-1")]
+    [InlineData("DailyTenantLimit", "100001")]
+    [InlineData("TenantRequestsPerMinute", "1001")]
+    [InlineData("MaximumTenantProviderConcurrency", "17")]
+    [InlineData("MaximumGlobalProviderConcurrency", "4097")]
+    [InlineData("DailyTenantCostBudget", "-1")]
+    [InlineData("DailyTenantCostBudget", "1000001")]
+    [InlineData("MaximumProviderAttemptCost", "0.000000001")]
+    [InlineData("BudgetCurrency", "usd")]
+    [InlineData("BudgetCurrency", "private-secret")]
+    public void Startup_rejects_invalid_shared_budget_limits(string setting, string value)
+    {
+        var builder = CreateBuilder("SelfHosted");
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            { ["AiAnalysis:" + setting] = value });
+        builder.AddApplicationServices();
+        using var services = builder.Services.BuildServiceProvider();
+        var failure =
+            Assert.Throws<OptionsValidationException>(() =>
+                services.GetRequiredService<IStartupValidator>().Validate());
+        Assert.DoesNotContain("private-secret", failure.Message);
+    }
+
     /// <summary>Numeric limits fail startup even with AI disabled, without silent clamps or provider activity.</summary>
     [Theory]
     [InlineData("TimeoutSeconds", "4")]
@@ -191,6 +273,12 @@ public sealed class HostingProfileRegistrationTests
                 scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<ILlmAnalysisProvider>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisContextBuilder>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisReadiness>());
+            Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAnalysisBudgetGuard>());
+            var health = services.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
+            var readiness = Assert.Single(health.Registrations, item => item.Name == "ai_analysis");
+            Assert.Contains(AnalysisHealthChecks.ReadinessTag, readiness.Tags);
+            Assert.Equal(TimeSpan.FromSeconds(5), readiness.Timeout);
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAnalysisEgressAuthorizer>());
             Assert.False(services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value.Enabled);
             AssertAnalysisDefaults(services);

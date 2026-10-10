@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Ai;
 using Application.Ai;
+using Application.Data.Apps;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
@@ -21,6 +22,61 @@ namespace Web.Tests;
 /// </summary>
 public sealed class DeploymentAnalysisPanelTests
 {
+    /// <summary>The page reads newly created remote configuration back after an explicit consent action.</summary>
+    [Fact]
+    public async Task Remote_consent_action_reads_back_new_configuration()
+    {
+        var owner = Guid.NewGuid();
+        var project = new CsProject();
+        project.Deployments.Add(new Deployment { CsProjectId = project.Id, Status = DeploymentStatus.Failed });
+        var app = new Domain.Entities.Application
+            { Name = "Fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote };
+        app.CsProjects.Add(project);
+        var saved = new Domain.Entities.Application
+            { Name = "Fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote };
+        saved.CsProjects.Add(new CsProject
+        {
+            Id = project.Id,
+            Configuration = new Configuration { DotNetVersion = "10.0", AiDiagnosticEgressConsented = true }
+        });
+        var port = DispatchProxy.Create<IApplicationService, ConsentPort>();
+        var probe = (ConsentPort)port;
+        probe.Saved = saved;
+        using var services = new ServiceCollection().AddSingleton(port).BuildServiceProvider();
+        var component = new ProjectDetails();
+        var type = typeof(ProjectDetails);
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        type.GetProperty(nameof(ProjectDetails.ProjectId))!.SetValue(component, app.Id);
+        type.GetField("_app", flags)!.SetValue(component, app);
+        type.GetField("_currentUserId", flags)!.SetValue(component, owner);
+        type.GetProperty("ScopeFactory", flags)!.SetValue(component,
+            services.GetRequiredService<IServiceScopeFactory>());
+        await (Task)type.GetMethod("SetAiConsentAsync", flags)!.Invoke(component, [true])!;
+        Assert.Equal((app.Id, owner, project.Id, true), probe.Target);
+        Assert.True(project.Configuration!.AiDiagnosticEgressConsented);
+        Assert.Contains("consent saved", (string)type.GetField("_analysisMessage", flags)!.GetValue(component)!);
+    }
+
+    /// <summary>The current remote deployment can edit consent without configuration, without choosing a sibling.</summary>
+    [Theory]
+    [InlineData(SourceType.Remote, true)]
+    [InlineData(SourceType.Local, false)]
+    public void Missing_configuration_consent_eligibility_uses_exact_deployment(SourceType source, bool eligible)
+    {
+        var project = new CsProject();
+        project.Deployments.Add(new Deployment { CsProjectId = project.Id, Status = DeploymentStatus.Failed });
+        var app = new Domain.Entities.Application
+            { Name = "Fixture", SourcePathOrUrl = "fixture", SourceType = source };
+        app.CsProjects.Add(project);
+        app.CsProjects.Add(new CsProject { Configuration = new Configuration { DotNetVersion = "10.0" } });
+        var component = new ProjectDetails();
+        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        typeof(ProjectDetails).GetField("_app", flags)!.SetValue(component, app);
+        Assert.Equal(eligible,
+            typeof(ProjectDetails).GetMethod("CanEditAnalysisConsent", flags)!.Invoke(component, null));
+        Assert.Equal(false, typeof(ProjectDetails).GetMethod("HasAnalysisConsent", flags)!.Invoke(component, null));
+    }
+
     /// <summary>An uncertain owner request retries the same GUID through the port and never copies exception text to feedback.</summary>
     [Fact]
     public async Task Owner_action_reuses_request_identity_after_uncertain_response()
@@ -140,6 +196,13 @@ public sealed class DeploymentAnalysisPanelTests
     [Theory]
     [InlineData("quota_exceeded", "daily analysis allowance")]
     [InlineData("unsupported_data", "no supported diagnostic data")]
+    [InlineData("tenant_quota_exceeded", "account&#x27;s daily analysis allowance")]
+    [InlineData("rate_limited", "analysis request rate limit")]
+    [InlineData("concurrency_exceeded", "shared provider processing capacity")]
+    [InlineData("budget_exceeded", "reserved spending allowance")]
+    [InlineData("budget_not_configured", "Configure positive")]
+    [InlineData("budget_configuration_invalid", "configuration is invalid")]
+    [InlineData("budget_currency_mismatch", "reservation currency")]
     [InlineData("unavailable", "egress approval is unavailable")]
     [InlineData("private-secret", "egress approval is unavailable")]
     public async Task Skip_states_use_authored_guidance(string code, string guidance)
@@ -186,6 +249,29 @@ public sealed class DeploymentAnalysisPanelTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AutoMate.slnx")))
             directory = directory.Parent;
         return directory?.FullName ?? throw new InvalidOperationException("Repository root unavailable.");
+    }
+
+    /// <summary>Records exact consent identities and supplies newly persisted configuration through the application port.</summary>
+    public class ConsentPort : DispatchProxy
+    {
+        /// <summary>Configuration returned by authorized readback.</summary>
+        public Domain.Entities.Application? Saved { get; set; }
+
+        /// <summary>Exact application, owner, project and consent passed by the page.</summary>
+        public (Guid App, Guid Owner, Guid Project, bool Consent) Target { get; private set; }
+
+        /// <inheritdoc />
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            if (method?.Name == "SetAiDiagnosticEgressConsentAsync" && args?.Length == 5)
+            {
+                Target = ((Guid)args[0]!, (Guid)args[1]!, (Guid)args[2]!, (bool)args[3]!);
+                return Task.FromResult(true);
+            }
+
+            if (method?.Name == "GetAppByIdAsync") return Task.FromResult(Saved);
+            throw new NotSupportedException();
+        }
     }
 
     /// <summary>Enabled UI options do not imply approved egress; the fake port never transmits anything.</summary>

@@ -1,8 +1,14 @@
 using System.Reflection;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Text.RegularExpressions;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
+using Application.Data.Apps;
 using Application.Data.Users;
+using Domain.Entities;
+using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
@@ -22,18 +28,48 @@ public sealed class TelemetryPageRenderingTests
     [Fact]
     public async Task Summary_and_history_render_compact_cards_and_collapsed_details()
     {
-        using var services = new ServiceCollection().AddLogging()
+        var registrations = new ServiceCollection().AddLogging()
             .AddSingleton<IJSRuntime, StaticJs>().AddSingleton<AuthenticationStateProvider, FixtureAuthentication>()
             .AddSingleton(DispatchProxy.Create<IUserService, UnusedUserService>())
             .AddSingleton<IDeploymentHistoryService, FixtureHistory>()
             .AddSingleton<IProjectTelemetryAnalytics, FixtureAnalytics>()
-            .BuildServiceProvider();
+            .AddSingleton<IDeploymentDetailsService, FixtureDetails>()
+            .AddSingleton(DispatchProxy.Create<IDeploymentAnalysisService, FixtureAssessments>())
+            .AddSingleton<NavigationManager, FixtureNavigation>();
+        foreach (var property in typeof(ProjectDetails).GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
+                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
+                                 !p.PropertyType.IsGenericType))
+            if (!registrations.Any(r => r.ServiceType == property.PropertyType))
+                registrations.AddSingleton(property.PropertyType,
+                    DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
+        using var services = registrations.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
         var project = await Render<ProjectTelemetrySummary>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid(), ["UserId"] = Guid.NewGuid() });
         var history = await Render<DeploymentHistory>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid(), ["DeploymentId"] = Guid.NewGuid() });
         Assert.Contains("Per observed container", Regex.Replace(project, @"\s+", " "));
+        var details = await Render<FixtureProject>(renderer,
+            new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid() });
+        var anchors = new[]
+            { "overview", "logs", "metrics", "analytics", "ai-analysis", "configuration", "deployments" };
+        var previous = -1;
+        foreach (var anchor in anchors)
+        {
+            var position = details.IndexOf($"id=\"{anchor}\"", StringComparison.Ordinal);
+            Assert.True(position > previous);
+            Assert.Contains($"href=\"#{anchor}\"", details);
+            previous = position;
+        }
+
+        Assert.DoesNotContain("_notice", details);
+        Assert.DoesNotContain("_metricAvailability", history);
+        Assert.Contains("Total deployments", details);
+        Assert.Contains("View Details", details);
+        Assert.Contains("/actions/runs/42", details);
+        Assert.Contains("Saved to dashboard", details);
+        Assert.Contains("This deployment predates", await Render<DeploymentConfigurationDetails>(renderer,
+            new Dictionary<string, object?> { ["Deployment"] = new Deployment() }));
         Assert.Contains("Resource overview", history);
         Assert.Contains("Collection settings", history);
         Assert.DoesNotContain("<details open", history);
@@ -48,7 +84,11 @@ public sealed class TelemetryPageRenderingTests
         File.Copy(css, Path.Combine(directory, "Web.styles.css"), true);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
             Path.Combine(directory, "bootstrap.css"), true);
-        foreach (var page in new[] { (Name: "project", Html: project), (Name: "history", Html: history) })
+        foreach (var page in new[]
+                 {
+                     (Name: "project", Html: project), (Name: "history", Html: history),
+                     (Name: "details", Html: details)
+                 })
             await File.WriteAllTextAsync(Path.Combine(directory, page.Name + ".html"), Wrap(page.Html));
     }
 
@@ -64,9 +104,9 @@ public sealed class TelemetryPageRenderingTests
     private static string Wrap(string content)
     {
         return
-            "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'></head><body><div style='max-width:1120px;margin:auto;padding:16px'><small>UI verification · example provider data</small><button style='margin-left:16px' onclick=\"document.documentElement.dataset.bsTheme=document.documentElement.dataset.bsTheme==='dark'?'light':'dark'\">Toggle theme</button><button onclick=\"document.documentElement.style.fontSize='200%'\">200% text</button>" +
+            "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'><link rel='stylesheet' href='/console.css'></head><body><div style='max-width:1120px;margin:auto;padding:16px'><small>UI verification · example provider data</small><button style='margin-left:16px' onclick=\"document.documentElement.dataset.bsTheme=document.documentElement.dataset.bsTheme==='dark'?'light':'dark'\">Toggle theme</button><button onclick=\"document.documentElement.style.fontSize='200%'\">200% text</button>" +
             content +
-            "</div><script type='module'>import {attach} from '/js/telemetry-chart.js';document.querySelectorAll('.telemetry-chart').forEach(attach);</script></body></html>";
+            "</div><script type='module'>import {attach} from '/js/telemetry-chart.js';document.querySelectorAll('.telemetry-chart').forEach(attach);import {attach as attachSections} from '/js/project-sections.js';document.querySelectorAll('.project-section-tabs').forEach(attachSections);</script></body></html>";
     }
 
     /// <summary>Finds the repository independently of test-output configuration.</summary>
@@ -76,6 +116,110 @@ public sealed class TelemetryPageRenderingTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AutoMate.slnx")))
             directory = directory.Parent;
         return directory!.FullName;
+    }
+
+    /// <summary>Renders the real project markup without authentication/provider lifecycle side effects.</summary>
+    public sealed class FixtureProject : ProjectDetails
+    {
+        /// <inheritdoc />
+        protected override Task OnInitializedAsync()
+        {
+            var project = new CsProject
+                { Name = "Web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } };
+            var app = new Domain.Entities.Application
+            {
+                Name = "History demo",
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-20),
+                SourceType = SourceType.Remote,
+                SourcePathOrUrl = "https://github.com/example/history-demo",
+                CsProjects = [project]
+            };
+            project.Application = app;
+            project.Deployments = Enumerable.Range(0, 8).Select(i => new Deployment
+            {
+                CsProject = project,
+                CsProjectId = project.Id,
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-8 + i),
+                Status = i == 7 ? DeploymentStatus.Running : DeploymentStatus.Stopped,
+                Outcome = DeploymentOutcome.Succeeded,
+                CloudGitHubActionRunId = 42,
+                CloudAppUrl = "https://example.invalid",
+                ConfigurationSnapshotJson = JsonSerializer.Serialize(new DeploymentConfigurationSnapshot("Web",
+                    "Azure Container Apps",
+                    app.SourcePathOrUrl, "main", "abc123", "Production", "10.0", 8080, true,
+                    "swedencentral", "demo-rg", "demo-app", "demo.azurecr.io"))
+            }).ToList();
+            typeof(ProjectDetails).GetField("_app", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(this, app);
+            typeof(ProjectDetails).GetField("_isLoading", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(this, false);
+            return Task.CompletedTask;
+        }
+
+        /// <inheritdoc />
+        protected override Task OnAfterRenderAsync(bool firstRender)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Provider-free metadata for the selected historical route.</summary>
+    private sealed class FixtureDetails : IDeploymentDetailsService
+    {
+        /// <inheritdoc />
+        public Task<Deployment?> GetAsync(Guid owner, Guid project, Guid deployment, CancellationToken token = default)
+        {
+            return Task.FromResult<Deployment?>(new Deployment
+            {
+                Id = deployment,
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-2),
+                UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+                Status = DeploymentStatus.Stopped,
+                Outcome = DeploymentOutcome.Succeeded,
+                CsProject = new CsProject { Name = "Historical Web" },
+                CloudGitHubActionRunId = 42,
+                ConfigurationSnapshotJson = JsonSerializer.Serialize(new DeploymentConfigurationSnapshot(
+                    "Historical Web", "Azure Container Apps", "https://github.com/example/history-demo", "release",
+                    "abc123",
+                    "Production", "10.0", 8080, true, "swedencentral", "historical-rg", "historical-app",
+                    "demo.azurecr.io"))
+            });
+        }
+    }
+
+    /// <summary>Unused injected operations return bounded empty fixture data, never perform provider work.</summary>
+    public class EmptyPort : DispatchProxy
+    {
+        /// <inheritdoc />
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            var type = method!.ReturnType;
+            if (type == typeof(void)) return null;
+            if (type == typeof(Task)) return Task.CompletedTask;
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                var result = type.GenericTypeArguments[0];
+                var value = result.IsValueType ? Activator.CreateInstance(result) : null;
+                if (result.IsGenericType && result.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))
+                    value = Activator.CreateInstance(typeof(List<>).MakeGenericType(result.GenericTypeArguments));
+                return typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(result).Invoke(null, [value]);
+            }
+
+            return type.IsValueType ? Activator.CreateInstance(type) : null;
+        }
+    }
+
+    /// <summary>Only local URLs are needed by the static project fixture.</summary>
+    private sealed class FixtureNavigation : NavigationManager
+    {
+        public FixtureNavigation()
+        {
+            Initialize("http://localhost/", "http://localhost/project/fixture");
+        }
+
+        protected override void NavigateToCore(string uri, bool forceLoad)
+        {
+        }
     }
 
     /// <summary>Guid claims exercise normal owner resolution without invoking any remote identity provider.</summary>
@@ -95,6 +239,39 @@ public sealed class TelemetryPageRenderingTests
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             throw new InvalidOperationException("Unexpected user lookup");
+        }
+    }
+
+    /// <summary>Recorded channels and a v2 historical result make both provider-free page previews representative.</summary>
+    public class FixtureAssessments : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            var now = DateTimeOffset.UtcNow;
+            return method?.Name switch
+            {
+                "GetPreferencesAsync" => Task.FromResult<AssessmentPreferences?>(new AssessmentPreferences(
+                    new AssessmentSelection(),
+                    [
+                        new AssessmentChannel(AssessmentSources.Build, "build"),
+                        new AssessmentChannel(AssessmentSources.Web, "web"),
+                        new AssessmentChannel(AssessmentSources.Database, "db")
+                    ],
+                    ["web", "db"], DeploymentStatus.Stopped)),
+                "GetLatestAsync" => Task.FromResult<DeploymentAnalysisView?>(new DeploymentAnalysisView(Guid.NewGuid(),
+                    (Guid)args![1]!,
+                    AiAnalysisStatus.Completed, AiAnalysisTrigger.Manual,
+                    "The saved activity completed successfully. The application is now stopped.",
+                    [], ["order:1"], null, now, now, ResultSchemaVersion: 2,
+                    Sections: new AssessmentSections(["The recorded build completed."],
+                        ["The selected web metrics show observed usage, not proof of health."], [],
+                        ["Only selected recorded evidence was assessed."]),
+                    Assessment: new AssessmentProvenance(new AssessmentSelection(), AssessmentKind.HistoricalReview,
+                        DeploymentStatus.Stopped, DeploymentOutcome.Succeeded,
+                        now, new AssessmentWindow(now.AddHours(-1), now, false)))),
+                "ListAsync" => Task.FromResult<IReadOnlyList<DeploymentAnalysisView>>([]),
+                _ => throw new NotSupportedException()
+            };
         }
     }
 

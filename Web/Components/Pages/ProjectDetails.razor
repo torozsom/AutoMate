@@ -39,11 +39,12 @@
         var primaryConfiguration = primaryWebProject?.Configuration;
         var sourceLabel = _app.SourceType == SourceType.Remote ? "GitHub" : "Local";
         var platformLabel = _app.SourceType == SourceType.Remote ? "Azure Container Apps" : "Docker Compose";
-        var branchLabel = _app.SourceType == SourceType.Remote ? "main" : "workspace";
+        var branchLabel = _app.SourceType == SourceType.Remote ? "GitHub repository" : "workspace";
         var webProjectCount = _app.CsProjects.Count(csp => csp.IsWebProject);
         var subProjectCount = _app.CsProjects.Count;
         var databaseCount = _databaseTabs.Count();
-        var recentDeployments = GetRecentDeployments().ToList();
+        var allDeployments = _app.CsProjects.SelectMany(p => p.Deployments).OrderBy(d => d.CreatedAt).ToList();
+        var recentDeployments = allDeployments.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Skip(_deploymentPage * 6).Take(6).ToList();
 
         <section class="project-console @GetProjectSourceClass(_app.SourceType)">
             <header class="project-console-header">
@@ -93,13 +94,7 @@
                 </div>
             </header>
 
-            <nav class="project-section-tabs" aria-label="Project detail sections">
-                <a href="#overview">Overview</a>
-                <a href="#deployments">Deployments</a>
-                <a href="#logs">Logs</a>
-                <a href="#metrics">Metrics</a>
-                <a href="#configuration">Configuration</a>
-            </nav>
+            <ProjectSectionNavigation/>
 
             <div class="project-console-body">
                 <section id="overview" class="console-section" aria-labelledby="overview-title">
@@ -110,6 +105,32 @@
                         </div>
                     </div>
 
+                    <dl class="project-overview-stats">
+                        <div>
+                            <dt>Saved to dashboard</dt>
+                            <dd>@FormatTimestamp(_app.CreatedAt)</dd>
+                        </div>
+                        <div>
+                            <dt>First deployment</dt>
+                            <dd>@FormatTimestamp(allDeployments.FirstOrDefault()?.CreatedAt)</dd>
+                        </div>
+                        <div>
+                            <dt>Total deployments</dt>
+                            <dd>@allDeployments.Count</dd>
+                        </div>
+                        <div>
+                            <dt>Successful</dt>
+                            <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Succeeded)</dd>
+                        </div>
+                        <div>
+                            <dt>Failed</dt>
+                            <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Failed)</dd>
+                        </div>
+                        <div>
+                            <dt>Pending / unknown</dt>
+                            <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Unknown)</dd>
+                        </div>
+                    </dl>
                     <div class="overview-layout">
                         <article class="detail-panel detail-panel-primary">
                             <div class="panel-header">
@@ -168,92 +189,17 @@
                         <div class="section-kicker">Source</div>
                         <div class="source-path-row" title="@_app.SourcePathOrUrl">
                             <i class="bi bi-link-45deg" aria-hidden="true"></i>
-                            <span class="text-truncate">@_app.SourcePathOrUrl</span>
-                        </div>
-                    </div>
-                </section>
-
-                <DeploymentAnalysisPanel DeploymentId="@GetLatestDeployment()?.Id" Result="@_latestAnalysis"
-                                         Enabled="@AnalysisOptions.CurrentValue.Enabled"
-                                         Consented="@HasAnalysisConsent()"
-                                         FailedDeployment="@(GetLatestDeployment()?.Status == DeploymentStatus.Failed)"
-                                         Busy="@_analysisBusy" Message="@_analysisMessage"
-                                         OnRequest="RequestAnalysisAsync"
-                                         OnRefresh="RefreshAnalysisFromUiAsync"
-                                         CanEditConsent="@(GetAnalysisProject()?.Configuration is not null)"
-                                         OnConsentChange="SetAiConsentAsync" OnCancel="CancelAnalysisAsync"/>
-
-                @if (_app.SourceType == SourceType.Local && latestStatus == DeploymentStatus.Running && _webHostPort > 0)
-                {
-                    <div class="live-launch">
-                        <div class="live-launch-copy">
-                            <span class="live-dot" aria-hidden="true"></span>
-                            <div>
-                                <div class="live-title">Web app is live</div>
-                                <div class="live-subtitle">Local endpoint is ready for this deployment.</div>
-                            </div>
-                        </div>
-                        <a href="http://localhost:@_webHostPort" target="_blank" class="btn btn-success live-link">
-                            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
-                            <span>http://localhost:@_webHostPort</span>
-                        </a>
-                    </div>
-                }
-
-                <section id="deployments" class="console-section" aria-labelledby="deployments-title">
-                    <div class="section-heading">
-                        <div>
-                            <div class="section-kicker">Deployments</div>
-                            <h2 id="deployments-title">Deployment history</h2>
-                        </div>
-                        <div class="monitoring-state">
-                            <span
-                                class="state-dot @(latestStatus == DeploymentStatus.Running ? "state-dot-running" : "")"
-                                aria-hidden="true"></span>
-                            <span>@(latestStatus?.ToString() ?? "Not deployed")</span>
-                        </div>
-                    </div>
-
-                    @if (_app.SourceType == SourceType.Remote)
-                    {
-                        <WorkflowBadge Status="@latestStatus"
-                                       Message="@_workflowStatusMessage"
-                                       WorkflowUrl="@_workflowUrl"/>
-                    }
-                    else if (!string.IsNullOrWhiteSpace(_workflowStatusMessage))
-                    {
-                        <p class="alert alert-warning" role="alert">@_workflowStatusMessage</p>
-                    }
-
-                    <div class="deployment-list">
-                        @if (recentDeployments.Count == 0)
-                        {
-                            <div class="metrics-empty deployment-empty">
-                                <i class="bi bi-rocket-takeoff" aria-hidden="true"></i>
-                                <span>No deployments yet. Configure and deploy this project to start the history.</span>
-                            </div>
-                        }
-                        else
-                        {
-                            @foreach (var deployment in recentDeployments)
+                            @if (GitHubRepositoryUrlParser.TryParse(_app.SourcePathOrUrl, out var repository))
                             {
-                                <div class="deployment-row">
-                                    <DeploymentBadge Status="@deployment.Status"/>
-                                    <div class="min-w-0">
-                                        <div class="deployment-name text-truncate" title="@deployment.CsProject?.Name">
-                                            @(deployment.CsProject?.Name ?? _app.Name)
-                                        </div>
-                                        <div class="deployment-meta text-truncate"
-                                             title="@GetDeploymentMeta(deployment)">
-                                            @GetDeploymentMeta(deployment)
-                                        </div>
-                                    </div>
-                                    <div class="deployment-date">@FormatTimestamp(deployment.CreatedAt)</div>
-                                    <a class="btn btn-sm btn-outline-secondary"
-                                       href="@($"/project/{ProjectId}/deployment/{deployment.Id}")">View history</a>
-                                </div>
+                                <a class="text-truncate"
+                                   href="@($"https://github.com/{repository.Owner}/{repository.Name}")" target="_blank"
+                                   rel="noopener noreferrer">@_app.SourcePathOrUrl</a>
                             }
-                        }
+                            else
+                            {
+                                <span class="text-truncate">@_app.SourcePathOrUrl</span>
+                            }
+                        </div>
                     </div>
                 </section>
 
@@ -323,6 +269,10 @@
                                     }
                                 }
                             </ul>
+                            <a href="#ai-analysis" class="terminal-ai-shortcut" aria-label="Go to AI Analysis"
+                               title="AI Analysis">
+                                <i class="bi bi-stars" aria-hidden="true"></i><span>AI</span>
+                            </a>
                         </div>
 
                         <div class="terminal-panel-body">
@@ -370,12 +320,12 @@
                 <section id="metrics" class="console-section" aria-labelledby="metrics-title">
                     <div class="section-heading">
                         <div>
-                            <div class="section-kicker">Metrics</div>
-                            <h2 id="metrics-title">Metrics</h2>
+                            <div class="section-kicker">Live Resource Utilization</div>
+                            <h2 id="metrics-title">Live Resource Utilization</h2>
                         </div>
                     </div>
 
-                    <ProjectTelemetrySummary ProjectId="ProjectId" UserId="_currentUserId"/>
+
                     <h3 class="h6">Container utilization</h3>
                     @if (latestStatus == DeploymentStatus.Running && _metricContainerNames.Count > 0)
                     {
@@ -443,6 +393,20 @@
                     }
                 </section>
 
+                <section id="analytics" class="console-section" aria-labelledby="analytics-title">
+                    <h2 id="analytics-title">Project Analytics</h2>
+                    <ProjectTelemetrySummary ProjectId="ProjectId" UserId="_currentUserId"/>
+                </section>
+
+                <section id="ai-analysis" class="console-section ai-analysis-accent"
+                         aria-labelledby="ai-analysis-title">
+                    <h2 id="ai-analysis-title">AI Analysis</h2>
+                    <DeploymentAnalysisSection OwnerId="_currentUserId" ProjectId="ProjectId"
+                                               DeploymentId="@(latestDeployment?.Id)"
+                                               CsProjectId="@(latestDeployment?.CsProjectId ?? Guid.Empty)"
+                                               Consented="@(_app.CsProjects.FirstOrDefault(p => p.Id == latestDeployment?.CsProjectId)?.Configuration?.AiDiagnosticEgressConsented == true)"/>
+                </section>
+
                 <section id="configuration" class="console-section" aria-labelledby="configuration-title">
                     <div class="section-heading">
                         <div>
@@ -456,24 +420,75 @@
                         </button>
                     </div>
 
-                    <div class="configuration-grid">
-                        <div class="config-item">
-                            <span>Project</span>
-                            <strong class="text-truncate"
-                                    title="@(primaryWebProject?.Name ?? _app.Name)">@(primaryWebProject?.Name ?? _app.Name)</strong>
+                    <DeploymentConfigurationDetails Deployment="latestDeployment"/>
+                    <p class="telemetry-muted">Recorded settings belong to the latest deployment. Configure deploy
+                        changes settings for the next deployment.</p>
+                </section>
+
+                <section id="deployments" class="console-section" aria-labelledby="deployments-title">
+                    <div class="section-heading">
+                        <div>
+                            <div class="section-kicker">Deployments</div>
+                            <h2 id="deployments-title">Deployment history</h2>
                         </div>
-                        <div class="config-item">
-                            <span>.NET</span>
-                            <strong>@(primaryConfiguration?.DotNetVersion ?? "Detected during deploy")</strong>
+                        <div class="monitoring-state">
+                            <span
+                                class="state-dot @(latestStatus == DeploymentStatus.Running ? "state-dot-running" : "")"
+                                aria-hidden="true"></span>
+                            <span>@(latestStatus?.ToString() ?? "Not deployed")</span>
                         </div>
-                        <div class="config-item">
-                            <span>Public access</span>
-                            <strong>@(primaryConfiguration?.IsPublic == true ? "Public" : "Local/private")</strong>
-                        </div>
-                        <div class="config-item">
-                            <span>Port</span>
-                            <strong>@(primaryConfiguration?.LocalExposedPort?.ToString() ?? (_webHostPort > 0 ? _webHostPort.ToString() : "Auto"))</strong>
-                        </div>
+                    </div>
+
+                    <div class="deployment-list">
+                        @if (recentDeployments.Count == 0)
+                        {
+                            <div class="metrics-empty deployment-empty">
+                                <i class="bi bi-rocket-takeoff" aria-hidden="true"></i>
+                                <span>No deployments yet. Configure and deploy this project to start the history.</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <table class="table console-table responsive-inventory">
+                                <caption class="visually-hidden">Deployment history for this project</caption>
+                                <thead>
+                                <tr>
+                                    <th scope="col">Deployment</th>
+                                    <th scope="col">Outcome</th>
+                                    <th scope="col">Runtime</th>
+                                    <th scope="col">Started UTC</th>
+                                    <th scope="col">Details</th>
+                                </tr>
+                                </thead>
+                                <tbody>@foreach (var deployment in recentDeployments)
+                                {
+                                    <tr>
+                                        <td data-label="Deployment">
+                                            <strong>@(deployment.CsProject?.Name ?? _app.Name)</strong><small
+                                                class="console-subtext">@deployment.Id.ToString("N")[..8]</small></td>
+                                        <td data-label="Outcome">@deployment.Outcome</td>
+                                        <td data-label="Runtime">
+                                            <DeploymentBadge Status="@deployment.Status"/>
+                                        </td>
+                                        <td data-label="Started UTC">@deployment.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td data-label="Details"><a
+                                                href="@($"/project/{ProjectId}/deployment/{deployment.Id}")">View
+                                                Details</a></td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                    <div class="history-pagination">
+                        <button class="btn btn-sm btn-outline-secondary" disabled="@(_deploymentPage == 0)"
+                                @onclick="() => _deploymentPage--">Newer deployments
+                        </button>
+                        <span>Page @(_deploymentPage + 1)</span>
+                        <button class="btn btn-sm btn-outline-secondary"
+                                disabled="@((_deploymentPage + 1) * 6 >= allDeployments.Count)"
+                                @onclick="() => _deploymentPage++">Older deployments
+                        </button>
                     </div>
                 </section>
             </div>
@@ -482,6 +497,10 @@
 </div>
 
 @code {
+
+    /// <summary>Bounded six-item deployment history page.</summary>
+    private int _deploymentPage;
+
 
     private static string GetProjectSourceClass(SourceType sourceType)
     {

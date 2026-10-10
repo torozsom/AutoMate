@@ -1,3 +1,5 @@
+using Application.Abstractions.Ai;
+
 namespace Application.Abstractions.Diagnostics;
 
 /// <summary>A numeric observation with provider-independent units; absent values are never zero-filled.</summary>
@@ -23,6 +25,13 @@ public interface IDeploymentLogWriter
 /// <summary>Reads bounded deployment output from a specialized store.</summary>
 public interface IDeploymentLogQuery
 {
+    /// <summary>Backend filtering occurs before its result limit; unsupported older adapters fail explicitly.</summary>
+    Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAssessmentAsync(ArchiveAssessmentQuery query,
+        CancellationToken token)
+    {
+        throw new NotSupportedException("Selected backend queries are unavailable.");
+    }
+
     /// <summary>Reads one cursor page in forward or reverse order within the retention window.</summary>
     Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,
         long cursor, bool backwards, int limit, CancellationToken cancellationToken, DateTimeOffset? start = null);
@@ -54,6 +63,16 @@ public sealed record DeploymentMetricHistory(IReadOnlyList<DeploymentMetricPoint
 /// <summary>Queries numeric deployment history and confirms delivery visibility.</summary>
 public interface IDeploymentMetricQuery
 {
+    /// <summary>Selected containers are independent of chosen log sources.</summary>
+    async Task<IReadOnlyList<DeploymentMetricPoint>> ReadAssessmentAsync(ArchiveAssessmentQuery query,
+        CancellationToken token)
+    {
+        return (await ReadAsync(query.Tenant, query.Project, query.Deployment,
+                query.Window.Start, query.Window.End, 100, token))
+            .Where(p => query.Selection.MetricContainers is null ||
+                        query.Selection.MetricContainers.Contains(p.Container, StringComparer.Ordinal)).ToArray();
+    }
+
     /// <summary>Returns interval aggregates without synthesizing missing samples.</summary>
     Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken);

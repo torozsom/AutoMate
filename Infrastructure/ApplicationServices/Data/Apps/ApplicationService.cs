@@ -147,6 +147,13 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
                 return false;
             }
 
+            // PostgreSQL also handles account cascades through the transactional deletion trigger.
+            if (!context.Database.IsNpgsql())
+                context.DeploymentArchiveCleanups.Add(new DeploymentArchiveCleanup
+                {
+                    TenantId = userId,
+                    ProjectId = appId
+                });
             context.Applications.Remove(app);
             await context.SaveChangesAsync(cancellationToken);
 
@@ -197,17 +204,26 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     public async Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, Guid csProjectId, bool consented,
         CancellationToken cancellationToken = default)
     {
-        var configuration = await context.Applications.Where(item => item.Id == appId && item.UserId == userId)
-            .SelectMany(item => item.CsProjects).Where(item => item.Id == csProjectId)
-            .Select(item => item.Configuration).FirstOrDefaultAsync(cancellationToken);
-        if (configuration is null)
+        var project = await context.CsProjects
+            .Include(item => item.Configuration).Include(item => item.Application)
+            .FirstOrDefaultAsync(item => item.Id == csProjectId && item.AppId == appId &&
+                                         item.Application.UserId == userId, cancellationToken);
+        if (project is null || (project.Configuration is null && project.Application.SourceType != SourceType.Remote))
         {
             logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId,
                 userId);
             return false;
         }
 
-        configuration.AiDiagnosticEgressConsented = consented;
+        // Remote projects are created without deployment configuration. Consent must still be owner-editable.
+        if (project.Configuration is null)
+        {
+            project.Configuration = new Configuration
+                { CsProjectId = project.Id, DotNetVersion = DefaultDotNetVersion };
+            context.Set<Configuration>().Add(project.Configuration);
+        }
+
+        project.Configuration.AiDiagnosticEgressConsented = consented;
         await context.SaveChangesAsync(cancellationToken);
         logger.LogInformation(
             "Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",

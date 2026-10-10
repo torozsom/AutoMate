@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
 using Domain.Entities;
 using Domain.Enums;
 using FluentAssertions;
@@ -17,6 +19,78 @@ namespace Infrastructure.Tests.Diagnostics;
 /// <summary>Real PostgreSQL/Loki/Mimir acceptance tests against the isolated Compose override.</summary>
 public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
 {
+    /// <summary>Real LogQL applies typed source/container filters before its candidate limit.</summary>
+    [TelemetryIntegrationFact]
+    public async Task Assessment_filters_selected_sources_before_backend_limits()
+    {
+        using var services = Services();
+        var seed = await SeedAsync(services);
+        await using var scope = services.CreateAsyncScope();
+        var logs = scope.ServiceProvider.GetRequiredService<IDeploymentLogWriter>();
+        var now = DateTimeOffset.UtcNow;
+        var rows = Enumerable.Range(1, 30).Select(i => new DeploymentLogEnvelope(Guid.NewGuid(), seed.Owner, i, now,
+            now.AddDays(30), Event(seed, "excluded database output") with
+            {
+                Source = DeploymentDiagnosticSource.DockerContainer,
+                SourceIdentity = new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Database,
+                    DeploymentDiagnosticStream.StandardOutput),
+                TimestampUtc = now.AddSeconds(-i),
+                TerminalChannel = new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "db")
+            }, "db")).ToList();
+        rows.Add(new DeploymentLogEnvelope(Guid.NewGuid(), seed.Owner, 31, now, now.AddDays(30),
+            Event(seed, "selected web output") with
+            {
+                Source = DeploymentDiagnosticSource.AzureContainerApps,
+                SourceIdentity = new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
+                    DeploymentDiagnosticStream.StandardOutput),
+                TimestampUtc = now.AddSeconds(-40),
+                TerminalChannel = new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "web")
+            }, "web"));
+        await logs.WriteAsync(rows, default);
+        var query = new ArchiveAssessmentQuery(seed.Owner, seed.Project, seed.Deployment,
+            new AssessmentSelection(Sources: AssessmentSources.Web, IncludeMetrics: false, LogContainers: ["web"]),
+            new AssessmentWindow(now.AddMinutes(-5), now.AddMinutes(1), false), 1);
+        var reader = scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>();
+        IReadOnlyList<DeploymentLogEnvelope> selected = [];
+        for (var attempt = 0; attempt < 30 && selected.Count == 0; attempt++)
+        {
+            selected = await reader.ReadAssessmentAsync(query, default);
+            if (selected.Count == 0) await Task.Delay(1000);
+        }
+
+        Assert.Single(selected);
+        Assert.Equal("selected web output", selected[0].Event.Message);
+        Assert.Empty(await reader.ReadAssessmentAsync(
+            query with { Selection = new AssessmentSelection(Sources: AssessmentSources.Azure) }, default));
+        Assert.Empty(await reader.ReadAssessmentAsync(query with { Tenant = Guid.NewGuid() }, default));
+        var metricRows = new[] { "web", "db" }.Select((container, i) => new DeploymentLogEnvelope(Guid.NewGuid(),
+            seed.Owner,
+            100 + i, now, now.AddDays(30), Event(seed, "metric") with
+            {
+                Kind = DeploymentDiagnosticKind.Metric, Source = DeploymentDiagnosticSource.DockerContainer,
+                TimestampUtc = now.AddMinutes(-2),
+                TerminalChannel = new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, container),
+                Metrics = [new DeploymentMetricSample("automate_memory_used_bytes", 4096 + i, "bytes")]
+            }, null)).ToArray();
+        await scope.ServiceProvider.GetRequiredService<IDeploymentMetricWriter>().WriteAsync(metricRows, default);
+        var metricQuery = query with
+        {
+            Selection = new AssessmentSelection(Sources: AssessmentSources.None, MetricContainers: ["web"])
+        };
+        var metricReader = scope.ServiceProvider.GetRequiredService<IDeploymentMetricQuery>();
+        IReadOnlyList<DeploymentMetricPoint> points = [];
+        for (var attempt = 0; attempt < 30 && points.Count == 0; attempt++)
+        {
+            points = await metricReader.ReadAssessmentAsync(metricQuery, default);
+            if (points.Count == 0) await Task.Delay(1000);
+        }
+
+        Assert.NotEmpty(points);
+        Assert.All(points, point => Assert.Equal("web", point.Container));
+        Assert.Empty(await metricReader.ReadAssessmentAsync(
+            metricQuery with { Selection = new AssessmentSelection(IncludeMetrics: false) }, default));
+    }
+
     [TelemetryIntegrationFact]
     public async Task Disk_receipts_recover_and_reach_real_stores_without_database_payloads()
     {
@@ -207,8 +281,9 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var seeded = await SeedAsync(services);
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        db.DeploymentDiagnosticRecords.AddRange(
-            new DeploymentDiagnosticRecord
+        DeploymentDiagnosticRecord[] chronologicalRows =
+        [
+            new()
             {
                 ProjectId = seeded.Project,
                 TimestampUtc = DateTimeOffset.UtcNow,
@@ -218,7 +293,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                 Message = "legacy earlier",
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
             },
-            new DeploymentDiagnosticRecord
+            new()
             {
                 ProjectId = seeded.Project,
                 DeploymentId = seeded.Deployment,
@@ -230,7 +305,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                 TerminalChannel = "build",
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(1)
             },
-            new DeploymentDiagnosticRecord
+            new()
             {
                 ProjectId = seeded.Project,
                 DeploymentId = seeded.Deployment,
@@ -241,8 +316,15 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                 Message = "expired",
                 TerminalChannel = "build",
                 ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1)
-            });
-        await db.SaveChangesAsync();
+            }
+        ];
+        // Separate ingestion writes preserve cursor order; EF may reorder entities within a bulk INSERT batch.
+        foreach (var row in chronologicalRows)
+        {
+            db.DeploymentDiagnosticRecords.Add(row);
+            await db.SaveChangesAsync();
+        }
+
         var specialized = scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>();
         var recent = await specialized.ReadLogsAsync(seeded.Owner, seeded.Project, seeded.Deployment, 0, true, 1);
         recent.Events.Should().ContainSingle().Which.Message.Should().Be("recent");
@@ -353,7 +435,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var options = Options.Create(settings ?? TelemetryStorageTests.Specialized());
         var services = new ServiceCollection().AddLogging()
             .AddSingleton<TelemetryProjectPolicyCache>()
-            .AddSingleton<TimeProvider>(TimeProvider.System)
+            .AddSingleton(TimeProvider.System)
             .AddSingleton<IDeploymentRuntimeViewers, DeploymentRuntimeViewers>()
             .AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider())
             .AddDbContext<AutoMateDbContext>(b =>

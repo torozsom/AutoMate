@@ -55,6 +55,18 @@ public sealed class TelemetryHostSafetyTests
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var badRequest = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, badRequest.StatusCode);
+        using var missingCredential = await client.PostAsync("/archive/metric-batch",
+            new StringContent("{}"));
+        Assert.Equal(HttpStatusCode.Unauthorized, missingCredential.StatusCode);
+        using var malformedBatch = new HttpRequestMessage(HttpMethod.Post, "/archive/metric-batch")
+        {
+            Content = new StringContent("{password=private-body")
+        };
+        malformedBatch.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        malformedBatch.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var rejectedBatch = await client.SendAsync(malformedBatch);
+        Assert.Equal(HttpStatusCode.BadRequest, rejectedBatch.StatusCode);
+
         var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("private-category");
         using (logger.BeginScope(new Dictionary<string, object?>
                    { ["Authorization"] = token, ["DeploymentId"] = Guid.NewGuid() }))

@@ -1,50 +1,18 @@
-﻿@page "/"
+@page "/"
 @using Microsoft.AspNetCore.Authorization
 @attribute [AllowAnonymous]
 
 <AuthorizeView>
     <Authorized>
-        <div class="container mt-4">
-            <div class="dashboard-welcome">
-                <div class="page-eyebrow">Workspace</div>
-                <h1>Welcome, <strong>@context.User.Identity?.Name</strong></h1>
-                <p class="mb-0 page-description">Jump back into deployments, projects, and system status.</p>
-            </div>
-
-            <div class="row g-4">
-                <div class="col-md-4">
-                    <div class="action-card">
-                        <div class="feature-icon"><i class="bi bi-rocket-takeoff" aria-hidden="true"></i></div>
-                        <h2>New deployment</h2>
-                        <p class="page-description">Launch a project deployment pipeline.</p>
-                        <a href="/dashboard" class="btn btn-primary mt-2">Start</a>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="action-card">
-                        <div class="feature-icon"><i class="bi bi-kanban" aria-hidden="true"></i></div>
-                        <h2>View projects</h2>
-                        <p class="page-description">Manage existing projects and configurations.</p>
-                        <a href="/dashboard" class="btn btn-outline-primary mt-2">View All</a>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="action-card">
-                        <div class="feature-icon"><i class="bi bi-activity" aria-hidden="true"></i></div>
-                        <h2>System status</h2>
-                        <p class="page-description">All systems operational. No active incidents.</p>
-                        <span class="badge deployment-badge deployment-badge-success mt-2">Healthy</span>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <PageTitle>Overview · AutoMate</PageTitle>
+        <WorkspaceOverviewPanel/>
     </Authorized>
 
     <NotAuthorized>
         <div class="hero-section">
             <div class="hero-content">
-                <div class="page-eyebrow">Developer deployment automation</div>
-                <h1 class="hero-title">Welcome to AutoMate</h1>
+                <div class="page-eyebrow">Your deployment workspace</div>
+                <h1 class="hero-title">Deploy with clarity.</h1>
                 <p class="hero-subtitle">
                     Connect source repositories, configure runtime services, and monitor deployments from one focused
                     console.

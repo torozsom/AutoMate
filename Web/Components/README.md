@@ -7,8 +7,8 @@ a real renderer dispatcher, including disposal.
 
 ## Telemetry presentation
 
-Project details groups daily analytics with live container utilization in Metrics. Deployment history opens with
-container-scoped resource summaries and a separate Logs card. Charts and numeric tables are collapsed by default;
+Project details separates live utilization and Project Analytics. Deployment Details opens with an overview, saved logs
+and historical resource summaries. Charts and numeric tables are collapsed by default;
 range changes preserve log paging and channels. Independent asynchronous scopes isolate history and analytics database
 reads, and cancelled/stale responses cannot overwrite newer selections.
 
@@ -98,7 +98,9 @@ theme tokens and wrapping touch targets. Actual deployment consent and operator 
 server ports continue to enforce authorization and egress policy. ProjectDetails retains a stable request GUID only
 when admission is uncertain, serializes owner actions and displays fixed errors without exception payloads. Explicit
 consent editing targets only the current deployment's configured C# project through the exact-project Application
-overload. Cancel uses the existing owner-authorized idempotent cancellation and saved readback; it remains available
+overload. Remote projects without configuration can edit consent; the service creates their missing configuration,
+and the page reads it back before enabling analysis. Cancel uses the existing owner-authorized idempotent cancellation
+and saved readback; it remains available
 for queued/running work when AI or consent is disabled. Consent changes do not enqueue work or change operator policy.
 Linked consent guidance explains data egress and revocation limits. Both handlers fence stale feedback and use fresh
 scopes; uncertain cancellation can safely be retried for the same analysis. Native controls include visible focus
@@ -109,3 +111,39 @@ DbContext use with page/background reads. The latest deployment is rechecked aft
 An independent five-second analysis timer runs in both hosting profiles on the renderer dispatcher. Versioned reads
 capture owner/deployment identity, preserve the saved view on failure, clear temporary polling warnings after recovery
 and ignore late results/feedback. Busy owner actions skip ticks; page disposal cancels and awaits polling.
+
+## Deployment history update (2026-10-08)
+
+ProjectSectionNavigation uses a scoped disposable JS module for fragments, focus, history, offsets and reduced motion.
+DeploymentAnalysisSection shares fenced consent/actions and five-second polling across both pages, with paged saved
+runs. DeploymentConfigurationDetails shows only recorded snapshots/artifacts; unavailable legacy configuration is
+explicit. Deployment Details presents selected-deployment logs before historical metrics and AI.
+
+Project Details ignores saved metric recovery callbacks and late provider replies after page disposal. Lifetime
+cancellation remains available until hub disposal completes; expected navigation cancellation/disposal does not emit a
+recovery failure. Real provider failures retain redacted exception diagnostics.
+
+## Status-aware assessment presenter (2026-10-09)
+
+`AssessmentContextControls` is shared through `DeploymentAnalysisSection` on both deployment surfaces. It edits focus,
+source/channel/metric selection and UTC range; per-deployment preferences are separate from immutable pending requests.
+Submitted controls freeze while pending. Route/disposal fencing and five-second result polling remain; context catalog
+refresh is bounded to once per minute. `AssessmentResultSection` and `DeploymentAnalysisPanel` render validated v2
+sections and saved provenance while retaining legacy layouts. See
+[status-aware assessments](../../docs/status-aware-assessments.md).
+
+## Workspace console
+
+WorkspaceOverviewPanel reads IWorkspaceQuery in independent scopes, refreshes visible pages every thirty seconds and
+fences replies against identity changes/disposal. WorkspaceOverviewView, KpiCard and ProjectInventoryTable are passive
+read-model presenters. Dashboard URL parameters preserve inventory selection; an owned entity is loaded only for the
+selected deployment action. ConsoleDialog and js/console-ui.js own keyboard focus, Escape and restoration; native auth
+forms keep antiforgery. RecordedValueRow copies explicit non-secret deployment metadata. See docs/ui-modernization.md.
+
+## Shared range and numeric controls
+
+MetricRangePicker freezes UTC bounds, validates future/calendar-year limits, and explicitly clips long deployment
+lifetimes. MetricStatisticsView renders bounded sample-weighted charts and paginated per-container/deployment
+statistics; StatisticsPager changes only numeric rows. Overview relative selections advance on visible refresh; custom
+ranges remain fixed. Project/history requests cancel obsolete reads and discard stale responses. These chart controls
+do not edit AI context preferences or saved results.

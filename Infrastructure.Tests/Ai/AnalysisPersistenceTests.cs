@@ -13,6 +13,7 @@ using Domain.Enums;
 using Infrastructure.Ai;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
+using Infrastructure.Observability;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,76 @@ namespace Infrastructure.Tests.Ai;
 /// <summary>Verifies real metadata persistence and authorized safe readback without contacting a provider.</summary>
 public sealed class AnalysisPersistenceTests
 {
+    /// <summary>Lease-fenced publication retains v2 sections and collection choices for both completed and empty-context runs.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Status_aware_results_and_skips_preserve_immutable_collection_provenance(bool empty)
+    {
+        var calls = 0;
+        await using var fixture = await Fixture.CreateAsync(() =>
+        {
+            calls++;
+            return Task.FromResult(AnalysisResultTests.Valid() with
+            {
+                ResultSchemaVersion = 2, EvidenceReferences = ["order:1"],
+                Sections = new AssessmentSections(["token=private-observation"], [], [], ["Recorded evidence only."])
+            });
+        });
+        var now = DateTimeOffset.UtcNow;
+        var selection = new AssessmentSelection(Sources: AssessmentSources.Web, IncludeMetrics: false);
+        var provenance = new AssessmentProvenance(selection, AssessmentKind.HistoricalReview, DeploymentStatus.Stopped,
+            DeploymentOutcome.Succeeded, now, new AssessmentWindow(now.AddHours(-2), now, false));
+        await fixture.Db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
+            update.SetProperty(a => a.RequestedSelectionJson, selection.CanonicalJson()));
+        await fixture.Db.Deployments.ExecuteUpdateAsync(update =>
+            update.SetProperty(d => d.Status, DeploymentStatus.Stopped));
+        ((ContextProxy)fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = () =>
+            Task.FromResult(new DeploymentAnalysisContext(empty ? "" : "redacted activity", empty ? [] : ["order:1"],
+                provenance));
+        await fixture.ProcessAsync();
+        var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
+            .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+        Assert.Equal(empty ? AiAnalysisStatus.Skipped : AiAnalysisStatus.Completed, view!.Status);
+        Assert.Equal(empty ? 0 : 1, calls);
+        Assert.Equal(provenance.Window, view.Assessment!.Window);
+        Assert.Equal(DeploymentStatus.Stopped, view.Assessment.ObservedStatus);
+        Assert.Equal(selection.CanonicalJson(), view.Assessment.Requested.CanonicalJson());
+        if (!empty)
+        {
+            Assert.Equal(AssessmentKind.HistoricalReview,
+                ((Provider)fixture.Services.GetRequiredService<ILlmAnalysisProvider>()).LastRequest!.Kind);
+            Assert.Equal("token=[REDACTED]", Assert.Single(view.Sections!.Observations));
+            Assert.Equal(2, view.ResultSchemaVersion);
+        }
+        else
+        {
+            Assert.False(await fixture.Db.AiAnalysisBudgetEntries.AnyAsync(entry => entry.IsProviderAttempt));
+        }
+    }
+
+    /// <summary>Zero spending prevents provider invocation and produces safe durable budget guidance.</summary>
+    [Fact]
+    public async Task Disabled_spending_skips_before_provider_and_preserves_deployment()
+    {
+        using var audit = new AuditLoggerProvider();
+        await using var fixture =
+            await Fixture.CreateAsync(() => throw new InvalidOperationException("Provider must not run."), audit);
+        ((AnalysisEgressPolicyTests.Monitor)fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>())
+            .CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, dailyBudget: 0);
+        await fixture.ProcessAsync();
+        var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+        Assert.Equal(AiAnalysisStatus.Skipped, saved.Status);
+        Assert.Equal("budget_not_configured", saved.FailureCode);
+        Assert.DoesNotContain(audit.Entries, entry => Equals(entry.GetValueOrDefault("Outcome"), "Completed"));
+        Assert.Contains(audit.Entries, entry => Equals(entry.GetValueOrDefault("Outcome"), "Unavailable"));
+        Assert.Contains(audit.Entries,
+            entry => Equals(entry.GetValueOrDefault("BudgetReason"), "BudgetNotConfigured") &&
+                     Equals(entry.GetValueOrDefault("DailyBudgetUnits"), 0L));
+        Assert.Empty(await fixture.Db.AiAnalysisBudgetEntries.ToListAsync());
+        Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
+    }
+
     /// <summary>Actual fenced processing emits correlated stage outcomes without provider payloads or identifier labels.</summary>
     [Theory]
     [InlineData("completed", "completed")]
@@ -449,6 +520,7 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(0, calls);
         Assert.Equal(AiAnalysisStatus.Skipped, view!.Status);
         Assert.Equal("unsupported_data", view.FailureCode);
+        Assert.Empty(await fixture.Db.AiAnalysisBudgetEntries.ToListAsync());
         Assert.Contains("no supported diagnostic data", view.Summary);
         Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
     }
@@ -1201,6 +1273,7 @@ public sealed class AnalysisPersistenceTests
                 .AddSingleton<IOptionsMonitor<AiAnalysisOptions>>(
                     new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(owner)))
                 .AddScoped<IAnalysisEgressAuthorizer, AnalysisEgressAuthorizer>()
+                .AddScoped<IAnalysisBudgetGuard, AnalysisBudgetGuard>()
                 .AddScoped<IDeploymentAnalysisQueue>(services =>
                 {
                     var queue = new DeploymentAnalysisQueue(services.GetRequiredService<AutoMateDbContext>(),
@@ -1208,7 +1281,8 @@ public sealed class AnalysisPersistenceTests
                         services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>());
                     return decorateQueue?.Invoke(queue) ?? queue;
                 })
-                .AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>().BuildServiceProvider();
+                .AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>().AddSafePlatformLogging()
+                .BuildServiceProvider();
             return new Fixture(connection, services, db, owner, deployment.Id, analysis.Id);
         }
     }
@@ -1247,10 +1321,14 @@ public sealed class AnalysisPersistenceTests
         Func<Task<LlmAnalysisResponse>> respond,
         Func<CancellationToken, Task<LlmAnalysisResponse>>? tokenResponse = null) : ILlmAnalysisProvider
     {
+        /// <summary>Captures the exact mode and evidence passed to the provider fixture.</summary>
+        public LlmAnalysisRequest? LastRequest { get; private set; }
+
         /// <inheritdoc />
         public Task<LlmAnalysisResponse> AnalyzeAsync(LlmAnalysisRequest request,
             CancellationToken cancellationToken = default)
         {
+            LastRequest = request;
             return tokenResponse?.Invoke(cancellationToken) ?? respond();
         }
     }
@@ -1264,6 +1342,8 @@ public sealed class AnalysisPersistenceTests
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+            builder.Entity<AiAnalysisBudgetEntry>().Property(e => e.OccurredAt)
+                .HasConversion(e => e.UtcTicks, e => new DateTimeOffset(e, TimeSpan.Zero));
             builder.Entity<AiDeploymentAnalysis>().Property(e => e.ExpiresAt)
                 .HasConversion(e => e.UtcTicks, e => new DateTimeOffset(e, TimeSpan.Zero));
             builder.Entity<DeploymentAnalysisWorkItem>().Property(e => e.NextAttemptAt)

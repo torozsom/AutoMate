@@ -5,23 +5,26 @@
     <div class="card-body">
         <h2 id="@_headingId" class="h5">AI deployment analysis</h2>
         <p>Review diagnostic suggestions before acting. Suggestions are never executed automatically.</p>
-        <div class="mb-3">
-            <p id="@(_headingId + "-consent")">Diagnostic data egress:
-                <strong>@(Consented ? "Allowed" : "Not allowed")</strong>.
-                Consent allows bounded, redacted deployment logs, metrics and project context to be sent to the
-                configured AI provider.
-                Operator policy still applies. Revoking consent prevents future provider requests; data already sent
-                cannot be recalled.</p>
-            <button type="button" class="btn btn-outline-secondary" disabled="@(Busy || !CanEditConsent)"
-                    aria-describedby="@(_headingId + "-consent")"
-                    @onclick="() => OnConsentChange.InvokeAsync(!Consented)">
-                @(Consented ? "Revoke diagnostic data egress consent" : "Allow diagnostic data egress")
-            </button>
-            @if (!CanEditConsent)
-            {
-                <p class="mt-2">Consent can be changed when the current deployment has a configured project.</p>
-            }
-        </div>
+        @if (!ReadOnly)
+        {
+            <div class="mb-3">
+                <p id="@(_headingId + "-consent")">Diagnostic data egress:
+                    <strong>@(Consented ? "Allowed" : "Not allowed")</strong>.
+                    Consent allows bounded, redacted deployment logs, metrics and project context to be sent to the
+                    configured AI provider.
+                    Operator policy still applies. Revoking consent prevents future provider requests; data already sent
+                    cannot be recalled.</p>
+                <button type="button" class="btn btn-outline-secondary" disabled="@(Busy || !CanEditConsent)"
+                        aria-describedby="@(_headingId + "-consent")"
+                        @onclick="() => OnConsentChange.InvokeAsync(!Consented)">
+                    @(Consented ? "Revoke diagnostic data egress consent" : "Allow diagnostic data egress")
+                </button>
+                @if (!CanEditConsent)
+                {
+                    <p class="mt-2">Consent can be changed when the current deployment has an eligible project.</p>
+                }
+            </div>
+        }
         <p role="status" aria-live="polite" aria-atomic="true"><strong>@StatusLabel</strong> @Explanation</p>
         @if (CurrentResult is { } result)
         {
@@ -58,11 +61,47 @@
                     }
                 }
             </dl>
+            @if (result.Assessment is { } assessment)
+            {
+                <p class="small"><strong>@AssessmentContextControls.FocusLabel(assessment.EffectiveKind)</strong> ·
+                    Observed @assessment.ObservedStatus / @assessment.ObservedOutcome at @Timestamp(assessment.CollectedAt).
+                </p>
+                <p class="small">Evidence
+                    range: @Timestamp(assessment.Window.Start) – @Timestamp(assessment.Window.End).
+                    Sources: @assessment.Requested.Sources.
+                    Metrics: @(assessment.Requested.IncludeMetrics ? "Included" : "Excluded").</p>
+                <p class="small text-break">Requested
+                    focus: @AssessmentContextControls.FocusLabel(assessment.Requested.Kind).
+                    Log
+                    containers: @(assessment.Requested.LogContainers is null ? "All recorded" : assessment.Requested.LogContainers.Length == 0 ? "None" : string.Join(", ", assessment.Requested.LogContainers)).
+                    Metric
+                    containers: @(assessment.Requested.MetricContainers is null ? "All recorded" : assessment.Requested.MetricContainers.Length == 0 ? "None" : string.Join(", ", assessment.Requested.MetricContainers)).</p>
+                @if (assessment.Window.Truncated)
+                {
+                    <p>Deployment lifetime exceeded 365 days; this assessment covers its latest 365 days.</p>
+                }
+            }
+            else
+            {
+                <p class="small text-muted">Collected context choices and observed deployment status are unknown for
+                    this run.</p>
+            }
+
             @if (result.Status == AiAnalysisStatus.Completed)
             {
-                <h3 class="h6">Summary</h3>
+                <h3 class="h6">@(result.Sections is null ? "Summary" : "Overview")</h3>
                 <p class="text-break" style="white-space: pre-wrap">@result.Summary</p>
-                <h3 class="h6">Recommended steps</h3>
+                @if (result.Sections is { } sections)
+                {
+                    <AssessmentResultSection Title="Observations" Items="sections.Observations"
+                                             EmptyMessage="No additional observations were recorded."/>
+                    <AssessmentResultSection Title="Metrics assessment" Items="sections.MetricsAssessment"
+                                             EmptyMessage="No metric assessment was supported by the selected evidence."/>
+                    <AssessmentResultSection Title="Potential issues" Items="sections.PotentialIssues"
+                                             EmptyMessage="No potential issues were identified in the selected evidence; this is not proof of overall health."/>
+                }
+
+                <h3 class="h6">@(result.Sections is null ? "Recommended steps" : "Recommendations")</h3>
                 @if (result.RecommendedSteps.Count == 0)
                 {
                     <p>No recommended steps were recorded.</p>
@@ -74,6 +113,12 @@
                             <li class="text-break">@step</li>
                         }
                     </ol>
+                }
+
+                @if (result.Sections is { } bounded)
+                {
+                    <AssessmentResultSection Title="Limitations" Items="bounded.Limitations"
+                                             EmptyMessage="No additional limitations were recorded; conclusions apply only to the selected evidence."/>
                 }
 
                 <h3 class="h6">Evidence references</h3>
@@ -91,20 +136,24 @@
                 }
             }
         }
-        <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-outline-primary" disabled="@(!CanRequest)" @onclick="OnRequest">Analyze
-                deployment
-            </button>
-            <button type="button" class="btn btn-outline-secondary" disabled="@(Busy || DeploymentId is null)"
-                    @onclick="OnRefresh">Refresh analysis
-            </button>
-            @if (CurrentResult?.Status is AiAnalysisStatus.Queued or AiAnalysisStatus.Running)
-            {
-                <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="OnCancel">Cancel
-                    analysis
+        @if (!ReadOnly)
+        {
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary" disabled="@(!CanRequest)" @onclick="OnRequest">
+                    Analyze
+                    deployment
                 </button>
-            }
-        </div>
+                <button type="button" class="btn btn-outline-secondary" disabled="@(Busy || DeploymentId is null)"
+                        @onclick="OnRefresh">Refresh analysis
+                </button>
+                @if (CurrentResult?.Status is AiAnalysisStatus.Queued or AiAnalysisStatus.Running)
+                {
+                    <button type="button" class="btn btn-outline-secondary" disabled="@Busy" @onclick="OnCancel">Cancel
+                        analysis
+                    </button>
+                }
+            </div>
+        }
         @if (!string.IsNullOrWhiteSpace(Message))
         {
             <p class="mt-3 mb-0" role="status" aria-live="polite">@Message</p>
@@ -113,6 +162,10 @@
 </section>
 
 @code {
+
+    /// <summary>Saved-run presentation hides consent edits and execution controls.</summary>
+    [Parameter]
+    public bool ReadOnly { get; set; }
 
     /// <summary>Unique accessible heading association when multiple panels are rendered.</summary>
     private readonly string _headingId = "analysis-" + Guid.NewGuid().ToString("N");
@@ -133,13 +186,17 @@
     [Parameter]
     public bool Consented { get; set; }
 
-    /// <summary>Whether the current deployment has an exact configured project whose consent can be edited.</summary>
+    /// <summary>Whether the current deployment has an exact eligible project whose consent can be edited.</summary>
     [Parameter]
     public bool CanEditConsent { get; set; }
 
     /// <summary>Whether the current deployment has persisted Failed status.</summary>
     [Parameter]
     public bool FailedDeployment { get; set; }
+
+    /// <summary>Allows an operational assessment of any persisted deployment status.</summary>
+    [Parameter]
+    public bool AllowAnyStatus { get; set; }
 
     /// <summary>Disables duplicate owner actions while a request or refresh is pending.</summary>
     [Parameter]
@@ -169,7 +226,7 @@
     private DeploymentAnalysisView? CurrentResult => Result?.DeploymentId == DeploymentId ? Result : null;
 
     /// <summary>Matches UI eligibility to existing owner admission gates without replacing server authorization.</summary>
-    private bool CanRequest => !Busy && Enabled && Consented && FailedDeployment && DeploymentId is not null &&
+    private bool CanRequest => !Busy && Enabled && Consented && (FailedDeployment || AllowAnyStatus) && DeploymentId is not null &&
                                CurrentResult?.Status is not (AiAnalysisStatus.Queued or AiAnalysisStatus.Running);
 
     /// <summary>Textual status conveys meaning without depending on color.</summary>
@@ -190,7 +247,7 @@
         _ when Busy => "Updating analysis…",
         _ when !Enabled => "New AI analysis is disabled by the operator. Saved results remain available.",
         _ when !Consented => "Diagnostic data egress consent is not enabled for this deployment's project.",
-        _ when !FailedDeployment => "Analysis requests are available after a deployment fails.",
+        _ when !FailedDeployment && !AllowAnyStatus => "Analysis requests are available after a deployment fails.",
         AiAnalysisStatus.Queued or AiAnalysisStatus.Running => "Status refreshes automatically every five seconds. You can also use Refresh analysis.",
         _ => "Analysis uses diagnostic data approved for this project."
     };

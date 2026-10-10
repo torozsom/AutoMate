@@ -6,6 +6,11 @@ internal static class PlatformLogCatalog
     /// <summary>Fixed application messages; interpolated and unknown provider templates are excluded.</summary>
     internal static readonly HashSet<string> Templates = new(StringComparer.Ordinal)
     {
+        "Archive cleanup unavailable: {FailureType}.",
+        "Archive backfill unavailable: {FailureType}.",
+        "Archive backfill deployment unavailable: {FailureType}.",
+        "Deployment artifact metadata unavailable: {FailureType}.",
+        "Analysis action unavailable: {FailureType}.",
         "Outbound HTTP request started: method {HttpMethod}.",
         "Outbound HTTP request sent: method {HttpMethod}.",
         "Outbound HTTP response received: status {StatusCode}, duration {ElapsedMilliseconds} ms.",
@@ -42,6 +47,8 @@ internal static class PlatformLogCatalog
         "Discarded an incomplete unacknowledged telemetry segment.",
         "Analysis retention cleanup failed: {FailureType}.",
         "AutoMate operation {Operation} outcome {Outcome}.",
+        "AI spending reservation denied: {BudgetReason}; daily allowance {DailyBudgetUnits}, reserved {ReservedCostUnits}, attempt {AttemptCostUnits} monetary units.",
+        "AI analysis execution failed: {FailureType}.",
         "Azure Container Apps runtime monitoring coordinator started.",
         "Azure Container Apps runtime monitoring coordinator stopped.",
         "Azure OIDC trust configured.",
@@ -287,6 +294,9 @@ internal static class PlatformLogCatalog
     /// <summary>Known application and framework logger categories; unknown names use a fixed fallback.</summary>
     internal static readonly HashSet<string> Categories = new(StringComparer.Ordinal)
     {
+        "Infrastructure.Diagnostics.DeploymentArchiveCleanupWorker",
+        "Infrastructure.Diagnostics.DeploymentArchiveBackfillWorker",
+        "Web.Components.Shared.DeploymentAnalysisSection",
         "AppStartup",
         "Application.Orchestration.DeploymentJobQueue",
         "Web.Observability.RequestAuditMiddleware",
@@ -306,6 +316,7 @@ internal static class PlatformLogCatalog
         "Application.Auth.AuthService",
         "Application.Data.Apps.ApplicationService",
         "Application.Orchestration.CloudDeploymentOrchestrator",
+        "Infrastructure.Ai.AnalysisBudgetGuard",
         "Application.Orchestration.DeploymentCleanupHostedService",
         "Application.Orchestration.DeploymentJobWorker",
         "Application.Orchestration.DeploymentStatusNotifier",

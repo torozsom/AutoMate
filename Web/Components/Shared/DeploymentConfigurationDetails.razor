@@ -1,0 +1,184 @@
+@using System.Text.Json
+@using Domain.Entities
+@if (Deployment is not null)
+{
+    var snapshot = Snapshot;
+    <div class="configuration-tables">
+        <section class="configuration-table-group"><h3>Application</h3>
+            <table class="table console-table">
+                <caption class="visually-hidden">Recorded application configuration</caption>
+                <tbody>
+                <RecordedValueRow Label="Project" Value="@(snapshot?.ProjectName ?? Deployment.CsProject?.Name)"/>
+                <RecordedValueRow Label="Provider"
+                                  Value="@(snapshot?.Provider ?? (Deployment.CloudGitHubActionRunId is not null ? "Azure Container Apps" : null))"/>
+                <RecordedValueRow Label="Runtime" Value="@(snapshot?.Runtime)"/>
+                <RecordedValueRow Label="Environment" Value="@(snapshot?.Environment)"/>
+                <RecordedValueRow Label="Port"
+                                  Value="@(Deployment.ResolvedHostPort?.ToString() ?? snapshot?.Port.ToString())"/>
+                </tbody>
+            </table>
+        </section>
+        <section class="configuration-table-group"><h3>Infrastructure</h3>
+            <table class="table console-table">
+                <caption class="visually-hidden">Recorded infrastructure configuration</caption>
+                <tbody>
+                <RecordedValueRow Label="Resource group" Value="@(snapshot?.ResourceGroup ?? CloudMissing)"/>
+                <RecordedValueRow Label="Container App"
+                                  Value="@(Deployment.CloudContainerAppName ?? snapshot?.ContainerApp ?? CloudMissing)"/>
+                <RecordedValueRow Label="Region" Value="@(snapshot?.Region ?? CloudMissing)"/>
+                <RecordedValueRow Label="Registry / image"
+                                  Value="@(string.Join(" / ", new[] { snapshot?.Registry, snapshot?.Image ?? Deployment.ImageTag }.Where(v => !string.IsNullOrWhiteSpace(v))))"
+                                  Copyable="true"/>
+                </tbody>
+            </table>
+        </section>
+        <section class="configuration-table-group"><h3>Source and workflow</h3>
+            <table class="table console-table">
+                <caption class="visually-hidden">Recorded source identity</caption>
+                <tbody>
+                @if (SourceUrl is { } source)
+                {
+                    <tr>
+                        <th scope="row">Repository</th>
+                        <td><a href="@source" target="_blank" rel="noopener noreferrer">@source ↗</a></td>
+                    </tr>
+                }
+                else
+                {
+                    <RecordedValueRow Label="Repository" Value="@(snapshot?.SourceUrl)"/>
+                }
+                <RecordedValueRow Label="Branch" Value="@(snapshot?.Branch)"/>
+                <RecordedValueRow Label="Commit" Value="@(snapshot?.Commit)" Copyable="true"/>
+                @if (WorkflowUrl is { } workflow)
+                {
+                    <tr>
+                        <th scope="row">Workflow</th>
+                        <td><a href="@workflow" target="_blank" rel="noopener noreferrer">Open workflow ↗</a></td>
+                    </tr>
+                }
+                else
+                {
+                    <RecordedValueRow Label="Workflow" Value="@CloudMissing"/>
+                }
+                </tbody>
+            </table>
+        </section>
+        <section class="configuration-table-group"><h3>Access</h3>
+            <table class="table console-table">
+                <caption class="visually-hidden">Recorded access links; resources may no longer exist</caption>
+                <tbody>
+                <tr>
+                    <th scope="row">Application URL</th>
+                    <td>@if (AppUrl is { } app)
+                        {
+                            <a href="@app" target="_blank" rel="noopener noreferrer">@app ↗</a>
+                        }
+                        else
+                        {
+                            <span>Not recorded</span>
+                        }
+                    </td>
+                </tr>
+                @if (ResourceUrl is { } resource)
+                {
+                    <tr>
+                        <th scope="row">Azure Portal</th>
+                        <td><a href="@resource" target="_blank" rel="noopener noreferrer">Open recorded resource ↗</a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </section>
+    </div>
+    <details class="console-details">
+        <summary>Additional details <span class="console-meta"> · provider identifiers and database composition</span>
+        </summary>
+        <div class="configuration-table-group">
+            <table class="table console-table">
+                <caption class="visually-hidden">Additional recorded non-secret deployment metadata</caption>
+                <tbody>
+                <RecordedValueRow Label="Revision" Value="@(Deployment.CloudContainerRevision ?? CloudMissing)"
+                                  Copyable="true"/>
+                <RecordedValueRow Label="Docker container"
+                                  Value="@(Deployment.DockerContainerId ?? (snapshot?.Provider?.Contains("Azure", StringComparison.OrdinalIgnoreCase) == true ? "Not applicable" : null))"
+                                  Copyable="true"/>
+                <RecordedValueRow Label="Workflow run"
+                                  Value="@(Deployment.CloudGitHubActionRunId?.ToString() ?? CloudMissing)"
+                                  Copyable="true"/>
+                <RecordedValueRow Label="Azure resource ID" Value="@(Deployment.CloudResourceId ?? CloudMissing)"
+                                  Copyable="true"/>
+                @foreach (var database in snapshot?.Databases ?? [])
+                {
+                    <RecordedValueRow Label="Database / container"
+                                      Value="@($"{database.Provider} / {database.Name} / {database.ContainerSuffix}")"/>
+                }
+                </tbody>
+            </table>
+        </div>
+    </details>
+    <p class="console-meta">Recorded values describe this deployment. They do not confirm that historical resources are
+        still accessible.</p>
+    @if (snapshot is null)
+    {
+        <p class="telemetry-muted">This deployment predates configuration snapshots. Missing historical settings cannot
+            be reconstructed.</p>
+    }
+}
+else
+{
+    <p class="telemetry-muted">No deployment has been recorded yet.</p>
+}
+
+@code {
+
+    /// <summary>Selected deployment; artifacts must not come from another run.</summary>
+    [Parameter]
+    public Deployment? Deployment { get; set; }
+
+    /// <summary>Only an explicit local provider makes cloud fields inapplicable.</summary>
+    private string CloudMissing => Snapshot?.Provider is { } provider && (provider.Contains("Docker", StringComparison.OrdinalIgnoreCase) || provider.Contains("Local", StringComparison.OrdinalIgnoreCase)) ? "Not applicable" : "Not recorded";
+
+    /// <summary>Reads only the explicit non-secret snapshot contract.</summary>
+    private DeploymentConfigurationSnapshot? Snapshot
+    {
+        get
+        {
+            try
+            {
+                return Deployment?.ConfigurationSnapshotJson is { } json ? JsonSerializer.Deserialize<DeploymentConfigurationSnapshot>(json) : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>Validated source from the immutable snapshot, or recorded legacy repository identity.</summary>
+    private string? SourceUrl => SafeUrl(Snapshot?.SourceUrl, true);
+
+    /// <summary>Stable run link survives workflow completion and component reload.</summary>
+    private string? WorkflowUrl => SourceUrl is { } source
+        ? (source.TrimEnd('/').EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? source.TrimEnd('/')[..^4] : source.TrimEnd('/')) +
+          (Deployment?.CloudGitHubActionRunId is { } run ? $"/actions/runs/{run}" : "/actions/workflows/deploy.yml")
+        : null;
+
+    /// <summary>Recorded cloud endpoint or local host port, without asserting that old resources still exist.</summary>
+    private string? AppUrl => SafeUrl(Deployment?.CloudAppUrl) ?? (Deployment?.ResolvedHostPort is { } port ? $"http://localhost:{port}" : null);
+
+    /// <summary>Azure Portal deep link constructed from a recorded ARM identity.</summary>
+    private string? ResourceUrl => Deployment?.CloudResourceId is { } id && id.StartsWith("/subscriptions/", StringComparison.OrdinalIgnoreCase)
+        ? "https://portal.azure.com/#resource" + id
+        : null;
+
+    /// <summary>External links reject credential-bearing URLs and unsafe schemes.</summary>
+    private static string? SafeUrl(string? value, bool github = false)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+               uri.Scheme is "http" or "https" && string.IsNullOrEmpty(uri.UserInfo) && (!github || uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+            ? uri.GetLeftPart(UriPartial.Path)
+            : null;
+    }
+
+}

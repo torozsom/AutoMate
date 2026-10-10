@@ -8,7 +8,7 @@
     <div class="login-card">
         <div class="login-header">
             <div class="page-eyebrow">Account access</div>
-            <h2 class="login-title">Create an account!</h2>
+            <h1 class="login-title">Create your account</h1>
         </div>
 
         @if (!string.IsNullOrEmpty(ErrorMessage))
@@ -49,9 +49,9 @@
                 <ValidationMessage For="() => Model!.ConfirmPassword" class="text-danger mt-1 small"/>
             </div>
 
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <button type="submit" class="btn btn-primary-custom text-white w-100 h-100"
+            <div class="row g-3 auth-actions">
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary w-100 h-100"
                             disabled="@IsSubmitting">
                         @if (IsSubmitting)
                         {
@@ -65,11 +65,11 @@
                         }
                     </button>
                 </div>
-                <div class="col-md-6">
+                <div class="col-12">
                     <a href="/api/auth/github-login"
                        class="btn btn-github w-100 h-100 d-flex align-items-center justify-content-center gap-2">
                         <i class="bi bi-github fs-4"></i>
-                        Login with GitHub
+                        Continue with GitHub
                     </a>
                 </div>
             </div>

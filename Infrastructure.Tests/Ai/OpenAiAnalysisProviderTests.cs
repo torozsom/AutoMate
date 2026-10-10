@@ -8,12 +8,111 @@ using Infrastructure.Ai;
 using Infrastructure.Diagnostics;
 using Infrastructure.Tests.TestSupport;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Ai;
 
 /// <summary>Checks Responses parsing using synthetic HTTP fixtures; no provider credentials or calls are required.</summary>
-public sealed class OpenAiAnalysisProviderTests
+public sealed class OpenAiAnalysisProviderTests() : ResponsesAnalysisProviderContractTests(false)
 {
+}
+
+/// <summary>Runs the bounded Responses, redaction, authorization, retry and shutdown contract against both adapters.</summary>
+public abstract class ResponsesAnalysisProviderContractTests(bool azure)
+{
+    /// <summary>Explicit approved synthetic resource route; no test contacts this URL.</summary>
+    private readonly string _endpoint = azure
+        ? "https://automate-test.openai.azure.com/openai/v1/"
+        : "https://eu.api.openai.com/v1/";
+
+    /// <summary>Selected adapter identity for the same protocol acceptance cases.</summary>
+    private readonly string _providerName = azure ? "azure-openai" : "openai";
+
+    /// <summary>Both provider adapters request and validate the status-aware schema without contacting Azure.</summary>
+    [Theory]
+    [InlineData(AssessmentKind.Startup)]
+    [InlineData(AssessmentKind.FailureDiagnosis)]
+    [InlineData(AssessmentKind.RuntimeOverview)]
+    [InlineData(AssessmentKind.HistoricalReview)]
+    public async Task Status_aware_transport_uses_v2_sections_and_exact_evidence(AssessmentKind kind)
+    {
+        using var handler = new DelegateHttpMessageHandler(request =>
+        {
+            using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+            var schema = body.RootElement.GetProperty("text").GetProperty("format").GetProperty("schema");
+            Assert.Equal(7, schema.GetProperty("required").GetArrayLength());
+            Assert.True(schema.GetProperty("properties").TryGetProperty("overview", out _));
+            return DelegateHttpMessageHandler.Json(Envelope(
+                """{"overview":"Recorded operation.","observations":["password=private-value"],"metricsAssessment":[],"potentialIssues":[],"recommendedSteps":[],"limitations":["Selected evidence only."],"evidenceReferences":["order:1"]}"""));
+        });
+        using var client = new HttpClient(handler);
+        var result = await Provider(client).AnalyzeAsync(Request("safe", ["order:1"]) with { Kind = kind });
+        Assert.Equal(2, result.ResultSchemaVersion);
+        Assert.NotNull(result.Sections);
+        Assert.DoesNotContain("private-value", result.Sections.Observations[0]);
+        Assert.Equal(["order:1"], result.EvidenceReferences);
+    }
+
+    /// <summary>Incomplete new-schema output and fabricated evidence fail closed on both adapters.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Status_aware_transport_rejects_missing_sections_or_fabricated_evidence(bool fabricated)
+    {
+        var text = fabricated
+            ? """{"overview":"Recorded operation.","observations":[],"metricsAssessment":[],"potentialIssues":[],"recommendedSteps":[],"limitations":[],"evidenceReferences":["order:999"]}"""
+            : """{"overview":"Recorded operation.","recommendedSteps":[],"evidenceReferences":[]}""";
+        using var handler = new DelegateHttpMessageHandler(_ => DelegateHttpMessageHandler.Json(Envelope(text)));
+        using var client = new HttpClient(handler);
+        await Assert.ThrowsAsync<InvalidAnalysisResultException>(() => Provider(client).AnalyzeAsync(
+            Request("safe", ["order:1"]) with { Kind = AssessmentKind.RuntimeOverview }));
+    }
+
+    /// <summary>Real configuration reload cancels active headers/body I/O and denies the next call without retry.</summary>
+    [Theory]
+    [InlineData(false, "ProviderEgressEnabled", "false")]
+    [InlineData(true, "ProviderEgressEnabled", "false")]
+    [InlineData(false, "Enabled", "false")]
+    [InlineData(true, "Enabled", "false")]
+    public async Task Egress_shutdown_cancels_active_transport_and_denies_subsequent_calls(bool readingBody,
+        string flag, string value)
+    {
+        var tenant = Guid.NewGuid();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AiAnalysis:Enabled"] = "true",
+            ["AiAnalysis:ProviderEgressEnabled"] = "true",
+            ["AiAnalysis:Provider"] = _providerName,
+            ["AiAnalysis:RegionalProcessingApproved"] = "true",
+            ["AiAnalysis:ProcessingRegion"] = "eu",
+            ["AiAnalysis:ApprovedRegions:0"] = "eu",
+            ["AiAnalysis:ApprovedTenantIds:0"] = tenant.ToString(),
+            ["AiAnalysis:AllowedDataCategories:0"] = "logs",
+            ["AiAnalysis:AllowedDataCategories:1"] = "metrics",
+            ["AiAnalysis:AllowedDataCategories:2"] = "traceCorrelation",
+            ["AiAnalysis:AzureOpenAi:ResourceName"] = "automate-test",
+            ["AiAnalysis:Endpoint"] = _endpoint
+        }).Build();
+        var services = new ServiceCollection();
+        services.AddOptions<AiAnalysisOptions>().Bind(configuration.GetSection("AiAnalysis"));
+        using var scope = services.BuildServiceProvider();
+        var monitor = scope.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var handler = new ShutdownHandler(started, readingBody);
+        using var client = new HttpClient(handler);
+        var provider = Provider(client, monitor: monitor);
+        var active = provider.AnalyzeAsync(Request("Build failed."));
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        configuration[$"AiAnalysis:{flag}"] = value;
+        configuration.Reload();
+        await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(async () =>
+            await active.WaitAsync(TimeSpan.FromSeconds(5)));
+        await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
+            provider.AnalyzeAsync(Request("Build failed.")));
+        Assert.Equal(1, handler.Calls);
+    }
+
     /// <summary>The configurable cap is present in the actual provider request; the existing default remains 8,192.</summary>
     [Theory]
     [InlineData(512)]
@@ -58,19 +157,19 @@ public sealed class OpenAiAnalysisProviderTests
     }
 
     /// <summary>Retains the exact approved route while varying bounded operational settings.</summary>
-    private static AiAnalysisOptions ApprovedWithLimits(int timeout, int output)
+    private AiAnalysisOptions ApprovedWithLimits(int timeout, int output)
     {
         return new AiAnalysisOptions
         {
             Enabled = true,
             ProviderEgressEnabled = true,
-            Provider = "openai",
+            Provider = _providerName,
             RegionalProcessingApproved = true,
             ProcessingRegion = "eu",
             ApprovedRegions = ["eu"],
             ApprovedTenantIds = [Guid.NewGuid()],
             AllowedDataCategories = ["logs", "metrics", "traceCorrelation"],
-            Endpoint = "https://eu.api.openai.com/v1/",
+            Endpoint = _endpoint,
             TimeoutSeconds = timeout,
             MaximumOutputTokens = output
         };
@@ -120,7 +219,19 @@ public sealed class OpenAiAnalysisProviderTests
         {
             using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             input = body.RootElement.GetProperty("input").GetString();
-            Assert.Equal("synthetic-test-key", request.Headers.Authorization!.Parameter);
+            if (azure)
+            {
+                Assert.Null(request.Headers.Authorization);
+                Assert.Equal("synthetic-test-key", Assert.Single(request.Headers.GetValues("api-key")));
+                Assert.Equal(_endpoint + "responses", request.RequestUri!.AbsoluteUri);
+                Assert.True(body.RootElement.GetProperty("text").GetProperty("format").GetProperty("strict")
+                    .GetBoolean());
+            }
+            else
+            {
+                Assert.Equal("synthetic-test-key", request.Headers.Authorization!.Parameter);
+            }
+
             Assert.False(body.RootElement.GetProperty("store").GetBoolean());
             Assert.Empty(body.RootElement.GetProperty("tools").EnumerateArray());
             return DelegateHttpMessageHandler.Json(Envelope(
@@ -160,6 +271,7 @@ public sealed class OpenAiAnalysisProviderTests
         var provider = Provider(client);
         var first = await provider.AnalyzeAsync(Request("safe diagnostics"));
         var second = await provider.AnalyzeAsync(Request("safe diagnostics"));
+        Assert.Equal(_providerName, first.Provider);
         Assert.Equal("gpt-5-mini-2025-08-07", first.Model);
         Assert.Equal("gpt-5-mini", first.RequestedModel);
         Assert.Equal("password=[REDACTED]", first.Summary);
@@ -374,7 +486,7 @@ public sealed class OpenAiAnalysisProviderTests
             throw new InvalidOperationException();
         });
         using var client = new HttpClient(handler);
-        var monitor = new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(Guid.NewGuid()));
+        var monitor = new AnalysisEgressPolicyTests.Monitor(Approved(Guid.NewGuid()));
         var authorizer =
             new AnalysisEgressPolicyTests.Authorizer(onCheck: () => monitor.CurrentValue = new AiAnalysisOptions());
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
@@ -395,22 +507,47 @@ public sealed class OpenAiAnalysisProviderTests
         using var client = new HttpClient(handler);
         var monitor =
             new AnalysisEgressPolicyTests.Monitor(
-                AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), model: "ghp_" + new string('a', 36)));
+                Approved(Guid.NewGuid(), model: "ghp_" + new string('a', 36)));
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             Provider(client, monitor: monitor).AnalyzeAsync(Request("safe")));
         Assert.Equal(0, calls);
     }
 
     /// <summary>Creates the adapter with explicitly synthetic settings and central validation.</summary>
-    private static OpenAiAnalysisProvider Provider(HttpClient client, bool enabled = true, bool allowed = true,
-        AnalysisEgressPolicyTests.Monitor? monitor = null, IAnalysisEgressAuthorizer? authorizer = null)
+    private ILlmAnalysisProvider Provider(HttpClient client, bool enabled = true, bool allowed = true,
+        IOptionsMonitor<AiAnalysisOptions>? monitor = null, IAnalysisEgressAuthorizer? authorizer = null)
     {
-        return new OpenAiAnalysisProvider(client,
-            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-                { ["AiAnalysis:ApiKey"] = "synthetic-test-key" }).Build(),
-            monitor ?? new AnalysisEgressPolicyTests.Monitor(
-                AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), enabled)), AnalysisResultTests.Validator(),
-            new DiagnosticRedactor(), authorizer ?? new AnalysisEgressPolicyTests.Authorizer(allowed));
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AiAnalysis:ApiKey"] = "synthetic-test-key",
+            ["AiAnalysis:AzureOpenAi:ApiKey"] = "synthetic-test-key",
+            ["AiAnalysis:AzureOpenAi:ResourceName"] = "automate-test"
+        }).Build();
+        monitor ??= new AnalysisEgressPolicyTests.Monitor(Approved(Guid.NewGuid(), enabled));
+        authorizer ??= new AnalysisEgressPolicyTests.Authorizer(allowed);
+        return azure
+            ? new AzureOpenAiAnalysisProvider(client, configuration, monitor, AnalysisResultTests.Validator(),
+                new DiagnosticRedactor(), authorizer)
+            : new OpenAiAnalysisProvider(client, configuration, monitor, AnalysisResultTests.Validator(),
+                new DiagnosticRedactor(), authorizer);
+    }
+
+    /// <summary>Constructs explicit approvals for each adapter without acquiring diagnostics or credentials.</summary>
+    private AiAnalysisOptions Approved(Guid owner, bool enabled = true, string model = "gpt-5-mini")
+    {
+        return new AiAnalysisOptions
+        {
+            Enabled = enabled,
+            ProviderEgressEnabled = true,
+            Provider = _providerName,
+            RegionalProcessingApproved = true,
+            ProcessingRegion = "eu",
+            ApprovedRegions = ["eu"],
+            ApprovedTenantIds = [owner],
+            AllowedDataCategories = ["logs", "metrics", "traceCorrelation"],
+            Endpoint = _endpoint,
+            Model = model
+        };
     }
 
     /// <summary>Builds a representative completed Responses envelope with a leading reasoning item.</summary>
@@ -431,6 +568,61 @@ public sealed class OpenAiAnalysisProviderTests
                 }
             }
         });
+    }
+
+    /// <summary>Holds synthetic transport at headers or body reads until cancellation reaches it.</summary>
+    protected sealed class ShutdownHandler(TaskCompletionSource started, bool readingBody) : HttpMessageHandler
+    {
+        /// <summary>Number of actual transport attempts.</summary>
+        public int Calls { get; private set; }
+
+        /// <inheritdoc />
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            if (readingBody)
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ShutdownContent(started) };
+            started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Transport must have been canceled.");
+        }
+    }
+
+    /// <summary>Supplies a stalled body stream after response headers have already arrived.</summary>
+    private sealed class ShutdownContent(TaskCompletionSource started) : HttpContent
+    {
+        /// <inheritdoc />
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+
+        /// <inheritdoc />
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            throw new InvalidOperationException("The adapter must request a stream.");
+        }
+
+        /// <inheritdoc />
+        protected override Task<Stream> CreateContentReadStreamAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult<Stream>(new ShutdownStream(started));
+        }
+    }
+
+    /// <summary>Blocks body reads until the actual adapter read token is canceled.</summary>
+    private sealed class ShutdownStream(TaskCompletionSource started) : MemoryStream
+    {
+        /// <inheritdoc />
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            throw new InvalidOperationException("Body read must have been canceled.");
+        }
     }
 
     /// <summary>Supplies a stream with no declared length, matching chunked HTTP response behavior.</summary>

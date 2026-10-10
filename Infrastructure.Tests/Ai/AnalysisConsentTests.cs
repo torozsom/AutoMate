@@ -12,6 +12,38 @@ namespace Infrastructure.Tests.Ai;
 /// <summary>Verifies exact-project consent persistence and authorization without diagnostic payload storage.</summary>
 public sealed class AnalysisConsentTests
 {
+    /// <summary>Remote projects without configuration support explicit consent, durable readback and revocation.</summary>
+    [Fact]
+    public async Task Remote_project_without_configuration_can_grant_and_revoke_consent()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
+        await using var db = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
+        await db.Database.EnsureCreatedAsync();
+        var owner = new LocalUser { Username = "fixture", Email = "fixture@example.invalid" };
+        var app = new Domain.Entities.Application
+            { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote, User = owner };
+        var selected = new CsProject { Application = app };
+        var sibling = new CsProject { Application = app };
+        db.CsProjects.AddRange(selected, sibling);
+        await db.SaveChangesAsync();
+        var service = new ApplicationService(db, NullLogger<ApplicationService>.Instance);
+        Assert.False(await service.SetAiDiagnosticEgressConsentAsync(app.Id, Guid.NewGuid(), selected.Id, true));
+        Assert.False(await service.SetAiDiagnosticEgressConsentAsync(Guid.NewGuid(), owner.Id, selected.Id, true));
+        Assert.Empty(await db.Set<Configuration>().ToListAsync());
+        Assert.True(await service.SetAiDiagnosticEgressConsentAsync(app.Id, owner.Id, selected.Id, true));
+        await using var read = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
+        var readService = new ApplicationService(read, NullLogger<ApplicationService>.Instance);
+        var saved = await readService.GetAppByIdAsync(app.Id, owner.Id);
+        Assert.True(saved!.CsProjects.Single(item => item.Id == selected.Id).Configuration!
+            .AiDiagnosticEgressConsented);
+        Assert.Null(saved.CsProjects.Single(item => item.Id == sibling.Id).Configuration);
+        Assert.True(await readService.SetAiDiagnosticEgressConsentAsync(app.Id, owner.Id, selected.Id, false));
+        db.ChangeTracker.Clear();
+        Assert.False((await db.Set<Configuration>().SingleAsync()).AiDiagnosticEgressConsented);
+    }
+
     /// <summary>Consent affects only the requested project and survives a fresh context, including revocation.</summary>
     [Theory]
     [InlineData(true)]

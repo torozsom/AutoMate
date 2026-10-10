@@ -77,6 +77,22 @@ The same AutoMate image supports two server-enforced profiles:
 
 These profiles are selected with `HostingProfile__Mode`; they are enforced in the background worker and deployment orchestrators, rather than only hidden in the UI.
 
+Both profiles expose `/health` for lightweight liveness and `/health/ready` for AI configuration and durable queue
+readiness. The readiness probe has a five-second deadline, reads metadata only and never calls an LLM. Intentionally
+disabled AI is healthy when queue storage is readable. See [probe status codes and scope](Web/Configs/README.md).
+
+The [AI analysis and security monitoring guide](docs/ai-analysis-operations.md) defines operator dashboard signals,
+read-only backlog queries, initial alert conditions and incident responses. Collector/backends and alert routing are
+operator-configured; the guide does not enable AI or provision a monitoring stack.
+
+AI controls share quota/rate allowances across an owner's projects and reserve conservative cost before provider
+attempts under cluster-wide concurrency guards. Currency defaults to USD and spending defaults to zero. See
+[operator limits, budget configuration and migration](Infrastructure/Ai/README.md).
+
+The [staged rollout and shutdown procedure](docs/ai-analysis-operations.md#staged-feature-enablement-and-shutdown)
+uses the default-off flags and approved owner cohort. Reloading AI policy cancels active OpenAI HTTP work locally;
+all replicas must observe the change, and already-sent remote processing cannot be recalled. Deployment work continues.
+
 ### Local Docker Workflow
 
 1. The user selects a local project from the dashboard.
@@ -324,21 +340,31 @@ Future improvements may include richer Azure subscription selection, deployment 
 
 ## Deployment history storage
 
-PostgreSQL remains the default. Optional Loki/Mimir storage separates terminal logs and numeric metrics while preserving
-reload replay and historical deployment views. Runtime collection is owner opt-in. See
+Both hosting profiles require the private disk gateway with Loki for new deployment logs and Mimir for numeric samples.
+PostgreSQL retains metadata and legacy reads/draining; new payload writes and a database fallback are rejected.
+Runtime collection requires background owner opt-in or authorized active viewing. See
 [configuration, quotas and the self-managed pilot](docs/deployment-telemetry.md).
 
-### AI diagnostic result foundation
+### AI deployment diagnostics
 
-AI remains disabled by default. Provider output is structurally validated, bounded and centrally redacted before
-analysis-result persistence/readback. Actual model IDs, prompt/schema versions and optional usage/cost metadata accompany
-owner-authorized results; unknown provenance remains empty. See [AI result policy](Application/Ai/README.md),
-[adapter/worker behavior](Infrastructure/Ai/README.md) and [implementation progress](Web/PLAN.md).
-The analysis-only `AddAiAnalysisResultProvenance` migration must be applied through the normal upgrade workflow.
-New deployment logs/metrics continue to use the private disk gateway and Loki/Mimir. Analysis metadata expires after
-90 days with bounded startup/hourly cleanup and owner-authorized deletion; active cancellation, broader data safety and
-production queue/egress hardening remain planned work.
+Both profiles implement owner-authorized manual analysis and globally opt-in automatic failure analysis through a
+durable leased queue. The project page exposes exact-project consent, request/refresh and cancellation, safe state
+guidance and validated results; advice is never executed. Active work can be canceled and terminal results deleted
+through the owner-authorized API. Context stays in memory; validated guidance and control metadata use PostgreSQL.
+
+AI/automatic/provider flags remain off by default, with an explicit approved-owner cohort and fresh project consent.
+Currency defaults to USD and provider spending to zero. Results expire after configurable 1–90 days, default ninety;
+independent quota/idempotency receipts and budget metadata preserve usage through deletion. Leases, durable retries,
+shared capacity/budgets and reload shutdown guard execution without blocking deployment work.
+
+See [architecture, onboarding and ordered metadata upgrades](docs/ai-analysis.md),
+[monitoring and shutdown](docs/ai-analysis-operations.md), [pilot acceptance](docs/ai-analysis-rollout.md) and
+[implementation decisions](docs/adr/0003-ai-analysis-execution-and-rollout.md). Provider/account/model/region approvals,
+live migration application and an internal pilot remain pending; [PLAN.md](Web/PLAN.md) tracks those gates.
+The [owned PostgreSQL verification runner](deploy/verification/README.md) tests migrations/shared locks without using
+an application database. [Azure OpenAI preparation](docs/azure-openai-integration-plan.md) records the requested next
+adapter and remaining resource/identity/deployment inputs; Azure egress is not enabled.
 
 AutoMate's platform OpenTelemetry logs now include fixed security/analysis audit events, GUID correlation scopes and
 uniform service/environment/version/hosting-profile resources. See [platform observability](Application/Diagnostics/README.md)
-for coverage and remaining global redaction work. Deployment log/metric persistence continues through Loki/Mimir.
+for coverage and supported export/redaction boundaries. Deployment log/metric persistence continues through Loki/Mimir.

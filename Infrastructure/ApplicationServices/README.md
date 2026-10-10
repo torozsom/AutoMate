@@ -21,5 +21,16 @@ behavior.
 - [Solution navigation map](../../.agents/navigation.md)
 
 Data/Apps/ApplicationService persists exact-project AI consent only after filtering application ownership and C#
-project membership. Missing configuration/ownership returns false without changes. The existing application-level
+project membership. Explicit consent edits create missing remote-project configuration with the existing .NET default;
+missing local configuration or ownership returns false without changes. Sibling projects remain untouched. The existing
+application-level
 consent overload remains available. Analysis admission and provider egress continue to enforce current policy.
+
+## Workspace projections
+
+Data/Apps/WorkspaceQuery implements IWorkspaceQuery through owner-scoped SQL projections and daily aggregate reads.
+It loads no entity graph for inventory, isolates missing resource statistics, and performs no provider requests.
+
+Workspace Overview also accepts absolute UTC windows, buckets recorded outcomes adaptively and uses IMetricExploration
+for detailed/long-range resource projections. It never queries Azure and isolates resource failures from deployment
+counts.

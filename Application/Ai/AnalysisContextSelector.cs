@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
@@ -6,8 +8,7 @@ using Application.Abstractions.Diagnostics;
 namespace Application.Ai;
 
 /// <summary>
-///     Deterministically selects diagnostic evidence by severity, failure relevance and recency within a bounded
-///     window.
+///     Selects bounded diagnostic evidence using assessment focus, source representation, severity and recency.
 /// </summary>
 public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
 {
@@ -17,7 +18,8 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     /// <summary>Serializes a bounded structured data document with stable IDs and explicit partial coverage.</summary>
     public DeploymentAnalysisContext Select(DeploymentTerminalHistory history,
         IReadOnlyList<DeploymentMetricPoint> metrics,
-        AnalysisContextBudget budget, bool metricsUnavailable, CancellationToken token = default)
+        AnalysisContextBudget budget, bool metricsUnavailable, CancellationToken token = default,
+        AssessmentKind kind = AssessmentKind.FailureDiagnosis, object? metadata = null)
     {
         token.ThrowIfCancellationRequested();
         var rows = history.Events.Take(MaximumCandidates).Where(row => row.OrderId > 0)
@@ -27,18 +29,27 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                     : $"order:{row.OrderId.ToString(CultureInfo.InvariantCulture)}")
             .Select(group => redactor.RedactTerminal(group.OrderByDescending(row => row.OrderId).First()))
             .Where(row => !string.IsNullOrWhiteSpace(row.Message)).ToArray();
-        var groups = rows.GroupBy(row => (row.Message, row.Severity, row.Stream))
+        var groups = rows.GroupBy(row => (row.Message, row.Severity, row.Stream, row.TerminalChannel))
             .Select(group => (
                 Row: group.OrderByDescending(row => row.TimestampUtc).ThenByDescending(row => row.OrderId).First(),
                 Count: group.Count(), First: group.Min(row => row.TimestampUtc),
                 Last: group.Max(row => row.TimestampUtc)))
-            .OrderByDescending(group => Severity(group.Row)).ThenByDescending(group => Relevant(group.Row.Message))
+            .OrderByDescending(group => kind == AssessmentKind.FailureDiagnosis ? Severity(group.Row) : 0)
+            .ThenByDescending(group => kind == AssessmentKind.FailureDiagnosis && Relevant(group.Row.Message))
             .ThenByDescending(group => group.Row.TimestampUtc).ThenByDescending(group => group.Row.OrderId).ToArray();
+        if (kind != AssessmentKind.FailureDiagnosis)
+            // Give each selected channel one representative before allocating the remaining budget by recency.
+            groups = groups.GroupBy(g => g.Row.TerminalChannel).Select(g => g.First())
+                .Concat(groups.Where(g => g.Row.Severity is DeploymentDiagnosticSeverity.Warning
+                        or DeploymentDiagnosticSeverity.Error or DeploymentDiagnosticSeverity.Critical)
+                    .GroupBy(g => g.Row.TerminalChannel).Select(g => g.First()))
+                .Concat(groups).Distinct().ToArray();
         var selected = new List<Line>();
         var signals = new List<MetricSignal>();
         var traces = new List<TraceSignal>();
-        var metricGroups = metrics.Take(1000).Where(SafeMetric).GroupBy(point => (point.Name, point.Unit)).Take(3)
-            .ToArray();
+        var allMetricGroups = metrics.Take(20000).Where(SafeMetric)
+            .GroupBy(point => (point.Container, point.Name, point.Unit)).ToArray();
+        var metricGroups = allMetricGroups.Take(24).ToArray();
         var availableTraces = rows.Where(row => ValidTrace(row.TraceId)).Select(row => row.TraceId).Distinct().Count();
         var logBudget = metricGroups.Length > 0 || availableTraces > 0
             ? budget with
@@ -54,7 +65,8 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         {
             return JsonSerializer.Serialize(new
             {
-                schemaVersion = 1,
+                schemaVersion = 2,
+                deployment = SafeMetadata(metadata),
                 coverage = new
                 {
                     candidateEvents = rows.Length,
@@ -64,7 +76,8 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                     earlierOmitted = history.EarlierOmitted || history.Events.Count > MaximumCandidates,
                     historyUnavailable = history.Availability is not null,
                     metricsUnavailable,
-                    metricGroupsOmitted = metricGroups.Length - signals.Count,
+                    metricGroupsOmitted = allMetricGroups.Length - signals.Count,
+                    metricCandidatesTruncated = metrics.Count > 20000,
                     traceGroupsOmitted = availableTraces - traces.Count
                 },
                 records = selected.OrderBy(line => line.timestamp).ThenBy(line => line.order).ToArray(),
@@ -80,7 +93,8 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
             var message = redactor.RedactText(row.Message, 1024);
             var line = new Line(Reference(row), row.OrderId, row.TimestampUtc, row.Sequence,
                 row.Severity is { } severity && Enum.IsDefined(severity) ? Enum.GetName(severity)! : "Unknown",
-                message, group.Count, group.First, group.Last);
+                message, group.Count, group.First, group.Last,
+                "channel-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(row.TerminalChannel)))[..12]);
             selected.Add(line);
             // Shorten only message data, keeping the evidence identity and coverage document intact.
             while (!logBudget.Fits(Render()) && message.Length > 64)
@@ -98,9 +112,16 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
             var points = group.ToArray();
             var first = points.Min(point => point.Timestamp);
             var last = points.Max(point => point.Timestamp);
-            signals.Add(new MetricSignal($"metric:{group.Key.Name}:{first.UtcTicks}:{last.UtcTicks}", group.Key.Name,
+            var containerId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(group.Key.Container)))[..12];
+            signals.Add(new MetricSignal($"metric:{group.Key.Name}:{containerId}:{first.UtcTicks}:{last.UtcTicks}",
+                group.Key.Name,
                 group.Key.Unit,
-                first, last, points.Length, points.Min(point => point.Minimum), points.Max(point => point.Maximum)));
+                first, last, points.Length, points.Min(point => point.Minimum), points.Max(point => point.Maximum),
+                "container-" + containerId, points.Average(point => point.Average),
+                points.Length > 1
+                    ? points.OrderBy(point => point.Timestamp).Last().Average -
+                      points.OrderBy(point => point.Timestamp).First().Average
+                    : null));
             if (!budget.Fits(Render())) signals.RemoveAt(signals.Count - 1);
         }
 
@@ -160,6 +181,49 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         return trace is { Length: 32 } && trace.Any(character => character != '0') && trace.All(Uri.IsHexDigit);
     }
 
+    /// <summary>Bounds configuration metadata and masks it without truncating a JSON document.</summary>
+    private JsonElement? SafeMetadata(object? metadata)
+    {
+        if (metadata is null) return null;
+        var json = JsonSerializer.Serialize(metadata);
+        if (json.Length > 4096) return JsonSerializer.SerializeToElement(new { configurationOmitted = true });
+        using var document = JsonDocument.Parse(json);
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            WriteMetadata(writer, document.RootElement);
+        }
+
+        return JsonSerializer.Deserialize<JsonElement>(buffer.ToArray());
+    }
+
+    /// <summary>Masks values before JSON encoding so header-like prose cannot corrupt the surrounding document.</summary>
+    private void WriteMetadata(Utf8JsonWriter writer, JsonElement value)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in value.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteMetadata(writer, property.Value);
+                }
+
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in value.EnumerateArray()) WriteMetadata(writer, item);
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                writer.WriteStringValue(redactor.RedactText(value.GetString()!, 256));
+                break;
+            default: value.WriteTo(writer); break;
+        }
+    }
+
     /// <summary>Bounded evidence group retaining the representative actual event and window timestamps.</summary>
     private sealed record Line(
         string reference,
@@ -170,7 +234,8 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         string message,
         int occurrences,
         DateTimeOffset? firstTimestamp,
-        DateTimeOffset? lastTimestamp);
+        DateTimeOffset? lastTimestamp,
+        string channel);
 
     /// <summary>Range over returned aggregate points; does not fabricate individual samples or causal conclusions.</summary>
     private sealed record MetricSignal(
@@ -181,7 +246,10 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         DateTimeOffset lastTimestamp,
         int returnedPoints,
         double minimum,
-        double maximum);
+        double maximum,
+        string container,
+        double average,
+        double? changeAcrossReturnedIntervals);
 
     /// <summary>Correlation observed in selected diagnostics, not a fetched span or error-status claim.</summary>
     private sealed record TraceSignal(string reference, int selectedEvents);

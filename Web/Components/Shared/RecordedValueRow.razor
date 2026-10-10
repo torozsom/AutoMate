@@ -1,0 +1,55 @@
+@inject IJSRuntime JS
+<tr>
+    <th scope="row">@Label</th>
+    <td>
+        <div class="recorded-value"><span>@(string.IsNullOrWhiteSpace(Value) ? "Not recorded" : Value)</span>
+            @if (!string.IsNullOrWhiteSpace(Value) && Copyable)
+            {
+                <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="@($"Copy {Label}")"
+                        @onclick="CopyAsync">@(_copied ? "Copied" : "Copy")</button>
+            }
+        </div>
+        @if (_failed)
+        {
+            <small role="status">Clipboard unavailable; select and copy the value.</small>
+        }
+    </td>
+</tr>
+
+@code {
+
+    /// <summary>Recorded field label.</summary>
+    [Parameter]
+    public string Label { get; set; } = "";
+
+    /// <summary>Non-secret recorded metadata.</summary>
+    [Parameter]
+    public string? Value { get; set; }
+
+    /// <summary>Long artifacts can be copied without truncating their displayed values.</summary>
+    [Parameter]
+    public bool Copyable { get; set; }
+
+    /// <summary>Clipboard feedback.</summary>
+    private bool _copied;
+
+    /// <summary>Clipboard availability guidance.</summary>
+    private bool _failed;
+
+    /// <summary>Copies explicit metadata through the local browser API.</summary>
+    private async Task CopyAsync()
+    {
+        try
+        {
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/console-ui.js");
+            await module.InvokeVoidAsync("copy", Value);
+            _copied = true;
+            _failed = false;
+        }
+        catch (JSException)
+        {
+            _failed = true;
+        }
+    }
+
+}

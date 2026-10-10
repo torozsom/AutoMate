@@ -12,7 +12,8 @@ public sealed class DeploymentHistoryService(
     DeploymentTelemetryStore store,
     IDeploymentMetricQuery metrics,
     IOptions<TelemetryStorageOptions> options,
-    ITelemetryGateway? gateway = null) : IDeploymentHistoryService
+    ITelemetryGateway? gateway = null,
+    IDeploymentArchive? archive = null) : IDeploymentHistoryService
 {
     public async Task<TelemetryLogPage> ReadLogsV2Async(Guid user, Guid project, Guid deployment, string? cursor,
         bool backwards, int limit, string? search = null, CancellationToken token = default)
@@ -62,12 +63,23 @@ public sealed class DeploymentHistoryService(
     {
         await AuthorizeAsync(userId, projectId, deploymentId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        if (end <= start || end - start > TimeSpan.FromDays(30))
-            throw new ArgumentException("Metric range must be positive and at most 30 days.");
-        start = start < now.AddDays(-30) ? now.AddDays(-30) : start;
+        if (end <= start)
+            throw new ArgumentException("Metric range must be positive.");
+        if (archive is null) start = start < now.AddDays(-30) ? now.AddDays(-30) : start;
         end = end > now ? now : end;
         if (end <= start) return new DeploymentMetricHistory([], "Metric history has expired.");
         maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
+        if (archive is not null && options.Value.DiskGateway && (!options.Value.ManagedService ||
+                                                                 await db.Applications.AnyAsync(
+                                                                     p => p.Id == projectId &&
+                                                                          p.ManagedTelemetryConsent,
+                                                                     cancellationToken)))
+        {
+            var saved = await archive.ReadMetricsAsync(userId, projectId, deploymentId, start, end, maximumPoints,
+                cancellationToken);
+            if (saved.Count > 0) return new DeploymentMetricHistory(saved);
+        }
+
         IReadOnlyList<DeploymentMetricPoint> remote = [];
         string? availability = null;
         var specialized = options.Value.Specialized && (!options.Value.ManagedService ||

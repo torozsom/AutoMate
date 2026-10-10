@@ -23,6 +23,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A thread-safe dictionary containing the deployment states of projects.
     private readonly ConcurrentDictionary<Guid, bool> _deployingStates = new();
 
+    /// <summary>Read lifetime cancelled on navigation.</summary>
+    private readonly CancellationTokenSource _lifetime = new();
+
     /// The list of apps associated with the authenticated user, fetched from the database.
     private List<Domain.Entities.Application>? _apps;
 
@@ -44,6 +47,12 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// A message to display global success notifications, such as successful deployments.
     private string? _globalSuccessMessage;
 
+    /// <summary>Bounded inventory projection.</summary>
+    private ProjectInventoryPage? _inventory;
+
+    /// <summary>Fences superseded inventory replies.</summary>
+    private int _inventoryVersion;
+
     /// A flag indicating whether the current user has connected an Azure account.
     private bool _isAzureConnected;
 
@@ -56,14 +65,35 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>Project associated with the pending cloud retry key.</summary>
     private Guid _pendingCloudProjectId;
 
+    /// <summary>Serializes deployment preparation before queue admission.</summary>
+    private Guid? _preparingProject;
+
+    /// <summary>Project awaiting a concrete removal confirmation.</summary>
+    private Guid? _removeProject;
+
+    /// <summary>Editable search text.</summary>
+    private string _search = "";
+
     /// The remote application currently selected for cloud deployment.
     private Domain.Entities.Application? _selectedCloudApp;
 
     /// The file system path of the project currently selected for deployment configuration.
     private string? _selectedProjectPath;
 
+    /// <summary>Connection dialog state.</summary>
+    private bool _showAzureConnect;
+
     /// A flag indicating whether the deployment configuration modal is currently visible to the user.
     private bool _showConfigModal;
+
+    /// <summary>Editable sort selection.</summary>
+    private string _sort = "activity";
+
+    /// <summary>Editable source filter.</summary>
+    private string _source = "";
+
+    /// <summary>Editable latest runtime filter.</summary>
+    private string _status = "";
 
     /// <summary>Records fixed safe outcomes for asynchronous UI notification failures.</summary>
     [Inject]
@@ -113,13 +143,46 @@ public partial class Dashboard : ComponentBase, IDisposable
     [SupplyParameterFromQuery(Name = "azure_error")]
     public string? AzureConnectionError { get; set; }
 
+    /// <summary>Independent EF scopes prevent overlapping circuit read operations.</summary>
+    [Inject]
+    private IServiceScopeFactory ServiceScopes { get; set; } = null!;
+
+    /// <summary>URL-backed search.</summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Search { get; set; }
+
+    /// <summary>URL-backed source filter.</summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "source")]
+    public string? Source { get; set; }
+
+    /// <summary>URL-backed status filter.</summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    /// <summary>URL-backed ordering.</summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "sort")]
+    public string? Sort { get; set; }
+
+    /// <summary>URL-backed page number.</summary>
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "page")]
+    public int? Page { get; set; }
+
 
     /// <summary>
     ///     Disposes of the component by unsubscribing from the deployment status change notifications.
     /// </summary>
     public void Dispose()
     {
+        if (_disposed) return;
         _disposed = true;
+        _lifetime.Cancel();
+        _lifetime.Dispose();
+        if (AuthStateProvider is not null) AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationChanged;
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
         GC.SuppressFinalize(this);
@@ -137,6 +200,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
+        AuthStateProvider.AuthenticationStateChanged += OnAuthenticationChanged;
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged += OnQueueStateChanged;
 
@@ -145,7 +209,7 @@ public partial class Dashboard : ComponentBase, IDisposable
         if (_currentUserId != Guid.Empty)
         {
             _isAzureConnected = await UserService.HasAzureConnectionAsync(_currentUserId);
-            _apps = await ApplicationService.GetUserAppsAsync(_currentUserId);
+            await RefreshAppsAsync();
         }
 
         if (!string.IsNullOrWhiteSpace(AzureConnectionError))
@@ -195,7 +259,16 @@ public partial class Dashboard : ComponentBase, IDisposable
     private async Task ApplyStatusChangedAsync(Guid appId, DeploymentStatus status)
     {
         var app = _apps?.FirstOrDefault(p => p.Id == appId);
-        if (app is null) return;
+        if (app is null)
+        {
+            if (_inventory?.Items.Any(p => p.Id == appId) == true)
+            {
+                await RefreshAppsAsync();
+                StateHasChanged();
+            }
+
+            return;
+        }
 
         var latestDeployment = app.CsProjects
             .SelectMany(c => c.Deployments)
@@ -203,12 +276,13 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         if (latestDeployment is not null)
             latestDeployment.Status = status;
-        else
+        else if (_inventory is null)
             await RefreshAppsAsync();
 
         if (status is DeploymentStatus.Running or DeploymentStatus.Failed or DeploymentStatus.Stopped)
             SetDeployingState(appId, false);
 
+        if (_inventory is not null) await RefreshAppsAsync();
         StateHasChanged();
     }
 
@@ -218,10 +292,31 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     private async Task RefreshAppsAsync()
     {
-        if (_currentUserId != Guid.Empty)
+        if (_currentUserId == Guid.Empty || _disposed) return;
+        var version = ++_inventoryVersion;
+        _isLoading = true;
+        try
         {
-            _apps = await ApplicationService.GetUserAppsAsync(_currentUserId);
-            await InvokeAsync(StateHasChanged);
+            using var scope = ServiceScopes.CreateScope();
+            var request = new ProjectInventoryRequest(_search,
+                Enum.TryParse<SourceType>(_source, out var source) && Enum.IsDefined(source) ? source : null,
+                Enum.TryParse<DeploymentStatus>(_status, out var status) && Enum.IsDefined(status) ? status : null,
+                _sort, Page ?? 1);
+            var result = await scope.ServiceProvider.GetRequiredService<IWorkspaceQuery>()
+                .ProjectsAsync(_currentUserId, request, _lifetime.Token);
+            if (!_disposed && version == _inventoryVersion) _inventory = result;
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
+        catch (Exception)
+        {
+            if (!_disposed && version == _inventoryVersion)
+                _globalErrorMessage = "Projects could not be loaded. Refresh to try again.";
+        }
+        finally
+        {
+            if (!_disposed && version == _inventoryVersion) _isLoading = false;
         }
     }
 
@@ -239,10 +334,15 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         var success = await ApplicationService.DeleteAppAsync(appId, _currentUserId);
 
-        if (success && _apps is not null)
-            _apps.RemoveAll(p => p.Id == appId);
+        if (success)
+        {
+            _apps?.RemoveAll(p => p.Id == appId);
+            await RefreshAppsAsync();
+        }
         else
+        {
             _globalErrorMessage = "Failed to remove the project. It might have been already deleted.";
+        }
     }
 
 
@@ -325,6 +425,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </returns>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
+        var owner = _currentUserId;
         var cloudApp = _selectedCloudApp;
         HideConfigModal();
         ClearMessages();
@@ -343,7 +444,8 @@ public partial class Dashboard : ComponentBase, IDisposable
                 return;
             }
 
-            var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(_currentUserId);
+            var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(owner);
+            if (_disposed || owner != _currentUserId) return;
             if (azureCredentials == null)
             {
                 _globalErrorMessage = "Connect your Azure account before deploying GitHub projects to the cloud.";
@@ -351,6 +453,7 @@ public partial class Dashboard : ComponentBase, IDisposable
             }
 
             var userDetails = await GetCurrentUserDetailsAsync();
+            if (_disposed || owner != _currentUserId || userDetails.UserId != owner) return;
             if (string.IsNullOrWhiteSpace(userDetails.AccessToken))
             {
                 _globalErrorMessage = "Connect your GitHub account before deploying GitHub projects to the cloud.";
@@ -371,7 +474,7 @@ public partial class Dashboard : ComponentBase, IDisposable
 
                     _pendingCloudIdempotencyKey ??= Guid.NewGuid().ToString("N");
                     await CloudDeploymentRuns.StartAsync(new CloudDeploymentStart(
-                        _currentUserId, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
+                        owner, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
                         repository.Owner, repository.Name, userDetails.AccessToken,
                         finalConfig, CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
                         cloudApp.Name, "."));
@@ -381,7 +484,7 @@ public partial class Dashboard : ComponentBase, IDisposable
                 {
                     await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
                     {
-                        RequestingUserId = _currentUserId,
+                        RequestingUserId = owner,
                         Config = finalConfig,
                         Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
                         CsProjectName = cloudApp.Name,
@@ -394,6 +497,7 @@ public partial class Dashboard : ComponentBase, IDisposable
                     }));
                 }
 
+                if (_disposed || owner != _currentUserId) return;
                 _globalSuccessMessage =
                     $"Cloud deployment workflow for '{finalConfig.ProjectName}' has been queued.";
             }
@@ -404,6 +508,7 @@ public partial class Dashboard : ComponentBase, IDisposable
                 return;
             }
 
+            if (_disposed || owner != _currentUserId) return;
             await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
             return;
         }
@@ -413,6 +518,7 @@ public partial class Dashboard : ComponentBase, IDisposable
         try
         {
             await DeploymentJobQueue.EnqueueAsync(new LocalDeploymentJob(finalConfig));
+            if (_disposed || owner != _currentUserId) return;
             _globalSuccessMessage = $"The '{finalConfig.ProjectName}' deployment has been queued.";
         }
         catch (Exception ex)
@@ -425,6 +531,7 @@ public partial class Dashboard : ComponentBase, IDisposable
             return;
         }
 
+        if (_disposed || owner != _currentUserId) return;
         await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
     }
 
@@ -454,13 +561,14 @@ public partial class Dashboard : ComponentBase, IDisposable
     private bool IsDeploying(Guid projectId)
     {
         var state = DeploymentJobQueue.GetProjectState(projectId);
-        return _deployingStates.GetValueOrDefault(projectId, false) ||
+        return _preparingProject == projectId || _deployingStates.GetValueOrDefault(projectId, false) ||
                state.QueuedDeployments > 0 || state.ActiveDeployments > 0;
     }
 
     private void OnQueueStateChanged(Guid projectId)
     {
-        if (_apps?.Any(app => app.Id == projectId) == true) _ = InvokeAsync(StateHasChanged);
+        if (!_disposed && (_inventory?.Items.Any(app => app.Id == projectId) == true ||
+                           _apps?.Any(app => app.Id == projectId) == true)) _ = InvokeAsync(StateHasChanged);
     }
 
 
@@ -560,5 +668,137 @@ public partial class Dashboard : ComponentBase, IDisposable
     private void NavigateToProject(Guid appId)
     {
         NavigationManager.NavigateTo($"/project/{appId}");
+    }
+
+    /// <inheritdoc />
+    protected override async Task OnParametersSetAsync()
+    {
+        _search = Search ?? "";
+        _source = Source ?? "";
+        _status = Status ?? "";
+        _sort = Sort is "name" or "saved" ? Sort : "activity";
+        await RefreshAppsAsync();
+    }
+
+    /// <summary>Encodes a stable filter URL for pagination and browser history.</summary>
+    private string InventoryUrl(int page)
+    {
+        return
+            $"/dashboard?q={Uri.EscapeDataString(_search)}&source={Uri.EscapeDataString(_source)}&status={Uri.EscapeDataString(_status)}&sort={_sort}&page={Math.Max(1, page)}";
+    }
+
+    /// <summary>Applies filters through navigation and resets to the first page.</summary>
+    private void ApplyFilters()
+    {
+        NavigationManager.NavigateTo(InventoryUrl(1));
+    }
+
+    /// <summary>Loads only the selected owned entity graph when an action needs it.</summary>
+    private async Task DeployInventoryAsync(Guid id)
+    {
+        if (_disposed || _preparingProject is not null) return;
+        _preparingProject = id;
+        var owner = _currentUserId;
+        try
+        {
+            using var scope = ServiceScopes.CreateScope();
+            var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
+                .GetAppByIdAsync(id, owner, _lifetime.Token);
+            if (_disposed || owner != _currentUserId) return;
+            if (app is null)
+            {
+                _globalErrorMessage = "This project is no longer available.";
+                return;
+            }
+
+            _apps = [app];
+            await DeployAppAsync(app);
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
+        catch (Exception)
+        {
+            if (!_disposed) _globalErrorMessage = "Deployment settings could not be prepared. Try again shortly.";
+        }
+        finally
+        {
+            _preparingProject = null;
+        }
+    }
+
+    /// <summary>Opens the project removal confirmation.</summary>
+    private void ConfirmRemoval(Guid id)
+    {
+        _removeProject = id;
+    }
+
+    /// <summary>Dismisses project removal.</summary>
+    private void CancelRemoval()
+    {
+        _removeProject = null;
+    }
+
+    /// <summary>Removes the explicitly selected owned project and reloads its page.</summary>
+    private async Task RemoveConfirmedAsync(Guid id)
+    {
+        _removeProject = null;
+        await DeleteAppAsync(id);
+    }
+
+    /// <summary>Dismisses the connection dialog.</summary>
+    private void CloseAzureDialog()
+    {
+        _showAzureConnect = false;
+    }
+
+    /// <summary>Clears project state when authentication changes on a still-open circuit.</summary>
+    private void OnAuthenticationChanged(Task<AuthenticationState> state)
+    {
+        _ = RebindOwnerAsync();
+    }
+
+    /// <summary>Fences old-owner replies and closes configuration before binding the new account.</summary>
+    private async Task RebindOwnerAsync()
+    {
+        if (_disposed) return;
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                if (_disposed) return;
+                var version = ++_inventoryVersion;
+                _currentUserId = Guid.Empty;
+                _inventory = null;
+                _apps = null;
+                _isAzureConnected = false;
+                _removeProject = null;
+                _showAzureConnect = false;
+                _pendingCloudIdempotencyKey = null;
+                _pendingCloudProjectId = Guid.Empty;
+                _deployingStates.Clear();
+                HideConfigModal();
+                ClearMessages();
+                StateHasChanged();
+                using var scope = ServiceScopes.CreateScope();
+                var users = scope.ServiceProvider.GetRequiredService<IUserService>();
+                var owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider, users,
+                    _lifetime.Token);
+                var connected = owner != Guid.Empty && await users.HasAzureConnectionAsync(owner, _lifetime.Token);
+                if (_disposed || version != _inventoryVersion) return;
+                _currentUserId = owner;
+                _isAzureConnected = connected;
+                await RefreshAppsAsync();
+                if (!_disposed) StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
+        catch (Exception error)
+        {
+            if (!_disposed)
+                Logger.LogWarning("Workspace identity refresh failed: {FailureType}.", error.GetType().Name);
+        }
     }
 }

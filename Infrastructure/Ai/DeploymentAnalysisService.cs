@@ -1,6 +1,7 @@
 using System.Data;
 using System.Text.Json;
 using Application.Abstractions.Ai;
+using Application.Abstractions.Diagnostics;
 using Application.Ai;
 using Application.Diagnostics;
 using Domain.Entities;
@@ -20,11 +21,67 @@ public sealed class DeploymentAnalysisService(
     IAnalysisResultValidator validator,
     TimeProvider clock,
     IAnalysisEgressAuthorizer egress,
-    ILogger<DeploymentAnalysisService> logger)
+    ILogger<DeploymentAnalysisService> logger,
+    IDeploymentArchive? archive = null)
     : IDeploymentAnalysisService
 {
     /// <summary>Bounds receipt aliases per UTC project day independently of the smaller admitted-analysis quota.</summary>
     internal const int MaximumDailyRequestReceipts = 1_000;
+
+    /// <inheritdoc />
+    public Task<DeploymentAnalysisRequestResult> RequestManualAsync(Guid ownerId, Guid deploymentId, Guid requestId,
+        AssessmentSelection selection, CancellationToken token = default)
+    {
+        return AdmitAsync(ownerId, deploymentId, requestId, AiAnalysisTrigger.Manual, token, selection);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> SavePreferencesAsync(Guid ownerId, Guid deploymentId, AssessmentSelection selection,
+        CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+        selection = selection.Normalize();
+        if (selection.End > clock.GetUtcNow())
+            throw new ArgumentException("Custom UTC range cannot end in the future.");
+        var json = selection.CanonicalJson();
+        return await dbContext.Deployments
+            .Where(d => d.Id == deploymentId && d.CsProject!.Application.UserId == ownerId)
+            .ExecuteUpdateAsync(update => update.SetProperty(d => d.AiAssessmentPreferencesJson, json), token) > 0;
+    }
+
+    /// <inheritdoc />
+    public async Task<AssessmentPreferences?> GetPreferencesAsync(Guid ownerId, Guid deploymentId,
+        CancellationToken token = default)
+    {
+        var deployment = await dbContext.Deployments.AsNoTracking().Where(d => d.Id == deploymentId &&
+                                                                               d.CsProject!.Application.UserId ==
+                                                                               ownerId).Select(d => new
+        {
+            d.Status, d.CreatedAt, d.UpdatedAt,
+            d.AiAssessmentPreferencesJson, d.ConfigurationSnapshotJson, Project = d.CsProject!.AppId
+        }).SingleOrDefaultAsync(token);
+        if (deployment is null) return null;
+        var now = clock.GetUtcNow();
+        var selection = AssessmentSelection.Read(deployment.AiAssessmentPreferencesJson);
+        var page = await AssessmentEvidenceReader.ReadAsync(dbContext, archive,
+            new ArchiveAssessmentQuery(ownerId, deployment.Project, deploymentId, new AssessmentSelection(),
+                new AssessmentWindow(now.AddDays(-365), now, false), CatalogOnly: true), token);
+        var unsupported = AssessmentSources.None;
+        if (deployment.ConfigurationSnapshotJson is { } snapshotJson)
+            try
+            {
+                var snapshot = JsonSerializer.Deserialize<DeploymentConfigurationSnapshot>(snapshotJson);
+                if (snapshot?.Provider == "Docker Compose") unsupported |= AssessmentSources.Azure;
+                if (snapshot is not null && snapshot.SourceUrl is null) unsupported |= AssessmentSources.GitHub;
+            }
+            catch (JsonException)
+            {
+            }
+
+        foreach (var channel in page.Channels) unsupported &= ~channel.Source;
+        return new AssessmentPreferences(selection, page.Channels, page.MetricContainers, deployment.Status,
+            page.Availability, unsupported);
+    }
 
     /// <inheritdoc />
     public Task<DeploymentAnalysisRequestResult> RequestManualAsync(Guid ownerId, Guid deploymentId,
@@ -47,10 +104,24 @@ public sealed class DeploymentAnalysisService(
         var now = clock.GetUtcNow();
         var analysis = await dbContext.AiDeploymentAnalyses.AsNoTracking()
             .Where(item =>
-                item.DeploymentId == deploymentId && item.ExpiresAt > now &&
+                item.DeploymentId == deploymentId && (item.ExpiresAt > now || item.RetainUntilDeleted) &&
                 item.Deployment.CsProject!.Application!.UserId == ownerId)
             .OrderByDescending(item => item.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         return analysis is null ? null : ToView(analysis);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<DeploymentAnalysisView>> ListAsync(Guid ownerId, Guid deploymentId, int offset = 0,
+        int limit = 20, CancellationToken cancellationToken = default)
+    {
+        var now = clock.GetUtcNow();
+        var results = await dbContext.AiDeploymentAnalyses.AsNoTracking().Where(item =>
+                item.DeploymentId == deploymentId &&
+                item.Deployment.CsProject!.Application.UserId == ownerId &&
+                (item.RetainUntilDeleted || item.ExpiresAt > now))
+            .OrderByDescending(item => item.CreatedAt).ThenByDescending(item => item.Id)
+            .Skip(Math.Max(0, offset)).Take(Math.Clamp(limit, 1, 50)).ToArrayAsync(cancellationToken);
+        return results.Select(ToView).ToArray();
     }
 
     /// <inheritdoc />
@@ -128,7 +199,7 @@ public sealed class DeploymentAnalysisService(
 
     /// <summary>Serializes short admission transactions per project; no context/provider call occurs while the guard is held.</summary>
     private async Task<DeploymentAnalysisRequestResult> AdmitAsync(Guid ownerId, Guid deploymentId, Guid? requestId,
-        AiAnalysisTrigger trigger, CancellationToken token)
+        AiAnalysisTrigger trigger, CancellationToken token, AssessmentSelection? requested = null)
     {
         if (requestId == Guid.Empty)
             return new DeploymentAnalysisRequestResult(false, "A nonempty analysis request ID is required.");
@@ -145,6 +216,11 @@ public sealed class DeploymentAnalysisService(
         await using var transaction = dbContext.Database.IsNpgsql()
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, token)
             : await dbContext.Database.BeginTransactionAsync(token);
+        // Owner guard precedes the project guard so cross-project quotas cannot race across instances.
+        if (await dbContext.Users.Where(item => item.Id == ownerId)
+                .ExecuteUpdateAsync(update => update.SetProperty(item => item.Username, item => item.Username),
+                    token) == 0)
+            return new DeploymentAnalysisRequestResult(false, "Deployment not found.");
         // The no-op UPDATE obtains a database row lock without changing project configuration or audit timestamps.
         // All admissions for this project observe committed receipts after acquiring the same guard (Read Committed).
         if (await dbContext.CsProjects.Where(item => item.Id == scope.CsProjectId && item.Application.UserId == ownerId)
@@ -162,11 +238,28 @@ public sealed class DeploymentAnalysisService(
             .Select(item => new
             {
                 item.Status,
+                item.AiAssessmentPreferencesJson,
                 Consent = item.CsProject!.Configuration != null &&
                           item.CsProject.Configuration.AiDiagnosticEgressConsented
             })
             .FirstOrDefaultAsync(token);
         if (deployment is null) return new DeploymentAnalysisRequestResult(false, "Deployment not found.");
+        string selectionJson;
+        try
+        {
+            var selection = requested ?? AssessmentSelection.Read(deployment.AiAssessmentPreferencesJson);
+            if (trigger == AiAnalysisTrigger.DeploymentFailed)
+                selection = selection with { Kind = AssessmentKind.Automatic };
+            selectionJson = selection.CanonicalJson();
+            if (selection.Range == AssessmentRange.Custom && selection.End > clock.GetUtcNow())
+                return new DeploymentAnalysisRequestResult(false, "Choose a time range ending in the past.");
+        }
+        catch (Exception error) when (error is ArgumentException or JsonException)
+        {
+            return new DeploymentAnalysisRequestResult(false,
+                "Choose valid assessment sources and a time range of at most 365 days.");
+        }
+
         if (trigger == AiAnalysisTrigger.DeploymentFailed && deployment.Status != DeploymentStatus.Failed)
             return new DeploymentAnalysisRequestResult(false, "The deployment is no longer failed.");
         if (!deployment.Consent)
@@ -183,6 +276,9 @@ public sealed class DeploymentAnalysisService(
             .FirstOrDefaultAsync(item => item.RequestKey == key, token);
         if (receipt is not null)
         {
+            if (AssessmentSelection.Read(receipt.RequestedSelectionJson).CanonicalJson() != selectionJson)
+                return new DeploymentAnalysisRequestResult(false,
+                    "This request ID was already used with different assessment choices.", Conflict: true);
             var prior = await dbContext.AiDeploymentAnalyses.AsNoTracking().FirstOrDefaultAsync(item =>
                 item.Id == receipt.AnalysisId &&
                 item.DeploymentId == deploymentId && item.ExpiresAt > now &&
@@ -196,12 +292,29 @@ public sealed class DeploymentAnalysisService(
                     "This request was already processed and its result is no longer available.");
         }
 
+        var retained = await dbContext.AiDeploymentAnalyses.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.IdempotencyKey == key && item.RetainUntilDeleted &&
+                                         item.DeploymentId == deploymentId &&
+                                         item.Deployment!.CsProject!.Application.UserId == ownerId, token);
+        if (retained is not null &&
+            AssessmentSelection.Read(retained.RequestedSelectionJson).CanonicalJson() != selectionJson)
+            return new DeploymentAnalysisRequestResult(false,
+                "This request ID was already used with different assessment choices.", Conflict: true);
+        if (retained is not null)
+            return new DeploymentAnalysisRequestResult(approved && retained.Status != AiAnalysisStatus.Skipped,
+                "This analysis request was already processed.", ToView(retained));
+
         var existing = !approved
             ? null
             : await dbContext.AiDeploymentAnalyses.AsNoTracking().Where(item => item.DeploymentId == deploymentId &&
                     item.ExpiresAt > now &&
                     (item.Status == AiAnalysisStatus.Queued || item.Status == AiAnalysisStatus.Running))
                 .OrderByDescending(item => item.CreatedAt).FirstOrDefaultAsync(token);
+        if (existing is not null &&
+            AssessmentSelection.Read(existing.RequestedSelectionJson).CanonicalJson() != selectionJson)
+            return new DeploymentAnalysisRequestResult(false,
+                "A different assessment is already in progress. Cancel it or wait before changing the request.",
+                Conflict: true);
         if (existing is not null && requestId is null)
             return new DeploymentAnalysisRequestResult(true, "An analysis is already in progress.", ToView(existing));
         if (await dbContext.AiAnalysisRequests.CountAsync(
@@ -215,6 +328,8 @@ public sealed class DeploymentAnalysisService(
                 item.AdmissionDay == day && item.ConsumesQuota, token) >=
             Math.Clamp(settings.DailyProjectLimit, 0, 1_000))
             skip = AnalysisSkipReason.ProjectQuotaExceeded;
+        if (skip is null && existing is null)
+            skip = await AnalysisBudgetGuard.AdmissionReasonAsync(dbContext, ownerId, settings, now, token);
         if (failure is not null && await dbContext.FailedDeploymentAnalysisEvents
                 .Where(item => item.DeploymentId == deploymentId && item.CompletedAt == null)
                 .ExecuteUpdateAsync(update => update.SetProperty(item => item.CompletedAt, now), token) == 0)
@@ -222,8 +337,10 @@ public sealed class DeploymentAnalysisService(
         var analysis = existing ?? new AiDeploymentAnalysis
         {
             DeploymentId = deploymentId,
+            RequestedSelectionJson = selectionJson,
             Trigger = trigger,
             Status = skip is null ? AiAnalysisStatus.Queued : AiAnalysisStatus.Skipped,
+            RetainUntilDeleted = true,
             Provider = skip is null ? settings.Provider ?? "unavailable" : "unavailable",
             Model = skip is null ? settings.Model : "unavailable",
             FailureCode = skip is { } reason ? AnalysisSkipPolicy.Code(reason) : null,
@@ -242,11 +359,24 @@ public sealed class DeploymentAnalysisService(
             DeploymentId = deploymentId,
             AnalysisId = analysis.Id,
             RequestKey = key,
+            RequestedSelectionJson = selectionJson,
             AdmissionDay = day,
             ConsumesQuota = work is not null,
             ExpiresAt = now.AddDays(90)
         };
         dbContext.AiAnalysisRequests.Add(newReceipt);
+        var usage = work is null
+            ? null
+            : new AiAnalysisBudgetEntry
+            {
+                Id = analysis.Id,
+                TenantId = ownerId,
+                AnalysisId = analysis.Id,
+                AccountingDay = day,
+                OccurredAt = now,
+                Currency = settings.BudgetCurrency
+            };
+        if (usage is not null) dbContext.AiAnalysisBudgetEntries.Add(usage);
         try
         {
             await dbContext.SaveChangesAsync(token);
@@ -256,9 +386,16 @@ public sealed class DeploymentAnalysisService(
         {
             // Remove only this admission's entities so a reused scoped context cannot later save a failed request.
             dbContext.Entry(newReceipt).State = EntityState.Detached;
+            if (usage is not null) dbContext.Entry(usage).State = EntityState.Detached;
             if (work is not null) dbContext.Entry(work).State = EntityState.Detached;
             if (admitted) dbContext.Entry(analysis).State = EntityState.Detached;
             throw;
+        }
+
+        if (skip is not null)
+        {
+            using var correlation = OperationalLog.BeginCorrelation(logger, deploymentId, analysis.Id);
+            OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Denied);
         }
 
         return new DeploymentAnalysisRequestResult(skip is null, skip is null
@@ -269,25 +406,48 @@ public sealed class DeploymentAnalysisService(
     /// <summary>Returns authorized result provenance and optional usage without exposing provider payloads.</summary>
     private DeploymentAnalysisView ToView(AiDeploymentAnalysis item)
     {
+        var view = ToResultView(item);
+        try
+        {
+            if (item.AssessmentProvenanceJson is not { Length: <= 131072 } json) return view;
+            var provenance = JsonSerializer.Deserialize<AssessmentProvenance>(json);
+            if (provenance is null || provenance.Window is null || !Enum.IsDefined(provenance.EffectiveKind) ||
+                !Enum.IsDefined(provenance.ObservedStatus) || !Enum.IsDefined(provenance.ObservedOutcome)) return view;
+            return view with { Assessment = provenance with { Requested = provenance.Requested.Normalize() } };
+        }
+        catch (Exception error) when (error is JsonException or ArgumentException or NullReferenceException)
+        {
+            return view;
+        }
+    }
+
+    /// <summary>Validates saved v1/v2 results before any UI receives provider-authored prose.</summary>
+    private DeploymentAnalysisView ToResultView(AiDeploymentAnalysis item)
+    {
         if (item.Status == AiAnalysisStatus.Cancelled)
             return new DeploymentAnalysisView(item.Id, item.DeploymentId, item.Status, item.Trigger,
                 "AI analysis was canceled by its owner.", [], [], null, item.CreatedAt, item.CompletedAt);
         if (item.Status == AiAnalysisStatus.Skipped)
             return new DeploymentAnalysisView(item.Id, item.DeploymentId, item.Status, item.Trigger,
                 AnalysisSkipPolicy.Message(item.FailureCode), [], [],
-                item.FailureCode is "unavailable" or "quota_exceeded" or "unsupported_data"
+                item.FailureCode is "unavailable" or "quota_exceeded" or "unsupported_data" or "tenant_quota_exceeded"
+                    or "rate_limited" or "concurrency_exceeded" or "budget_exceeded"
                     ? item.FailureCode
                     : "unavailable",
                 item.CreatedAt, item.CompletedAt);
         try
         {
             var completed = item.Status == AiAnalysisStatus.Completed;
+            if (item.AssessmentSectionsJson?.Length > 131072) throw new InvalidAnalysisResultException();
             var safe = validator.Validate(new LlmAnalysisResponse(item.Provider, item.Model,
                 completed ? item.Summary ?? string.Empty : "Analysis result unavailable.",
                 completed ? Deserialize(item.RecommendedStepsJson) : [],
                 completed ? Deserialize(item.EvidenceReferencesJson) : [],
                 item.InputTokens, item.OutputTokens, item.RequestedModel, item.ModelVersion, item.PromptVersion,
-                item.ResultSchemaVersion, item.EstimatedCost, item.CostCurrency));
+                item.ResultSchemaVersion, item.EstimatedCost, item.CostCurrency,
+                completed && item.AssessmentSectionsJson is not null
+                    ? JsonSerializer.Deserialize<AssessmentSections>(item.AssessmentSectionsJson)
+                    : null));
             return new DeploymentAnalysisView(item.Id, item.DeploymentId, item.Status,
                 item.Trigger, completed
                     ? safe.Summary
@@ -303,7 +463,7 @@ public sealed class DeploymentAnalysisService(
                     : null,
                 item.CreatedAt, item.CompletedAt, safe.Provider, safe.Model, safe.RequestedModel,
                 safe.ModelVersion, safe.PromptVersion, item.ResultSchemaVersion, safe.InputTokens, safe.OutputTokens,
-                safe.EstimatedCost, safe.CostCurrency);
+                safe.EstimatedCost, safe.CostCurrency, safe.Sections);
         }
         catch (Exception exception) when (exception is InvalidAnalysisResultException or JsonException)
         {

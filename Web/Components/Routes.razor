@@ -2,8 +2,19 @@
 <CascadingAuthenticationState>
     <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(NotFound)">
         <Found Context="routeData">
-            <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)"/>
+            <RouteView @key="RouteKey(routeData)" RouteData="routeData" DefaultLayout="typeof(MainLayout)"/>
             <FocusOnNavigate RouteData="routeData" Selector="h1"/>
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+
+    /// <summary>Dispose deployment presenters and scroll listeners when the selected project or deployment changes.</summary>
+    private static string RouteKey(RouteData data)
+    {
+        return data.PageType.FullName + ":" +
+               string.Join(":", data.RouteValues.OrderBy(value => value.Key).Select(value => value.Value));
+    }
+
+}

@@ -389,7 +389,6 @@ public sealed class DeploymentDiagnosticDispatcher(
             _ => throw new ArgumentOutOfRangeException()
         };
     }
-
 }
 
 /// <summary>Finite diagnostic metric dimensions, excluding identity and external strings.</summary>

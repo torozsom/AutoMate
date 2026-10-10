@@ -44,6 +44,7 @@ credentials moved from `.docker/.env` remain private in `deploy/.env`; only `.en
 - [SaaS setup](saas/README.md)
 - [Telemetry setup and retention operations](../docs/deployment-telemetry.md)
 - [Local Grafana dashboards and log search](telemetry/README.md)
+- [Owned disposable PostgreSQL verification](verification/README.md)
 
 Telemetry credentials, certificates, and working test artifacts remain in the ignored root `.telemetry/` directory.
 Its initialization script resolves that directory relative to its own location, independently of the shell's working

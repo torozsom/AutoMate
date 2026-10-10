@@ -1,4 +1,5 @@
 using Domain.Entities;
+using Domain.Enums;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -90,6 +91,9 @@ public class AutoMateDbContext(
     /// </summary>
     public DbSet<Deployment> Deployments => Set<Deployment>();
 
+    /// <summary>Archive deletion outbox without cascading owner/project foreign keys.</summary>
+    public DbSet<DeploymentArchiveCleanup> DeploymentArchiveCleanups => Set<DeploymentArchiveCleanup>();
+
     /// <summary>Durable SaaS cloud deployment requests.</summary>
     public DbSet<CloudDeploymentRun> CloudDeploymentRuns => Set<CloudDeploymentRun>();
 
@@ -117,6 +121,9 @@ public class AutoMateDbContext(
     public DbSet<FailedDeploymentAnalysisEvent> FailedDeploymentAnalysisEvents => Set<FailedDeploymentAnalysisEvent>();
 
     public DbSet<DeploymentAnalysisWorkItem> DeploymentAnalysisWorkItems => Set<DeploymentAnalysisWorkItem>();
+
+    /// <summary>Tenant-wide admission and non-refundable provider reservations, independent of result/project lifetime.</summary>
+    public DbSet<AiAnalysisBudgetEntry> AiAnalysisBudgetEntries => Set<AiAnalysisBudgetEntry>();
 
     /// <summary>Durable checkpoints for GitHub Actions diagnostic streaming.</summary>
     public DbSet<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints => Set<GitHubWorkflowCheckpoint>();
@@ -258,6 +265,17 @@ public class AutoMateDbContext(
     /// </summary>
     private void UpdateAuditFields()
     {
+        foreach (var entry in ChangeTracker.Entries<Deployment>()
+                     .Where(e => e.State is EntityState.Added or EntityState.Modified))
+            if (entry.Entity.Outcome == DeploymentOutcome.Unknown &&
+                entry.Entity.Status is DeploymentStatus.Running or DeploymentStatus.Failed)
+            {
+                entry.Entity.Outcome = entry.Entity.Status == DeploymentStatus.Running
+                    ? DeploymentOutcome.Succeeded
+                    : DeploymentOutcome.Failed;
+                entry.Entity.FinishedAt ??= DateTimeOffset.UtcNow;
+            }
+
         var entries = ChangeTracker.Entries<BaseEntity>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified);
 
@@ -379,6 +397,7 @@ public class AutoMateDbContext(
 
     private static void ConfigureDeploymentDiagnosticsAndAnalyses(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<DeploymentArchiveCleanup>().HasIndex(item => item.ProjectId).IsUnique();
         var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
         diagnostic.HasIndex(item => new { item.TenantId, item.OrderId });
         diagnostic.HasIndex(item => item.BufferExpiresAt);
@@ -430,6 +449,14 @@ public class AutoMateDbContext(
             .OnDelete(DeleteBehavior.Cascade);
 
         var work = modelBuilder.Entity<DeploymentAnalysisWorkItem>();
+        var budget = modelBuilder.Entity<AiAnalysisBudgetEntry>();
+        budget.HasIndex(item => new { item.TenantId, item.AccountingDay, item.IsProviderAttempt });
+        budget.HasIndex(item => new { item.TenantId, item.IsProviderAttempt, item.OccurredAt });
+        budget.HasIndex(item => item.OccurredAt);
+        budget.HasIndex(item => item.LeaseId).IsUnique();
+        budget.Property(item => item.Currency).HasMaxLength(3).IsRequired();
+        budget.HasOne(item => item.Tenant).WithMany().HasForeignKey(item => item.TenantId)
+            .OnDelete(DeleteBehavior.Cascade);
         work.HasIndex(item => item.AnalysisId).IsUnique();
         work.HasIndex(item => new { item.CompletedAt, item.NextAttemptAt, item.LeaseUntil, item.CreatedAt });
         work.Property(item => item.AttemptCount).HasDefaultValue(0);

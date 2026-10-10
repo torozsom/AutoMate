@@ -74,7 +74,7 @@ public static class AppConfiguration
             });
 
             // Map Health Checks (Industry standard for readiness/liveness probes)
-            app.MapHealthChecks("/health");
+            app.MapApplicationHealthChecks();
 
             // Dynamically map all custom endpoints
             var endpoints = app.Services.GetServices<IEndpoint>();

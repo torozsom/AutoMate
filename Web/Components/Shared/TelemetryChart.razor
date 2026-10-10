@@ -41,9 +41,9 @@
             }
             <g>
                 <text x="100" y="235"
-                      class="telemetry-axis-label">@Start.ToString("MMM d", CultureInfo.CurrentCulture)</text>
+                      class="telemetry-axis-label">@Start.ToString(AxisFormat, CultureInfo.InvariantCulture)</text>
                 <text x="455" y="235" text-anchor="end"
-                      class="telemetry-axis-label">@End.ToString("MMM d", CultureInfo.CurrentCulture)</text>
+                      class="telemetry-axis-label">@End.ToString(AxisFormat, CultureInfo.InvariantCulture)</text>
             </g>
         </svg>
         <p class="telemetry-chart-inspection" aria-live="polite" data-inspection>Hover or tap a point; use arrow keys
@@ -86,6 +86,10 @@
 
     /// <summary>Imported local interaction module.</summary>
     private IJSObjectReference? _module;
+
+    /// <summary>Minute windows show time; long windows include the calendar year.</summary>
+    private string AxisFormat => End - Start <= TimeSpan.FromDays(1) ? "HH:mm" :
+        End - Start > TimeSpan.FromDays(90) ? "MMM yyyy" : "MMM d";
 
     /// <summary>Maps a timestamp to a padded chart coordinate.</summary>
     private double X(DateTimeOffset timestamp)

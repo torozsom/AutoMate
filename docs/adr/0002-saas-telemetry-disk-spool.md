@@ -1,5 +1,9 @@
 # ADR 0002: Deployment disk telemetry and daily analytics
 
+Permanent archive, saved AI-result and analytics retention are superseded
+by [ADR 0004](0004-permanent-deployment-history.md), approved by the owner on 2026-10-08. Operational backend windows,
+redaction, consent and accounting safeguards remain.
+
 Accepted on 2026-10-04 following the approved telemetry plan; extended to SelfHosted by explicit user request on the
 same date.
 

@@ -12,10 +12,15 @@ namespace Infrastructure.Ai;
 /// <param name="Name">Canonical ordinal provider identifier.</param>
 /// <param name="ImplementationType">Concrete provider port implementation registered in the current scope.</param>
 /// <param name="ApprovesRoute">Adapter-specific exact endpoint/region approval, in addition to shared policy.</param>
+/// <param name="CredentialsConfigured">
+///     Optional local credential-presence check; must never resolve an adapter or perform
+///     I/O.
+/// </param>
 public sealed record AnalysisProviderRegistration(
     string Name,
     Type ImplementationType,
-    Func<AiAnalysisOptions, bool> ApprovesRoute);
+    Func<AiAnalysisOptions, bool> ApprovesRoute,
+    Func<bool>? CredentialsConfigured = null);
 
 /// <summary>Immutable adapter catalog separates provider selection and route approval from the workflow/UI.</summary>
 public sealed class AnalysisProviderCatalog

@@ -41,7 +41,9 @@ public sealed record ProjectTelemetryAnalytics(
     int FailedDeployments,
     double? AverageDeploymentSeconds,
     IReadOnlyList<DeploymentAnalyticsRow> Daily,
-    string? Availability);
+    string? Availability,
+    MetricExplorationResult? Observations = null,
+    long? CompleteDayLogErrors = null);
 
 public interface IProjectTelemetryAnalytics
 {

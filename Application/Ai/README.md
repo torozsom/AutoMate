@@ -1,10 +1,23 @@
 # AI result policy
 
+`Enabled`, `AutomaticAnalysisEnabled` and `ProviderEgressEnabled` are independent default-off flags. `ApprovedTenantIds`
+is the explicit staged owner-account cohort, with current per-project consent still required. The
+[operator rollout path](../../docs/ai-analysis-operations.md#staged-feature-enablement-and-shutdown) defines promotion
+and rollback. OpenAI and Azure OpenAI cancel local in-flight HTTP work on AI option reload; propagation and remote
+recall limitations
+remain. Disabling analysis does not disable deployments or existing authorized result management.
+
+`AnalysisBudgetPolicy` validates tenant admission/rate limits, shared provider concurrency and exact eight-decimal
+monetary settings independently of AI enablement. BudgetCurrency defaults to USD and both monetary settings default to
+zero, denying provider execution until configured. `AnalysisSkipPolicy` maps tenant, rate, concurrency and spending
+denials to fixed guidance. [Infrastructure budget controls](../../Infrastructure/Ai/README.md) document atomic guards,
+reservation/deletion semantics and the operator-approved worst-case request-cost requirement.
+
 M8 configuration keeps existing AI/automatic/provider-egress defaults off. MaximumOutputTokens caps requested provider
 output (including reasoning) at 1–8,192 tokens, default 8,192. Common runtime egress policy also rejects timeout outside
 5–300 seconds and invalid output limits, even if a custom monitor bypasses Web startup validation. Web validates all
 context limits (each 1–131,072) and result retention (1–90 days) independently of enablement. These are bounds, not a
-tokenizer or cost estimate; cluster/tenant cost budgets remain separate M8 work.
+tokenizer or cost estimate; shared cost reservations are separately enforced by IAnalysisBudgetGuard.
 
 `AnalysisResultValidator` implements the Application-owned `IAnalysisResultValidator` port. Every provider response is
 untrusted until validation succeeds. The current result contract is version 1: a non-empty summary up to 4,096
@@ -21,7 +34,8 @@ numeric (18,8) and a three-letter uppercase currency; adapters must supply estim
 Unknown usage, cost, model revision and prompt provenance remain null.
 
 `InvalidAnalysisResultException` and `AnalysisProviderUnavailableException` contain fixed safe messages, never a raw
-provider body or exception. M5 still owns broader masking guarantees and final egress/rollout policy. Context selection
+provider body or exception. Supported masking and runtime egress gates are implemented; actual provider approval and
+live rollout acceptance remain pending. Context selection
 and exact reference
 membership are implemented below. Structural validation does not establish that a model's recommendation is correct or
 that every
@@ -81,13 +95,26 @@ startup validates 0–5 retries, 1–300 base and 5–3,600 max with base <= max
 
 DailyProjectLimit defaults to five and is validated at startup in the range 0–1,000. Zero denies new analysis
 admissions; active work and stable-ID replay can still be returned under current consent/operator policy. Usage is
-recorded in metadata receipts rather than counting deletable result rows; tenant/cost controls remain separate work.
+recorded in metadata receipts rather than counting deletable result rows; shared tenant/cost controls are also
+implemented.
 
 AiAnalysisOptions.MaximumConcurrency is a restart-scoped per-instance processing limit, default one and valid from
 one through MaximumSupportedConcurrency (sixteen). Web validates configuration even when AI is disabled; Infrastructure
-owns execution slots. This setting does not enable egress or replace future tenant/provider concurrency budgets.
+owns execution slots. This setting does not enable egress or replace the separate shared provider-capacity guard.
 
-AnalysisSkipPolicy owns finite Unavailable, ProjectQuotaExceeded and UnsupportedData reasons and fixed owner guidance.
+AnalysisSkipPolicy owns finite Unavailable, ProjectQuotaExceeded, UnsupportedData, TenantQuotaExceeded, RateLimited,
+ConcurrencyExceeded and BudgetExceeded reasons and fixed owner guidance.
 Unavailable exceptions carry only this enum; unknown persisted codes read as unavailable. AnalysisEgressPolicy exposes
 shared approval requirements; Infrastructure registrations add exact provider routes. The legacy OpenAI helper remains
 available without expanding the Application workflow to a provider registry.
+
+## Spending denial codes
+
+Status-aware manual assessment contracts, source classification, frozen ranges and v2 result bounds are documented
+in [status-aware assessments](../../docs/status-aware-assessments.md). `AssessmentSelection` canonicalizes request
+options; the context selector uses effective focus for ranking and preserves separate container metric groups.
+Empty configuration-only context never qualifies as evidence. Existing input/overhead/accounting limits remain.
+
+AnalysisSkipReason appends BudgetNotConfigured, BudgetConfigurationInvalid and BudgetCurrencyMismatch without changing
+existing enum values. AnalysisSkipPolicy maps these to finite authored guidance; budget_exceeded explains shared account
+reservations and the midnight UTC reset. These are AutoMate reservations, not Azure invoice reconciliation.

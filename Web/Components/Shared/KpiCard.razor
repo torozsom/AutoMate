@@ -1,0 +1,19 @@
+<article class="console-kpi">
+    <span>@Label</span><strong>@Value</strong><small>@Detail</small>
+</article>
+
+@code {
+
+    /// <summary>Concise metric name.</summary>
+    [Parameter]
+    public string Label { get; set; } = "";
+
+    /// <summary>Formatted recorded value or explicit unavailable indicator.</summary>
+    [Parameter]
+    public string Value { get; set; } = "";
+
+    /// <summary>Period, denominator or coverage qualification.</summary>
+    [Parameter]
+    public string Detail { get; set; } = "";
+
+}

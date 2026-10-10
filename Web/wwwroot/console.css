@@ -1,0 +1,816 @@
+/* Shared SaaS console surfaces. All colours follow the existing local theme. */
+:root {
+    --am-space: 4px;
+}
+
+.console-page-heading, .console-section-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.console-page-heading h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    letter-spacing: -.025em;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.console-page-heading p, .console-section-heading p {
+    margin: 0;
+    color: var(--am-text-muted);
+}
+
+.console-section-heading {
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.console-section-heading h2 {
+    font-size: 18px;
+    margin: 0 0 4px;
+    font-weight: 650;
+}
+
+.console-section-heading p, .console-meta {
+    font-size: 14px;
+    color: var(--am-text-muted);
+}
+
+.console-panel {
+    padding: 24px;
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+    margin-bottom: 24px;
+    min-width: 0;
+}
+
+.console-kpis {
+    display: grid;
+    grid-template-columns:repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.console-kpi {
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.console-kpi span {
+    font-size: 14px;
+    color: var(--am-text-muted);
+    font-weight: 600;
+}
+
+.console-kpi strong {
+    font-size: 30px;
+    font-weight: 650;
+    letter-spacing: -.035em;
+    line-height: 1.2;
+}
+
+.console-kpi small {
+    font-size: 12px;
+    color: var(--am-text-muted);
+}
+
+.console-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+    margin-bottom: 24px;
+}
+
+.console-toolbar label {
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    font-weight: 600;
+    gap: 6px;
+}
+
+.console-toolbar .console-meta {
+    margin: auto auto auto 0;
+}
+
+.inventory-search {
+    flex: 1;
+    min-width: 180px;
+}
+
+.console-toolbar .form-select {
+    min-width: 130px;
+}
+
+.console-toolbar .form-control, .console-toolbar .form-select {
+    font-size: 14px;
+}
+
+.console-row-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.console-row-actions .btn {
+    white-space: nowrap;
+}
+
+.console-table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--am-text);
+    --bs-table-border-color: var(--am-border);
+    margin-bottom: 0;
+    font-size: 14px;
+    table-layout: auto;
+}
+
+.console-table th {
+    font-weight: 600;
+}
+
+.console-table thead th {
+    color: var(--am-text-muted);
+    font-size: 12px;
+    background: var(--am-surface-muted);
+}
+
+.console-table th, .console-table td {
+    padding: 12px;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+}
+
+.console-table tbody tr:hover {
+    background: var(--am-surface-muted);
+}
+
+.console-table caption {
+    color: var(--am-text-muted);
+    font-size: 12px;
+}
+
+.console-subtext {
+    display: block;
+    color: var(--am-text-muted);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.inventory-name {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.inventory-source {
+    max-width: 360px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.console-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 20px;
+    color: var(--am-text-muted);
+    font-size: 14px;
+}
+
+.console-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--am-text-muted);
+    display: grid;
+    justify-items: center;
+    gap: 12px;
+}
+
+.console-empty p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.console-empty strong {
+    color: var(--am-text);
+    font-weight: 600;
+}
+
+.console-empty h2 {
+    font-size: 18px;
+}
+
+.console-empty > .bi {
+    font-size: 24px;
+    color: var(--am-primary);
+}
+
+.overview-grid {
+    display: grid;
+    grid-template-columns:minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 24px;
+}
+
+.activity-chart {
+    height: 180px;
+    display: flex;
+    gap: 3px;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--am-border);
+}
+
+.activity-column {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-end;
+    height: 100%;
+}
+
+.activity-stack {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    overflow: hidden;
+}
+
+.activity-stack span {
+    width: 100%;
+    display: block;
+}
+
+.activity-success {
+    background: var(--am-success);
+}
+
+.activity-failure {
+    background: var(--am-danger);
+}
+
+.activity-unknown {
+    background: var(--am-text-subtle);
+}
+
+.activity-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--am-text-muted);
+    margin-bottom: 12px;
+}
+
+.activity-legend span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.activity-legend i {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+}
+
+.chart-period {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--am-text-muted);
+    margin-top: 8px;
+}
+
+.console-details {
+    margin-top: 16px;
+}
+
+.console-details > summary {
+    padding: 12px 0;
+    min-height: 44px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--am-text);
+    cursor: pointer;
+}
+
+.attention-list {
+    list-style: none;
+    margin: 0 0 16px;
+    padding: 0;
+}
+
+.attention-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--am-border);
+}
+
+.attention-list small {
+    display: block;
+    font-size: 12px;
+    color: var(--am-text-muted);
+}
+
+.azure-connection-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 20px;
+    border: 1px solid var(--am-border);
+    background: var(--am-surface);
+    border-radius: 8px;
+    margin-bottom: 24px;
+}
+
+.azure-account-option {
+    padding: 20px 0;
+    border-bottom: 1px solid var(--am-border);
+}
+
+.azure-account-option h3 {
+    font-size: 16px;
+}
+
+.azure-account-option p {
+    font-size: 14px;
+    color: var(--am-text-muted);
+}
+
+.azure-account-option label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.console-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(8 13 23 / .55);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    z-index: 1055;
+}
+
+.console-dialog {
+    width: min(100%, 760px);
+    max-height: calc(100dvh - 48px);
+    overflow: auto;
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+    box-shadow: var(--am-shadow-lg);
+}
+
+.console-dialog-header {
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px 24px;
+    background: var(--am-surface);
+    border-bottom: 1px solid var(--am-border);
+    z-index: 1;
+}
+
+.console-dialog-header h2 {
+    margin: 4px 0 0;
+    font-size: 20px;
+}
+
+.console-dialog-body {
+    padding: 24px;
+}
+
+.console-dialog .modal-body {
+    padding: 24px !important;
+}
+
+.console-dialog .modal-footer {
+    padding: 16px 24px;
+    position: sticky;
+    bottom: 0;
+    background: var(--am-surface);
+}
+
+.console-dialog .config-nested-panel {
+    background: var(--am-surface-muted);
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+}
+
+.configuration-tables {
+    display: grid;
+    grid-template-columns:1fr 1fr;
+    gap: 24px;
+}
+
+.configuration-table-group {
+    min-width: 0;
+}
+
+.configuration-table-group h3 {
+    font-size: 14px;
+    font-weight: 650;
+    margin: 0 0 8px;
+}
+
+.configuration-table-group table th {
+    width: 140px;
+    color: var(--am-text-muted);
+}
+
+.configuration-table-group table td {
+    width: auto;
+}
+
+.recorded-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    overflow-wrap: anywhere;
+}
+
+.recorded-value > span {
+    min-width: 0;
+    word-break: break-word;
+}
+
+.recorded-value .btn {
+    flex: none;
+}
+
+.public-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px clamp(16px, 4vw, 64px);
+    border-bottom: 1px solid var(--am-border);
+    background: var(--am-surface);
+}
+
+.public-brand {
+    font-size: 20px;
+    font-weight: 700;
+    text-decoration: none;
+    color: var(--am-text);
+}
+
+.public-main {
+    max-width: 1200px;
+    margin: auto;
+    padding: 32px 24px;
+}
+
+.public-main .login-container {
+    min-height: calc(100dvh - 180px);
+}
+
+@media (max-width: 1100px) {
+    .overview-grid {
+        grid-template-columns:1fr;
+        gap: 0;
+    }
+
+    .console-table td, .console-table th {
+        padding: 10px 8px;
+    }
+}
+
+@media (max-width: 767px) {
+    .console-kpis {
+        grid-template-columns:repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .console-kpi {
+        padding: 16px;
+    }
+
+    .console-kpi strong {
+        font-size: 26px;
+    }
+
+    .console-panel {
+        padding: 16px;
+    }
+
+    .console-page-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .console-page-heading h1 {
+        font-size: 24px;
+    }
+
+    .azure-connection-strip {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .configuration-tables {
+        grid-template-columns:1fr;
+        gap: 20px;
+    }
+
+    .inventory-source {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .inventory-toolbar {
+        display: grid;
+        grid-template-columns:1fr 1fr;
+    }
+
+    .inventory-search {
+        grid-column: 1/-1;
+    }
+
+    .inventory-toolbar label {
+        min-width: 0;
+    }
+
+    .inventory-toolbar .form-select {
+        min-width: 0;
+    }
+
+    .console-dialog-backdrop {
+        padding: 12px;
+    }
+
+    .console-dialog {
+        max-height: calc(100dvh - 24px);
+    }
+
+    .console-dialog-header, .console-dialog-body {
+        padding: 16px;
+    }
+
+    .public-header {
+        flex-wrap: wrap;
+        padding: 16px;
+    }
+
+    .public-main {
+        padding: 24px 12px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+    }
+}
+
+/* Stack table rows before the sidebar leaves too little horizontal space. */
+@media (max-width: 1200px) {
+    .responsive-inventory thead {
+        display: none;
+    }
+
+    .responsive-inventory, .responsive-inventory tbody {
+        display: block;
+        width: 100%;
+    }
+
+    .responsive-inventory tr {
+        display: block;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--am-border);
+    }
+
+    .responsive-inventory td {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 6px 0;
+        border: 0;
+    }
+
+    .responsive-inventory td::before {
+        content: attr(data-label);
+        flex: 0 0 105px;
+        font-size: 12px;
+        color: var(--am-text-muted);
+    }
+
+    .responsive-inventory td:first-child {
+        display: block;
+        font-size: 16px;
+    }
+
+    .responsive-inventory td:first-child::before {
+        display: none;
+    }
+
+    .responsive-inventory td .console-subtext {
+        margin-left: 0;
+    }
+
+    .responsive-inventory td .console-row-actions {
+        justify-content: flex-end;
+    }
+
+    .responsive-inventory td::before {
+        flex-basis: 90px;
+    }
+
+    .responsive-inventory td > .inventory-cell {
+        flex: 1;
+        min-width: 0;
+        text-align: right;
+    }
+}
+
+.overview-page, .projects-page {
+    display: block;
+}
+
+.activity-failure {
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(255, 255, 255, .35) 4px, rgba(255, 255, 255, .35) 6px);
+}
+
+.activity-unknown {
+    background-image: radial-gradient(rgba(255, 255, 255, .45) 1px, transparent 1px);
+    background-size: 5px 5px;
+}
+
+.console-dialog .modal-body h3 {
+    font-size: 16px;
+}
+
+@media (max-width: 767px) {
+    .responsive-inventory .btn, .recorded-value .btn {
+        min-height: 44px;
+    }
+}
+
+/* Assessment identity and deliberate separation of connection and dialog actions. */
+.ai-analysis-accent {
+    border: 2px solid #7653b5 !important;
+    border-radius: 8px;
+    padding: 24px;
+}
+
+[data-bs-theme="dark"] .ai-analysis-accent {
+    border-color: #b59be5 !important;
+}
+
+.azure-connection-strip > .console-row-actions:first-child {
+    gap: 16px;
+}
+
+.console-dialog .modal-footer {
+    gap: 16px;
+}
+
+.console-dialog .modal-footer > * {
+    margin: 0;
+}
+
+.deployment-identity-status {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.metric-range-picker, .statistics-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 16px;
+    margin: 12px 0;
+}
+
+.metric-range-picker label, .statistics-pager label {
+    display: grid;
+    gap: 4px;
+    font-size: 14px;
+}
+
+.metric-range-picker .telemetry-notice {
+    flex-basis: 100%;
+}
+
+.statistics-pager {
+    align-items: center;
+}
+
+.statistics-pager button, .metric-range-picker button {
+    min-height: 44px;
+}
+
+/* Available panel width also responds to browser zoom, independently of viewport breakpoints. */
+.console-panel, .console-section {
+    container-type: inline-size;
+}
+
+.attention-list li {
+    flex-wrap: wrap;
+}
+
+.attention-list li > div {
+    min-width: 0;
+    flex: 1 1 140px;
+}
+
+.attention-list li > .badge {
+    flex-shrink: 0;
+    max-width: 100%;
+}
+
+@container (max-width: 760px) {
+    .responsive-inventory thead {
+        display: none;
+    }
+
+    .responsive-inventory, .responsive-inventory tbody {
+        display: block;
+        width: 100%;
+    }
+
+    .responsive-inventory tr {
+        display: block;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--am-border);
+    }
+
+    .responsive-inventory td {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 6px 0;
+        border: 0;
+    }
+
+    .responsive-inventory td::before {
+        content: attr(data-label);
+        flex: 0 0 105px;
+        font-size: 12px;
+        color: var(--am-text-muted);
+    }
+
+    .responsive-inventory td:first-child {
+        display: block;
+        font-size: 16px;
+    }
+
+    .responsive-inventory td:first-child::before {
+        display: none;
+    }
+
+    .responsive-inventory td .console-subtext {
+        margin-left: 0;
+    }
+
+    .responsive-inventory td .console-row-actions {
+        justify-content: flex-end;
+    }
+
+    .responsive-inventory td::before {
+        flex-basis: 90px;
+    }
+
+    .responsive-inventory td > .inventory-cell {
+        flex: 1;
+        min-width: 0;
+        text-align: right;
+    }
+}

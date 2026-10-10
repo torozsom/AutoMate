@@ -7,10 +7,13 @@ public sealed class AiAnalysisOptions
     /// <summary>Upper bound on per-instance processing slots to prevent unbounded worker fan-out.</summary>
     public const int MaximumSupportedConcurrency = 16;
 
+    /// <summary>Global analysis feature flag; default off independently of deployment execution.</summary>
     public bool Enabled { get; init; }
+
+    /// <summary>Additional opt-in for failure-triggered analysis within the approved owner cohort.</summary>
     public bool AutomaticAnalysisEnabled { get; init; }
 
-    /// <summary>Independent operator kill switch; default denies all provider transmission.</summary>
+    /// <summary>Independent operator kill switch; reload also cancels active OpenAI requests locally.</summary>
     public bool ProviderEgressEnabled { get; init; }
 
     /// <summary>Canonical registered Infrastructure adapter identifier; selection never implicitly approves egress.</summary>
@@ -66,6 +69,27 @@ public sealed class AiAnalysisOptions
 
     /// <summary>New analyses admitted per UTC project day, between zero and 1,000; result deletion does not refund usage.</summary>
     public int DailyProjectLimit { get; init; } = 5;
+
+    /// <summary>New analyses per owner-account tenant across all projects in a UTC day; zero denies admission.</summary>
+    public int DailyTenantLimit { get; init; } = 100;
+
+    /// <summary>New analyses per tenant in a rolling sixty-second window; replay and active aliases do not count.</summary>
+    public int TenantRequestsPerMinute { get; init; } = 10;
+
+    /// <summary>Concurrent provider attempts with live budget reservations per tenant across worker instances.</summary>
+    public int MaximumTenantProviderConcurrency { get; init; } = 2;
+
+    /// <summary>Concurrent provider attempts with live budget reservations across all tenants and instances.</summary>
+    public int MaximumGlobalProviderConcurrency { get; init; } = 16;
+
+    /// <summary>Daily reserved spend per tenant; zero defaults to denying provider execution.</summary>
+    public decimal DailyTenantCostBudget { get; init; }
+
+    /// <summary>Operator-approved worst-case cost of one bounded request, reserved before every attempt without refund.</summary>
+    public decimal MaximumProviderAttemptCost { get; init; }
+
+    /// <summary>Three-letter currency of reservation limits; changing currency during a charged UTC day denies execution.</summary>
+    public string BudgetCurrency { get; init; } = "USD";
 
     /// <summary>Expiry for newly admitted result/work metadata, between one and ninety days; existing expiry is unchanged.</summary>
     public int ResultRetentionDays { get; init; } = 90;

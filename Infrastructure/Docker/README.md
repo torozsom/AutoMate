@@ -98,3 +98,6 @@ cancellation remains Warning. Exit/timeout/cancellation behavior is unchanged. R
 Image/container/Compose operational logs omit names and filesystem paths; GUIDs and numeric port values retain
 correlation. Build-context cleanup logs expose failure type only. Redacted build progress and diagnostic terminal
 delivery remain unchanged.
+
+Ownership-verified Docker observations record the selected deployment’s application container identity and actual image
+in its immutable configuration snapshot. Database credentials, environment values and inspect payloads are excluded.

@@ -8,15 +8,22 @@
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
+<button type="button" class="mobile-nav-toggle" aria-label="Toggle navigation" aria-expanded="@_menuOpen"
+        aria-controls="workspace-navigation" @ref="_menuToggle" @onclick="ToggleMenu">
+    <i class="bi bi-list" aria-hidden="true"></i> Menu
+</button>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+<div id="workspace-navigation" class="nav-scrollable @(_menuOpen ? "nav-open" : null)" @onkeydown="HandleMenuKey">
     <nav class="nav flex-column h-100" aria-label="Primary">
         <div class="nav-section-label">Workspace</div>
 
         <div class="nav-item">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All" @onclick="CloseMenu">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span>
+                <AuthorizeView Context="navOverview">
+                    <Authorized>Overview</Authorized>
+                    <NotAuthorized>Home</NotAuthorized>
+                </AuthorizeView>
             </NavLink>
         </div>
 
@@ -31,24 +38,24 @@
 
             <Authorized>
                 <div class="nav-item">
-                    <NavLink class="nav-link" href="/dashboard">
-                        <span class="bi bi-grid-3x3-nav-menu" aria-hidden="true"></span> Dashboard
+                    <NavLink class="nav-link" href="/dashboard" @onclick="CloseMenu">
+                        <span class="bi bi-grid-3x3-nav-menu" aria-hidden="true"></span> Projects
                     </NavLink>
                 </div>
 
                 <div class="nav-section-label">Sources</div>
 
                 <div class="nav-item">
-                    <NavLink class="nav-link" href="/github-repos">
-                        <span class="bi bi-github-repos-nav-menu" aria-hidden="true"></span> GitHub Repos
+                    <NavLink class="nav-link" href="/github-repos" @onclick="CloseMenu">
+                        <span class="bi bi-github-repos-nav-menu" aria-hidden="true"></span> GitHub repositories
                     </NavLink>
                 </div>
 
                 @if (DeploymentCapabilities.LocalDeploymentsEnabled)
                 {
                     <div class="nav-item">
-                        <NavLink class="nav-link" href="local-repos">
-                            <span class="bi bi-folder2-open-nav-menu" aria-hidden="true"></span> Local Repos
+                        <NavLink class="nav-link" href="local-repos" @onclick="CloseMenu">
+                            <span class="bi bi-folder2-open-nav-menu" aria-hidden="true"></span> Local repositories
                         </NavLink>
                     </div>
                 }

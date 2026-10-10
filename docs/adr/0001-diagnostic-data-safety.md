@@ -1,10 +1,16 @@
 # ADR 0001: Diagnostic data safety and AI egress
 
+Permanent archive, saved AI-result and analytics retention are superseded
+by [ADR 0004](0004-permanent-deployment-history.md), approved by the owner on 2026-10-08. Operational backend windows,
+redaction, consent and accounting safeguards remain.
+
 ## Status
 
 Accepted on 2026-10-02. Delivery buffers in both hosting profiles and aggregate retention are superseded
 by [ADR 0002](0002-saas-telemetry-disk-spool.md): deployment telemetry uses disk segments, and daily numeric aggregates
 may be retained for 365 days. The 30-day raw-data/redaction/security decisions continue to apply.
+[ADR 0003](0003-ai-analysis-execution-and-rollout.md) records the implemented analysis queue, automatic gating,
+owner cancellation, independent accounting retention and local reload cancellation; provider approval remains pending.
 
 ## Decisions
 
@@ -47,7 +53,7 @@ rotated outside this repository.
 Validated analysis results/metadata expire under ResultRetentionDays (1–90 days, default 90) after admission. Query
 access and queue eligibility end immediately
 at expiry. Startup/hourly bounded cleanup removes expired results and their work items, including while AI is disabled.
-Owners may immediately delete terminal or expired results; unexpired queued/running work awaits M6 cancellation support.
+Owners may immediately delete terminal or expired results, and cancel unexpired queued/running work before deletion.
 No diagnostic context snapshots are persisted. Analysis deletion preserves deployment metadata and existing Loki/Mimir
 retention. Remote responses already in flight are discarded after expiry/deletion. Operators must apply the same expiry
 and explicit deletion policy to recoverable backups and restore procedures; this repository does not configure backups.
@@ -80,7 +86,23 @@ an approved owner-account tenant, all current diagnostic categories and fresh pr
 The independent egress switch remains false; no provider, DPA, account, model or processing geography is approved here.
 Startup validation rejects requested egress without approvals. Workers check consent before/after context construction;
 the real adapter requires deployment scope and checks again without redirects/automatic HTTP retries. Reloadable
-configuration denies later calls, but cannot recall in-flight transmission. ResultRetentionDays may shorten new-result
+configuration denies later calls and now cancels active local OpenAI I/O on reload, but cannot recall transmitted data
+or remote processing. ResultRetentionDays may shorten new-result
 expiry from the default 90 days to at least one day, without extending existing records or changing diagnostic
 retention.
 The onboarding guide documents provider data-control limitations and operator verification responsibilities.
+
+## Console-only exception diagnostics (2026-10-08)
+
+The operator explicitly requested useful exception details in all environments. The shared logging boundary now permits
+a separate redacted console-only exception snapshot, outside the ordinary ILogger providers and SDK export paths.
+This supplements the operational telemetry allowlist; it does not permit raw exceptions or diagnostic payloads in
+platform telemetry, customer-facing results or provider context.
+
+Snapshots mask centrally recognized secrets and current configured credential values before console output. They retain
+safe correlation, exception types/messages, numeric HTTP status and compiled stack symbols, capped at 16 KiB UTF-8,
+four levels, sixteen exceptions and twenty frames per exception. Source paths, arguments, exception Data, headers and
+response bodies are excluded; payload-bearing SDK messages are withheld entirely. Arbitrary prose remains potentially
+sensitive despite masking. Operators must restrict stderr capture access/retention and avoid forwarding these snapshots
+to platform OTLP collectors. Raw exceptions stay in memory; no parallel raw log copy or new diagnostic storage exists.
+Console formatting/write failures never interrupt deployment/analysis. Customer-visible guidance stays fixed.

@@ -18,6 +18,9 @@ public sealed class DiskSpoolOptions
 /// <summary>Single-writer, checksummed immutable segments; receipts follow a flush to durable storage.</summary>
 public sealed class DiskTelemetrySpool : BackgroundService
 {
+    /// <summary>Permanent history is required by the production telemetry composition before issuing receipts.</summary>
+    private readonly IDeploymentArchive? _archive;
+
     private readonly int _batchSize;
     private readonly string _directory;
     private readonly Dictionary<Guid, long> _drops = [];
@@ -41,7 +44,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
 
     /// <summary>Creates the single writer with mandatory queue-admission redaction.</summary>
     public DiskTelemetrySpool(IOptions<DiskSpoolOptions> spool, IOptions<TelemetryStorageOptions> limits,
-        ILogger<DiskTelemetrySpool> logger, IDiagnosticRedactor redactor)
+        ILogger<DiskTelemetrySpool> logger, IDiagnosticRedactor redactor, IDeploymentArchive? archive = null)
     {
         if (!Path.IsPathFullyQualified(spool.Value.Directory))
             throw new InvalidOperationException("DiskSpool:Directory must be an absolute persistent-volume path.");
@@ -50,6 +53,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
         _batchSize = Math.Clamp(spool.Value.BatchSize, 1, 100);
         _logger = logger;
         _redactor = redactor;
+        _archive = archive;
     }
 
     public override async Task StartAsync(CancellationToken cancellationToken)
@@ -144,11 +148,17 @@ public sealed class DiskTelemetrySpool : BackgroundService
                 {
                     if (existing.TenantId != item.Tenant || existing.ProjectId != item.Event.ProjectId ||
                         existing.DeploymentId != item.Event.DeploymentId)
+                    {
                         item.Completion.TrySetException(
                             new InvalidOperationException("Event identity ownership mismatch."));
+                    }
                     else
-                        item.Completion.TrySetResult(ReadSegment(existing.Path)
-                            .Single(e => e.EventId == item.Event.EventId));
+                    {
+                        var receipt = ReadSegment(existing.Path).Single(e => e.EventId == item.Event.EventId);
+                        if (_archive is not null) receipt = await _archive.AppendAsync(receipt, token);
+                        item.Completion.TrySetResult(receipt);
+                    }
+
                     continue;
                 }
 
@@ -191,6 +201,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
                     seriesChanged = true;
                 }
 
+                if (_archive is not null) envelope = await _archive.AppendAsync(envelope, token);
                 AddBytes(item.Tenant, size);
                 accepted.Add((item, envelope));
             }
