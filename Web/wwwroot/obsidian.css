@@ -19,7 +19,7 @@
 }
 
 body {
-    font-size: 14px;
+    font-size: 0.875rem;
     -webkit-font-smoothing: antialiased;
 }
 
@@ -42,7 +42,7 @@ body {
 
 .sidebar .navbar-brand {
     color: #e2e8f0;
-    font-size: 18px;
+    font-size: 1.125rem;
     font-weight: 700;
     gap: 10px;
 }
@@ -69,7 +69,7 @@ body {
 
 .sidebar .nav-section-label {
     color: #94a3b8;
-    font: 500 10px/1.4 var(--am-font-mono);
+    font: 500 0.625rem/1.4 var(--am-font-mono);
     letter-spacing: .06em;
     padding: 20px 12px 8px;
 }
@@ -77,7 +77,7 @@ body {
 .sidebar .nav-item .nav-link {
     min-height: 40px;
     padding: 8px 12px;
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 500;
     color: #94a3b8;
     border-radius: 6px;
@@ -114,13 +114,13 @@ body {
 .top-row .docker-status-pill {
     border-radius: 999px;
     min-height: 28px;
-    font-size: 11px;
+    font-size: 0.6875rem;
     padding: 4px 12px;
 }
 
 .btn, .form-control, .form-select {
     min-height: 36px;
-    font-size: 12px;
+    font-size: 0.75rem;
     border-radius: 6px;
 }
 
@@ -147,11 +147,11 @@ body {
 
 .console-row-actions .btn, .console-toolbar .btn, .top-row .btn {
     font-family: var(--am-font-mono);
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 
 .badge, .deployment-badge, .source-pill {
-    font: 500 10px/1.4 var(--am-font-mono);
+    font: 500 0.625rem/1.4 var(--am-font-mono);
     border-radius: 4px;
     padding: 3px 7px;
 }
@@ -164,18 +164,18 @@ body {
 }
 
 .console-page-heading h1 {
-    font-size: 30px;
+    font-size: 1.875rem;
     font-weight: 700;
     margin: 8px 0 4px;
 }
 
 .console-page-heading .page-description {
-    font-size: 12px;
+    font-size: 0.75rem;
     max-width: 540px;
 }
 
 .page-eyebrow {
-    font: 600 11px/1.5 var(--am-font-mono);
+    font: 600 0.6875rem/1.5 var(--am-font-mono);
 }
 
 .overview-header-actions {
@@ -193,7 +193,7 @@ body {
 }
 
 .overview-header-actions .console-meta {
-    font: 11px var(--am-font-mono);
+    font: 0.6875rem var(--am-font-mono);
     margin: 0;
 }
 
@@ -206,7 +206,7 @@ body {
 }
 
 .overview-header-actions .metric-range-picker .form-select {
-    font: 11px var(--am-font-mono);
+    font: 0.6875rem var(--am-font-mono);
 }
 
 .console-kpis {
@@ -224,17 +224,17 @@ body {
 }
 
 .console-kpi span {
-    font-size: 12px;
+    font-size: 0.75rem;
     font-weight: 500;
 }
 
 .console-kpi strong {
-    font: 700 28px/1.2 var(--am-font-mono);
+    font: 700 1.75rem/1.2 var(--am-font-mono);
     letter-spacing: -.04em;
 }
 
 .console-kpi small {
-    font: 10px/1.6 var(--am-font-mono);
+    font: 0.625rem/1.6 var(--am-font-mono);
 }
 
 .console-kpi:first-child {
@@ -261,12 +261,12 @@ body {
 }
 
 .console-section-heading h2 {
-    font-size: 16px;
+    font-size: 1rem;
     font-weight: 600;
 }
 
 .console-section-heading p, .console-meta {
-    font: 11px/1.6 var(--am-font-mono);
+    font: 0.6875rem/1.6 var(--am-font-mono);
 }
 
 .activity-chart {
@@ -278,7 +278,7 @@ body {
 
 .activity-legend, .chart-period, .console-details > summary {
     font-family: var(--am-font-mono);
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 
 .console-details > summary {
@@ -293,16 +293,16 @@ body {
 }
 
 .attention-list a {
-    font: 600 12px/1.5 var(--am-font-mono);
+    font: 600 0.75rem/1.5 var(--am-font-mono);
     text-decoration: none;
 }
 
 .console-table {
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 
 .console-table thead th {
-    font-size: 10px;
+    font-size: 0.625rem;
     font-weight: 500;
 }
 
@@ -311,7 +311,7 @@ body {
 }
 
 .console-table .console-subtext {
-    font-size: 10px;
+    font-size: 0.625rem;
 }
 
 .console-table .btn {
@@ -327,12 +327,12 @@ body {
 }
 
 .configuration-table-group h3 {
-    font: 600 11px/1.5 var(--am-font-mono);
+    font: 600 0.6875rem/1.5 var(--am-font-mono);
     color: var(--am-primary);
 }
 
 .configuration-table-group .console-table th, .configuration-table-group .console-table td {
-    font-size: 11px;
+    font-size: 0.6875rem;
     padding: 10px 0;
 }
 
@@ -342,7 +342,7 @@ body {
 }
 
 .telemetry-panel h2 {
-    font-size: 16px;
+    font-size: 1rem;
 }
 
 .telemetry-chart {
@@ -360,7 +360,7 @@ body {
 }
 
 .telemetry-muted, .telemetry-chart-note {
-    font: 11px/1.6 var(--am-font-mono);
+    font: 0.6875rem/1.6 var(--am-font-mono);
 }
 
 .ai-analysis-accent {
@@ -398,7 +398,7 @@ body {
 }
 
 .assessment-options label, .assessment-sources label {
-    font: 11px/1.6 var(--am-font-mono);
+    font: 0.6875rem/1.6 var(--am-font-mono);
 }
 
 .analysis-panel {
@@ -416,7 +416,7 @@ body {
 }
 
 .project-section-tabs a {
-    font: 500 11px/1.5 var(--am-font-mono);
+    font: 500 0.6875rem/1.5 var(--am-font-mono);
     border-radius: 0;
     padding: 12px;
     gap: 8px;
@@ -456,17 +456,17 @@ body {
 }
 
 .project-details-page .project-breadcrumb {
-    font-size: 28px;
+    font-size: 1.75rem;
     margin: 12px 0 8px;
 }
 
 .project-details-page .project-subtitle {
-    font: 11px/1.6 var(--am-font-mono);
+    font: 0.6875rem/1.6 var(--am-font-mono);
     font-weight: 400;
 }
 
 .project-details-page .source-path-row {
-    font: 11px/1.6 var(--am-font-mono);
+    font: 0.6875rem/1.6 var(--am-font-mono);
 }
 
 .project-details-page .source-path-row a {
@@ -475,7 +475,7 @@ body {
 
 .project-details-page .action-button {
     min-width: 112px;
-    font: 500 12px var(--am-font-mono);
+    font: 500 0.75rem var(--am-font-mono);
 }
 
 .project-details-page .project-status-cluster {
@@ -505,12 +505,12 @@ body {
 }
 
 .project-details-page .panel-header h3 {
-    font: 500 11px/1.5 var(--am-font-mono);
+    font: 500 0.6875rem/1.5 var(--am-font-mono);
     color: var(--am-text-muted);
 }
 
 .project-details-page .source-pill {
-    font: 500 10px/1.5 var(--am-font-mono);
+    font: 500 0.625rem/1.5 var(--am-font-mono);
     border-radius: 4px;
     padding: 3px 7px;
 }
@@ -527,7 +527,7 @@ body {
 }
 
 .project-details-page .detail-list dt, .project-details-page .detail-list dd {
-    font: 400 10px/1.6 var(--am-font-mono);
+    font: 400 0.625rem/1.6 var(--am-font-mono);
     overflow-wrap: anywhere;
 }
 
@@ -536,11 +536,11 @@ body {
 }
 
 .project-details-page .overview-count {
-    font: 600 24px/1.2 var(--am-font-mono);
+    font: 600 1.5rem/1.2 var(--am-font-mono);
 }
 
 .project-details-page .overview-date {
-    font: 500 12px/1.6 var(--am-font-mono);
+    font: 500 0.75rem/1.6 var(--am-font-mono);
 }
 
 .project-details-page .detail-panel-primary {
@@ -552,7 +552,7 @@ body {
 }
 
 .project-details-page .section-heading h2 {
-    font-size: 16px;
+    font-size: 1rem;
 }
 
 .project-details-page .terminal-panel {
@@ -560,6 +560,8 @@ body {
     border: 1px solid var(--am-border);
     border-radius: 12px;
     box-shadow: none;
+    width: 94%;
+    margin-inline: auto;
 }
 
 .project-details-page .terminal-panel-header {
@@ -570,7 +572,7 @@ body {
 
 .project-details-page .terminal-panel-header h2 {
     color: var(--am-text);
-    font: 500 11px/1.5 var(--am-font-mono);
+    font: 500 0.6875rem/1.5 var(--am-font-mono);
     display: flex;
     align-items: center;
     gap: 24px;
@@ -595,7 +597,7 @@ body {
     color: var(--am-text-muted);
     border: 1px solid var(--am-border);
     border-radius: 4px;
-    font: 400 10px/1.5 var(--am-font-mono);
+    font: 400 0.625rem/1.5 var(--am-font-mono);
     min-height: 28px;
     padding: 4px 8px;
 }
@@ -608,8 +610,14 @@ body {
 
 .project-details-page .terminal-panel-body {
     background: #07090e;
-    height: 360px;
-    min-height: 300px;
+    height: clamp(440px, 60vh, 640px);
+    min-height: 440px;
+}
+
+@media (max-width: 767px) {
+    .project-details-page .terminal-panel {
+        width: 100%;
+    }
 }
 
 .project-details-page .terminal-ai-shortcut {
@@ -651,12 +659,12 @@ body {
 }
 
 .history-page .history-header h1 {
-    font-size: 24px;
+    font-size: 1.5rem;
     font-weight: 700;
 }
 
 .history-page .history-header > a {
-    font: 11px var(--am-font-mono);
+    font: 0.6875rem var(--am-font-mono);
     text-decoration: none;
 }
 
@@ -674,13 +682,13 @@ body {
 }
 
 .history-overview dt {
-    font: 500 10px/1.5 var(--am-font-mono);
+    font: 500 0.625rem/1.5 var(--am-font-mono);
     color: var(--am-text-muted);
     margin-bottom: 8px;
 }
 
 .history-overview dd {
-    font: 500 11px/1.6 var(--am-font-mono);
+    font: 500 0.6875rem/1.6 var(--am-font-mono);
     margin: 0;
     overflow-wrap: anywhere;
 }
@@ -693,7 +701,7 @@ body {
 
 .history-page .history-log-controls, .history-page .history-log-footer {
     font-family: var(--am-font-mono);
-    font-size: 11px;
+    font-size: 0.6875rem;
 }
 
 .history-page .telemetry-panel {

@@ -84,7 +84,8 @@
                 {
                     <ProjectInventoryTable Inventory="inventoryPage" AzureConnected="_isAzureConnected"
                                            LocalEnabled="DeploymentCapabilities.LocalDeploymentsEnabled"
-                                           IsDeploying="IsDeploying" OnDeploy="DeployInventoryAsync"
+                                           IsDeploying="IsDeploying" IsStopping="IsStopping"
+                                           OnDeploy="DeployInventoryAsync" OnStop="StopInventoryAsync"
                                            OnRemove="ConfirmRemoval"/>
                     <nav class="console-pagination" aria-label="Projects pagination"><span>@inventoryPage.Total projects · Page @inventoryPage.Page of @Math.Max(1, (inventoryPage.Total + 19) / 20)</span>
                         <div class="console-row-actions"><a

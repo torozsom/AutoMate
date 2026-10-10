@@ -26,6 +26,9 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>Read lifetime cancelled on navigation.</summary>
     private readonly CancellationTokenSource _lifetime = new();
 
+    /// <summary>Prevents duplicate stop requests while loading the owned project.</summary>
+    private readonly HashSet<Guid> _preparingStops = [];
+
     /// The list of apps associated with the authenticated user, fetched from the database.
     private List<Domain.Entities.Application>? _apps;
 
@@ -565,6 +568,13 @@ public partial class Dashboard : ComponentBase, IDisposable
                state.QueuedDeployments > 0 || state.ActiveDeployments > 0;
     }
 
+    /// <summary>Checks stop preparation and background queue activity.</summary>
+    private bool IsStopping(Guid projectId)
+    {
+        var state = DeploymentJobQueue.GetProjectState(projectId);
+        return _preparingStops.Contains(projectId) || state.QueuedStops > 0 || state.ActiveStops > 0;
+    }
+
     private void OnQueueStateChanged(Guid projectId)
     {
         if (!_disposed && (_inventory?.Items.Any(app => app.Id == projectId) == true ||
@@ -696,7 +706,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>Loads only the selected owned entity graph when an action needs it.</summary>
     private async Task DeployInventoryAsync(Guid id)
     {
-        if (_disposed || _preparingProject is not null) return;
+        if (_disposed || _preparingProject is not null || IsStopping(id)) return;
         _preparingProject = id;
         var owner = _currentUserId;
         try
@@ -724,6 +734,65 @@ public partial class Dashboard : ComponentBase, IDisposable
         finally
         {
             _preparingProject = null;
+        }
+    }
+
+    /// <summary>Queues the existing local stop operation after reloading the owned running project.</summary>
+    private async Task StopInventoryAsync(Guid id)
+    {
+        if (_disposed || _currentUserId == Guid.Empty || IsDeploying(id) || IsStopping(id)) return;
+        _preparingStops.Add(id);
+        var owner = _currentUserId;
+        _globalErrorMessage = null;
+        _globalSuccessMessage = null;
+        try
+        {
+            using var scope = ServiceScopes.CreateScope();
+            var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
+                .GetAppByIdAsync(id, owner, _lifetime.Token);
+            if (_disposed || owner != _currentUserId) return;
+            if (app is null || app.UserId != owner)
+            {
+                _globalErrorMessage = "This project is no longer available.";
+                return;
+            }
+
+            if (app.SourceType != SourceType.Local)
+            {
+                _globalErrorMessage = "Stop cloud deployments in your cloud provider's portal.";
+                return;
+            }
+
+            if (!DeploymentCapabilities.LocalDeploymentsEnabled)
+            {
+                _globalErrorMessage = "Local deployments are disabled on this host.";
+                return;
+            }
+
+            var latest = app.CsProjects.SelectMany(project => project.Deployments)
+                .OrderByDescending(deployment => deployment.CreatedAt).FirstOrDefault();
+            var webProject = app.CsProjects.FirstOrDefault(project => project.IsWebProject);
+            if (latest?.Status != DeploymentStatus.Running || webProject is null || IsDeploying(id))
+            {
+                _globalErrorMessage = "This project has no running deployment to stop.";
+                return;
+            }
+
+            await DeploymentJobQueue.EnqueueAsync(new StopLocalDeploymentJob(id, app.Name, webProject.Path),
+                _lifetime.Token);
+            if (!_disposed && owner == _currentUserId) _globalSuccessMessage = "Deployment stop queued.";
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError(exception, "Could not queue project stop for {ProjectId}", id);
+            if (!_disposed) _globalErrorMessage = "The deployment could not be stopped. Try again shortly.";
+        }
+        finally
+        {
+            _preparingStops.Remove(id);
         }
     }
 

@@ -74,8 +74,20 @@ const server = http.createServer((req, res) => {
                     assert.deepEqual(lowContrast, [], name + ' ' + theme + ' text contrast');
                     if (name.startsWith('projects')) {
                         assert.equal(await page.locator('.project-inventory tbody tr').count(), 3);
+                        for (const row of await page.locator('.project-inventory tbody tr').all()) {
+                            assert.deepEqual((await row.locator('.console-row-actions button').allTextContents()).map(text => text.trim()), ['Deploy', 'Stop', 'Remove']);
+                        }
                         assert.equal(await page.locator('article.dashboard-project-card').count(), 0);
                         if (width === 360) assert.equal(await page.locator('.project-inventory thead').evaluate(e => getComputedStyle(e).display), 'none');
+                    }
+                    if (name === 'details') {
+                        const dimensions = await page.locator('.terminal-panel').evaluate(panel => ({
+                            width: panel.getBoundingClientRect().width,
+                            parent: panel.parentElement.clientWidth,
+                            height: panel.querySelector('.terminal-panel-body').getBoundingClientRect().height
+                        }));
+                        assert.ok(dimensions.height >= 440, 'Project terminals have a taller viewport');
+                        if (width === 1440) assert.ok(dimensions.width < dimensions.parent * .96, 'Desktop terminal width is reduced');
                     }
                     if (name.startsWith('overview')) {
                         assert.equal(await page.locator('.console-kpi').count(), 4);

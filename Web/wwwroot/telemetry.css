@@ -166,7 +166,7 @@
 
 .telemetry-axis-label {
     fill: var(--am-text-muted);
-    font-size: 13px;
+    font-size: 0.8125rem;
 }
 
 .telemetry-series-line {

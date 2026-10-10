@@ -52,6 +52,11 @@ Signed-in Home is Overview and /dashboard is Projects. Public pages use a lightw
 and console.css provide compact tables, KPI cards and responsive surfaces.
 See [behavior and verification](../docs/ui-modernization.md).
 
+The Projects list offers Deploy, Stop and Remove in that order. Stop queues the same owner-authorized local Docker
+operation as Project Details; it is unavailable for inactive projects, disabled local hosting and cloud projects (which
+use the provider portal). Pending stops disable competing row actions. Project Details terminals use a taller
+440–640px viewport and 94% desktop width, retaining full width on mobile.
+
 The Obsidian Telemetry refresh follows the three reference subfolders under `.agents/UI-Design` through native Blazor
 components and `wwwroot/obsidian.css`. Dark is the default for new sessions; saved light/dark choices load before
 the first paint. Inter and JetBrains Mono plus the existing Bootstrap Icons are served locally with their licenses.

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Application.Abstractions.Hosting;
 using Application.Data.Apps;
 using Application.Orchestration;
 using Domain.Entities;
@@ -17,6 +18,85 @@ namespace Web.Tests;
 /// <summary>Exercises background deployment notifications against a real renderer dispatcher.</summary>
 public sealed class DashboardStatusTests
 {
+    /// <summary>Only an owned running local deployment with enabled hosting can enter the stop queue.</summary>
+    [Theory]
+    [InlineData(SourceType.Local, DeploymentStatus.Running, true, true, true)]
+    [InlineData(SourceType.Local, DeploymentStatus.Stopped, true, true, false)]
+    [InlineData(SourceType.Local, DeploymentStatus.Failed, true, true, false)]
+    [InlineData(SourceType.Remote, DeploymentStatus.Running, true, true, false)]
+    [InlineData(SourceType.Local, DeploymentStatus.Running, false, true, false)]
+    [InlineData(SourceType.Local, DeploymentStatus.Running, true, false, false)]
+    public async Task Inventory_stop_enforces_ownership_status_and_hosting(SourceType source,
+        DeploymentStatus status, bool localEnabled, bool owned, bool accepted)
+    {
+        var owner = Guid.NewGuid();
+        var id = Guid.NewGuid();
+        var app = new Domain.Entities.Application
+        {
+            Id = id,
+            UserId = owned ? owner : Guid.NewGuid(),
+            Name = "fixture",
+            SourceType = source,
+            SourcePathOrUrl = "fixture",
+            CsProjects =
+            [
+                new CsProject
+                {
+                    IsWebProject = true, Path = "C:/fixture/app.csproj",
+                    Deployments = [new Deployment { Status = status }]
+                }
+            ]
+        };
+        var query = DispatchProxy.Create<IApplicationService, OperationalLoggingTests.PortProxy>();
+        ((OperationalLoggingTests.PortProxy)query).Call = (method, args) =>
+        {
+            Assert.Equal(nameof(IApplicationService.GetAppByIdAsync), method!.Name);
+            Assert.Equal(id, args![0]);
+            Assert.Equal(owner, args[1]);
+            return Task.FromResult<Domain.Entities.Application?>(app);
+        };
+        var capabilities = DispatchProxy.Create<IDeploymentCapabilities, OperationalLoggingTests.PortProxy>();
+        ((OperationalLoggingTests.PortProxy)capabilities).Call = (_, _) => localEnabled;
+        var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
+        StopLocalDeploymentJob? submitted = null;
+        ((OperationalLoggingTests.PortProxy)queue).Call = (method, args) =>
+        {
+            if (method!.Name == nameof(IDeploymentJobQueue.GetProjectState))
+                return new DeploymentQueueState(0, 0, 0, 0);
+            if (method.Name == nameof(IDeploymentJobQueue.EnqueueAsync))
+            {
+                submitted = Assert.IsType<StopLocalDeploymentJob>(args![0]);
+                return ValueTask.CompletedTask;
+            }
+
+            return null;
+        };
+        using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
+        var component = new FixtureDashboard();
+        typeof(Dashboard).GetField("_currentUserId", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(
+            component, owner);
+        Property("ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
+        Property("DeploymentCapabilities", capabilities);
+        Property("DeploymentJobQueue", queue);
+        Property("Logger", NullLogger<Dashboard>.Instance);
+        await (Task)typeof(Dashboard).GetMethod("StopInventoryAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(component, [id])!;
+        Assert.Equal(accepted, submitted is not null);
+        if (submitted is not null)
+        {
+            Assert.Equal(id, submitted.ProjectId);
+            Assert.Equal(app.Name, submitted.ProjectName);
+            Assert.Equal(app.CsProjects.Single().Path, submitted.CsProjectPath);
+        }
+
+        /// <summary>Supplies provider-free Application ports.</summary>
+        void Property(string name, object value)
+        {
+            typeof(Dashboard).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
+                value);
+        }
+    }
+
     /// <summary>Terminal notifications update both status and pending controls without cross-thread rendering errors.</summary>
     [Theory]
     [InlineData(DeploymentStatus.Running)]
@@ -78,7 +158,10 @@ public sealed class DashboardStatusTests
         var deployment = new Deployment { Status = DeploymentStatus.Starting };
         var app = new Domain.Entities.Application
         {
-            Id = project, Name = "fixture", SourceType = SourceType.Local, SourcePathOrUrl = "fixture",
+            Id = project,
+            Name = "fixture",
+            SourceType = SourceType.Local,
+            SourcePathOrUrl = "fixture",
             CsProjects = [new CsProject { Deployments = [deployment] }]
         };
         var initial = new ProjectInventoryPage(
