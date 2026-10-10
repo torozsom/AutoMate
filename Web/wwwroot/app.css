@@ -98,6 +98,11 @@ body {
     min-height: 100%;
 }
 
+/* A modest shared type increase that respects the browser's default text size. */
+html {
+    font-size: 106.25%;
+}
+
 body {
     background: var(--am-bg);
     color: var(--am-text);

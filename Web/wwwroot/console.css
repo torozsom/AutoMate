@@ -13,7 +13,7 @@
 
 .console-page-heading h1 {
     margin: 0 0 8px;
-    font-size: clamp(30px, 2.5vw, 40px);
+    font-size: clamp(1.875rem, 2.5vw, 2.5rem);
     letter-spacing: -.025em;
     font-weight: 650;
     line-height: 1.2;
@@ -30,13 +30,13 @@
 }
 
 .console-section-heading h2 {
-    font-size: 18px;
+    font-size: 1.125rem;
     margin: 0 0 4px;
     font-weight: 650;
 }
 
 .console-section-heading p, .console-meta {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--am-text-muted);
 }
 
@@ -70,13 +70,13 @@
 }
 
 .console-kpi span {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--am-text-muted);
     font-weight: 600;
 }
 
 .console-kpi strong {
-    font-size: 30px;
+    font-size: 1.875rem;
     font-weight: 650;
     letter-spacing: -.035em;
     line-height: 1.2;
@@ -84,7 +84,7 @@
 }
 
 .console-kpi small {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--am-text-muted);
 }
 
@@ -99,7 +99,7 @@
 .console-toolbar label {
     display: flex;
     flex-direction: column;
-    font-size: 13px;
+    font-size: 0.8125rem;
     font-weight: 600;
     gap: 6px;
 }
@@ -118,7 +118,7 @@
 }
 
 .console-toolbar .form-control, .console-toolbar .form-select {
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .console-row-actions {
@@ -137,7 +137,7 @@
     --bs-table-color: var(--am-text);
     --bs-table-border-color: var(--am-border);
     margin-bottom: 0;
-    font-size: 14px;
+    font-size: 0.875rem;
     table-layout: auto;
 }
 
@@ -147,7 +147,7 @@
 
 .console-table thead th {
     color: var(--am-text-muted);
-    font-size: 12px;
+    font-size: 0.75rem;
     background: var(--am-surface-muted);
     font-family: var(--am-font-mono);
     font-weight: 500;
@@ -166,13 +166,13 @@
 
 .console-table caption {
     color: var(--am-text-muted);
-    font-size: 12px;
+    font-size: 0.75rem;
 }
 
 .console-subtext {
     display: block;
     color: var(--am-text-muted);
-    font-size: 12px;
+    font-size: 0.75rem;
     margin-top: 4px;
     font-family: var(--am-font-mono);
     font-variant-numeric: tabular-nums;
@@ -201,7 +201,7 @@
     flex-wrap: wrap;
     padding-top: 20px;
     color: var(--am-text-muted);
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .console-empty {
@@ -215,7 +215,7 @@
 
 .console-empty p {
     margin: 0;
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .console-empty strong {
@@ -224,11 +224,11 @@
 }
 
 .console-empty h2 {
-    font-size: 18px;
+    font-size: 1.125rem;
 }
 
 .console-empty > .bi {
-    font-size: 24px;
+    font-size: 1.5rem;
     color: var(--am-primary);
 }
 
@@ -283,7 +283,7 @@
     display: flex;
     gap: 16px;
     flex-wrap: wrap;
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--am-text-muted);
     margin-bottom: 12px;
 }
@@ -303,7 +303,7 @@
 .chart-period {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--am-text-muted);
     margin-top: 8px;
 }
@@ -315,7 +315,7 @@
 .console-details > summary {
     padding: 12px 0;
     min-height: 44px;
-    font-size: 14px;
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--am-text);
     cursor: pointer;
@@ -338,7 +338,7 @@
 
 .attention-list small {
     display: block;
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--am-text-muted);
 }
 
@@ -360,18 +360,18 @@
 }
 
 .azure-account-option h3 {
-    font-size: 16px;
+    font-size: 1rem;
 }
 
 .azure-account-option p {
-    font-size: 14px;
+    font-size: 0.875rem;
     color: var(--am-text-muted);
 }
 
 .azure-account-option label {
     display: block;
     margin-bottom: 8px;
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .console-dialog-backdrop {
@@ -410,7 +410,7 @@
 
 .console-dialog-header h2 {
     margin: 4px 0 0;
-    font-size: 20px;
+    font-size: 1.25rem;
 }
 
 .console-dialog-body {
@@ -445,7 +445,7 @@
 }
 
 .configuration-table-group h3 {
-    font-size: 14px;
+    font-size: 0.875rem;
     font-weight: 650;
     margin: 0 0 8px;
 }
@@ -487,7 +487,7 @@
 }
 
 .public-brand {
-    font-size: 20px;
+    font-size: 1.25rem;
     font-weight: 700;
     text-decoration: none;
     color: var(--am-primary);
@@ -525,7 +525,7 @@
     }
 
     .console-kpi strong {
-        font-size: 26px;
+        font-size: 1.625rem;
     }
 
     .console-panel {
@@ -538,7 +538,7 @@
     }
 
     .console-page-heading h1 {
-        font-size: 24px;
+        font-size: 1.5rem;
     }
 
     .azure-connection-strip {
@@ -633,13 +633,13 @@
     .responsive-inventory td::before {
         content: attr(data-label);
         flex: 0 0 105px;
-        font-size: 12px;
+        font-size: 0.75rem;
         color: var(--am-text-muted);
     }
 
     .responsive-inventory td:first-child {
         display: block;
-        font-size: 16px;
+        font-size: 1rem;
     }
 
     .responsive-inventory td:first-child::before {
@@ -679,7 +679,7 @@
 }
 
 .console-dialog .modal-body h3 {
-    font-size: 16px;
+    font-size: 1rem;
 }
 
 @media (max-width: 767px) {
@@ -729,7 +729,7 @@
 .metric-range-picker label, .statistics-pager label {
     display: grid;
     gap: 4px;
-    font-size: 14px;
+    font-size: 0.875rem;
 }
 
 .metric-range-picker .telemetry-notice {
@@ -791,13 +791,13 @@
     .responsive-inventory td::before {
         content: attr(data-label);
         flex: 0 0 105px;
-        font-size: 12px;
+        font-size: 0.75rem;
         color: var(--am-text-muted);
     }
 
     .responsive-inventory td:first-child {
         display: block;
-        font-size: 16px;
+        font-size: 1rem;
     }
 
     .responsive-inventory td:first-child::before {

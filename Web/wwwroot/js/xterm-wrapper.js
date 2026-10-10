@@ -12,7 +12,7 @@ window.xtermWrapper = {
             convertEol: true,
             cursorBlink: true,
             fontFamily: '"JetBrains Mono", Consolas, "Courier New", monospace',
-            fontSize: 12,
+            fontSize: 13,
             lineHeight: 1.4
         });
 
