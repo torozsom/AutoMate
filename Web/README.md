@@ -65,5 +65,6 @@ Reference-only controls and illustrative claims are omitted; current application
 ## Metric refinements
 
 Every chart group uses a shared UTC range picker (10-minute through five-year presets, custom five-minute minimum).
-Numeric metric/outcome tables use independent 10/25/50-row pagination. AI sections have a purple border; repository
+Numeric metric/outcome tables use independent 10/25/50-row pagination. Completed AI answers have a bright purple border;
+context settings, consent, request status and run metadata stay outside that border. Repository
 source pages retain their earlier card presentation. See ../docs/metric-exploration.md.

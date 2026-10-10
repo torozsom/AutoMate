@@ -122,8 +122,10 @@ const server = http.createServer((req, res) => {
             await page.goto(url + '/history.html');
             await page.evaluate(theme => document.documentElement.dataset.bsTheme = theme, theme);
             assert.equal(await page.locator('.deployment-identity-status .deployment-badge').count(), 1);
-            const accent = page.locator('.ai-analysis-accent');
+            const accent = page.locator('.ai-analysis-answer').first();
             assert.equal(await accent.evaluate(e => getComputedStyle(e).borderTopWidth), '2px');
+            assert.equal(await accent.evaluate(e => getComputedStyle(e).borderTopColor), theme === 'dark' ? 'rgb(192, 132, 252)' : 'rgb(147, 51, 234)');
+            assert.equal(await accent.locator('button,input,select,dl').count(), 0, 'Only the generated answer receives the purple border');
             await accent.screenshot({path: path.join(preview, 'ai-history-' + theme + '.png')});
             await page.locator('.telemetry-explore > summary').click();
             await page.locator('.telemetry-table-details > summary').click();

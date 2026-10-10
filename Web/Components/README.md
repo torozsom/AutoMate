@@ -162,3 +162,7 @@ project AI navigation anchor or inline section. Deployment history retains inlin
 egress consent and cancellation belong to the shared section. Closing the dialog stops UI polling without canceling
 server work; route/deployment changes close it and fence delayed replies. Terminal history/connection failures are
 displayed outside terminal output.
+
+Only completed provider answers (summary, observations, recommendations, limitations and evidence references) receive
+the bright purple border, in both the project dialog and deployment history. Settings, consent, status and run metadata
+remain outside the answer border; pending or failed runs do not display an answer frame.

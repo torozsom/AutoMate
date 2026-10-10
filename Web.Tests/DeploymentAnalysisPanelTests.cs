@@ -50,6 +50,7 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.Contains("type=\"button\"", html);
         Assert.DoesNotContain("<script>alert", html);
         Assert.Equal(status == AiAnalysisStatus.Completed, html.Contains("&lt;script&gt;", StringComparison.Ordinal));
+        Assert.Equal(status == AiAnalysisStatus.Completed, html.Contains("aria-label=\"AI analysis answer\"", StringComparison.Ordinal));
         if (status == AiAnalysisStatus.Completed)
         {
             Assert.Contains("Recommended steps", html);
