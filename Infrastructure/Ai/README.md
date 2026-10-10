@@ -525,3 +525,11 @@ Saved production results retain until owner deletion; ResultRetentionDays now bo
 terminal results. Receipt and spending cleanup remain ninety days. Manual assessment supports every deployment status;
 automatic admission remains failure-only. Historical context uses the exact deployment archive.
 The $0.07 attempt reservation, $50 USD daily ceiling and disabled retries remain unchanged.
+
+## Provider access denial
+
+Responses transport classifies HTTP 403 as permanent `provider_access_denied`. It retains only an allowlisted provider,
+numeric HTTP status, recognized error code and validated request identifier from a bounded error envelope; arbitrary
+response messages and context are discarded. The worker persists fixed guidance and never retries this denial. Check
+endpoint/credential resource pairing, model/deployment permissions and network restrictions; retain existing egress
+consent, operator approvals and spending reservations.

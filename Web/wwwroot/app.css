@@ -1,7 +1,24 @@
+/* Locally served reference typefaces, distributed under the included SIL OFL licenses. */
+@font-face {
+    font-family: "Inter";
+    src: url("fonts/Inter-Variable.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "JetBrains Mono";
+    src: url("fonts/JetBrainsMono-Variable.ttf") format("truetype");
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+}
+
 :root {
     color-scheme: light;
-    --am-font-sans: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-    --am-font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --am-font-sans: "Inter", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    --am-font-mono: "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     --am-bg: #f6f7f9;
     --am-surface: #ffffff;
     --am-surface-muted: #f3f4f6;
@@ -14,6 +31,7 @@
     --am-primary: #0b63ce;
     --am-primary-hover: #084f9f;
     --am-primary-soft: #dcecff;
+    --am-on-primary: #ffffff;
     --am-success: #087647;
     --am-success-soft: #ddf5e8;
     --am-danger: #b4232f;
@@ -22,9 +40,9 @@
     --am-warning-soft: #fff1c9;
     --am-info: #006d8f;
     --am-info-soft: #dff4fb;
-    --am-radius-sm: 0.375rem;
+    --am-radius-sm: 0.25rem;
     --am-radius: 0.5rem;
-    --am-radius-lg: 0.625rem;
+    --am-radius-lg: 0.75rem;
     --am-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.08);
     --am-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
     --am-shadow-lg: 0 10px 28px rgba(16, 24, 40, 0.12);
@@ -42,27 +60,30 @@
 
 [data-bs-theme="dark"] {
     color-scheme: dark;
-    --am-bg: #12151b;
-    --am-surface: #1b1f27;
-    --am-surface-muted: #242a34;
-    --am-surface-subtle: #303744;
-    --am-border: #39414f;
+    --am-bg: #090a0f;
+    --am-surface: #12141c;
+    --am-surface-muted: #181b26;
+    --am-surface-subtle: #1f2433;
+    --am-border: #262b3d;
     --am-border-strong: #596579;
-    --am-text: #f3f7fc;
-    --am-text-muted: #c8d2df;
-    --am-text-subtle: #aebacd;
-    --am-primary: #74a7ff;
-    --am-primary-hover: #a6c5ff;
-    --am-primary-soft: #20395f;
-    --am-success: #67dca2;
-    --am-success-soft: #184931;
-    --am-danger: #ff8d98;
-    --am-danger-soft: #57242d;
+    --am-text: #e1e1ed;
+    --am-text-muted: #bbc9cf;
+    --am-text-subtle: #94a3b8;
+    --am-primary: #00d2ff;
+    --am-primary-hover: #a5e7ff;
+    --am-primary-soft: #003543;
+    --am-on-primary: #090a0f;
+    --am-success: #69f6b9;
+    --am-success-soft: #003824;
+    --am-danger: #ffb4ab;
+    --am-danger-soft: #3b1720;
     --am-warning: #f3c35b;
-    --am-warning-soft: #523d14;
-    --am-info: #75d7ef;
-    --am-info-soft: #174352;
-    --am-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+    --am-warning-soft: #3c2d14;
+    --am-info: #aec6ff;
+    --am-info-soft: #002e6b;
+    --am-focus: #47d6ff;
+    --bs-primary-rgb: 0, 210, 255;
+    --am-shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     --am-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
     --am-shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.28);
     --bs-body-bg: var(--am-bg);
@@ -174,7 +195,7 @@ h1:focus {
 
 .btn {
     align-items: center;
-    border-radius: var(--am-radius);
+    border-radius: var(--am-radius-sm);
     display: inline-flex;
     flex-shrink: 0;
     font-weight: 700;
@@ -192,14 +213,14 @@ h1:focus {
 .btn-primary {
     background-color: var(--am-primary);
     border-color: var(--am-primary);
-    color: #fff;
+    color: var(--am-on-primary);
 }
 
 .btn-primary:hover,
 .btn-primary:focus {
     background-color: var(--am-primary-hover);
     border-color: var(--am-primary-hover);
-    color: #fff;
+    color: var(--am-on-primary);
 }
 
 .btn-outline-secondary {
@@ -509,7 +530,28 @@ button:focus-visible {
 }
 
 [data-bs-theme="dark"] .btn-primary {
-    color: #07111f;
+    color: var(--am-on-primary);
+}
+
+/* Functional accents follow the Obsidian Telemetry reference. */
+[data-bs-theme="dark"] .btn-primary:hover {
+    box-shadow: 0 0 12px rgba(0, 210, 255, 0.2);
+}
+
+.btn:disabled, .btn.disabled {
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.form-control:focus, .form-select:focus {
+    background-color: var(--am-surface-subtle);
+    border-color: var(--am-primary);
+    color: var(--am-text);
+}
+
+code, pre, .source-path-row, .project-path {
+    font-family: var(--am-font-mono);
+    font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 575.98px) {

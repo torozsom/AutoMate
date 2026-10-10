@@ -1,5 +1,7 @@
 using System.Reflection;
 using Application.Abstractions.Diagnostics;
+using Domain.Entities;
+using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Web.Components.Pages;
@@ -15,7 +17,15 @@ public sealed class ProjectDetailsMetricRecoveryTests
     public async Task Disposed_page_does_not_start_metric_recovery()
     {
         var page = new ProjectDetails();
-        Field(page, "_terminalDeploymentId", (Guid?)Guid.NewGuid());
+        var deployment = new Deployment { Status = DeploymentStatus.Running };
+        Field(page, "_app", new Domain.Entities.Application
+        {
+            Name = "fixture",
+            SourcePathOrUrl = "fixture",
+            SourceType = SourceType.Local,
+            CsProjects = [new CsProject { Deployments = [deployment] }]
+        });
+        Field(page, "_terminalDeploymentId", (Guid?)deployment.Id);
         Field(page, "_analysisDisposed", true);
         Cancellation(page).Dispose();
         await RecoverAsync(page);
@@ -32,7 +42,15 @@ public sealed class ProjectDetailsMetricRecoveryTests
         await using var services = new ServiceCollection().AddSingleton(history).BuildServiceProvider();
         var logger = new RecordingLogger();
         var page = new ProjectDetails();
-        Field(page, "_terminalDeploymentId", (Guid?)Guid.NewGuid());
+        var deployment = new Deployment { Status = DeploymentStatus.Running };
+        Field(page, "_app", new Domain.Entities.Application
+        {
+            Name = "fixture",
+            SourcePathOrUrl = "fixture",
+            SourceType = SourceType.Local,
+            CsProjects = [new CsProject { Deployments = [deployment] }]
+        });
+        Field(page, "_terminalDeploymentId", (Guid?)deployment.Id);
         Property(page, "ScopeFactory", services.GetRequiredService<IServiceScopeFactory>());
         Property(page, "Logger", logger);
         var pending = RecoverAsync(page);

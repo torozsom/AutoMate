@@ -1,0 +1,799 @@
+/* Visual translation of the three UI-Design references. Existing controls and data contracts are retained. */
+[data-bs-theme="dark"] {
+    --am-bg: #0c0e16;
+    --am-surface: #11131b;
+    --am-surface-muted: #171a25;
+    --am-surface-subtle: #1f2333;
+    --am-border: #252936;
+    --am-border-strong: #4b5568;
+    --am-text: #e2e8f0;
+    --am-text-muted: #94a3b8;
+    --am-text-subtle: #94a3b8;
+    --am-success: #34d399;
+    --am-success-soft: #082a24;
+    --am-danger: #fb7185;
+    --am-danger-soft: #351621;
+    --am-info: #38bdf8;
+    --am-info-soft: #10283c;
+    --am-shadow-sm: none;
+}
+
+body {
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+}
+
+.container {
+    max-width: 1600px;
+}
+
+.page .sidebar {
+    flex-basis: 256px;
+    background: #07090e;
+    border-right: 1px solid #202431;
+}
+
+.sidebar .nav-brand-row {
+    height: 56px;
+    min-height: 56px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #202431;
+}
+
+.sidebar .navbar-brand {
+    color: #e2e8f0;
+    font-size: 18px;
+    font-weight: 700;
+    gap: 10px;
+}
+
+.sidebar .brand-mark {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    border-radius: 6px;
+    border: 0;
+    color: #07090e;
+    background: linear-gradient(135deg, #00d2ff, #38bdf8 55%, #0070f3);
+    box-shadow: 0 0 16px #00d2ff20;
+}
+
+.sidebar .nav-scrollable {
+    height: calc(100dvh - 56px);
+}
+
+.sidebar .nav {
+    padding: 12px;
+    gap: 4px;
+}
+
+.sidebar .nav-section-label {
+    color: #94a3b8;
+    font: 500 10px/1.4 var(--am-font-mono);
+    letter-spacing: .06em;
+    padding: 20px 12px 8px;
+}
+
+.sidebar .nav-item .nav-link {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #94a3b8;
+    border-radius: 6px;
+    gap: 10px;
+}
+
+.sidebar .nav-item a.active {
+    background: #00d2ff12;
+    border-color: #00d2ff20;
+    border-left-color: #00d2ff;
+    color: #00d2ff;
+}
+
+.sidebar .nav-item .nav-link:hover {
+    color: #e2e8f0;
+}
+
+.sidebar .nav-item .bi {
+    width: 16px;
+    height: 16px;
+    background-size: 16px;
+}
+
+.app-main .top-row {
+    min-height: 56px;
+    padding: 8px 24px;
+    border-bottom: 1px solid var(--am-border);
+}
+
+.app-main .content {
+    padding: 32px;
+}
+
+.top-row .docker-status-pill {
+    border-radius: 999px;
+    min-height: 28px;
+    font-size: 11px;
+    padding: 4px 12px;
+}
+
+.btn, .form-control, .form-select {
+    min-height: 36px;
+    font-size: 12px;
+    border-radius: 6px;
+}
+
+.btn {
+    font-weight: 600;
+}
+
+.btn-sm {
+    min-height: 28px;
+}
+
+.btn-outline-secondary {
+    border-color: var(--am-border);
+    color: var(--am-text-muted);
+}
+
+.btn-outline-danger {
+    --bs-btn-color: var(--am-danger);
+    --bs-btn-border-color: var(--am-danger);
+    --bs-btn-hover-color: var(--am-bg);
+    --bs-btn-hover-bg: var(--am-danger);
+    --bs-btn-hover-border-color: var(--am-danger);
+}
+
+.console-row-actions .btn, .console-toolbar .btn, .top-row .btn {
+    font-family: var(--am-font-mono);
+    font-size: 11px;
+}
+
+.badge, .deployment-badge, .source-pill {
+    font: 500 10px/1.4 var(--am-font-mono);
+    border-radius: 4px;
+    padding: 3px 7px;
+}
+
+.console-page-heading {
+    align-items: flex-start;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--am-border);
+    margin-bottom: 24px;
+}
+
+.console-page-heading h1 {
+    font-size: 30px;
+    font-weight: 700;
+    margin: 8px 0 4px;
+}
+
+.console-page-heading .page-description {
+    font-size: 12px;
+    max-width: 540px;
+}
+
+.page-eyebrow {
+    font: 600 11px/1.5 var(--am-font-mono);
+}
+
+.overview-header-actions {
+    display: grid;
+    gap: 12px;
+    justify-items: start;
+    width: 536px;
+    max-width: 100%;
+}
+
+.overview-header-actions .console-toolbar {
+    margin: 0;
+    gap: 10px;
+    align-items: end;
+}
+
+.overview-header-actions .console-meta {
+    font: 11px var(--am-font-mono);
+    margin: 0;
+}
+
+.overview-header-actions .metric-range-picker {
+    margin: 0;
+}
+
+.overview-header-actions .metric-range-picker > label {
+    min-width: 170px;
+}
+
+.overview-header-actions .metric-range-picker .form-select {
+    font: 11px var(--am-font-mono);
+}
+
+.console-kpis {
+    gap: 16px;
+}
+
+.console-kpi {
+    padding: 20px;
+    min-height: 132px;
+    gap: 16px;
+    border: 1px solid var(--am-border);
+    border-radius: 12px;
+    background: var(--am-surface);
+    box-shadow: none;
+}
+
+.console-kpi span {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.console-kpi strong {
+    font: 700 28px/1.2 var(--am-font-mono);
+    letter-spacing: -.04em;
+}
+
+.console-kpi small {
+    font: 10px/1.6 var(--am-font-mono);
+}
+
+.console-kpi:first-child {
+    background: linear-gradient(135deg, var(--am-surface) 65%, color-mix(in srgb, var(--am-primary-soft) 40%, var(--am-surface)));
+}
+
+.console-kpi:nth-child(2) {
+    background: linear-gradient(135deg, var(--am-surface) 65%, color-mix(in srgb, var(--am-success-soft) 40%, var(--am-surface)));
+}
+
+.overview-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 24px;
+}
+
+.console-panel {
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.console-section-heading {
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--am-border);
+}
+
+.console-section-heading h2 {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.console-section-heading p, .console-meta {
+    font: 11px/1.6 var(--am-font-mono);
+}
+
+.activity-chart {
+    height: 220px;
+    padding-top: 24px;
+    gap: 8px;
+    background: repeating-linear-gradient(to top, transparent 0, transparent 54px, var(--am-border) 55px, transparent 56px);
+}
+
+.activity-legend, .chart-period, .console-details > summary {
+    font-family: var(--am-font-mono);
+    font-size: 11px;
+}
+
+.console-details > summary {
+    color: var(--am-primary);
+}
+
+.attention-list li {
+    padding: 16px;
+    margin-top: 12px;
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+}
+
+.attention-list a {
+    font: 600 12px/1.5 var(--am-font-mono);
+    text-decoration: none;
+}
+
+.console-table {
+    font-size: 12px;
+}
+
+.console-table thead th {
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.console-table tbody td {
+    font-variant-numeric: tabular-nums;
+}
+
+.console-table .console-subtext {
+    font-size: 10px;
+}
+
+.console-table .btn {
+    min-height: 32px;
+}
+
+.configuration-table-group {
+    padding: 20px;
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+    background: var(--am-bg);
+    min-width: 0;
+}
+
+.configuration-table-group h3 {
+    font: 600 11px/1.5 var(--am-font-mono);
+    color: var(--am-primary);
+}
+
+.configuration-table-group .console-table th, .configuration-table-group .console-table td {
+    font-size: 11px;
+    padding: 10px 0;
+}
+
+.telemetry-panel {
+    border-radius: 12px;
+    padding: 24px;
+}
+
+.telemetry-panel h2 {
+    font-size: 16px;
+}
+
+.telemetry-chart {
+    border-radius: 12px;
+    background: var(--am-surface);
+}
+
+.telemetry-kpi {
+    background: var(--am-bg);
+    border-radius: 8px;
+}
+
+.telemetry-kpi strong {
+    font-family: var(--am-font-mono);
+}
+
+.telemetry-muted, .telemetry-chart-note {
+    font: 11px/1.6 var(--am-font-mono);
+}
+
+.ai-analysis-accent {
+    border-color: #7653b5 !important;
+    border-radius: 12px;
+}
+
+[data-bs-theme="dark"] .ai-analysis-accent {
+    border-color: #493361 !important;
+}
+
+.assessment-context {
+    background: var(--am-bg);
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.assessment-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.assessment-sources {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.assessment-sources > div {
+    padding: 8px;
+    background: var(--am-surface);
+    border: 1px solid var(--am-border);
+    border-radius: 4px;
+}
+
+.assessment-options label, .assessment-sources label {
+    font: 11px/1.6 var(--am-font-mono);
+}
+
+.analysis-panel {
+    border-color: var(--am-border);
+    background: var(--am-surface);
+    border-radius: 12px;
+}
+
+.project-section-tabs {
+    background: var(--am-bg);
+    border-bottom: 1px solid var(--am-border);
+    gap: 4px;
+    padding: 0;
+    top: 56px;
+}
+
+.project-section-tabs a {
+    font: 500 11px/1.5 var(--am-font-mono);
+    border-radius: 0;
+    padding: 12px;
+    gap: 8px;
+    color: var(--am-text-muted);
+}
+
+.project-section-tabs a.active {
+    background: transparent;
+    color: var(--am-primary);
+    box-shadow: inset 0 -2px var(--am-primary);
+}
+
+.project-section-tabs svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.project-details-page .project-console {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+    box-shadow: none;
+    min-width: 0;
+}
+
+.project-details-page .console-section, .project-details-page .project-console-body {
+    min-width: 0;
+}
+
+.project-details-page .project-console-header {
+    background: transparent;
+    padding: 0 0 24px;
+    border: 0;
+    gap: 24px;
+}
+
+.project-details-page .project-breadcrumb {
+    font-size: 28px;
+    margin: 12px 0 8px;
+}
+
+.project-details-page .project-subtitle {
+    font: 11px/1.6 var(--am-font-mono);
+    font-weight: 400;
+}
+
+.project-details-page .source-path-row {
+    font: 11px/1.6 var(--am-font-mono);
+}
+
+.project-details-page .source-path-row a {
+    text-decoration: none;
+}
+
+.project-details-page .action-button {
+    min-width: 112px;
+    font: 500 12px var(--am-font-mono);
+}
+
+.project-details-page .project-status-cluster {
+    gap: 12px;
+}
+
+.project-details-page .project-console-body {
+    padding: 24px 0 0;
+    gap: 24px;
+}
+
+.project-details-page .overview-layout {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.project-details-page .detail-panel {
+    padding: 16px;
+    gap: 12px;
+    border-radius: 12px;
+    align-content: start;
+}
+
+.project-details-page .panel-header {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.project-details-page .panel-header h3 {
+    font: 500 11px/1.5 var(--am-font-mono);
+    color: var(--am-text-muted);
+}
+
+.project-details-page .source-pill {
+    font: 500 10px/1.5 var(--am-font-mono);
+    border-radius: 4px;
+    padding: 3px 7px;
+}
+
+.project-details-page .detail-list {
+    gap: 8px;
+}
+
+.project-details-page .detail-list > div {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 8px;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.project-details-page .detail-list dt, .project-details-page .detail-list dd {
+    font: 400 10px/1.6 var(--am-font-mono);
+    overflow-wrap: anywhere;
+}
+
+.project-details-page .detail-list dd {
+    text-align: right;
+}
+
+.project-details-page .overview-count {
+    font: 600 24px/1.2 var(--am-font-mono);
+}
+
+.project-details-page .overview-date {
+    font: 500 12px/1.6 var(--am-font-mono);
+}
+
+.project-details-page .detail-panel-primary {
+    border-color: var(--am-border);
+}
+
+.project-details-page .section-kicker {
+    display: none;
+}
+
+.project-details-page .section-heading h2 {
+    font-size: 16px;
+}
+
+.project-details-page .terminal-panel {
+    background: #07090e;
+    border: 1px solid var(--am-border);
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+.project-details-page .terminal-panel-header {
+    background: var(--am-surface);
+    padding: 12px 16px;
+    flex-wrap: wrap;
+}
+
+.project-details-page .terminal-panel-header h2 {
+    color: var(--am-text);
+    font: 500 11px/1.5 var(--am-font-mono);
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin: 0 auto 0 0;
+}
+
+.project-details-page .terminal-panel-header h2::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    background: #fb7185;
+    border-radius: 50%;
+    box-shadow: 12px 0 #f59e0b, 24px 0 #34d399;
+    margin-right: 12px;
+}
+
+.project-details-page .terminal-panel-header .terminal-tabs {
+    flex: 0 1 auto;
+}
+
+.project-details-page .terminal-tabs .nav-link {
+    color: var(--am-text-muted);
+    border: 1px solid var(--am-border);
+    border-radius: 4px;
+    font: 400 10px/1.5 var(--am-font-mono);
+    min-height: 28px;
+    padding: 4px 8px;
+}
+
+.project-details-page .terminal-tabs .nav-link.active {
+    background: #003543;
+    border-color: #00d2ff50;
+    color: #00d2ff;
+}
+
+.project-details-page .terminal-panel-body {
+    background: #07090e;
+    height: 360px;
+    min-height: 300px;
+}
+
+.project-details-page .terminal-ai-shortcut {
+    border-radius: 4px;
+    min-height: 28px;
+    min-width: 28px;
+    padding: 4px;
+    box-shadow: none;
+}
+
+.project-details-page .configuration-tables {
+    gap: 16px;
+}
+
+.project-details-page .project-section-tabs {
+    padding: 0;
+    background: var(--am-bg);
+}
+
+[data-bs-theme="dark"] .project-details-page .detail-panel {
+    background: var(--am-surface);
+}
+
+[data-bs-theme="dark"] .project-details-page .project-console-header {
+    background: transparent;
+}
+
+.history-page.history-page {
+    padding: 0;
+    max-width: 1600px;
+}
+
+.history-page .history-header {
+    padding: 24px;
+    border: 1px solid var(--am-border);
+    border-radius: 12px;
+    background: var(--am-surface);
+    margin-bottom: 24px;
+}
+
+.history-page .history-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+.history-page .history-header > a {
+    font: 11px var(--am-font-mono);
+    text-decoration: none;
+}
+
+.history-overview {
+    border-top: 1px solid var(--am-border);
+    padding-top: 20px;
+    margin-top: 20px;
+}
+
+.history-overview dl {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0;
+}
+
+.history-overview dt {
+    font: 500 10px/1.5 var(--am-font-mono);
+    color: var(--am-text-muted);
+    margin-bottom: 8px;
+}
+
+.history-overview dd {
+    font: 500 11px/1.6 var(--am-font-mono);
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.history-page .history-terminal-viewport {
+    background: #07090e;
+    border: 1px solid var(--am-border);
+    border-radius: 8px;
+}
+
+.history-page .history-log-controls, .history-page .history-log-footer {
+    font-family: var(--am-font-mono);
+    font-size: 11px;
+}
+
+.history-page .telemetry-panel {
+    margin: 0 0 24px;
+}
+
+@media (max-width: 1199px) {
+    .console-page-heading {
+        flex-wrap: wrap;
+    }
+
+    .overview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .assessment-sources {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .project-details-page .overview-layout {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767px) {
+    .app-main .content {
+        padding: 16px;
+    }
+
+    .console-page-heading {
+        gap: 16px;
+    }
+
+    .overview-header-actions {
+        width: 100%;
+    }
+
+    .overview-header-actions .console-toolbar {
+        width: 100%;
+    }
+
+    .console-kpi {
+        min-height: 120px;
+        padding: 16px;
+    }
+
+    .console-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .console-panel, .telemetry-panel, .ai-analysis-accent {
+        padding: 16px;
+    }
+
+    .btn, .form-control, .form-select, .console-table .btn {
+        min-height: 44px;
+    }
+
+    .assessment-sources, .assessment-options {
+        grid-template-columns: 1fr;
+    }
+
+    .project-details-page .overview-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .project-details-page .project-console-header {
+        padding: 0 0 16px;
+    }
+
+    .project-details-page .terminal-tabs .nav-link {
+        min-height: 44px;
+    }
+
+    .project-details-page .terminal-ai-shortcut {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    .history-overview dl {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .history-page .history-header {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .sidebar .nav-scrollable {
+        height: auto;
+    }
+
+    .sidebar .nav-brand-row {
+        height: 68px;
+        min-height: 68px;
+    }
+
+    .project-section-tabs {
+        top: 0;
+    }
+}

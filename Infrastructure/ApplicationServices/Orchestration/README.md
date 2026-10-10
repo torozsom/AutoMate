@@ -16,13 +16,14 @@ cannot remove a replacement. Command exit, finite outcome, source cleanup and jo
 registry tracks every daemon/log/metrics task and awaits cancellation on replacement, stop and host shutdown. Each
 target
 owns a scoped Docker source; policy reads use separate scopes. Daemon collection runs during deployment operations or
-runtime interest. Runtime logs and metrics still require authorized viewers or explicit background consent. The
+runtime interest. Runtime logs and metrics are automatic for the latest Starting or Running deployment, without viewing
+or preference gates. The
 five-second
 policy loop checks the latest deployment, restarts completed sources independently and cancels all runtime sources when
-interest ends. No static state or detached `Task.Run` loops own subscription lifetimes.
+the deployment becomes inactive. No static state or detached `Task.Run` loops own subscription lifetimes.
 
 `LocalRuntimeRecoveryService` registers missing supervisors for current running local deployments every 15 seconds.
-Idle supervisors do not open runtime subscriptions; their policy loop responds to consent/viewing changes.
+Supervisors open runtime subscriptions for active deployments independently of browser presence.
 `LocalDockerTargets` stores names, service tabs and ownership IDs only, never credentials or environment payloads.
 
 Docker details and bounded replay limitations are documented in [Docker](../../Docker/README.md).

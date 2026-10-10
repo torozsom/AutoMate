@@ -33,7 +33,7 @@ public sealed class LocalDiagnosticSupervisionTests
             await harness.Manager.RegisterAsync(other, true).WaitAsync(TimeSpan.FromSeconds(2));
             Assert.False(stop.IsCompleted);
             Assert.False(replacement.IsCompleted);
-            Assert.Equal(2, harness.Source.Subscriptions.Count);
+            Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon");
         }
         finally
         {
@@ -42,17 +42,19 @@ public sealed class LocalDiagnosticSupervisionTests
 
         await Task.WhenAll(stop, replacement).WaitAsync(TimeSpan.FromSeconds(3));
         Assert.True(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
-        Assert.Equal(3, harness.Source.Subscriptions.Count);
+        Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon" && !s.Stopped.Task.IsCompleted);
     }
 
-    /// <summary>Automatic lifecycle collection does not silently opt the owner into runtime log/metric collection.</summary>
+    /// <summary>Lifecycle and runtime collection start without viewers or legacy opt-in and stop with the host.</summary>
     [Fact]
     public async Task Operation_starts_daemon_before_return_and_host_shutdown_awaits_it()
     {
         await using var harness = await Harness.CreateAsync(false);
         await harness.Manager.RegisterAsync(harness.Target, true);
-        Assert.Single(harness.Source.Subscriptions);
-        Assert.Equal("daemon", harness.Source.Subscriptions.Single().Kind);
+        await harness.Source.RuntimeStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon");
+        Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "logs");
+        Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "metrics");
         await harness.Manager.StopAsync(CancellationToken.None);
         Assert.All(harness.Source.Subscriptions, s => Assert.True(s.Stopped.Task.IsCompletedSuccessfully));
         Assert.False(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
@@ -64,7 +66,8 @@ public sealed class LocalDiagnosticSupervisionTests
     {
         await using var harness = await Harness.CreateAsync(false);
         await harness.Manager.RegisterAsync(harness.Target, true);
-        var first = harness.Source.Subscriptions.Single();
+        await harness.Source.RuntimeStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var first = harness.Source.Subscriptions.ToArray();
         var next = harness.Target with { DeploymentId = Guid.NewGuid(), RegisteredAt = DateTimeOffset.UtcNow };
         await using (var scope = harness.Services.CreateAsyncScope())
         {
@@ -81,7 +84,7 @@ public sealed class LocalDiagnosticSupervisionTests
         }
 
         await harness.Manager.RegisterAsync(next, true);
-        Assert.True(first.Stopped.Task.IsCompletedSuccessfully);
+        Assert.All(first, source => Assert.True(source.Stopped.Task.IsCompletedSuccessfully));
         Assert.True(harness.Manager.IsActive(next.ProjectId, next.DeploymentId));
         Assert.False(harness.Manager.IsActive(next.ProjectId, harness.Target.DeploymentId));
         await harness.Manager.StopProjectAsync(next.ProjectId);
@@ -89,9 +92,9 @@ public sealed class LocalDiagnosticSupervisionTests
         Assert.False(harness.Manager.IsActive(next.ProjectId, next.DeploymentId));
     }
 
-    /// <summary>Independent logs and metrics start with consent and all stop after consent is withdrawn.</summary>
+    /// <summary>Legacy disabling cannot stop automatic collection; explicit project shutdown still cancels all sources.</summary>
     [Fact]
-    public async Task Runtime_consent_withdrawal_cancels_all_sources_without_stopping_deployment()
+    public async Task Legacy_flag_cannot_disable_runtime_collection()
     {
         await using var harness = await Harness.CreateAsync(true);
         await harness.Manager.RegisterAsync(harness.Target, false);
@@ -105,8 +108,10 @@ public sealed class LocalDiagnosticSupervisionTests
             await db.SaveChangesAsync();
         }
 
-        await Task.WhenAll(harness.Source.Subscriptions.Select(s => s.Stopped.Task)).WaitAsync(TimeSpan.FromSeconds(8));
-        Assert.True(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
+        Assert.All(harness.Source.Subscriptions, s => Assert.False(s.Stopped.Task.IsCompleted));
+        await harness.Manager.StopProjectAsync(harness.Target.ProjectId);
+        Assert.All(harness.Source.Subscriptions, s => Assert.True(s.Stopped.Task.IsCompletedSuccessfully));
+        Assert.False(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
         await using var check = harness.Services.CreateAsyncScope();
         Assert.Equal(DeploymentStatus.Running,
             (await check.ServiceProvider.GetRequiredService<AutoMateDbContext>().Deployments.SingleAsync()).Status);

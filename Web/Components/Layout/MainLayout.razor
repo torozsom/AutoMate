@@ -13,7 +13,7 @@
                 <header class="top-row">
                     <AuthorizeView Context="headerAuth">
                         <Authorized>
-                            <div class="top-row-status">
+                            <div class="top-row-status" role="status">
                                 @if (DeploymentCapabilities.LocalDeploymentsEnabled)
                                 {
                                     @switch (_isDockerRunning)
@@ -51,7 +51,7 @@
                             </div>
 
                             <div class="top-row-actions">
-                                <a href="/swagger" target="_blank"
+                                <a href="/swagger" target="_blank" rel="noopener noreferrer"
                                    class="btn btn-sm btn-outline-secondary">
                                     <i class="bi bi-braces" aria-hidden="true"></i>
                                     <span>OpenAPI</span>

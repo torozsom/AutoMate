@@ -6,6 +6,7 @@ using Application.Abstractions.Diagnostics;
 using Application.Ai;
 using Application.Diagnostics;
 using Domain.Enums;
+using Infrastructure.Diagnostics;
 
 namespace Infrastructure.Observability;
 
@@ -40,7 +41,8 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         "NpgsqlException", "PostgresException", "RedisConnectionException", "RedisTimeoutException",
         "DockerApiException", "DockerContainerNotFoundException", "SocketException", "CryptographicException",
         "InvalidAnalysisResultException",
-        "AnalysisProviderUnavailableException", "TelemetryProviderException", "ObjectDisposedException"
+        "AnalysisProviderUnavailableException", "AnalysisProviderAccessDeniedException",
+        "TelemetryCompatibilityException", "TelemetryProviderException", "ObjectDisposedException"
     };
 
     /// <summary>Allows source categories from reviewed code only, retaining existing filters for known categories.</summary>
@@ -103,6 +105,7 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         if (key == "AuthenticationScheme")
             return value is "Cookies" or "GitHub" or "Microsoft" ? value : null;
         if (key == "ConsentState") return value is "enabled" or "disabled" ? value : null;
+        if (key == "TelemetryCompatibility") return EnumValue<TelemetryCompatibilityFailure>(value);
         if (key == "OutputFile")
             return value is "Dockerfile" or "Dockerfile.dockerignore" or "docker-compose.yml" or "main.bicep"
                 or "deploy.yml" or "infra/main.bicep" or

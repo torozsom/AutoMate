@@ -34,7 +34,8 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 - [Solution navigation map](../../.agents/navigation.md)
 
 `TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state. Application runtime
-and managed-egress preferences are explicit default-off consent fields.
+and managed-storage flags default to true and remain temporary compatibility fields. Diagnostic collection and approved
+storage are automatic; AI egress consent remains separate.
 
 `AiDeploymentAnalysis` stores validated/redacted analysis guidance with optional requested/returned model provenance,
 explicit model revision, prompt/result schema versions, token counts and decimal cost/currency metadata. Legacy optional

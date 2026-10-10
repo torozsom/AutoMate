@@ -110,7 +110,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
         await using var policyScope = scopeFactory.CreateAsyncScope();
         var project = await policyScope.ServiceProvider.GetRequiredService<AutoMateDbContext>().Applications
             .Where(p => p.Id == target.ProjectId && p.UserId == target.UserId)
-            .Select(p => new { p.RuntimeDiagnosticsEnabled }).SingleOrDefaultAsync(cancellationToken);
+            .Select(p => new { p.Id }).SingleOrDefaultAsync(cancellationToken);
         if (project is null)
         {
             _targets.TryRemove(target.DeploymentId, out _);
@@ -134,8 +134,6 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
 
         target.ExpectedRevision ??= deployment.CloudContainerRevision;
-        if (!project.RuntimeDiagnosticsEnabled && !(policyScope.ServiceProvider.GetService<IDeploymentRuntimeViewers>()?
-                .HasViewers(target.ProjectId, target.DeploymentId) ?? false)) return;
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsNpgsql())
         {
@@ -427,8 +425,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
             {
                 d.Id,
                 d.CsProject!.AppId,
-                d.CsProject.Application.RuntimeDiagnosticsEnabled,
-                d.CsProject.Application.UserId,
+                d.CsProject!.Application.UserId,
                 d.CloudResourceId,
                 d.CloudContainerAppName,
                 d.CloudContainerRevision
@@ -436,8 +433,6 @@ public sealed class AzureContainerAppRuntimeStreamer(
         foreach (var d in deployments)
         {
             if (_targets.ContainsKey(d.Id)) continue;
-            if (!d.RuntimeDiagnosticsEnabled && !(scope.ServiceProvider.GetService<IDeploymentRuntimeViewers>()?
-                    .HasViewers(d.AppId, d.Id) ?? false)) continue;
             try
             {
                 var azure = await credentials.GetAsync(d.UserId, token);

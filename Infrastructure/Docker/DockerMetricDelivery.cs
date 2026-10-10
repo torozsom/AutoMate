@@ -35,25 +35,24 @@ internal sealed class DockerMetricDelivery(
                 DeploymentDiagnosticStream.Metric, container),
             Metrics: DeploymentMetricNormalizer.Docker(metrics.Cpu, metrics.Memory));
         var safe = redactor.Redact(observation).Event;
-        if (viewers.HasViewers(projectId, deploymentId))
+        // Legacy viewing leases do not gate collection or delivery; SignalR group membership remains authorized.
+        _ = viewers;
+        var startedAt = Stopwatch.GetTimestamp();
+        try
         {
-            var startedAt = Stopwatch.GetTimestamp();
-            try
-            {
-                await live.StreamContainerMetricsAsync(projectId, container, safe.Attributes!["cpu"],
-                    safe.Attributes["memory"], token);
-                AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(safe));
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(safe));
-                logger.LogWarning("Live Docker metric delivery unavailable for project {ProjectId}: {FailureType}.",
-                    projectId, exception.GetType().Name);
-            }
-            finally
-            {
-                DeploymentDiagnosticPublisher.RecordSinkDuration(safe, "delivery", startedAt);
-            }
+            await live.StreamContainerMetricsAsync(projectId, container, safe.Attributes!["cpu"],
+                safe.Attributes["memory"], token);
+            AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(safe));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(safe));
+            logger.LogWarning("Live Docker metric delivery unavailable for project {ProjectId}: {FailureType}.",
+                projectId, exception.GetType().Name);
+        }
+        finally
+        {
+            DeploymentDiagnosticPublisher.RecordSinkDuration(safe, "delivery", startedAt);
         }
 
         if (now < _nextHistorySample) return;

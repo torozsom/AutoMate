@@ -10,14 +10,14 @@ const server = http.createServer((req, res) => {
         res.end();
         return;
     }
-    const base = /^(details|history)\.html$/.test(name) ? metrics : /^[a-z-]+\.html$|^(bootstrap.css|Web.styles.css)$/.test(name) ? preview : assets;
+    const base = /^(details|details-analysis|history)\.html$/.test(name) ? metrics : /^[a-z-]+\.html$|^(bootstrap.css|Web.styles.css)$/.test(name) ? preview : assets;
     const file = path.resolve(base, name);
     if (!file.startsWith(base + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         res.writeHead(404);
         res.end();
         return;
     }
-    res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html');
+    res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : /\.(ttf|woff2?)$/.test(file) ? 'font/' + path.extname(file).slice(1) : 'text/html');
     fs.createReadStream(file).pipe(res);
 });
 (async () => {
@@ -36,11 +36,20 @@ const server = http.createServer((req, res) => {
                     await page.goto(url + '/' + name + '.html');
                     await page.evaluate(theme => document.documentElement.dataset.bsTheme = theme, theme);
                     await page.evaluate(() => document.fonts.ready);
-                    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ' ' + theme + ' ' + width + ' must not overflow');
+                    assert.ok(await page.evaluate(() => document.fonts.check('12px Inter') && document.fonts.check('12px "JetBrains Mono"')), 'Reference fonts must load locally');
+                    const overflow = await page.evaluate(() => ({
+                        width: document.documentElement.scrollWidth, viewport: innerWidth,
+                        elements: [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > innerWidth + 1)
+                            .slice(0, 8).map(e => e.tagName + '.' + e.className)
+                    }));
+                    assert.ok(overflow.width <= overflow.viewport + 1, name + ' ' + theme + ' ' + width + ' must not overflow: ' + JSON.stringify(overflow));
                     await page.screenshot({
                         path: path.join(preview, name + '-' + theme + '-' + width + '.png'),
                         fullPage: true
                     });
+                    if (theme === 'dark' && width === 1440 && ['overview', 'details'].includes(name)) {
+                        await page.screenshot({path: path.join(preview, name + '-desktop.png')});
+                    }
                     checked++;
                     const lowContrast = await page.evaluate(() => {
                         const rgb = value => (value.match(/[0-9.]+/g) || []).slice(0, 3).map(v => Number(v) * (value.startsWith('color(srgb') ? 255 : 1));
@@ -55,7 +64,7 @@ const server = http.createServer((req, res) => {
                             }
                             return getComputedStyle(document.body).backgroundColor;
                         };
-                        return [...document.querySelectorAll('.console-kpi span,.console-meta,.console-subtext,.page-description,.btn-primary')]
+                        return [...document.querySelectorAll('.console-kpi span,.console-meta,.console-subtext,.page-description,.btn-primary,.detail-list dt,.detail-list dd,.nav-section-label,.skip-link')]
                             .filter(e => e.getClientRects().length && !e.matches(':disabled')).filter(e => {
                                 const style = getComputedStyle(e);
                                 const a = luminance(style.color), b = luminance(background(e));
@@ -85,7 +94,9 @@ const server = http.createServer((req, res) => {
                         assert.equal(await page.locator('[role=dialog]').count(), 0);
                     }
                     if (name === 'details') {
-                        assert.deepEqual(await page.locator('.project-section-tabs a').allTextContents(), ['Overview', 'Live Logs', 'Live Resource Utilization', 'Project Analytics', 'AI Analysis', 'Configuration', 'Deployment History']);
+                        assert.equal(await page.locator('.deployment-progress').count(), 0);
+                        assert.equal(await page.locator('.overview-layout > .detail-panel').count(), 4);
+                        assert.deepEqual(await page.locator('.project-section-tabs a').allTextContents(), ['Overview', 'Live Logs', 'Live Resource Utilization', 'Project Analytics', 'Configuration', 'Deployment History']);
                         assert.ok(await page.locator('.configuration-tables table').count() >= 4);
                         await page.locator('#configuration .console-details > summary').click();
                         assert.ok(await page.locator('#configuration .console-details').getAttribute('open') !== null);
@@ -118,14 +129,20 @@ const server = http.createServer((req, res) => {
             assert.equal(await page.locator('details.local-subproject-list').count(), 0);
             await page.goto(url + '/details.html');
             await page.evaluate(theme => document.documentElement.dataset.bsTheme = theme, theme);
-            await page.locator('#ai-analysis').screenshot({path: path.join(preview, 'ai-project-' + theme + '.png')});
+            await page.locator('.terminal-ai-shortcut').click();
+            await page.locator('[role=dialog]').screenshot({path: path.join(preview, 'ai-project-' + theme + '.png')});
         }
         for (const name of ['overview', 'projects', 'login', 'details', 'history', 'github', 'local', 'configuration']) {
             await page.setViewportSize({width: 1440, height: 960});
             await page.goto(url + '/' + name + '.html');
             await page.evaluate(() => document.documentElement.style.zoom = '2');
             await page.evaluate(() => document.fonts.ready);
-            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name + ' at 200% zoom must not overflow');
+            const zoomOverflow = await page.evaluate(() => ({
+                width: document.documentElement.scrollWidth, viewport: innerWidth,
+                elements: [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > innerWidth + 1)
+                    .slice(0, 10).map(e => e.tagName + '.' + e.className)
+            }));
+            assert.ok(zoomOverflow.width <= zoomOverflow.viewport + 1, name + ' at 200% zoom must not overflow: ' + JSON.stringify(zoomOverflow));
         }
         await page.goto(url + '/overview.html');
         await page.setViewportSize({width: 360, height: 960});
@@ -136,7 +153,9 @@ const server = http.createServer((req, res) => {
         await page.waitForFunction(() => document.activeElement.id === 'configuration-title');
         await page.locator('.terminal-ai-shortcut').focus();
         await page.keyboard.press('Enter');
-        await page.waitForFunction(() => document.activeElement.id === 'ai-analysis-title');
+        await page.waitForFunction(() => document.querySelector('[role=dialog]')?.contains(document.activeElement));
+        await page.keyboard.press('Escape');
+        await page.waitForFunction(() => !document.querySelector('[role=dialog]') && document.activeElement.classList.contains('terminal-ai-shortcut'));
         assert.deepEqual(errors, []);
         console.log('Passed ' + checked + ' theme/viewport page checks, dialog keyboard traps, selected deployment links, section anchors, mobile navigation and 200% zoom. Screenshots: ' + preview);
     } finally {

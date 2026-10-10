@@ -7,7 +7,7 @@ namespace Web.Components.Layout;
 
 public partial class NavMenu : ComponentBase
 {
-    private bool _isDarkMode;
+    private bool _isDarkMode = true;
 
     /// <summary>Mobile navigation visibility.</summary>
     private bool _menuOpen;

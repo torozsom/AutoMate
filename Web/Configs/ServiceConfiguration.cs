@@ -534,6 +534,7 @@ public static class ServiceConfiguration
                 });
             services.AddSingleton<TelemetryHttpTransport>();
             services.AddSingleton<TelemetryProjectPolicyCache>();
+            services.AddSingleton<TelemetryGatewayCompatibility>();
             services.AddScoped<ITelemetryGateway, TelemetryGatewayClient>();
             services.AddScoped<IDeploymentArchive, TelemetryGatewayClient>();
             services.AddScoped<DeploymentDiagnosticStore>();

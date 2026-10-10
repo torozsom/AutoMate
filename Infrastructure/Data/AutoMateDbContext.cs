@@ -330,6 +330,8 @@ public class AutoMateDbContext(
     private static void ConfigureApplication(EntityTypeBuilder<Domain.Entities.Application> entity)
     {
         entity.Property(a => a.Name).HasMaxLength(ApplicationNameMaxLength).IsRequired();
+        entity.Property(a => a.RuntimeDiagnosticsEnabled).HasDefaultValue(true);
+        entity.Property(a => a.ManagedTelemetryConsent).HasDefaultValue(true);
 
         entity.HasMany(a => a.CsProjects)
             .WithOne(csp => csp.Application)

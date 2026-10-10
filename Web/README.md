@@ -52,6 +52,11 @@ Signed-in Home is Overview and /dashboard is Projects. Public pages use a lightw
 and console.css provide compact tables, KPI cards and responsive surfaces.
 See [behavior and verification](../docs/ui-modernization.md).
 
+The Obsidian Telemetry refresh follows the three reference subfolders under `.agents/UI-Design` through native Blazor
+components and `wwwroot/obsidian.css`. Dark is the default for new sessions; saved light/dark choices load before
+the first paint. Inter and JetBrains Mono plus the existing Bootstrap Icons are served locally with their licenses.
+Reference-only controls and illustrative claims are omitted; current application features are preserved.
+
 ## Metric refinements
 
 Every chart group uses a shared UTC range picker (10-minute through five-year presets, custom five-minute minimum).

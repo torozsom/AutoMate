@@ -318,7 +318,9 @@ namespace Infrastructure.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<bool>("ManagedTelemetryConsent")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
+                        .HasDefaultValue(true)
                         .HasColumnName("managed_telemetry_consent");
 
                     b.Property<string>("Name")
@@ -328,7 +330,9 @@ namespace Infrastructure.Migrations
                         .HasColumnName("name");
 
                     b.Property<bool>("RuntimeDiagnosticsEnabled")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
+                        .HasDefaultValue(true)
                         .HasColumnName("runtime_diagnostics_enabled");
 
                     b.Property<string>("SourcePathOrUrl")

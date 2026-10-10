@@ -19,7 +19,7 @@ light/dark theme tokens. `Shared/TelemetryPresentation.cs` owns friendly names, 
 rounded axes and sample-weighted daily averages. Historical summaries average returned interval aggregates; raw sample
 counts are unavailable there. Memory capacity remains supporting text rather than flattening the usage chart.
 
-Collection consent remains explicit; retention/sampling help is collapsed. No storage/API/schema changes are involved.
+Collection and approved storage are automatic; retention/sampling help is collapsed. AI egress consent remains explicit.
 Rendering fixtures in Web.Tests generate ignored `.artifacts/metrics-preview` HTML for browser checks without OAuth.
 
 Project details offers Stop only for local sources. Remote cloud deployments must be stopped in the provider portal;
@@ -62,11 +62,14 @@ independently of metric queries; metric-provider failures keep the logs visible 
 Changing history pages or channels replaces terminal content instead of accumulating it. The shared xterm wrapper
 coalesces resize notifications and fits only when the viewport dimensions change.
 `Shared/TelemetryPreferences.razor`
-records explicit runtime and managed-provider consent. Project replay tracks a confirmed cursor separately from bounded
+displays automatic collection, retention and sampling without consent controls. Project replay tracks a confirmed cursor
+separately from bounded
 rendered live identities and does not advance on failed backend reads. Self-hosted pages also periodically catch up.
 
-Runtime logs and metrics collected while viewing are saved for 30-day replay. The checkbox enables background
-collection while the page is closed. Metric history defaults to 60-second sampling; local live cards update with each
+Runtime logs and metrics are automatically saved while the deployment is active, including while the page is closed.
+Project terminals replay only Starting/Running deployments; Stopped/Failed pages initialize empty. Permanent historical
+reads remain on deployment-history pages. Metric history defaults to 60-second sampling; local live cards update with
+each
 Docker stats observation (normally every 1–2 seconds). The metric cards restore the latest
 saved numeric snapshot while awaiting live updates. `DeploymentMetricDisplay` formats numeric units for the cards.
 
@@ -134,6 +137,10 @@ sections and saved provenance while retaining legacy layouts. See
 
 ## Workspace console
 
+The local UI-Design references are translated through `wwwroot/obsidian.css`, local Inter/JetBrains Mono fonts and
+existing Bootstrap Icons. Project Details groups its existing metadata into four compact cards; Deployment Details
+groups its existing overview fields into the header. Existing routes, controls, consent and data queries are preserved.
+
 WorkspaceOverviewPanel reads IWorkspaceQuery in independent scopes, refreshes visible pages every thirty seconds and
 fences replies against identity changes/disposal. WorkspaceOverviewView, KpiCard and ProjectInventoryTable are passive
 read-model presenters. Dashboard URL parameters preserve inventory selection; an owned entity is loaded only for the
@@ -147,3 +154,11 @@ lifetimes. MetricStatisticsView renders bounded sample-weighted charts and pagin
 statistics; StatisticsPager changes only numeric rows. Overview relative selections advance on visible refresh; custom
 ranges remain fixed. Project/history requests cancel obsolete reads and discard stale responses. These chart controls
 do not edit AI context preferences or saved results.
+
+## Current deployment analysis dialog
+
+The project terminal AI button opens `ConsoleDialog` containing the shared `DeploymentAnalysisSection`; there is no
+project AI navigation anchor or inline section. Deployment history retains inline analysis. Choices, immutable requests,
+egress consent and cancellation belong to the shared section. Closing the dialog stops UI polling without canceling
+server work; route/deployment changes close it and fence delayed replies. Terminal history/connection failures are
+displayed outside terminal output.

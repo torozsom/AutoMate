@@ -38,7 +38,8 @@ Pagination never restricts charts. Configuration key/value tables remain unpagin
 
 IMetricExploration accepts owner, optional project/deployment/container, absolute range and statistics pagination.
 IWorkspaceQuery accepts absolute ranges as well as its existing compatibility overload. The private metric-batch route
-resolves current membership and managed-storage consent, selects ten partitions per request and returns at most 4,000
+resolves current membership and operator processing approval, selects ten partitions per request and returns at most
+4,000
 aggregates with continuation. Web sends bounded batches, not a request per project and never an Azure provider request.
 
 The archive's metric-index contains day-partitioned checksummed references and completion metadata, without log prose.

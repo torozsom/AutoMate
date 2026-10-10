@@ -47,6 +47,16 @@ public sealed class TelemetryHostSafetyTests
         using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
         using var unauthorized = await client.GetAsync("/status?password=private-query");
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+        using var anonymousCapabilities = await client.GetAsync("/capabilities");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymousCapabilities.StatusCode);
+        using var capabilityRequest = new HttpRequestMessage(HttpMethod.Get, "/capabilities");
+        capabilityRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var capabilityResponse = await client.SendAsync(capabilityRequest);
+        Assert.Equal(HttpStatusCode.OK, capabilityResponse.StatusCode);
+        var capabilityJson = await capabilityResponse.Content.ReadAsStringAsync();
+        Assert.Contains("assessment-metrics", capabilityJson);
+        Assert.Contains("metric-batch", capabilityJson);
+        Assert.DoesNotContain(token, capabilityJson);
         using var request = new HttpRequestMessage(HttpMethod.Post, "/ingest?password=private-query")
         {
             Content = new StringContent("{password=private-body")

@@ -4,7 +4,8 @@ window.setTheme = (theme) => {
 }
 
 window.getTheme = () => {
-    return localStorage.getItem('theme') || 'light';
+    const theme = localStorage.getItem('theme');
+    return theme === 'light' || theme === 'dark' ? theme : 'dark';
 }
 
 window.initializeTheme = () => {

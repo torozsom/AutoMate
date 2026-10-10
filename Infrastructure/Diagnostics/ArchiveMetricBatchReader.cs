@@ -22,6 +22,8 @@ public sealed class ArchiveMetricBatchReader(
     /// <summary>Reads ten authorized partitions per request, with explicit continuation and availability.</summary>
     public async Task<ArchiveMetricBatch> ReadAsync(ArchiveMetricBatchRequest request, CancellationToken token)
     {
+        if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
+            throw new InvalidOperationException("Managed telemetry processing is not approved.");
         ValidateArchiveWindow(request.Range);
         if (request.Owner == Guid.Empty || request.Offset < 0) throw new ArgumentException("Invalid metric batch.");
         var projects = db.Applications.AsNoTracking().Where(p => p.UserId == request.Owner);
@@ -37,16 +39,10 @@ public sealed class ArchiveMetricBatchReader(
                                                                  d.CsProject.AppId == request.Project) &&
                                                                 (request.Deployment == null ||
                                                                  d.Id == request.Deployment));
-        var withheld = options.Value.ManagedService && await selected.AnyAsync(d =>
-            !d.CsProject!.Application.ManagedTelemetryConsent, token);
-        if (options.Value.ManagedService)
-            selected = selected.Where(d => d.CsProject!.Application.ManagedTelemetryConsent);
         var partitions = await selected.OrderBy(d => d.Id).Skip(request.Offset).Take(11)
             .Select(d => new { d.Id, Project = d.CsProject!.AppId }).ToListAsync(token);
         var items = new List<MetricObservation>();
-        var notice = withheld
-            ? "Managed metric storage requires consent; some project observations are unavailable."
-            : null;
+        string? notice = null;
         foreach (var partition in partitions.Take(10))
         {
             var page = await archive.ReadIndexedMetricsAsync(request.Owner, partition.Project, partition.Id,

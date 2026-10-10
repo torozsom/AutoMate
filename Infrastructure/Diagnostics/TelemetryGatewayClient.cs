@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -8,7 +9,10 @@ using Microsoft.Extensions.Options;
 namespace Infrastructure.Diagnostics;
 
 /// <summary>Only server-side callers possess the private ingestion credential.</summary>
-public sealed class TelemetryGatewayClient(IHttpClientFactory clients, IOptions<TelemetryStorageOptions> options)
+public sealed class TelemetryGatewayClient(
+    IHttpClientFactory clients,
+    IOptions<TelemetryStorageOptions> options,
+    TelemetryGatewayCompatibility compatibility)
     : ITelemetryGateway, IDeploymentArchive
 {
     /// <inheritdoc />
@@ -91,12 +95,15 @@ public sealed class TelemetryGatewayClient(IHttpClientFactory clients, IOptions<
     /// <summary>Bounds archive response bodies and cancellation across headers and decoding.</summary>
     private async Task<T> SendArchiveAsync<T>(string path, object? payload, CancellationToken token)
     {
+        await compatibility.EnsureAsync(token);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(30));
         using var request = Request(payload is null ? HttpMethod.Get : HttpMethod.Post, path);
         if (payload is not null) request.Content = JsonContent.Create(payload);
         using var response = await clients.CreateClient("DeploymentTelemetry").SendAsync(request,
             HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new TelemetryCompatibilityException(TelemetryCompatibilityFailure.IncompatibleHost);
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(deadline.Token);
         using var body = new MemoryStream();

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Domain.Enums;
 using Infrastructure.Data;
@@ -283,18 +282,16 @@ public sealed class LocalDeploymentLogStreamManager(
         }
     }
 
-    /// <summary>Reads current deployment and consent using an independent EF scope.</summary>
+    /// <summary>Reads current deployment eligibility using an independent EF scope.</summary>
     private async Task<(bool Current, bool Runtime, DeploymentStatus Status)> ReadPolicyAsync(
         DockerDeploymentTarget target, CancellationToken token)
     {
         await using var scope = scopes.CreateAsyncScope();
         var latest = await scope.ServiceProvider.GetRequiredService<AutoMateDbContext>().Deployments.AsNoTracking()
             .Where(d => d.CsProject!.AppId == target.ProjectId).OrderByDescending(d => d.CreatedAt)
-            .Select(d => new { d.Id, d.Status, d.CsProject!.Application!.RuntimeDiagnosticsEnabled })
+            .Select(d => new { d.Id, d.Status })
             .FirstOrDefaultAsync(token);
-        var interest = latest?.RuntimeDiagnosticsEnabled == true || scope.ServiceProvider
-            .GetRequiredService<IDeploymentRuntimeViewers>()
-            .HasViewers(target.ProjectId, target.DeploymentId);
+        const bool interest = true;
         return (latest?.Id == target.DeploymentId, interest, latest?.Status ?? DeploymentStatus.Stopped);
     }
 

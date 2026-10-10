@@ -17,14 +17,17 @@
             <div class="page-eyebrow">Workspace</div>
             <h1>Overview</h1>
             <p class="page-description">Deployment activity and recorded resource usage, at a glance.</p></div>
-        <a class="btn btn-primary" href="/dashboard"><i class="bi bi-plus-lg" aria-hidden="true"></i> Deploy a
-            project</a></header>
-    <div class="console-toolbar">
-        <MetricRangePicker Changed="RangeChangedAsync" SelectionChanged="p => _preset = p"/>
-        <span
-            class="console-meta">@(_data is null ? "UTC daily statistics" : $"Updated {_data.End:HH:mm:ss} UTC")</span>
-        <button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LoadAsync">Refresh</button>
-    </div>
+        <div class="overview-header-actions">
+            <div class="console-toolbar">
+                <MetricRangePicker Changed="RangeChangedAsync" SelectionChanged="p => _preset = p"/>
+                <span
+                    class="console-meta">@(_data is null ? "UTC daily statistics" : $"Updated {_data.End:HH:mm:ss} UTC")</span>
+                <button class="btn btn-outline-secondary" disabled="@_busy" @onclick="LoadAsync">Refresh</button>
+            </div>
+            <a class="btn btn-primary" href="/dashboard"><i class="bi bi-plus-lg" aria-hidden="true"></i> Deploy a
+                project</a>
+        </div>
+    </header>
     @if (_notice is not null)
     {
         <p class="alert alert-warning" role="status">@_notice</p>

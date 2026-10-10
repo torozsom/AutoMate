@@ -83,3 +83,6 @@ starting the new dispatcher. Do not use EnsureCreated for production: it cannot 
 PreserveDeploymentHistory adds snapshots/outcomes, permanent AI-result markers and archive cleanup metadata. Positive
 Running/Failed facts backfill outcomes; stopped-only records remain Unknown. A PostgreSQL project-deletion trigger
 queues archive cleanup in the same transaction, including account cascades.
+
+AutomaticTelemetryCollection backfills existing runtime/storage compatibility flags and adds true defaults. It preserves
+all saved diagnostic/history rows; downgrade removes defaults without restoring historical opt-out values.

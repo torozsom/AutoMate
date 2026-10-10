@@ -31,8 +31,9 @@ public sealed class DeploymentAnalysisContextBuilder(
         // Compatibility for retained-data adapters without the richer archive selection port.
         var deployment = await db.Deployments.AsNoTracking().Where(d => d.Id == deploymentId).Select(d => new
         {
-            Project = d.CsProject!.AppId, Owner = d.CsProject.Application.UserId,
-            Consent = d.CsProject.Application.ManagedTelemetryConsent, d.CreatedAt
+            Project = d.CsProject!.AppId,
+            Owner = d.CsProject.Application.UserId,
+            d.CreatedAt
         }).SingleOrDefaultAsync(token);
         if (deployment is null) return new DeploymentAnalysisContext("", []);
         var history = await diagnostics.ReadRecentAsync(deployment.Project, deploymentId,
@@ -42,7 +43,7 @@ public sealed class DeploymentAnalysisContextBuilder(
             Events = history.Events.Where(e => e.ProjectId == deployment.Project &&
                                                (e.DeploymentId == deploymentId || e.DeploymentId is null)).ToArray()
         };
-        var unavailable = storage.Value.ManagedService && !deployment.Consent;
+        var unavailable = storage.Value.ManagedService && !storage.Value.ManagedDataProcessingApproved;
         IReadOnlyList<DeploymentMetricPoint> points = [];
         if (!unavailable)
             try
@@ -72,16 +73,21 @@ public sealed class DeploymentAnalysisContextBuilder(
         selection = selection.Normalize();
         var deployment = await db.Deployments.AsNoTracking().Where(d => d.Id == deploymentId).Select(d => new
         {
-            Project = d.CsProject!.AppId, Owner = d.CsProject.Application.UserId,
-            Consent = d.CsProject.Application.ManagedTelemetryConsent,
-            d.CreatedAt, d.UpdatedAt, d.Status, d.Outcome, d.ConfigurationSnapshotJson
+            Project = d.CsProject!.AppId,
+            Owner = d.CsProject.Application.UserId,
+            d.CreatedAt,
+            d.UpdatedAt,
+            d.Status,
+            d.Outcome,
+            d.ConfigurationSnapshotJson
         }).SingleOrDefaultAsync(token);
         if (deployment is null) return new DeploymentAnalysisContext("", []);
         var now = clock.GetUtcNow();
         var window = selection.Window(deployment.Status, deployment.CreatedAt, deployment.UpdatedAt, now);
         var provenance = new AssessmentProvenance(selection, selection.Resolve(deployment.Status), deployment.Status,
             deployment.Outcome, now, window);
-        if (window.End <= window.Start || (storage.Value.ManagedService && !deployment.Consent))
+        if (window.End <= window.Start ||
+            (storage.Value.ManagedService && !storage.Value.ManagedDataProcessingApproved))
             return new DeploymentAnalysisContext("", [], provenance);
         var query = new ArchiveAssessmentQuery(deployment.Owner, deployment.Project, deploymentId, selection, window);
         var page = await AssessmentEvidenceReader.ReadAsync(db, archive, query, token, retainedLogs);
@@ -112,9 +118,13 @@ public sealed class DeploymentAnalysisContextBuilder(
                 if (snapshot is not null)
                     configuration = new
                     {
-                        provider = Bounded(snapshot.Provider), runtime = Bounded(snapshot.Runtime),
-                        environment = Bounded(snapshot.Environment), snapshot.Port, snapshot.Public,
-                        region = Bounded(snapshot.Region), image = Bounded(snapshot.Image)
+                        provider = Bounded(snapshot.Provider),
+                        runtime = Bounded(snapshot.Runtime),
+                        environment = Bounded(snapshot.Environment),
+                        snapshot.Port,
+                        snapshot.Public,
+                        region = Bounded(snapshot.Region),
+                        image = Bounded(snapshot.Image)
                     };
             }
             catch (JsonException)
@@ -123,8 +133,12 @@ public sealed class DeploymentAnalysisContextBuilder(
 
         var metadata = new
         {
-            status = deployment.Status.ToString(), outcome = deployment.Outcome.ToString(),
-            assessment = provenance.EffectiveKind.ToString(), collectedAt = now, window, configuration,
+            status = deployment.Status.ToString(),
+            outcome = deployment.Outcome.ToString(),
+            assessment = provenance.EffectiveKind.ToString(),
+            collectedAt = now,
+            window,
+            configuration,
             channels = page.Channels.Where(c => page.Events.Any(e => e.Channel == c.Channel)).Take(24).Select(c => new
             {
                 channel = "channel-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(c.Channel)))[..12],
