@@ -27,9 +27,9 @@ Loki/Mimir TLS endpoints can still be used by Web. Production ingress must be pr
    diagnostic payloads or deployment identities are rewritten.
 2. Start the single telemetry service after migrations. Verify authentication, volume ownership, a durable receipt,
    restart recovery, `/status` and actual Loki/Mimir visibility with a canary account.
-3. Enable DiskGateway on a limited audience. In both profiles, invalid gateway configuration fails startup; missing
-   managed
-   consent does not trigger a raw PostgreSQL fallback. Policy/consent caches expire after five seconds.
+3. Enable DiskGateway on a limited audience. In both profiles, invalid gateway configuration fails startup; diagnostic
+   collection/storage are automatic, with operator processing approval and no raw PostgreSQL fallback. Ownership policy
+   caches expire after five seconds.
 4. Keep the old database outbox worker running until pending database payloads reach zero. Existing 30-day database
    history is merged with pending disk and confirmed backend history. V1 APIs stay available; v2 log cursors are
    versioned and resource-scoped. Do not downgrade an AutoMate host to a raw database fallback during an outage.

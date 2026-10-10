@@ -2,8 +2,8 @@
 
 Infrastructure owns the diagnostic redactor, redacted diagnostic store, and bounded delivery pipeline. It receives
 normalized events from provider adapters, redacts them before every sink, adds structured logs/traces/metrics, and fans
-out safe terminal data after durable persistence. Runtime output collected during authorized viewing is saved for
-replay too; the owner preference controls collection while no page is open.
+out safe terminal data after durable persistence. Runtime logs and sampled metrics are collected and persisted
+automatically for active deployments in both hosting profiles, including while every browser is closed.
 
 The pipeline persists only already-redacted events before broadcasting them. Its dispatcher maps typed terminal channels
 to stable UI channels, keeping GitHub Actions, Azure console, Azure system, local build, and local container output
@@ -49,7 +49,8 @@ never make Web, SignalR, or provider payload types part of the diagnostic contra
 `DeploymentTelemetryStore` writes new payloads through the disk gateway and merges legacy PostgreSQL reads with Loki
 history. `LokiDeploymentLogs` and
 `MimirDeploymentMetrics` implement separate log/metric ports. `TelemetryDeliveryWorker` leases tenant batches and waits
-for complete-prefix query visibility. `DeploymentHistoryService` authorizes historical reads and consent changes.
+for complete-prefix query visibility. `DeploymentHistoryService` authorizes historical reads and legacy preference
+calls.
 `TelemetryStorageOptions` validates quotas/transport, and `TelemetryHttpTransport` bounds active and waiting requests.
 See [hosting and retention operations](../../docs/deployment-telemetry.md).
 
@@ -58,7 +59,7 @@ limits. It never includes configured endpoint values or credentials in validatio
 
 `DeploymentRuntimeViewers` bounds authorized process-local viewing leases to 4,096 connections/project pairs and expires
 them after 45 seconds without renewal. Collected runtime output uses durable positive cursors for replay.
-Viewing alone does not enable unattended collection. Storage requests include capacity waits and body reads in a
+Viewing leases do not gate unattended collection. Storage requests include capacity waits and body reads in a
 10-second deadline; provider timeouts return an availability notice without terminating live delivery.
 
 Local live numeric metrics are a presentation snapshot: `DockerMetricDelivery` centrally redacts each observation and
@@ -120,7 +121,7 @@ Web/Observability/README.md. Universal protection for arbitrary unsupported inte
 | DeploymentDiagnosticPublisher channel                  | Bounded detached redacted events before admission; finite metric dimensions only.                                                                                                                                                                                                                    |
 | DiskTelemetrySpool channel/segments                    | Mandatory injected shared redactor snapshots event attributes/metrics and channel before queue admission. Current masking also applies after checksum verification on backlog read, without rewriting acknowledged files. Identity, receipt, cancellation and durable flush semantics are preserved. |
 | Deployment analysis work rows                          | Analysis IDs and claim/completion metadata only; context is loaded just before invocation and is never cached or persisted in these rows. Durable leases/retries remain M6 work.                                                                                                                     |
-| TelemetryProjectPolicyCache / TelemetryAdmissionPolicy | Bounded five-second GUID ownership/consent projections; no diagnostic payloads, provider errors, credentials or context.                                                                                                                                                                             |
+| TelemetryProjectPolicyCache / TelemetryAdmissionPolicy | Bounded five-second GUID ownership projections; no diagnostic payloads, provider errors, credentials or context.                                                                                                                                                                                     |
 | GitHub repository distributed cache                    | Repository DTO metadata for the existing repository UI; token-hashed keys and ten-minute TTL, no workflow diagnostic logs or AI context. Repository metadata is private operational data, not an approved external telemetry dimension.                                                              |
 | In-process DeploymentJobQueue                          | Bounded execution inputs may contain credentials required for deployment; inputs remain local, are never diagnostic context/metric labels, and are not serialized to distributed cache. Redacting those inputs would break existing deployment operation.                                            |
 | SaaS cloud queue/outbox                                | Run IDs and scheduling metadata; token-free configuration snapshot is protected using the existing EF data-protection converter. Verified webhook receipts store selected workflow metadata rather than raw HTTP payloads/logs.                                                                      |
@@ -159,10 +160,23 @@ See [status-aware assessments](../../docs/status-aware-assessments.md) for metad
 MetricExplorationService streams retained full UTC-day rows and combines exact archived boundary fragments, preserving
 container/deployment identity and sample weighting. ArchiveMetricBatchReader resolves ten currently authorized
 partitions
-in SQL per private request and caps output before HTTP serialization. Managed storage rechecks consent.
+in SQL per private request and caps output before HTTP serialization. Managed storage retains operator processing
+approval.
 
 DiskDeploymentArchive.Metrics keeps a derived day lookup containing checksummed source references, never diagnostic
 prose.
 A sealed checksummed day-count manifest detects missing/corrupt references. Source segments remain authoritative.
 Legacy recovery advances at most 2,000 segments per read and reports partial results until complete. Project archive
 cleanup removes lookup files with the partition. See ../../docs/metric-exploration.md.
+
+## Automatic collection and host compatibility
+
+Legacy preference setters still authorize ownership but keep collection/storage enabled when older clients submit false.
+Operator processing approval, redaction, retention and sampling remain enforced. Apply
+`20261010141504_AutomaticTelemetryCollection` before updated services; it backfills existing flags and adds true
+defaults without changing saved history.
+
+`TelemetryGatewayCompatibility` coalesces authenticated five-second, 8 KiB capability probes before archive operations.
+A protocol/version mismatch, access denial and an unreachable host have distinct finite operator diagnostics and safe
+availability guidance; an empty authorized archive response is valid history. Preserve the archive volume when
+rebuilding/recreating Telemetry.

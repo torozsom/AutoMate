@@ -39,7 +39,6 @@
         var primaryConfiguration = primaryWebProject?.Configuration;
         var sourceLabel = _app.SourceType == SourceType.Remote ? "GitHub" : "Local";
         var platformLabel = _app.SourceType == SourceType.Remote ? "Azure Container Apps" : "Docker Compose";
-        var branchLabel = _app.SourceType == SourceType.Remote ? "GitHub repository" : "workspace";
         var webProjectCount = _app.CsProjects.Count(csp => csp.IsWebProject);
         var subProjectCount = _app.CsProjects.Count;
         var databaseCount = _databaseTabs.Count();
@@ -49,11 +48,21 @@
         <section class="project-console @GetProjectSourceClass(_app.SourceType)">
             <header class="project-console-header">
                 <div class="project-identity">
-                    <div class="project-breadcrumb">AutoMate / @_app.Name</div>
+                    <div class="source-path-row" title="@_app.SourcePathOrUrl">
+                        @if (GitHubRepositoryUrlParser.TryParse(_app.SourcePathOrUrl, out var repository))
+                        {
+                            <a class="text-truncate"
+                               href="@($"https://github.com/{repository.Owner}/{repository.Name}")"
+                               target="_blank" rel="noopener noreferrer">@_app.SourcePathOrUrl</a>
+                        }
+                        else
+                        {
+                            <span class="text-truncate">@_app.SourcePathOrUrl</span>
+                        }
+                    </div>
+                    <h1 class="project-breadcrumb">@_app.Name</h1>
                     <div class="project-subtitle">
                         <span>@sourceLabel</span>
-                        <span aria-hidden="true">·</span>
-                        <span>@branchLabel</span>
                         <span aria-hidden="true">·</span>
                         <span>@platformLabel</span>
                     </div>
@@ -62,7 +71,7 @@
                 <div class="project-status-cluster">
                     <DeploymentBadge Status="@latestStatus"/>
                     <div class="project-actions">
-                        <button class="btn btn-success action-button action-button-deploy" @onclick="DeployProjectAsync"
+                        <button class="btn btn-primary action-button action-button-deploy" @onclick="DeployProjectAsync"
                                 disabled="@(isDeploying || isStopping)">
                             @if (isDeploying)
                             {
@@ -98,39 +107,7 @@
 
             <div class="project-console-body">
                 <section id="overview" class="console-section" aria-labelledby="overview-title">
-                    <div class="section-heading">
-                        <div>
-                            <div class="section-kicker">Overview</div>
-                            <h2 id="overview-title">Project status</h2>
-                        </div>
-                    </div>
-
-                    <dl class="project-overview-stats">
-                        <div>
-                            <dt>Saved to dashboard</dt>
-                            <dd>@FormatTimestamp(_app.CreatedAt)</dd>
-                        </div>
-                        <div>
-                            <dt>First deployment</dt>
-                            <dd>@FormatTimestamp(allDeployments.FirstOrDefault()?.CreatedAt)</dd>
-                        </div>
-                        <div>
-                            <dt>Total deployments</dt>
-                            <dd>@allDeployments.Count</dd>
-                        </div>
-                        <div>
-                            <dt>Successful</dt>
-                            <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Succeeded)</dd>
-                        </div>
-                        <div>
-                            <dt>Failed</dt>
-                            <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Failed)</dd>
-                        </div>
-                        <div>
-                            <dt>Pending / unknown</dt>
-                            <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Unknown)</dd>
-                        </div>
-                    </dl>
+                    <h2 id="overview-title" class="visually-hidden">Project status</h2>
                     <div class="overview-layout">
                         <article class="detail-panel detail-panel-primary">
                             <div class="panel-header">
@@ -183,37 +160,46 @@
                                 </div>
                             </dl>
                         </article>
-                    </div>
-
-                    <div class="source-path-panel">
-                        <div class="section-kicker">Source</div>
-                        <div class="source-path-row" title="@_app.SourcePathOrUrl">
-                            <i class="bi bi-link-45deg" aria-hidden="true"></i>
-                            @if (GitHubRepositoryUrlParser.TryParse(_app.SourcePathOrUrl, out var repository))
-                            {
-                                <a class="text-truncate"
-                                   href="@($"https://github.com/{repository.Owner}/{repository.Name}")" target="_blank"
-                                   rel="noopener noreferrer">@_app.SourcePathOrUrl</a>
-                            }
-                            else
-                            {
-                                <span class="text-truncate">@_app.SourcePathOrUrl</span>
-                            }
-                        </div>
+                        <article class="detail-panel">
+                            <div class="panel-header"><h3>Total deployments</h3></div>
+                            <strong class="overview-count">@allDeployments.Count</strong>
+                            <dl class="detail-list">
+                                <div>
+                                    <dt>Successful</dt>
+                                    <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Succeeded)</dd>
+                                </div>
+                                <div>
+                                    <dt>Failed</dt>
+                                    <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Failed)</dd>
+                                </div>
+                                <div>
+                                    <dt>Pending / unknown</dt>
+                                    <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Unknown)</dd>
+                                </div>
+                            </dl>
+                        </article>
+                        <article class="detail-panel">
+                            <div class="panel-header"><h3>Saved to dashboard</h3></div>
+                            <div class="overview-date">@FormatTimestamp(_app.CreatedAt)</div>
+                            <dl class="detail-list">
+                                <div>
+                                    <dt>First deployment</dt>
+                                    <dd>@FormatTimestamp(allDeployments.FirstOrDefault()?.CreatedAt)</dd>
+                                </div>
+                            </dl>
+                        </article>
                     </div>
                 </section>
 
                 <section id="logs" class="console-section" aria-labelledby="logs-title">
                     <TelemetryPreferences ProjectId="ProjectId"/>
-                    <div class="section-heading">
-                        <div>
-                            <div class="section-kicker">Live logs</div>
-                            <h2 id="logs-title">Runtime output</h2>
-                        </div>
-                    </div>
-
                     <div class="terminal-panel">
                         <div class="terminal-panel-header">
+                            <h2 id="logs-title">Runtime output</h2>
+                            @if (_lastHistoryAvailability is not null)
+                            {
+                                <p class="telemetry-notice" role="status">@_lastHistoryAvailability</p>
+                            }
                             <ul class="nav nav-pills terminal-tabs" role="tablist">
                                 @if (_app.SourceType == SourceType.Remote)
                                 {
@@ -269,10 +255,12 @@
                                     }
                                 }
                             </ul>
-                            <a href="#ai-analysis" class="terminal-ai-shortcut" aria-label="Go to AI Analysis"
-                               title="AI Analysis">
+                            <button type="button" class="terminal-ai-shortcut" aria-label="Open AI Analysis"
+                                    aria-haspopup="dialog" disabled="@(latestDeployment is null)"
+                                    @onclick="OpenAnalysisDialog"
+                                    title="AI Analysis">
                                 <i class="bi bi-stars" aria-hidden="true"></i><span>AI</span>
-                            </a>
+                            </button>
                         </div>
 
                         <div class="terminal-panel-body">
@@ -398,14 +386,17 @@
                     <ProjectTelemetrySummary ProjectId="ProjectId" UserId="_currentUserId"/>
                 </section>
 
-                <section id="ai-analysis" class="console-section ai-analysis-accent"
-                         aria-labelledby="ai-analysis-title">
-                    <h2 id="ai-analysis-title">AI Analysis</h2>
-                    <DeploymentAnalysisSection OwnerId="_currentUserId" ProjectId="ProjectId"
-                                               DeploymentId="@(latestDeployment?.Id)"
-                                               CsProjectId="@(latestDeployment?.CsProjectId ?? Guid.Empty)"
-                                               Consented="@(_app.CsProjects.FirstOrDefault(p => p.Id == latestDeployment?.CsProjectId)?.Configuration?.AiDiagnosticEgressConsented == true)"/>
-                </section>
+                @if (_showAnalysisDialog && latestDeployment is not null)
+                {
+                    <ConsoleDialog Title="AI Analysis" Eyebrow="Deployment assessment" OnClose="CloseAnalysisDialog">
+                        <div class="console-dialog-body">
+                            <DeploymentAnalysisSection OwnerId="_currentUserId" ProjectId="ProjectId"
+                                                       DeploymentId="@(latestDeployment?.Id)"
+                                                       CsProjectId="@(latestDeployment?.CsProjectId ?? Guid.Empty)"
+                                                       Consented="@(_app.CsProjects.FirstOrDefault(p => p.Id == latestDeployment?.CsProjectId)?.Configuration?.AiDiagnosticEgressConsented == true)"/>
+                        </div>
+                    </ConsoleDialog>
+                }
 
                 <section id="configuration" class="console-section" aria-labelledby="configuration-title">
                     <div class="section-heading">

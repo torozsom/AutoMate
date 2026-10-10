@@ -93,11 +93,11 @@ public interface IDeploymentHistoryService
         return TelemetryHistoryCursor.Page(history, project, deployment);
     }
 
-    /// <summary>Reads owner-scoped collection and provider-consent preferences.</summary>
+    /// <summary>Reads owner-scoped automatic collection status and processing location.</summary>
     Task<DeploymentTelemetryPreferences> GetPreferencesAsync(Guid userId, Guid projectId,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Records explicit consent or revocation for the configured managed provider.</summary>
+    /// <summary>Compatibility operation; authorizes the owner and keeps approved telemetry storage enabled.</summary>
     Task SetManagedConsentAsync(Guid userId, Guid projectId, bool enabled,
         CancellationToken cancellationToken = default);
 
@@ -109,7 +109,7 @@ public interface IDeploymentHistoryService
     Task<DeploymentMetricHistory> ReadMetricsAsync(Guid userId, Guid projectId, Guid deploymentId,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken = default);
 
-    /// <summary>Records explicit owner consent for ongoing runtime diagnostics.</summary>
+    /// <summary>Compatibility operation; authorizes the owner and keeps runtime collection enabled.</summary>
     Task SetRuntimeCollectionAsync(Guid userId, Guid projectId, bool enabled,
         CancellationToken cancellationToken = default);
 }

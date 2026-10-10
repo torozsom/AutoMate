@@ -72,3 +72,7 @@ Web.Tests/ConsoleExceptionDiagnosticsTests and real SDK export tests cover the s
 
 Archive backfill and cleanup failures use approved failure-type metadata. Detached redacted console exception
 diagnostics follow the same bounded safety policy as other failures; exported telemetry never receives exception prose.
+
+Telemetry capability failures expose a finite incompatibility, access-denied or unavailability category. Provider
+access-denied exceptions retain only authored guidance and allowlisted code/request correlation in the console
+diagnostic sink; response messages, credentials and context remain excluded.

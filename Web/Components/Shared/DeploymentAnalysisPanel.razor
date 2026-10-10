@@ -243,6 +243,7 @@
     {
         AiAnalysisStatus.Skipped => AnalysisSkipPolicy.Message(CurrentResult.FailureCode),
         AiAnalysisStatus.Cancelled => "The owner canceled this analysis.",
+        AiAnalysisStatus.Failed when CurrentResult.FailureCode == AnalysisProviderAccessDeniedException.FailureCode => AnalysisProviderAccessDeniedException.Guidance,
         AiAnalysisStatus.Failed => "No complete result is available. You can request another analysis when enabled.",
         _ when Busy => "Updating analysis…",
         _ when !Enabled => "New AI analysis is disabled by the operator. Saved results remain available.",

@@ -143,7 +143,7 @@
             }
             @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
             {
-                <ConfigurationForm Config="_currentDeployConfig" ProjectPath="_selectedProjectPath"
+                <ConfigurationForm Config="_currentDeployConfig" ProjectPath="@_selectedProjectPath"
                                    IsCloudDeployment="_currentDeployConfig.IsCloudDeployment" OnCancel="HideConfigModal"
                                    OnDeployConfirmed="ExecuteDeploymentAsync"/>
             }

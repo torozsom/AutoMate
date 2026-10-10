@@ -8,11 +8,11 @@ namespace Domain.Entities;
 /// </summary>
 public class Application : BaseEntity
 {
-    /// <summary>Explicit owner opt-in for ongoing runtime logs and numeric samples.</summary>
-    public bool RuntimeDiagnosticsEnabled { get; set; }
+    /// <summary>Legacy compatibility flag; runtime diagnostics are always collected for active deployments.</summary>
+    public bool RuntimeDiagnosticsEnabled { get; set; } = true;
 
-    /// <summary>Explicit consent to send diagnostics to an approved managed telemetry provider.</summary>
-    public bool ManagedTelemetryConsent { get; set; }
+    /// <summary>Legacy compatibility flag; approved telemetry storage is automatic, independently of AI consent.</summary>
+    public bool ManagedTelemetryConsent { get; set; } = true;
 
     /// <summary>
     ///     Gets or sets the unique identifier of the user who owns the project.

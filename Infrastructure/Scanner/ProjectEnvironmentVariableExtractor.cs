@@ -54,6 +54,7 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
             logger.LogWarning(ex,
                 "[ProjectScannerService] Error extracting environment variables from config files at: {ProjectPath}",
                 projectPath);
+            throw;
         }
 
         return extractedVars;
@@ -142,6 +143,7 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
         {
             logger.LogWarning(ex, "[ProjectScannerService] Error parsing launchSettings.json at {LaunchSettingsPath}",
                 launchSettingsPath);
+            if (ex is IOException or UnauthorizedAccessException) throw;
         }
 
         return new LaunchSettingsScanResult(envVars, defaultPort);
@@ -205,6 +207,7 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
         catch (Exception ex)
         {
             logger.LogWarning(ex, "[ProjectScannerService] Error scanning .env file: {EnvFilePath}", envFilePath);
+            if (ex is IOException or UnauthorizedAccessException) throw;
         }
     }
 

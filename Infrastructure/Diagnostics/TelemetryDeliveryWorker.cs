@@ -82,9 +82,7 @@ public sealed class TelemetryDeliveryWorker(
                 var rows = await db.DeploymentDiagnosticRecords.AsNoTracking()
                     .Where(r => r.TenantId == tenant && r.DeliveryJson != null)
                     .OrderBy(r => r.OrderId).Take(options.Value.BatchSize).ToListAsync(deadline.Token);
-                var allowedProjects = await db.Applications.Where(p => p.UserId == tenant &&
-                                                                       (!options.Value.ManagedService ||
-                                                                        p.ManagedTelemetryConsent)).Select(p => p.Id)
+                var allowedProjects = await db.Applications.Where(p => p.UserId == tenant).Select(p => p.Id)
                     .ToListAsync(deadline.Token);
                 var revoked = rows.Where(r => !allowedProjects.Contains(r.ProjectId)).ToArray();
                 if (revoked.Length > 0)

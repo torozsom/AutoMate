@@ -17,8 +17,15 @@ public partial class ConfigurationForm : ComponentBase
     private readonly List<EnvVarItem> _envVars = [];
 
     private CloudDefaults? _lastCloudDefaults;
+
+    /// <summary>Prevents overlapping scans and exposes progress to the form.</summary>
+    private bool _loadingVariables;
+
     private string _selectedEnvironment = DeploymentDefaults.DevelopmentEnvironmentName;
     private string? _validationMessage;
+
+    /// <summary>Safe feedback without configuration values or filesystem details.</summary>
+    private string? _variableLoadMessage;
 
     /// <summary>Hosting mode determines the cloud registry guidance and defaults.</summary>
     [Inject]
@@ -116,15 +123,39 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private async Task LoadVariablesFromConfigFilesAsync()
     {
-        if (IsCloudDeployment || string.IsNullOrWhiteSpace(ProjectPath)) return;
+        if (IsCloudDeployment || _loadingVariables) return;
+        if (string.IsNullOrWhiteSpace(ProjectPath))
+        {
+            _variableLoadMessage = "Project files are unavailable. Reopen deployment settings and try again.";
+            return;
+        }
 
-        // Analyze the project files and extract environment variables.
-        var scannedVars = await ProjectScanner.ExtractEnvironmentVariablesAsync(ProjectPath);
+        _loadingVariables = true;
+        _variableLoadMessage = null;
+        try
+        {
+            var scannedVars = await ProjectScanner.ExtractEnvironmentVariablesAsync(ProjectPath);
+            var added = 0;
+            foreach (var kvp in scannedVars)
+                if (!_envVars.Exists(e => string.Equals(e.Key.Trim(), kvp.Key, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _envVars.Add(new EnvVarItem { Key = kvp.Key, Value = kvp.Value });
+                    added++;
+                }
 
-        // Only add variables that are not already present in our UI list
-        foreach (var kvp in scannedVars)
-            if (!_envVars.Exists(e => e.Key.Equals(kvp.Key, StringComparison.OrdinalIgnoreCase)))
-                _envVars.Add(new EnvVarItem { Key = kvp.Key, Value = kvp.Value });
+            _variableLoadMessage = scannedVars.Count == 0
+                ? "No environment variables were found in the project configuration files."
+                : $"Loaded {added} new environment variables. Existing entries were preserved.";
+        }
+        catch (Exception)
+        {
+            _variableLoadMessage =
+                "Unable to read project configuration files. Check that they are accessible and try again.";
+        }
+        finally
+        {
+            _loadingVariables = false;
+        }
     }
 
 

@@ -15,7 +15,7 @@ const server = http.createServer((req, res) => {
         return;
     }
     const relative = pathname.replace(/^\//, '');
-    const base = /^(details|history|project)\.html$|^Web.styles.css$|^bootstrap.css$/.test(relative) ? preview : assets;
+    const base = /^(details|details-analysis|history|project)\.html$|^Web.styles.css$|^bootstrap.css$/.test(relative) ? preview : assets;
     const file = path.resolve(base, relative);
     if (!file.startsWith(base + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         res.writeHead(404);
@@ -41,17 +41,20 @@ const server = http.createServer((req, res) => {
         page.on('requestfailed', request => console.error('Failed resource:', request.url(), request.failure()?.errorText));
         await page.goto(address + '/details.html#configuration');
         await page.waitForFunction(() => document.activeElement?.id === 'configuration-title');
-        assert.equal(await page.locator('.project-section-tabs a').count(), 7);
+        assert.equal(await page.locator('.project-section-tabs a').count(), 6);
+        assert.equal(await page.locator('#ai-analysis').count(), 0);
+        await page.locator('button.terminal-ai-shortcut').click();
+        await page.waitForFunction(() => document.querySelector('[role=dialog]')?.contains(document.activeElement));
         assert.equal(await page.locator('.assessment-context select').count(), 2);
         assert.equal(await page.locator('.assessment-context select').first().locator('option').count(), 5);
         assert.equal(await page.locator('.assessment-context select').last().locator('option').count(), 6);
         assert.ok(await page.locator('.assessment-context').innerText().then(text => text.includes('Azure application console output')));
-        await page.locator('a.terminal-ai-shortcut').click();
-        await page.waitForFunction(() => location.hash === '#ai-analysis' && document.activeElement?.id === 'ai-analysis-title');
+        await page.keyboard.press('Escape');
+        await page.waitForFunction(() => !document.querySelector('[role=dialog]') && document.activeElement?.classList.contains('terminal-ai-shortcut'));
         await page.locator('.project-section-tabs a[href="#logs"]').click();
         await page.waitForFunction(() => document.activeElement?.id === 'logs-title');
         await page.goBack();
-        await page.waitForFunction(() => document.activeElement?.id === 'ai-analysis-title');
+        await page.waitForFunction(() => location.hash === '#configuration');
         // Keyboard activation uses the same real anchors and moves focus to the section heading.
         await page.locator('.project-section-tabs a[href="#overview"]').focus();
         await page.keyboard.press('Enter');

@@ -381,9 +381,37 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         using var client = new HttpClient(handler);
         var error = await Record.ExceptionAsync(() => Provider(client).AnalyzeAsync(Request("safe")));
         if (transient) Assert.Equal(42, Assert.IsType<TransientAnalysisProviderException>(error).RetryAfterSeconds);
+        else if (status == 403) Assert.IsType<AnalysisProviderAccessDeniedException>(error);
         else Assert.IsType<HttpRequestException>(error);
         Assert.Equal(1, calls);
         Assert.DoesNotContain("private-value", error!.ToString());
+        Assert.Null(error.InnerException);
+    }
+
+    /// <summary>Permanent denials retain only recognized codes and validated provider correlation IDs.</summary>
+    [Theory]
+    [InlineData("AccessDenied", "AccessDenied")]
+    [InlineData("private-provider-code", "unknown")]
+    public async Task Access_denial_metadata_is_bounded_and_allowlisted(string code, string expected)
+    {
+        var requestId = Guid.NewGuid().ToString("D");
+        using var handler = new DelegateHttpMessageHandler(_ =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.Forbidden)
+            {
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new { error = new { code, message = "password=private-body" } }))
+            };
+            response.Headers.Add("apim-request-id", requestId);
+            response.Headers.Add("x-request-id", requestId);
+            return response;
+        });
+        using var client = new HttpClient(handler);
+        var error = await Assert.ThrowsAsync<AnalysisProviderAccessDeniedException>(() =>
+            Provider(client).AnalyzeAsync(Request("safe")));
+        Assert.Equal(expected, error.Code);
+        Assert.Equal(requestId, error.RequestId);
+        Assert.DoesNotContain("private", error.ToString());
         Assert.Null(error.InnerException);
     }
 

@@ -95,7 +95,8 @@ gates and live status semantics. It writes synthetic provider fixtures under .ar
 Bootstrap/application/component CSS; these do not load project data or call providers. Browser checks cover light/dark
 contrast and 375px layout with 200% text. The fixture is a passive static render, not an authenticated live deployment.
 
-DeploymentAnalysisPollingTests exercises the actual ProjectDetails scoped read and dispatcher tick methods: overlapping
+DeploymentAnalysisPollingTests exercises the shared DeploymentAnalysisSection scoped refresh and selection lifetime:
+overlapping
 reads, owner/deployment changes, disposal cancellation, transient failure recovery, busy suppression and stale failure
 feedback. Synthetic Application ports keep these checks independent of databases, timers and provider traffic.
 

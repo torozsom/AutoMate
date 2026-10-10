@@ -54,9 +54,11 @@ public sealed class RuntimeViewingTests
         viewers.HasViewers(project, deployment).Should().BeTrue();
     }
 
-    /// <summary>Viewed runtime output is saved; unattended collection requires explicit background consent.</summary>
-    [Fact]
-    public async Task Viewed_runtime_is_persisted_for_replay_without_enabling_background_collection()
+    /// <summary>Runtime output is saved automatically even with legacy flags disabled and no viewers.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Runtime_is_persisted_automatically_with_legacy_flags_disabled(bool managed)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
@@ -77,7 +79,10 @@ public sealed class RuntimeViewingTests
         using var policies = new TelemetryProjectPolicyCache(services.GetRequiredService<IServiceScopeFactory>());
         var gateway = new RecordingGateway();
         var settings = Options.Create(new TelemetryStorageOptions
-            { Backend = "LokiMimir", DeliveryMode = "DiskGateway" });
+        {
+            Backend = "LokiMimir", DeliveryMode = "DiskGateway", ManagedService = managed,
+            ManagedDataProcessingApproved = true
+        });
         var store = new DeploymentTelemetryStore(db, new DeploymentDiagnosticStore(db, new DiagnosticRedactor()),
             new UnusedQuery(),
             settings, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance, viewers, gateway,
@@ -89,10 +94,12 @@ public sealed class RuntimeViewingTests
             CsProject = new CsProject { Application = app, Name = "Web", Path = "Web.csproj" }
         });
         await db.SaveChangesAsync();
+        await db.Applications.ExecuteUpdateAsync(u => u.SetProperty(p => p.RuntimeDiagnosticsEnabled, false)
+            .SetProperty(p => p.ManagedTelemetryConsent, false));
         var log = new DeploymentDiagnosticEvent(app.Id, deployment, DeploymentDiagnosticSource.DockerContainer,
             DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
             "sample", new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "web"));
-        (await store.PersistAsync(log, "web")).Should().Be(0);
+        (await store.PersistAsync(log, "web")).Should().BeGreaterThan(0);
         viewers.Renew("owner", app.Id, deployment);
         await store.PersistAsync(log, "web");
         (await store.PersistAsync(log with { DeploymentId = Guid.NewGuid() }, "web")).Should().Be(0);
@@ -103,10 +110,10 @@ public sealed class RuntimeViewingTests
             Metrics = [new DeploymentMetricSample("automate_cpu_usage_cores", 0.25, "cores")]
         };
         await store.PersistAsync(metric, null);
-        gateway.Count.Should().Be(2);
+        gateway.Count.Should().Be(3);
         (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(0);
         viewers.Remove("owner");
-        (await store.PersistAsync(log, "web")).Should().Be(0);
+        (await store.PersistAsync(log, "web")).Should().BeGreaterThan(0);
         app.RuntimeDiagnosticsEnabled = true;
         await db.SaveChangesAsync();
         using var refreshedPolicies =
@@ -116,8 +123,38 @@ public sealed class RuntimeViewingTests
             settings, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance, viewers, gateway,
             refreshedPolicies);
         await backgroundStore.PersistAsync(log, "web");
-        gateway.Count.Should().Be(3);
+        gateway.Count.Should().Be(5);
         (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(0);
+        var history = new DeploymentHistoryService(db, store, new UnusedMetrics(), settings);
+        await history.SetRuntimeCollectionAsync(app.UserId, app.Id, false);
+        await history.SetManagedConsentAsync(app.UserId, app.Id, false);
+        var enabled = await history.GetPreferencesAsync(app.UserId, app.Id);
+        enabled.RuntimeEnabled.Should().BeTrue();
+        enabled.ManagedConsent.Should().BeTrue();
+        var persisted = await db.Applications.AsNoTracking().SingleAsync();
+        persisted.RuntimeDiagnosticsEnabled.Should().BeTrue();
+        persisted.ManagedTelemetryConsent.Should().BeTrue();
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            history.SetRuntimeCollectionAsync(Guid.NewGuid(), app.Id, false));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            history.SetManagedConsentAsync(Guid.NewGuid(), app.Id, false));
+    }
+
+    /// <summary>Preference changes do not query external metrics.</summary>
+    private sealed class UnusedMetrics : IDeploymentMetricQuery
+    {
+        /// <inheritdoc />
+        public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenant, Guid project, Guid deployment,
+            DateTimeOffset start, DateTimeOffset end, int maximum, CancellationToken token)
+        {
+            throw new InvalidOperationException();
+        }
+
+        /// <inheritdoc />
+        public Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken token)
+        {
+            throw new InvalidOperationException();
+        }
     }
 
     /// <summary>Tracks confirmed disk-gateway submissions; no PostgreSQL payload or ordering sequence is used.</summary>

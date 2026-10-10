@@ -1,17 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <base href="/"/>
+    <script src="js/theme.js"></script>
+    <script>window.initializeTheme();</script>
     <ResourcePreloader/>
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]"/>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
+    <link rel="stylesheet" href="@Assets["lib/bootstrap-icons/font/bootstrap-icons.css"]"/>
     <link rel="stylesheet" href="@Assets["app.css"]"/>
     <link rel="stylesheet" href="@Assets["Web.styles.css"]"/>
     <link rel="stylesheet" href="@Assets["telemetry.css"]"/>
     <link rel="stylesheet" href="@Assets["console.css"]"/>
+    <link rel="stylesheet" href="@Assets["obsidian.css"]"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"/>
     <ImportMap/>
     <link rel="icon" type="image/png" href="favicon.png"/>
@@ -23,10 +26,6 @@
 <Routes @rendermode="InteractiveServer"/>
 <ReconnectModal/>
 <script src="@Assets["_framework/blazor.web.js"]"></script>
-<script src="js/theme.js"></script>
-<script>
-    window.initializeTheme();
-</script>
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 <script src="/js/xterm-wrapper.js"></script>

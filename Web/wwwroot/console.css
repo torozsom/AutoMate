@@ -13,7 +13,7 @@
 
 .console-page-heading h1 {
     margin: 0 0 8px;
-    font-size: 28px;
+    font-size: clamp(30px, 2.5vw, 40px);
     letter-spacing: -.025em;
     font-weight: 650;
     line-height: 1.2;
@@ -65,6 +65,8 @@
     flex-direction: column;
     gap: 8px;
     min-width: 0;
+    box-shadow: var(--am-shadow-sm);
+    border-bottom: 2px solid var(--am-primary);
 }
 
 .console-kpi span {
@@ -78,6 +80,7 @@
     font-weight: 650;
     letter-spacing: -.035em;
     line-height: 1.2;
+    font-variant-numeric: tabular-nums;
 }
 
 .console-kpi small {
@@ -146,6 +149,9 @@
     color: var(--am-text-muted);
     font-size: 12px;
     background: var(--am-surface-muted);
+    font-family: var(--am-font-mono);
+    font-weight: 500;
+    letter-spacing: 0.04em;
 }
 
 .console-table th, .console-table td {
@@ -168,6 +174,8 @@
     color: var(--am-text-muted);
     font-size: 12px;
     margin-top: 4px;
+    font-family: var(--am-font-mono);
+    font-variant-numeric: tabular-nums;
 }
 
 .inventory-name {
@@ -482,7 +490,7 @@
     font-size: 20px;
     font-weight: 700;
     text-decoration: none;
-    color: var(--am-text);
+    color: var(--am-primary);
 }
 
 .public-main {

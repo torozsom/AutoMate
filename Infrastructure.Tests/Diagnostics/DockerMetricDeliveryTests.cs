@@ -37,7 +37,8 @@ public sealed class DockerMetricDeliveryTests
         viewers.Remove("owner");
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("80%", "100MiB / 200MiB"),
             CancellationToken.None);
-        live.Values.Should().HaveCount(61);
+        live.Values.Should().HaveCount(62);
+        history.Events.Should().HaveCount(2);
     }
 
     /// <summary>A transient UI failure cannot terminate collection; live values are centrally redacted.</summary>

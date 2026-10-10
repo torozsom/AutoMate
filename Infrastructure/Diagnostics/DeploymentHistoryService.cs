@@ -33,7 +33,7 @@ public sealed class DeploymentHistoryService(
         var project = await db.Applications.AsNoTracking()
             .SingleOrDefaultAsync(p => p.Id == projectId && p.UserId == userId, cancellationToken);
         if (project is null) throw new UnauthorizedAccessException("Project access denied.");
-        return new DeploymentTelemetryPreferences(project.RuntimeDiagnosticsEnabled, project.ManagedTelemetryConsent,
+        return new DeploymentTelemetryPreferences(true, true,
             options.Value.ManagedService, options.Value.ProcessingRegion);
     }
 
@@ -41,10 +41,10 @@ public sealed class DeploymentHistoryService(
     public async Task SetManagedConsentAsync(Guid userId, Guid projectId, bool enabled,
         CancellationToken cancellationToken = default)
     {
-        if (enabled && (!options.Value.ManagedService || !options.Value.ManagedDataProcessingApproved))
+        if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
             throw new InvalidOperationException("Managed provider onboarding is not configured.");
         var changed = await db.Applications.Where(p => p.Id == projectId && p.UserId == userId)
-            .ExecuteUpdateAsync(u => u.SetProperty(p => p.ManagedTelemetryConsent, enabled), cancellationToken);
+            .ExecuteUpdateAsync(u => u.SetProperty(p => p.ManagedTelemetryConsent, true), cancellationToken);
         if (changed == 0) throw new UnauthorizedAccessException("Project access denied.");
     }
 
@@ -69,11 +69,7 @@ public sealed class DeploymentHistoryService(
         end = end > now ? now : end;
         if (end <= start) return new DeploymentMetricHistory([], "Metric history has expired.");
         maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
-        if (archive is not null && options.Value.DiskGateway && (!options.Value.ManagedService ||
-                                                                 await db.Applications.AnyAsync(
-                                                                     p => p.Id == projectId &&
-                                                                          p.ManagedTelemetryConsent,
-                                                                     cancellationToken)))
+        if (archive is not null && options.Value.DiskGateway)
         {
             var saved = await archive.ReadMetricsAsync(userId, projectId, deploymentId, start, end, maximumPoints,
                 cancellationToken);
@@ -82,12 +78,7 @@ public sealed class DeploymentHistoryService(
 
         IReadOnlyList<DeploymentMetricPoint> remote = [];
         string? availability = null;
-        var specialized = options.Value.Specialized && (!options.Value.ManagedService ||
-                                                        await db.Applications.AnyAsync(
-                                                            p => p.Id == projectId && p.ManagedTelemetryConsent,
-                                                            cancellationToken));
-        if (options.Value.Specialized && !specialized)
-            availability = "Managed storage requires owner consent; local metric history is shown.";
+        var specialized = options.Value.Specialized;
         if (specialized)
             try
             {
@@ -177,7 +168,7 @@ public sealed class DeploymentHistoryService(
         CancellationToken cancellationToken = default)
     {
         var changed = await db.Applications.Where(p => p.Id == projectId && p.UserId == userId)
-            .ExecuteUpdateAsync(u => u.SetProperty(p => p.RuntimeDiagnosticsEnabled, enabled), cancellationToken);
+            .ExecuteUpdateAsync(u => u.SetProperty(p => p.RuntimeDiagnosticsEnabled, true), cancellationToken);
         if (changed == 0) throw new UnauthorizedAccessException("Project access denied.");
     }
 

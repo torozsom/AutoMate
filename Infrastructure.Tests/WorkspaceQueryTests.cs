@@ -158,13 +158,15 @@ public sealed class WorkspaceQueryTests
                 .OverviewAsync(fixture.Owner, range);
             Assert.Equal(60, overview.Resources.Single(p => p.Metric == "automate_cpu_usage_cores").Samples);
             var consent = new MetricExplorationService(db, port,
-                Options.Create(new TelemetryStorageOptions { ManagedService = true }), TimeProvider.System);
+                Options.Create(new TelemetryStorageOptions
+                    { ManagedService = true, ManagedDataProcessingApproved = true }), TimeProvider.System);
             var privateReader = new ArchiveMetricBatchReader(db, disk,
-                Options.Create(new TelemetryStorageOptions { ManagedService = true }));
-            Assert.Empty(
+                Options.Create(new TelemetryStorageOptions
+                    { ManagedService = true, ManagedDataProcessingApproved = true }));
+            Assert.NotEmpty(
                 (await privateReader.ReadAsync(
                     new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject), default)).Items);
-            Assert.Contains("consent",
+            Assert.Null(
                 (await privateReader.ReadAsync(
                     new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject),
                     default)).Availability);
@@ -187,8 +189,16 @@ public sealed class WorkspaceQueryTests
         db.DeploymentDailyTelemetry.Add(new DeploymentDailyTelemetry
         {
             UserId = fixture.Owner,
-            ProjectId = fixture.PrimaryProject, DeploymentId = deployment, DayUtc = day, Container = "web",
-            Metric = "automate_cpu_usage_cores", Unit = "cores", SampleCount = 4, Sum = 2, Minimum = .1, Maximum = .9
+            ProjectId = fixture.PrimaryProject,
+            DeploymentId = deployment,
+            DayUtc = day,
+            Container = "web",
+            Metric = "automate_cpu_usage_cores",
+            Unit = "cores",
+            SampleCount = 4,
+            Sum = 2,
+            Minimum = .1,
+            Maximum = .9
         });
         await db.SaveChangesAsync();
         await db.DeploymentDailyTelemetry.Where(d => d.UserId == fixture.OtherOwner)
@@ -346,12 +356,16 @@ public sealed class WorkspaceQueryTests
                 var apps = Enumerable.Range(0, 23).Select(index => new Domain.Entities.Application
                 {
                     Name = index == 0 ? "API service" : $"Project {index:00}",
-                    User = owner, SourceType = index == 0 ? SourceType.Remote : SourceType.Local,
+                    User = owner,
+                    SourceType = index == 0 ? SourceType.Remote : SourceType.Local,
                     SourcePathOrUrl = "fixture"
                 }).ToArray();
                 var outsider = new Domain.Entities.Application
                 {
-                    Name = "Private outsider", User = other, SourceType = SourceType.Local, SourcePathOrUrl = "private"
+                    Name = "Private outsider",
+                    User = other,
+                    SourceType = SourceType.Local,
+                    SourcePathOrUrl = "private"
                 };
                 var component = new CsProject
                     { Name = "Web", Path = "web.csproj", IsWebProject = true, Application = apps[0] };
@@ -386,25 +400,51 @@ public sealed class WorkspaceQueryTests
                 db.DeploymentDailyTelemetry.AddRange(
                     new DeploymentDailyTelemetry
                     {
-                        UserId = owner.Id, ProjectId = apps[0].Id, DeploymentId = successful.Id, DayUtc = day,
-                        Container = "web", Metric = "automate_cpu_usage_cores", Unit = "cores", SampleCount = 1,
-                        Sum = .1, Minimum = .1, Maximum = .1
+                        UserId = owner.Id,
+                        ProjectId = apps[0].Id,
+                        DeploymentId = successful.Id,
+                        DayUtc = day,
+                        Container = "web",
+                        Metric = "automate_cpu_usage_cores",
+                        Unit = "cores",
+                        SampleCount = 1,
+                        Sum = .1,
+                        Minimum = .1,
+                        Maximum = .1
                     },
                     new DeploymentDailyTelemetry
                     {
-                        UserId = owner.Id, ProjectId = apps[0].Id, DeploymentId = starting.Id, DayUtc = day,
-                        Container = "worker", Metric = "automate_cpu_usage_cores", Unit = "cores", SampleCount = 3,
-                        Sum = 1.5, Minimum = .2, Maximum = .9, Incomplete = true
+                        UserId = owner.Id,
+                        ProjectId = apps[0].Id,
+                        DeploymentId = starting.Id,
+                        DayUtc = day,
+                        Container = "worker",
+                        Metric = "automate_cpu_usage_cores",
+                        Unit = "cores",
+                        SampleCount = 3,
+                        Sum = 1.5,
+                        Minimum = .2,
+                        Maximum = .9,
+                        Incomplete = true
                     },
                     new DeploymentDailyTelemetry
                     {
-                        UserId = other.Id, ProjectId = outsider.Id, DeploymentId = unknown.Id, DayUtc = day,
-                        Container = "private", Metric = "automate_cpu_usage_cores", Unit = "cores", SampleCount = 100,
+                        UserId = other.Id,
+                        ProjectId = outsider.Id,
+                        DeploymentId = unknown.Id,
+                        DayUtc = day,
+                        Container = "private",
+                        Metric = "automate_cpu_usage_cores",
+                        Unit = "cores",
+                        SampleCount = 100,
                         Sum = 100
                     });
                 db.CloudDeploymentRuns.Add(new CloudDeploymentRun
                 {
-                    UserId = owner.Id, ProjectId = apps[2].Id, IdempotencyKey = "fixture", Phase = CloudRunPhase.Queued
+                    UserId = owner.Id,
+                    ProjectId = apps[2].Id,
+                    IdempotencyKey = "fixture",
+                    Phase = CloudRunPhase.Queued
                 });
                 await db.SaveChangesAsync();
                 return fixture;

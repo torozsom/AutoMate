@@ -7,8 +7,16 @@ No TypeUI MCP server was exposed during this implementation. Reference research 
 [Linear design refresh](https://linear.app/now/behind-the-latest-design-refresh) and
 [Carbon data-table guidance](https://www.carbondesignsystem.com/building-blocks/core/components/data-table/guidelines).
 
-Existing theme tokens now use neutral surfaces with restrained blue actions. The console uses system fonts,
-4px spacing increments, 8px corners, readable metadata and semantic tables. There is no new framework/font dependency.
+The three subfolders under `.agents/UI-Design` contain Overview, Deployment Details and Project Details references.
+`Web/wwwroot/obsidian.css` maps their obsidian surfaces, compact card proportions, cyan accents, terminal chrome and
+typography to existing Blazor components. Inter/JetBrains Mono and the existing Bootstrap Icons are hosted locally;
+licenses are stored beside the assets. ASP.NET Core, Blazor and the existing Bootstrap foundation remain in place.
+
+New sessions default to dark; persisted light/dark preferences load in the document head to avoid a theme flash.
+The existing light palette remains available. Project Details groups existing deployment, infrastructure, counts and
+timestamps into four cards. Deployment Details groups existing metadata in its header; Overview retains its existing
+charts, filters and paging. No lifecycle strip, reference-only actions, explanatory UI text, synthetic health/SLA/
+replica claims or new backend capabilities are added. Security and data-availability guidance remains available.
 
 - Signed-in Home (`/`) is **Overview**. Projects (`/dashboard`) is the paginated inventory.
 - Overview defaults to the last 30 days. Chart range and numeric pagination refinements are documented

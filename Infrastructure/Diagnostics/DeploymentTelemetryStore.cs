@@ -27,16 +27,15 @@ public sealed class DeploymentTelemetryStore(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        // Accepted only for constructor compatibility; viewing no longer controls collection or persistence.
+        _ = viewers;
         if (options.Value.DiskGateway)
         {
             var policy = await policies!.GetAsync(diagnosticEvent.ProjectId, cancellationToken);
             if (policy is null) return 0;
-            var isRuntime = diagnosticEvent.Kind == DeploymentDiagnosticKind.Metric || diagnosticEvent.Source is
-                DeploymentDiagnosticSource.DockerContainer or DeploymentDiagnosticSource.AzureContainerApps;
-            if (isRuntime && !policy.RuntimeDiagnosticsEnabled && !(diagnosticEvent.DeploymentId is { } id &&
-                                                                    viewers.HasViewers(diagnosticEvent.ProjectId, id)))
-                return 0;
-            if (options.Value.ManagedService && !policy.ManagedTelemetryConsent) return 0;
+            if (diagnosticEvent.DeploymentId is { } deployment && !await db.Deployments.AnyAsync(d =>
+                    d.Id == deployment && d.CsProject!.AppId == diagnosticEvent.ProjectId &&
+                    d.CsProject.Application.UserId == policy.UserId, cancellationToken)) return 0;
             var receipt = await gateway!.AcceptAsync(redactor.Redact(diagnosticEvent).Event with
             {
                 EventId = diagnosticEvent.EventId ?? Guid.NewGuid()
@@ -104,10 +103,9 @@ public sealed class DeploymentTelemetryStore(
         limit = Math.Clamp(limit, 1, 2000);
         var now = DateTimeOffset.UtcNow;
         var project = await db.Applications.AsNoTracking().Where(p => p.Id == projectId)
-            .Select(p => new { p.UserId, p.ManagedTelemetryConsent }).SingleOrDefaultAsync(cancellationToken);
+            .Select(p => new { p.UserId }).SingleOrDefaultAsync(cancellationToken);
         var tenant = project?.UserId ?? Guid.Empty;
-        var specialized = options.Value.Specialized &&
-                          (!options.Value.ManagedService || project?.ManagedTelemetryConsent == true);
+        var specialized = options.Value.Specialized;
         var deploymentCreatedAt = await db.Deployments
             .Where(d => d.Id == deploymentId && d.CsProject!.AppId == projectId)
             .Select(d => (DateTimeOffset?)d.CreatedAt).SingleOrDefaultAsync(cancellationToken);
@@ -116,9 +114,7 @@ public sealed class DeploymentTelemetryStore(
         {
             var history = await postgres.ReadRecentAsync(projectId, deploymentId, limit, cancellationToken);
             history = history with { Events = history.Events.Select(redactor.RedactTerminal).ToArray() };
-            return options.Value.Specialized
-                ? history with { Availability = "Managed storage requires owner consent; local history is shown." }
-                : history;
+            return history;
         }
 
         var nextDeploymentCreatedAt = await db.Deployments.Where(d => d.CsProject!.AppId == projectId &&
@@ -145,9 +141,7 @@ public sealed class DeploymentTelemetryStore(
                 r.Severity == "Trace" ? DeploymentDiagnosticSeverity.Trace : null,
                 r.TimestampUtc, null, null, r.TraceId, r.SpanId, r.Sequence))
             .ToListAsync(cancellationToken);
-        var availability = options.Value.Specialized && !specialized
-            ? "Managed storage requires owner consent; local history is shown."
-            : null;
+        string? availability = null;
         var canAdvance = true;
         var archiveAvailable = false;
         if (specialized)
@@ -195,9 +189,11 @@ public sealed class DeploymentTelemetryStore(
             {
                 logger.LogWarning("Specialized history unavailable for {DeploymentId}: {FailureType}.", deploymentId,
                     ex.GetType().Name);
-                availability = archiveAvailable
-                    ? "Saved archive output is available; operational storage is temporarily unavailable."
-                    : "History storage is temporarily unavailable; only buffered output is shown.";
+                availability = ex is TelemetryCompatibilityException compatibilityError
+                    ? compatibilityError.Message
+                    : archiveAvailable
+                        ? "Saved archive output is available; operational storage is temporarily unavailable."
+                        : "History storage is temporarily unavailable; only buffered output is shown.";
                 canAdvance = archiveAvailable;
             }
 

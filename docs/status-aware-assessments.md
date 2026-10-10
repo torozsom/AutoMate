@@ -66,7 +66,7 @@ Authenticated routes:
 - POST `/api/deployments/{deploymentId}/analyses` with `{ requestId, selection }`
 
 Mutations require antiforgery validation. Owner identity comes from authentication; database and private Telemetry
-authorization recheck ownership and current managed-telemetry consent. Conflicting request IDs return HTTP 409.
+authorization recheck ownership and operator processing approval. Conflicting request IDs return HTTP 409.
 Existing cancellation, five-second polling, route/disposal fencing, admission receipts and accounting stay intact.
 
 ## Rollout and verification

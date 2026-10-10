@@ -67,7 +67,8 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             seed.Owner,
             100 + i, now, now.AddDays(30), Event(seed, "metric") with
             {
-                Kind = DeploymentDiagnosticKind.Metric, Source = DeploymentDiagnosticSource.DockerContainer,
+                Kind = DeploymentDiagnosticKind.Metric,
+                Source = DeploymentDiagnosticSource.DockerContainer,
                 TimestampUtc = now.AddMinutes(-2),
                 TerminalChannel = new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, container),
                 Metrics = [new DeploymentMetricSample("automate_memory_used_bytes", 4096 + i, "bytes")]
@@ -347,9 +348,9 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                 "web"));
     }
 
-    /// <summary>Consent gates external historical queries/draining but never enables new PostgreSQL fallback writes.</summary>
+    /// <summary>Legacy preference calls cannot disable authorized history or draining, and never enable PostgreSQL writes.</summary>
     [TelemetryIntegrationFact]
-    public async Task Managed_consent_controls_legacy_delivery_without_new_database_ingestion()
+    public async Task Legacy_preferences_preserve_history_and_delivery_without_new_database_ingestion()
     {
         var settings = TelemetryStorageTests.Specialized();
         settings.ManagedService = true;
@@ -368,7 +369,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             (await history.ReadLogsAsync(seeded.Owner, seeded.Project, seeded.Deployment, 0, true, 10)).Events);
         await history.ReadMetricsAsync(seeded.Owner, seeded.Project, seeded.Deployment,
             DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow, 10);
-        Assert.Equal(0, sinks.Reads);
+        Assert.True(sinks.Reads > 0);
         await history.SetManagedConsentAsync(seeded.Owner, seeded.Project, true);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             store.PersistAsync(Event(seeded, "new after consent"), "build"));
@@ -377,11 +378,11 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var worker = new TelemetryDeliveryWorker(services.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(settings), NullLogger<TelemetryDeliveryWorker>.Instance);
         await worker.DeliverOnceAsync(default);
-        Assert.Equal(0, sinks.Writes);
+        Assert.True(sinks.Writes > 0);
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        Assert.False(await db.DeploymentDiagnosticRecords.AnyAsync(row =>
+        Assert.True(await db.DeploymentDiagnosticRecords.AnyAsync(row =>
             row.ProjectId == seeded.Project && row.DeliveryJson != null));
-        Assert.Single(await db.DeploymentDiagnosticRecords.Where(row => row.ProjectId == seeded.Project).ToListAsync());
+        Assert.Equal(2, await db.DeploymentDiagnosticRecords.CountAsync(row => row.ProjectId == seeded.Project));
     }
 
     /// <summary>Seeds historical migration fixtures only; production ingestion never creates these records or outboxes.</summary>

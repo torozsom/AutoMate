@@ -28,3 +28,6 @@ behavior.
 ## Related documentation
 
 - [Solution navigation map](../../.agents/navigation.md)
+
+Environment-variable scans propagate filesystem/access failures so deployment forms show safe failure guidance.
+Successfully scanned empty configuration remains an empty result; malformed optional JSON is still skipped as before.

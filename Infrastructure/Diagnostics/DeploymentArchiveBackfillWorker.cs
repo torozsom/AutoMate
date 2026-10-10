@@ -48,12 +48,13 @@ public sealed class DeploymentArchiveBackfillWorker(
     /// <summary>Bounds each discovery pass and each backend query independently of deployment age.</summary>
     public async Task ImportBatchAsync(CancellationToken token)
     {
+        if (settings.Value.ManagedService && !settings.Value.ManagedDataProcessingApproved)
+            throw new InvalidOperationException("Managed telemetry processing is not approved.");
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
         var logs = scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>();
         var metrics = scope.ServiceProvider.GetRequiredService<IDeploymentMetricQuery>();
         var projects = await db.Deployments.AsNoTracking()
-            .Where(d => !settings.Value.ManagedService || d.CsProject!.Application.ManagedTelemetryConsent)
             .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id).Skip(_offset).Take(20)
             .Select(d => new
                 { d.Id, d.CreatedAt, Project = d.CsProject!.AppId, Tenant = d.CsProject.Application.UserId })

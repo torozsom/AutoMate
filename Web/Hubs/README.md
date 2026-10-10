@@ -9,8 +9,8 @@ buffered live events by database ordering cursor without gaps or duplicates.
 
 An authorized join for the latest deployment also renews a 45-second live runtime viewing lease. Project details
 renews through its existing catch-up handshake. Leaving/disconnecting removes interest; abandoned connections expire.
-Historical subscriptions do not enable collection. Viewed runtime output is saved for replay. The owner preference
-controls collection while no page is open.
+Historical subscriptions do not enable collection. Runtime output is automatically collected and saved for replay while
+active, including with every browser closed.
 
 Connection transport buffers are capped at 64 KiB in each direction. Live sends have cancellable deadlines; one slow
 connection cannot accumulate unbounded writes or indefinitely occupy the diagnostic dispatcher. Reconnect continues to

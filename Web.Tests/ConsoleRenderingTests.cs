@@ -196,13 +196,13 @@ public sealed class ConsoleRenderingTests
     private static string Wrap(string html)
     {
         return
-            "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'><link rel='stylesheet' href='/console.css'></head><body>" +
+            "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'><link rel='stylesheet' href='/console.css'><link rel='stylesheet' href='/obsidian.css'><link rel='stylesheet' href='/lib/bootstrap-icons/font/bootstrap-icons.css'></head><body>" +
             html +
             "<script type='module'>import {attach} from '/js/telemetry-chart.js'; document.querySelectorAll('.telemetry-chart').forEach(attach); import {attachDialog} from '/js/console-ui.js'; document.querySelectorAll('[role=dialog]').forEach(root=>attachDialog(root,{invokeMethodAsync(){root.parentElement.remove(); return Promise.resolve();}})); const menu=document.querySelector('.mobile-nav-toggle');if(menu)menu.addEventListener('click',()=>{const target=document.getElementById('workspace-navigation');target.classList.toggle('nav-open');menu.setAttribute('aria-expanded',target.classList.contains('nav-open'));});</script></body></html>";
     }
 
     /// <summary>Runs real shell composition for both supported hosting profiles.</summary>
-    private sealed class PreviewCapabilities(bool localEnabled) : IDeploymentCapabilities
+    internal sealed class PreviewCapabilities(bool localEnabled) : IDeploymentCapabilities
     {
         /// <inheritdoc />
         public bool LocalDeploymentsEnabled => localEnabled;
@@ -256,6 +256,10 @@ public sealed class ConsoleRenderingTests
         [Parameter]
         public Type Page { get; set; } = typeof(Home);
 
+        /// <summary>Already rendered real page markup, used for complete shell screenshots.</summary>
+        [Parameter]
+        public RenderFragment? Body { get; set; }
+
         /// <summary>Fixture identity.</summary>
         [Inject]
         public AuthenticationStateProvider Authentication { get; set; } = null!;
@@ -268,7 +272,7 @@ public sealed class ConsoleRenderingTests
             b.AddAttribute(2, "ChildContent", (RenderFragment)(child =>
             {
                 child.OpenComponent<MainLayout>(0);
-                child.AddAttribute(1, "Body", (RenderFragment)(page =>
+                child.AddAttribute(1, "Body", Body ?? (page =>
                 {
                     page.OpenComponent(0, Page);
                     page.CloseComponent();
@@ -369,8 +373,11 @@ public sealed class ConsoleRenderingTests
         {
             Config = new DeploymentConfigDto
             {
-                ProjectName = "Commerce API", IsCloudDeployment = true, CloudAzureRegion = "westeurope",
-                CloudResourceGroupName = "rg-commerce", CloudContainerAppName = "commerce-api",
+                ProjectName = "Commerce API",
+                IsCloudDeployment = true,
+                CloudAzureRegion = "westeurope",
+                CloudResourceGroupName = "rg-commerce",
+                CloudContainerAppName = "commerce-api",
                 CloudRegistryName = "commerce.azurecr.io",
                 Databases =
                 [
@@ -449,7 +456,7 @@ public sealed class ConsoleRenderingTests
     }
 
     /// <summary>Fake form token used only by offline previews.</summary>
-    private sealed class PreviewAntiforgery : AntiforgeryStateProvider
+    internal sealed class PreviewAntiforgery : AntiforgeryStateProvider
     {
         /// <inheritdoc />
         public override AntiforgeryRequestToken GetAntiforgeryToken()

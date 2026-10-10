@@ -169,8 +169,9 @@
                 @if (!IsCloudDeployment)
                 {
                     <button type="button" class="btn btn-sm btn-outline-secondary"
+                            disabled="@_loadingVariables"
                             @onclick="LoadVariablesFromConfigFilesAsync">
-                        <i class="bi bi-file-earmark-arrow-down"></i> Load Variables
+                        <i class="bi bi-file-earmark-arrow-down"></i> @(_loadingVariables ? "Loading variables…" : "Load Variables")
                     </button>
                 }
                 <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="AddEmptyEnvVar">
@@ -178,6 +179,11 @@
                 </button>
             </div>
         </div>
+
+        @if (_variableLoadMessage is not null)
+        {
+            <p role="status">@_variableLoadMessage</p>
+        }
 
         @if (_envVars.Count == 0)
         {

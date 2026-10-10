@@ -25,7 +25,7 @@ public sealed class TelemetryAdmissionPolicy(IServiceScopeFactory scopes) : IDis
                                                                 (deployment == null || db.Deployments.Any(d =>
                                                                     d.Id == deployment &&
                                                                     d.CsProject!.AppId == project)))
-            .Select(p => new TelemetryProjectPolicy(p.UserId, p.RuntimeDiagnosticsEnabled, p.ManagedTelemetryConsent))
+            .Select(p => new TelemetryProjectPolicy(p.UserId, true, true))
             .SingleOrDefaultAsync(token);
         _cache.Set(key, value,
             new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5) });

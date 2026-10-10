@@ -78,14 +78,15 @@ In **Explore**, select **AutoMate Loki** or **AutoMate Mimir**. Example queries:
 automate_cpu_usage_cores
 ```
 
-Memory metric names are `automate_memory_used_bytes` and `automate_memory_limit_bytes`. Runtime collection must be
-enabled in AutoMate before those samples are collected. Grafana queries the stores directly; it does not merge pending
-PostgreSQL outbox records or legacy PostgreSQL diagnostics. No data during pending ingestion or before opt-in is
+Memory metric names are `automate_memory_used_bytes` and `automate_memory_limit_bytes`. Runtime collection is automatic
+for active deployments in both AutoMate hosting profiles. Grafana queries the stores directly; it does not merge pending
+PostgreSQL outbox records or legacy PostgreSQL diagnostics. No data during pending ingestion or before collection
+started is
 expected.
 
 If both data-source health checks pass but the panels are empty, confirm AutoMate was restarted after selecting
 `TelemetryStorage:Backend=LokiMimir`, then start a new deployment. Existing PostgreSQL history is not backfilled into
-Loki or Mimir. Enable the runtime-collection checkbox to collect CPU/memory and ongoing container logs; metrics normally
+Loki or Mimir. CPU/memory and ongoing container logs are collected automatically; metrics normally
 arrive on a 60-second sampling interval. Choose the time range containing those observations.
 
 ## Configuration and boundaries

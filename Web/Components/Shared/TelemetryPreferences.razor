@@ -8,26 +8,13 @@
 @if (_preferences is not null)
 {
     <div class="telemetry-preferences">
-        <label class="form-check">
-            <input class="form-check-input" type="checkbox" checked="@_preferences.RuntimeEnabled"
-                   @onchange="ChangeRuntimeAsync"/>
-            <span class="form-check-label">Continue collecting runtime logs and CPU/memory samples while this page is closed</span>
-        </label>
-        @if (_preferences.ManagedService)
-        {
-            <label class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" checked="@_preferences.ManagedConsent"
-                       @onchange="ChangeConsentAsync"/>
-                <span class="form-check-label">Allow redacted diagnostics to be sent to the configured managed provider in @_preferences.ProcessingRegion</span>
-            </label>
-        }
         <details>
             <summary>Retention and sampling details</summary>
             <small>Saved build output and runtime logs/metrics retain until you delete the project. Operational provider
                 views retain 30 days.
-                Web and database terminals restore saved output after reload. Enable background collection above to
-                collect
-                while the page is closed.
+                Runtime logs and CPU/memory samples are collected and saved automatically while deployments are active,
+                including while this page is closed. Active project terminals restore saved output after reload;
+                inactive deployments remain available in deployment history.
                 Metric history is sampled every 60 seconds by default; local live values update every few
                 seconds.</small></details>
         @if (_error is not null)
@@ -77,32 +64,5 @@ else if (_error is not null)
         }
     }
 
-    /// <summary>Records ongoing-collection consent.</summary>
-    private async Task ChangeRuntimeAsync(ChangeEventArgs args)
-    {
-        await SaveAsync(args.Value is true, false);
-    }
-
-    /// <summary>Records external-provider consent.</summary>
-    private async Task ChangeConsentAsync(ChangeEventArgs args)
-    {
-        await SaveAsync(args.Value is true, true);
-    }
-
-    /// <summary>Persists the chosen preference and refreshes the authoritative value.</summary>
-    private async Task SaveAsync(bool enabled, bool managed)
-    {
-        try
-        {
-            if (managed) await History.SetManagedConsentAsync(_owner, ProjectId, enabled);
-            else await History.SetRuntimeCollectionAsync(_owner, ProjectId, enabled);
-            _preferences = await History.GetPreferencesAsync(_owner, ProjectId);
-            _error = null;
-        }
-        catch (Exception)
-        {
-            _error = "Unable to update diagnostic collection preferences.";
-        }
-    }
 
 }

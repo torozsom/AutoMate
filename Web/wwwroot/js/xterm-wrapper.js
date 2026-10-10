@@ -8,10 +8,12 @@ window.xtermWrapper = {
     init: function (elementId) {
         this.dispose(elementId);
         const term = new Terminal({
-            theme: {background: '#1e1e1e'},
+            theme: {background: '#07090e', foreground: '#bbc9cf', cursor: '#00d2ff', selectionBackground: '#003543'},
             convertEol: true,
             cursorBlink: true,
-            fontFamily: 'Consolas, "Courier New", monospace'
+            fontFamily: '"JetBrains Mono", Consolas, "Courier New", monospace',
+            fontSize: 12,
+            lineHeight: 1.4
         });
 
         const fitAddon = new FitAddon.FitAddon();

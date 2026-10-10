@@ -29,6 +29,30 @@
         <details class="history-identity">
             <summary>Deployment details</summary>
             <p>Deployment ID: <code>@DeploymentId</code></p></details>
+        @if (_authorized && _deployment is not null)
+        {
+            <div class="history-overview">
+                <h2 class="visually-hidden">Deployment overview</h2>
+                <dl>
+                    <div>
+                        <dt>Project</dt>
+                        <dd>@_deployment.CsProject?.Name</dd>
+                    </div>
+                    <div>
+                        <dt>Started UTC</dt>
+                        <dd>@_deployment.CreatedAt.ToString("u")</dd>
+                    </div>
+                    <div>
+                        <dt>Finished UTC</dt>
+                        <dd>@(_deployment.FinishedAt?.ToString("u") ?? "Not recorded")</dd>
+                    </div>
+                    <div>
+                        <dt>Outcome</dt>
+                        <dd>@_deployment.Outcome</dd>
+                    </div>
+                </dl>
+            </div>
+        }
     </header>
     @if (_error is not null)
     {
@@ -36,15 +60,6 @@
     }
     @if (_authorized)
     {
-        <section class="telemetry-panel">
-            <h2>Deployment overview</h2>
-            @if (_deployment is not null)
-            {
-                <p>@(_deployment.CsProject?.Name) · Started @_deployment.CreatedAt.ToString("u") ·
-                    Outcome @_deployment.Outcome</p>
-                <p>Finished: @(_deployment.FinishedAt?.ToString("u") ?? "Not recorded")</p>
-            }
-        </section>
         <section class="telemetry-panel" aria-labelledby="history-logs-title">
             <div class="telemetry-toolbar">
                 <div><h2 id="history-logs-title">Logs</h2>

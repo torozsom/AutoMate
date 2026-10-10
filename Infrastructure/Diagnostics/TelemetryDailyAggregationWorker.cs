@@ -41,8 +41,7 @@ public sealed class TelemetryDailyAggregationWorker(
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
         var now = DateTimeOffset.UtcNow;
         var deployments = await db.Deployments.AsNoTracking().Where(d =>
-                (!options.Value.ManagedService || d.CsProject!.Application.ManagedTelemetryConsent) &&
-                (d.Status == DeploymentStatus.Running || d.UpdatedAt >= now.AddDays(-2)))
+                d.Status == DeploymentStatus.Running || d.UpdatedAt >= now.AddDays(-2))
             .Select(d => new { d.Id, d.CreatedAt, d.CsProject!.AppId, d.CsProject.Application.UserId })
             .ToListAsync(token);
         foreach (var deployment in deployments)

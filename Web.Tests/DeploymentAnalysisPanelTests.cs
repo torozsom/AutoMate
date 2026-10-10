@@ -2,15 +2,12 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Ai;
 using Application.Ai;
-using Application.Data.Apps;
-using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Web.Components.Pages;
 using Web.Components.Shared;
 using Xunit;
 
@@ -22,92 +19,18 @@ namespace Web.Tests;
 /// </summary>
 public sealed class DeploymentAnalysisPanelTests
 {
-    /// <summary>The page reads newly created remote configuration back after an explicit consent action.</summary>
+    /// <summary>A provider denial explains the external correction without exposing arbitrary provider text.</summary>
     [Fact]
-    public async Task Remote_consent_action_reads_back_new_configuration()
+    public async Task Provider_denial_has_actionable_fixed_guidance()
     {
-        var owner = Guid.NewGuid();
-        var project = new CsProject();
-        project.Deployments.Add(new Deployment { CsProjectId = project.Id, Status = DeploymentStatus.Failed });
-        var app = new Domain.Entities.Application
-            { Name = "Fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote };
-        app.CsProjects.Add(project);
-        var saved = new Domain.Entities.Application
-            { Name = "Fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote };
-        saved.CsProjects.Add(new CsProject
+        var result = Result(AiAnalysisStatus.Failed) with
         {
-            Id = project.Id,
-            Configuration = new Configuration { DotNetVersion = "10.0", AiDiagnosticEgressConsented = true }
-        });
-        var port = DispatchProxy.Create<IApplicationService, ConsentPort>();
-        var probe = (ConsentPort)port;
-        probe.Saved = saved;
-        using var services = new ServiceCollection().AddSingleton(port).BuildServiceProvider();
-        var component = new ProjectDetails();
-        var type = typeof(ProjectDetails);
-        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        type.GetProperty(nameof(ProjectDetails.ProjectId))!.SetValue(component, app.Id);
-        type.GetField("_app", flags)!.SetValue(component, app);
-        type.GetField("_currentUserId", flags)!.SetValue(component, owner);
-        type.GetProperty("ScopeFactory", flags)!.SetValue(component,
-            services.GetRequiredService<IServiceScopeFactory>());
-        await (Task)type.GetMethod("SetAiConsentAsync", flags)!.Invoke(component, [true])!;
-        Assert.Equal((app.Id, owner, project.Id, true), probe.Target);
-        Assert.True(project.Configuration!.AiDiagnosticEgressConsented);
-        Assert.Contains("consent saved", (string)type.GetField("_analysisMessage", flags)!.GetValue(component)!);
-    }
-
-    /// <summary>The current remote deployment can edit consent without configuration, without choosing a sibling.</summary>
-    [Theory]
-    [InlineData(SourceType.Remote, true)]
-    [InlineData(SourceType.Local, false)]
-    public void Missing_configuration_consent_eligibility_uses_exact_deployment(SourceType source, bool eligible)
-    {
-        var project = new CsProject();
-        project.Deployments.Add(new Deployment { CsProjectId = project.Id, Status = DeploymentStatus.Failed });
-        var app = new Domain.Entities.Application
-            { Name = "Fixture", SourcePathOrUrl = "fixture", SourceType = source };
-        app.CsProjects.Add(project);
-        app.CsProjects.Add(new CsProject { Configuration = new Configuration { DotNetVersion = "10.0" } });
-        var component = new ProjectDetails();
-        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        typeof(ProjectDetails).GetField("_app", flags)!.SetValue(component, app);
-        Assert.Equal(eligible,
-            typeof(ProjectDetails).GetMethod("CanEditAnalysisConsent", flags)!.Invoke(component, null));
-        Assert.Equal(false, typeof(ProjectDetails).GetMethod("HasAnalysisConsent", flags)!.Invoke(component, null));
-    }
-
-    /// <summary>An uncertain owner request retries the same GUID through the port and never copies exception text to feedback.</summary>
-    [Fact]
-    public async Task Owner_action_reuses_request_identity_after_uncertain_response()
-    {
-        var owner = Guid.NewGuid();
-        var project = new CsProject
-            { Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true } };
-        var deployment = new Deployment { CsProjectId = project.Id, Status = DeploymentStatus.Failed };
-        project.Deployments.Add(deployment);
-        var app = new Domain.Entities.Application
-            { Name = "Fixture", SourceType = SourceType.Local, SourcePathOrUrl = "C:/fixture" };
-        app.CsProjects.Add(project);
-        var component = new ProjectDetails();
-        var type = typeof(ProjectDetails);
-        var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        type.GetField("_app", flags)!.SetValue(component, app);
-        type.GetField("_currentUserId", flags)!.SetValue(component, owner);
-        type.GetProperty("AnalysisOptions", flags)!.SetValue(component, new EnabledOptions());
-        var port = DispatchProxy.Create<IDeploymentAnalysisService, RequestPort>();
-        var probe = (RequestPort)port;
-        using var services = new ServiceCollection().AddSingleton(port).BuildServiceProvider();
-        type.GetProperty("ScopeFactory", flags)!.SetValue(component,
-            services.GetRequiredService<IServiceScopeFactory>());
-        var request = type.GetMethod("RequestAnalysisAsync", flags)!;
-        await (Task)request.Invoke(component, null)!;
-        Assert.DoesNotContain("private", (string)type.GetField("_analysisMessage", flags)!.GetValue(component)!);
-        await (Task)request.Invoke(component, null)!;
-        Assert.Equal(2, probe.Requests.Count);
-        Assert.Equal(probe.Requests[0], probe.Requests[1]);
-        Assert.Equal(owner, probe.Owner);
-        Assert.Equal(deployment.Id, probe.Deployment);
+            FailureCode = AnalysisProviderAccessDeniedException.FailureCode
+        };
+        var html = await RenderAsync(result);
+        Assert.Contains("provider denied access", html);
+        Assert.Contains("network access", html);
+        Assert.DoesNotContain("private", html);
     }
 
     /// <summary>Every durable state has an accessible textual label; nonterminal payloads are omitted.</summary>

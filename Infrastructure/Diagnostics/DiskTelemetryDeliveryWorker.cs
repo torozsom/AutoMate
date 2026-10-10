@@ -67,8 +67,7 @@ public sealed class DiskTelemetryDeliveryWorker(
         {
             var policy = await scope.ServiceProvider.GetRequiredService<TelemetryProjectPolicyCache>()
                 .GetAsync(group.Key.ProjectId, token);
-            var allowed = policy?.UserId == group.Key.TenantId &&
-                          (!options.Value.ManagedService || policy.ManagedTelemetryConsent);
+            var allowed = policy?.UserId == group.Key.TenantId;
             var expired = group.Where(e =>
                 e.StoredAt.AddHours(options.Value.BufferHours) <= DateTimeOffset.UtcNow || !allowed).ToArray();
             lost.AddRange(expired);

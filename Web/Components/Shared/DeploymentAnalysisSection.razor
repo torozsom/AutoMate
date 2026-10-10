@@ -238,9 +238,19 @@
         {
             if (DeploymentId is not { } deployment || _latest is not { } latest || latest.DeploymentId != deployment) return;
             var identity = _identity;
-            await service.CancelAsync(OwnerId, deployment, latest.Id, token);
+            var outcome = await service.CancelAsync(OwnerId, deployment, latest.Id, token);
+            if (identity != _identity || token.IsCancellationRequested) return;
             var updated = await service.GetLatestAsync(OwnerId, deployment, token);
-            if (identity == _identity && !token.IsCancellationRequested) _latest = updated;
+            if (identity == _identity && !token.IsCancellationRequested)
+            {
+                _latest = updated;
+                _message = outcome switch
+                {
+                    DeploymentAnalysisCancellationResult.Cancelled => "Analysis canceled.",
+                    DeploymentAnalysisCancellationResult.AlreadyFinished => "Analysis already finished; its saved result is preserved.",
+                    _ => "Analysis is no longer available."
+                };
+            }
         });
     }
 
@@ -255,7 +265,13 @@
                 .SetAiDiagnosticEgressConsentAsync(ProjectId, OwnerId, CsProjectId, consented, token);
             if (identity == _identity && !token.IsCancellationRequested)
             {
-                if (changed) _consented = consented;
+                if (changed)
+                {
+                    _consented = consented;
+                    _message = consented
+                        ? "Diagnostic data egress consent saved for this deployment's project."
+                        : "Diagnostic data egress consent revoked. Use Cancel analysis to stop queued or running work.";
+                }
                 else _message = "Consent could not be updated.";
             }
         });

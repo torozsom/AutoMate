@@ -1,21 +1,17 @@
 using System.Globalization;
-using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
-using Application.Ai;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Application.Orchestration;
 using Domain.DTO;
-using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.Extensions.Options;
 using Web.Components.Shared;
 using Web.Hubs;
 
@@ -55,24 +51,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
 
-    /// <summary>Serializes owner analysis actions.</summary>
-    private bool _analysisBusy;
-
-    /// <summary>Prevents late analysis reads/actions from publishing after page disposal.</summary>
+    /// <summary>Prevents late page reads from publishing after disposal.</summary>
     private bool _analysisDisposed;
-
-    private string? _analysisMessage;
-
-
-    /// <summary>Monotonic read/action generation rejects responses overtaken by newer page operations.</summary>
-    private long _analysisReadVersion;
-
-    /// <summary>Deployment scope of the retained request identity.</summary>
-    private Guid? _analysisRequestDeploymentId;
-
-    /// <summary>Stable admission identity retained after an uncertain response.</summary>
-    private Guid? _analysisRequestId;
-
 
     /// A nullable variable to hold the app details fetched from the database.
     private Domain.Entities.Application? _app;
@@ -82,6 +62,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// A terminal instance for Azure Container Apps console output.
     private Terminal? _azureWebTerminal;
+
+    /// <summary>Project bound to this component's current subscription.</summary>
+    private Guid _boundProjectId;
 
     /// A terminal instance for displaying build logs.
     private Terminal? _buildTerminal;
@@ -103,9 +86,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// A list of database tabs to be displayed in the UI, initialized as an empty list.
     private IEnumerable<DatabaseTab> _databaseTabs = [];
-
-    /// <summary>Suppresses repeated empty-history notices during SaaS catch-up polls.</summary>
-    private bool _emptyTerminalNoticeShown;
 
     /// A terminal instance for GitHub Actions output from a cloud deployment.
     private Terminal? _githubActionsTerminal;
@@ -130,17 +110,23 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     private long _lastTerminalOrderId;
 
-    /// <summary>Latest owner-visible analysis for the current deployment.</summary>
-    private DeploymentAnalysisView? _latestAnalysis;
-
     /// <summary>Bounds saved metric recovery while waiting for the first live sample.</summary>
     private DateTimeOffset _nextMetricReplayAt;
+
+    /// <summary>Rejects terminal replies overtaken by navigation or a deployment replacement.</summary>
+    private long _pageGeneration;
 
     /// <summary>Stable key used if the current SaaS admission request is retried.</summary>
     private string? _pendingCloudIdempotencyKey;
 
+    /// <summary>Rejoins the authorized stream after the replacement route has rendered terminals.</summary>
+    private bool _rejoinPending;
+
     /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
     private string? _selectedProjectPath;
+
+    /// <summary>Shows the deployment-scoped assessment dialog.</summary>
+    private bool _showAnalysisDialog;
 
     /// A boolean flag to control the visibility of the deployment configuration modal.
     private bool _showConfigModal;
@@ -163,11 +149,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
     private string? _workflowUrl;
-
-    /// <summary>Fresh operator enablement for presentation; server admission still enforces all policy.</summary>
-    [Inject]
-    private IOptionsMonitor<AiAnalysisOptions> AnalysisOptions { get; set; } = null!;
-
 
     /// The ID of the project to be displayed, passed as a parameter to the component.
     [Parameter]
@@ -230,7 +211,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _analysisDisposed = true;
-        _analysisReadVersion++;
+        _pageGeneration++;
         await _cloudPollCancellation.CancelAsync();
         if (_cloudPollTask is not null)
             try
@@ -505,111 +486,80 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged += OnQueueStateChanged;
+        _boundProjectId = ProjectId;
         _currentUserId = await GetCurrentUserIdAsync();
+        await LoadCurrentProjectAsync();
+        if (_app is not null) _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
+    }
 
-        if (_currentUserId != Guid.Empty)
+    /// <inheritdoc />
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_boundProjectId == Guid.Empty)
         {
-            _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
-            _terminalDeploymentId = GetLatestDeployment()?.Id;
-            if (_app?.SourceType == SourceType.Remote)
-                _activeTab = "github-actions";
-            if (_app?.SourceType == SourceType.Remote && !DeploymentCapabilities.LocalDeploymentsEnabled)
-            {
-                _cloudRunReceipt = await CloudDeploymentRuns.GetLatestForProjectAsync(_currentUserId, ProjectId);
-                UpdateCloudRunMessage();
-                _cloudPollTask = PollSaasCloudAsync(_cloudPollCancellation.Token);
-            }
+            _boundProjectId = ProjectId;
+            return;
+        }
 
-            await RefreshLatestAnalysisAsync();
-            // The shared deployment-scoped presenter owns AI polling on both details pages.
-            if (_app is not null && _cloudPollTask is null)
-                _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
+        if (_boundProjectId == ProjectId || _analysisDisposed) return;
+        var previousProject = _boundProjectId;
+        _boundProjectId = ProjectId;
+        _pageGeneration++;
+        _showAnalysisDialog = false;
+        HideConfigModal();
+        _app = null;
+        _isLoading = true;
+        _terminalDeploymentId = null;
+        ResetTerminalState();
+        if (_hubConnection?.State == HubConnectionState.Connected)
+            await _hubConnection.SendAsync("LeaveProjectGroup", previousProject, _cloudPollCancellation.Token);
+        await LoadCurrentProjectAsync();
+        _rejoinPending = true;
+    }
 
-            if (_app is { SourceType: SourceType.Local })
-            {
-                var csProject = _app.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
-                if (csProject != null)
-                {
-                    var config = await ProjectScanner.AnalyzeDependenciesAsync(_app, csProject);
-                    _databaseTabs = config.Databases
-                        .Select(db =>
-                            new DatabaseTab(db.DbType, db.ContainerNameSuffix, db.DbType))
-                        .ToList();
-                }
-            }
+    /// <summary>Loads route-specific data while fencing old route responses at every I/O boundary.</summary>
+    private async Task LoadCurrentProjectAsync()
+    {
+        var project = ProjectId;
+        var generation = _pageGeneration;
+        var token = _cloudPollCancellation.Token;
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        var app = _currentUserId == Guid.Empty
+            ? null
+            : await scope.ServiceProvider
+                .GetRequiredService<IApplicationService>().GetAppByIdAsync(project, _currentUserId, token);
+        if (_analysisDisposed || token.IsCancellationRequested || project != ProjectId ||
+            generation != _pageGeneration) return;
+        _app = app;
+        _terminalDeploymentId = GetLatestDeployment()?.Id;
+        _activeTab = app?.SourceType == SourceType.Remote ? "github-actions" : "build";
+        _databaseTabs = [];
+        _cloudRunReceipt = null;
+        _workflowStatusMessage = null;
+        if (app is { SourceType: SourceType.Remote } && !DeploymentCapabilities.LocalDeploymentsEnabled)
+        {
+            var receipt = await scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>()
+                .GetLatestForProjectAsync(_currentUserId, project, token);
+            if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;
+            _cloudRunReceipt = receipt;
+            UpdateCloudRunMessage();
+        }
+
+        if (app is { SourceType: SourceType.Local } && app.CsProjects.FirstOrDefault(csp => csp.IsWebProject) is
+                { } csProject)
+        {
+            var config = await ProjectScanner.AnalyzeDependenciesAsync(app, csProject, token);
+            if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;
+            _databaseTabs = config.Databases.Select(db => new DatabaseTab(db.DbType, db.ContainerNameSuffix, db.DbType))
+                .ToList();
         }
 
         await UpdateWebHostPortAsync();
-
-        _isLoading = false;
+        if (project == ProjectId && generation == _pageGeneration && !token.IsCancellationRequested) _isLoading = false;
     }
 
-    /// <summary>
-    ///     Refreshes persisted analysis on the renderer dispatcher; failures preserve the last saved view and retry next
-    ///     tick.
-    /// </summary>
-    private async Task PollAnalysisAsync(CancellationToken cancellationToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-        while (await timer.WaitForNextTickAsync(cancellationToken))
-            await PollAnalysisOnceAsync(cancellationToken);
-    }
-
-    /// <summary>Runs one dispatcher-bound read and fences failure feedback against newer page actions.</summary>
-    private Task PollAnalysisOnceAsync(CancellationToken cancellationToken)
-    {
-        return InvokeAsync(async () =>
-        {
-            if (_analysisDisposed || _analysisBusy || cancellationToken.IsCancellationRequested ||
-                GetLatestDeployment() is null) return;
-            const string unavailable =
-                "Automatic refresh is temporarily unavailable. Saved status may be out of date; use Refresh analysis.";
-            var version = _analysisReadVersion + 1;
-            var owner = _currentUserId;
-            var deploymentId = GetLatestDeployment()!.Id;
-            try
-            {
-                if (await RefreshLatestAnalysisAsync(cancellationToken))
-                {
-                    if (_analysisMessage == unavailable) _analysisMessage = null;
-                    StateHasChanged();
-                }
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-            }
-            catch (Exception)
-            {
-                if (_analysisDisposed || cancellationToken.IsCancellationRequested || version != _analysisReadVersion ||
-                    owner != _currentUserId || deploymentId != GetLatestDeployment()?.Id) return;
-                _analysisMessage = unavailable;
-                StateHasChanged();
-            }
-        });
-    }
-
-    /// <summary>Confirms replay progress for self-hosted pages without depending on live-delivery order.</summary>
+    /// <summary>Refreshes the current route through independent scopes and confirms active terminal replay progress.</summary>
     private async Task PollTerminalHistoryAsync(CancellationToken cancellationToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-        while (await timer.WaitForNextTickAsync(cancellationToken))
-            try
-            {
-                if (_hubConnection?.State == HubConnectionState.Connected && _terminalDeploymentId.HasValue)
-                    await JoinLogHubGroupAsync();
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogWarning("Terminal catch-up unavailable: {FailureType}.", ex.GetType().Name);
-            }
-    }
-
-    /// <summary>Refreshes SaaS phase and catches up redacted logs across app instances.</summary>
-    private async Task PollSaasCloudAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         while (await timer.WaitForNextTickAsync(cancellationToken))
@@ -617,23 +567,26 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (!await _cloudPollGate.WaitAsync(0, cancellationToken)) continue;
             try
             {
-                await using var scope = ScopeFactory.CreateAsyncScope();
-                var receipt = await scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>()
-                    .GetLatestForProjectAsync(_currentUserId, ProjectId, cancellationToken);
-                if (receipt?.RunId != _cloudRunReceipt?.RunId || receipt?.Phase != _cloudRunReceipt?.Phase)
+                await InvokeAsync(async () =>
                 {
-                    _cloudRunReceipt = receipt;
-                    UpdateCloudRunMessage();
-                    await InvokeAsync(() => RefreshProjectAsync());
-                }
-                else if (receipt?.Phase == CloudRunPhase.Queued)
-                {
-                    UpdateCloudRunMessage();
-                    await InvokeAsync(StateHasChanged);
-                }
+                    if (_analysisDisposed || _isLoading) return;
+                    await RefreshProjectAsync();
+                    if (_app?.SourceType == SourceType.Remote && !DeploymentCapabilities.LocalDeploymentsEnabled)
+                    {
+                        var project = ProjectId;
+                        var generation = _pageGeneration;
+                        await using var scope = ScopeFactory.CreateAsyncScope();
+                        var receipt = await scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>()
+                            .GetLatestForProjectAsync(_currentUserId, project, cancellationToken);
+                        if (project != ProjectId || generation != _pageGeneration ||
+                            cancellationToken.IsCancellationRequested) return;
+                        _cloudRunReceipt = receipt;
+                        UpdateCloudRunMessage();
+                    }
 
-                if (_hubConnection?.State == HubConnectionState.Connected && _terminalDeploymentId.HasValue)
-                    await JoinLogHubGroupAsync();
+                    if (_hubConnection?.State == HubConnectionState.Connected) await JoinLogHubGroupAsync();
+                    StateHasChanged();
+                });
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -641,8 +594,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Logger.LogWarning("SaaS cloud status refresh failed for {ProjectId}. Failure {FailureType}.", ProjectId,
-                    ex?.GetType().Name);
+                Logger.LogWarning("Project status/terminal refresh unavailable: {FailureType}.", ex.GetType().Name);
             }
             finally
             {
@@ -707,6 +659,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task UpdateWebHostPortAsync(int maxAttempts = 1)
     {
+        var project = ProjectId;
+        var generation = _pageGeneration;
         if (_app is not { SourceType: SourceType.Local } || GetLatestStatus() != DeploymentStatus.Running)
         {
             _webHostPort = 0;
@@ -726,6 +680,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             foreach (var containerName in containerNames)
             {
                 var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
+                if (_analysisDisposed || project != ProjectId || generation != _pageGeneration) return;
                 if (hostPort > 0)
                 {
                     _webHostPort = hostPort;
@@ -746,242 +701,77 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     private async Task RefreshProjectAsync(bool resolveWebPortWithRetry = false)
     {
-        if (_currentUserId != Guid.Empty)
-        {
-            _app = await ApplicationService.GetAppByIdAsync(ProjectId, _currentUserId);
-            var latestDeploymentId = GetLatestDeployment()?.Id;
-            if (latestDeploymentId != _terminalDeploymentId)
-            {
-                _terminalDeploymentId = latestDeploymentId;
-                _containerMetrics.Clear();
-                _metricContainerNames.Clear();
-                _currentMetricIndex = 0;
-                _nextMetricReplayAt = DateTimeOffset.MinValue;
-                _showSavedMetricNotice = false;
-                _lastTerminalOrderId = 0;
-                _renderedTerminalIds.Clear();
-                _lastHistoryAvailability = null;
-                _emptyTerminalNoticeShown = false;
-                _pendingTerminalLogs.Clear();
-                _terminalReplayPending = true;
-                await ClearTerminalsAsync();
-                if (_hubConnection?.State == HubConnectionState.Connected)
-                    await JoinLogHubGroupAsync();
-            }
-
-            await RefreshLatestAnalysisAsync();
-            await UpdateWebHostPortAsync(resolveWebPortWithRetry ? 6 : 1);
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    /// <summary>Requests through an isolated owner-authorized scope, retaining a stable ID only when the outcome is uncertain.</summary>
-    private async Task RequestAnalysisAsync()
-    {
-        var deployment = GetLatestDeployment();
-        if (_analysisDisposed || _analysisBusy || deployment?.Status != DeploymentStatus.Failed ||
-            !AnalysisOptions.CurrentValue.Enabled || !HasAnalysisConsent()) return;
-        _analysisBusy = true;
-        var version = ++_analysisReadVersion;
-        var token = _cloudPollCancellation.Token;
-        if (_analysisRequestDeploymentId != deployment.Id || _analysisRequestId is null)
-        {
-            _analysisRequestDeploymentId = deployment.Id;
-            _analysisRequestId = Guid.NewGuid();
-        }
-
-        try
-        {
-            await using var scope = ScopeFactory.CreateAsyncScope();
-            var analyses = scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>();
-            var result =
-                await analyses.RequestManualAsync(_currentUserId, deployment.Id, _analysisRequestId.Value, token);
-            _analysisRequestId = null;
-            if (_analysisDisposed || token.IsCancellationRequested || version != _analysisReadVersion ||
-                GetLatestDeployment()?.Id != deployment.Id) return;
-            _analysisMessage = result.Message;
-            var view = result.Analysis ?? await analyses.GetLatestAsync(_currentUserId, deployment.Id, token);
-            if (!_analysisDisposed && !token.IsCancellationRequested && version == _analysisReadVersion &&
-                GetLatestDeployment()?.Id == deployment.Id) _latestAnalysis = view;
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-        }
-        catch (Exception)
-        {
-            if (!_analysisDisposed && version == _analysisReadVersion)
-                _analysisMessage = "Analysis request could not be confirmed. Refresh or retry to check its status.";
-        }
-        finally
-        {
-            _analysisBusy = false;
-        }
-    }
-
-    /// <summary>Reads consent for the actual current deployment, rather than another C# project's configuration.</summary>
-    private bool HasAnalysisConsent()
-    {
-        return GetAnalysisProject()?.Configuration?.AiDiagnosticEgressConsented == true;
-    }
-
-    /// <summary>Resolves only the current deployment's C# project, never another configured project.</summary>
-    private CsProject? GetAnalysisProject()
-    {
-        return _app?.CsProjects.FirstOrDefault(project => project.Id == GetLatestDeployment()?.CsProjectId);
-    }
-
-    /// <summary>Remote projects can save explicit consent before a deployment configuration exists.</summary>
-    private bool CanEditAnalysisConsent()
-    {
-        return GetAnalysisProject() is { } project &&
-               (project.Configuration is not null || _app?.SourceType == SourceType.Remote);
-    }
-
-    /// <summary>Refreshes owner-visible persisted state with fixed failure guidance and duplicate-action suppression.</summary>
-    private async Task RefreshAnalysisFromUiAsync()
-    {
-        if (_analysisDisposed || _analysisBusy) return;
-        _analysisBusy = true;
-        var version = _analysisReadVersion + 1;
-        try
-        {
-            if (await RefreshLatestAnalysisAsync()) _analysisMessage = "Analysis status refreshed.";
-        }
-        catch (OperationCanceledException) when (_analysisDisposed)
-        {
-        }
-        catch (Exception)
-        {
-            if (!_analysisDisposed && version == _analysisReadVersion)
-                _analysisMessage = "Analysis status is temporarily unavailable. Try refreshing again.";
-        }
-        finally
-        {
-            _analysisBusy = false;
-        }
-    }
-
-    /// <summary>Persists explicit consent for the exact owner project using an isolated scope and stale-action fences.</summary>
-    private async Task SetAiConsentAsync(bool consented)
-    {
-        var project = GetAnalysisProject();
-        if (_analysisDisposed || _analysisBusy || project is null || !CanEditAnalysisConsent()) return;
-        var appId = ProjectId;
-        var owner = _currentUserId;
-        var projectId = project.Id;
-        var deploymentId = GetLatestDeployment()!.Id;
-        var version = ++_analysisReadVersion;
-        var token = _cloudPollCancellation.Token;
-        _analysisBusy = true;
-        try
-        {
-            await using var scope = ScopeFactory.CreateAsyncScope();
-            var apps = scope.ServiceProvider.GetRequiredService<IApplicationService>();
-            var saved = await apps.SetAiDiagnosticEgressConsentAsync(appId, owner, projectId, consented, token);
-            if (saved && project.Configuration is null)
-            {
-                var refreshed = await apps.GetAppByIdAsync(appId, owner, token);
-                if (!IsCurrentAnalysisAction(version, owner, deploymentId, token) || ProjectId != appId) return;
-                project.Configuration =
-                    refreshed?.CsProjects.FirstOrDefault(item => item.Id == projectId)?.Configuration;
-            }
-
-            if (!IsCurrentAnalysisAction(version, owner, deploymentId, token) || ProjectId != appId) return;
-            if (saved && GetAnalysisProject() is { Configuration: { } configuration } current &&
-                current.Id == projectId)
-            {
-                configuration.AiDiagnosticEgressConsented = consented;
-                _analysisMessage = consented
-                    ? "Diagnostic data egress consent saved for this deployment's project."
-                    : "Diagnostic data egress consent revoked. Use Cancel analysis to stop queued or running work.";
-            }
-            else
-            {
-                _analysisMessage = "Consent could not be saved. Refresh the project and try again.";
-            }
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-        }
-        catch (Exception)
-        {
-            if (IsCurrentAnalysisAction(version, owner, deploymentId, token))
-                _analysisMessage = "Consent change could not be confirmed. Refresh the project before trying again.";
-        }
-        finally
-        {
-            _analysisBusy = false;
-        }
-    }
-
-    /// <summary>Cancels the exact visible active analysis; persisted readback handles completion races and retry uncertainty.</summary>
-    private async Task CancelAnalysisAsync()
-    {
-        var deploymentId = GetLatestDeployment()?.Id;
-        var analysis = _latestAnalysis;
-        if (_analysisDisposed || _analysisBusy || deploymentId is null || analysis?.DeploymentId != deploymentId ||
-            analysis.Status is not (AiAnalysisStatus.Queued or AiAnalysisStatus.Running)) return;
-        var owner = _currentUserId;
-        var version = ++_analysisReadVersion;
-        var token = _cloudPollCancellation.Token;
-        _analysisBusy = true;
-        try
-        {
-            await using var scope = ScopeFactory.CreateAsyncScope();
-            var analyses = scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>();
-            var outcome = await analyses.CancelAsync(owner, deploymentId.Value, analysis.Id, token);
-            if (!IsCurrentAnalysisAction(version, owner, deploymentId.Value, token)) return;
-            _analysisMessage = outcome switch
-            {
-                DeploymentAnalysisCancellationResult.Cancelled => "Analysis canceled.",
-                DeploymentAnalysisCancellationResult.AlreadyFinished =>
-                    "Analysis already finished; its saved result is preserved.",
-                _ => "Analysis is no longer available."
-            };
-            var view = await analyses.GetLatestAsync(owner, deploymentId.Value, token);
-            if (IsCurrentAnalysisAction(version, owner, deploymentId.Value, token)) _latestAnalysis = view;
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-        }
-        catch (Exception)
-        {
-            if (IsCurrentAnalysisAction(version, owner, deploymentId.Value, token))
-                _analysisMessage = "Cancellation could not be confirmed. Refresh or retry to check its status.";
-        }
-        finally
-        {
-            _analysisBusy = false;
-        }
-    }
-
-    /// <summary>Rejects action feedback or readback after a newer action, owner/deployment change or page disposal.</summary>
-    private bool IsCurrentAnalysisAction(long version, Guid owner, Guid deploymentId, CancellationToken token)
-    {
-        return !_analysisDisposed && !token.IsCancellationRequested && version == _analysisReadVersion &&
-               owner == _currentUserId && GetLatestDeployment()?.Id == deploymentId;
-    }
-
-    /// <summary>Uses an isolated read scope and omits late responses if the current deployment changed.</summary>
-    private async Task<bool> RefreshLatestAnalysisAsync(CancellationToken cancellationToken = default)
-    {
-        if (_analysisDisposed) return false;
-        var token = cancellationToken.CanBeCanceled ? cancellationToken : _cloudPollCancellation.Token;
-        var version = ++_analysisReadVersion;
-        var owner = _currentUserId;
-        var deployment = GetLatestDeployment();
-        var deploymentId = deployment?.Id;
+        if (_currentUserId == Guid.Empty || _analysisDisposed || _isLoading) return;
+        var project = ProjectId;
+        var generation = _pageGeneration;
         await using var scope = ScopeFactory.CreateAsyncScope();
-        var analyses = scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisService>();
-        var result = deployment is null
-            ? null
-            : await analyses.GetLatestAsync(owner, deploymentId!.Value, token);
-        if (_analysisDisposed || token.IsCancellationRequested || version != _analysisReadVersion ||
-            owner != _currentUserId || GetLatestDeployment()?.Id != deploymentId) return false;
-        _latestAnalysis = result;
-        return true;
+        var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
+            .GetAppByIdAsync(project, _currentUserId, _cloudPollCancellation.Token);
+        if (_analysisDisposed || generation != _pageGeneration || project != ProjectId) return;
+        var previouslyActive = CanReplayTerminalHistory();
+        _app = app;
+        var latestDeploymentId = GetLatestDeployment()?.Id;
+        if (latestDeploymentId != _terminalDeploymentId)
+        {
+            _terminalDeploymentId = latestDeploymentId;
+            _showAnalysisDialog = false;
+            _pageGeneration++;
+            ResetTerminalState();
+            await ClearTerminalsAsync();
+            if (_hubConnection?.State == HubConnectionState.Connected) await JoinLogHubGroupAsync();
+        }
+        else if (previouslyActive != CanReplayTerminalHistory())
+        {
+            // Keep visible output on stop, but invalidate replies issued before the status transition.
+            _pageGeneration++;
+            _pendingTerminalLogs.Clear();
+            _terminalReplayPending = CanReplayTerminalHistory();
+        }
+
+        await UpdateWebHostPortAsync(resolveWebPortWithRetry ? 6 : 1);
+        await InvokeAsync(StateHasChanged);
     }
 
+    /// <summary>Resets replay and metric state for a replacement deployment or route.</summary>
+    private void ResetTerminalState()
+    {
+        _containerMetrics.Clear();
+        _metricContainerNames.Clear();
+        _currentMetricIndex = 0;
+        _nextMetricReplayAt = DateTimeOffset.MinValue;
+        _showSavedMetricNotice = false;
+        _lastTerminalOrderId = 0;
+        _renderedTerminalIds.Clear();
+        _lastHistoryAvailability = null;
+        _pendingTerminalLogs.Clear();
+        _terminalBufferOverflow = false;
+        _terminalReplayPending = true;
+    }
+
+    /// <summary>Opens context configuration and saved results for the current deployment.</summary>
+    private void OpenAnalysisDialog()
+    {
+        if (!_analysisDisposed && GetLatestDeployment() is not null) _showAnalysisDialog = true;
+    }
+
+    /// <summary>Closes presentation without canceling durable analysis work.</summary>
+    private void CloseAnalysisDialog()
+    {
+        _showAnalysisDialog = false;
+    }
+
+    /// <summary>Only the currently active deployment can replay output on the live project page.</summary>
+    private bool CanReplayTerminalHistory()
+    {
+        return GetLatestStatus() is DeploymentStatus.Starting or DeploymentStatus.Running;
+    }
+
+    /// <summary>Rejects replies after disposal, navigation, deployment replacement or an inactive status.</summary>
+    private bool IsCurrentTerminalRead(Guid project, Guid? deployment, long generation)
+    {
+        return !_analysisDisposed && generation == _pageGeneration && project == ProjectId &&
+               deployment == _terminalDeploymentId && CanReplayTerminalHistory();
+    }
 
     /// <summary>
     ///     Retrieves the latest deployment status for the project by
@@ -1267,7 +1057,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             {
                 await InvokeAsync(async () =>
                 {
-                    if (terminalLog.DeploymentId != _terminalDeploymentId) return;
+                    if (_analysisDisposed || !CanReplayTerminalHistory() ||
+                        terminalLog.DeploymentId != _terminalDeploymentId) return;
                     if (_terminalReplayPending)
                     {
                         if (_pendingTerminalLogs.Count < 512) _pendingTerminalLogs.Add(terminalLog);
@@ -1287,6 +1078,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 {
                     return InvokeAsync(() =>
                     {
+                        if (_analysisDisposed || !CanReplayTerminalHistory()) return;
                         _containerMetrics[containerName] = (cpuUsage, memoryUsage);
                         _showSavedMetricNotice = false;
                         if (!_metricContainerNames.Contains(containerName)) _metricContainerNames.Add(containerName);
@@ -1312,58 +1104,78 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
             }
         }
+        else if (!_isLoading && _app is not null && _rejoinPending &&
+                 _hubConnection?.State == HubConnectionState.Connected)
+        {
+            _rejoinPending = false;
+            await JoinLogHubGroupAsync();
+        }
     }
 
-    /// <summary>Authorizes the current SignalR connection for this project's redacted diagnostic stream.</summary>
+    /// <summary>Joins the live stream and restores only the current active deployment's bounded output.</summary>
     private async Task JoinLogHubGroupAsync()
     {
-        if (_cloudPollCancellation.IsCancellationRequested || _hubConnection is null ||
-            _hubConnection.State != HubConnectionState.Connected)
-            return;
+        if (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested || _hubConnection is null ||
+            _hubConnection.State != HubConnectionState.Connected) return;
 
         await _terminalReplayGate.WaitAsync(_cloudPollCancellation.Token);
         try
         {
+            var project = ProjectId;
+            var deployment = _terminalDeploymentId;
+            var generation = _pageGeneration;
+            var active = CanReplayTerminalHistory();
             var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose)
                 .ToTimeLimitedDataProtector();
-            var secureToken = protector.Protect($"{ProjectId}:{_currentUserId}", TimeSpan.FromMinutes(5));
-            _terminalReplayPending = true;
+            var secureToken = protector.Protect($"{project}:{_currentUserId}", TimeSpan.FromMinutes(5));
+            _terminalReplayPending = active;
             var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
-                ProjectId, _terminalDeploymentId, secureToken, _lastTerminalOrderId, _cloudPollCancellation.Token);
+                project, active ? deployment : null, secureToken, _lastTerminalOrderId, _cloudPollCancellation.Token);
             await InvokeAsync(async () =>
             {
-                if (!_emptyTerminalNoticeShown && _terminalDeploymentId.HasValue && _lastTerminalOrderId == 0 &&
-                    history.Events.Count == 0 && _pendingTerminalLogs.Count == 0)
+                if (!IsCurrentTerminalRead(project, deployment, generation))
                 {
-                    await WriteTerminalNoticeAsync("No saved terminal output is available for this deployment.");
-                    _emptyTerminalNoticeShown = true;
+                    if (generation == _pageGeneration) _terminalReplayPending = false;
+                    return;
                 }
 
-                if (history.Availability is not null && history.Availability != _lastHistoryAvailability)
-                    await WriteTerminalNoticeAsync(history.Availability);
-                _lastHistoryAvailability = history.Availability;
+                // Empty history is normal. Storage errors remain visible outside deployment output.
+                _lastHistoryAvailability =
+                    history.Availability?.StartsWith("No saved output", StringComparison.Ordinal) == true
+                        ? null
+                        : history.Availability;
                 if (history.EarlierOmitted)
-                    await WriteTerminalNoticeAsync(_lastTerminalOrderId == 0
+                    _lastHistoryAvailability = _lastTerminalOrderId == 0
                         ? "Earlier output omitted; showing the most recent 500 events."
-                        : "More output is available and will load on the next refresh.");
+                        : "More output is available and will load on the next refresh.";
                 foreach (var terminalLog in history.Events)
+                {
+                    if (!IsCurrentTerminalRead(project, deployment, generation)) return;
                     await WriteTerminalLogAsync(terminalLog, true);
+                }
+
+                if (!IsCurrentTerminalRead(project, deployment, generation)) return;
                 if (history.CanAdvanceCursor && history.Events.Count > 0)
                 {
                     _lastTerminalOrderId = Math.Max(_lastTerminalOrderId, history.Events.Max(e => e.OrderId));
                     _renderedTerminalIds.RemoveWhere(id => id <= _lastTerminalOrderId);
                 }
 
-                foreach (var terminalLog in _pendingTerminalLogs.OrderBy(item => item.OrderId))
+                foreach (var terminalLog in _pendingTerminalLogs.OrderBy(item => item.OrderId).ToArray())
+                {
+                    if (!IsCurrentTerminalRead(project, deployment, generation)) return;
                     await WriteTerminalLogAsync(terminalLog);
+                }
+
                 _pendingTerminalLogs.Clear();
                 _terminalReplayPending = false;
                 if (_terminalBufferOverflow)
                 {
-                    await WriteTerminalNoticeAsync(
-                        "Some live output was omitted. Reload to recover available history.");
+                    _lastHistoryAvailability = "Some live output was omitted. Reload to recover available history.";
                     _terminalBufferOverflow = false;
                 }
+
+                StateHasChanged();
             });
         }
         finally
@@ -1378,22 +1190,25 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private async Task RestoreMetricSnapshotAsync()
     {
         if (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested ||
-            !_terminalDeploymentId.HasValue || _containerMetrics.Count > 0 ||
+            !CanReplayTerminalHistory() || !_terminalDeploymentId.HasValue || _containerMetrics.Count > 0 ||
             DateTimeOffset.UtcNow < _nextMetricReplayAt) return;
         _nextMetricReplayAt = DateTimeOffset.UtcNow.AddSeconds(60);
         var deploymentId = _terminalDeploymentId.Value;
+        var projectId = ProjectId;
+        var generation = _pageGeneration;
         var token = _cloudPollCancellation.Token;
         try
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
             var end = DateTimeOffset.UtcNow;
             var history = await scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>()
-                .ReadMetricsAsync(_currentUserId, ProjectId, deploymentId, end.AddMinutes(-15), end, 15,
+                .ReadMetricsAsync(_currentUserId, projectId, deploymentId, end.AddMinutes(-15), end, 15,
                     token);
             if (_analysisDisposed || token.IsCancellationRequested) return;
             await InvokeAsync(() =>
             {
-                if (_analysisDisposed || token.IsCancellationRequested || _terminalDeploymentId != deploymentId) return;
+                if (token.IsCancellationRequested ||
+                    !IsCurrentTerminalRead(projectId, deploymentId, generation)) return;
                 foreach (var group in history.Points.GroupBy(p => p.Container))
                 {
                     if (_containerMetrics.ContainsKey(group.Key)) continue;
@@ -1453,10 +1268,16 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (terminal is not null) await terminal.WriteAsync(DeploymentTerminalPresentation.Format(terminalLog));
     }
 
+    /// <summary>Shows operational guidance outside the terminal's deployment output.</summary>
     private Task WriteTerminalNoticeAsync(string message)
     {
-        var terminal = _app?.SourceType == SourceType.Remote ? _githubActionsTerminal : _buildTerminal;
-        return terminal?.WriteLineAsync(message) ?? Task.CompletedTask;
+        if (!_analysisDisposed)
+        {
+            _lastHistoryAvailability = message;
+            StateHasChanged();
+        }
+
+        return Task.CompletedTask;
     }
 
 

@@ -22,6 +22,8 @@ public sealed class MetricExplorationService(
     public async Task<MetricExplorationResult> ReadAsync(MetricExplorationQuery query,
         CancellationToken token = default)
     {
+        if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
+            throw new InvalidOperationException("Managed telemetry processing is not approved.");
         query.Range.Validate(clock.GetUtcNow());
         if (query.Owner == Guid.Empty || query.PageSize is not (10 or 25 or 50) || query.Page < 1)
             throw new ArgumentException("Invalid metric exploration request.");
@@ -52,9 +54,7 @@ public sealed class MetricExplorationService(
                                                                                d.Container == query.Container) &&
                                                                               db.Applications.Any(p =>
                                                                                   p.Id == d.ProjectId &&
-                                                                                  p.UserId == query.Owner &&
-                                                                                  (!options.Value.ManagedService ||
-                                                                                      p.ManagedTelemetryConsent)) &&
+                                                                                  p.UserId == query.Owner) &&
                                                                               db.Deployments.Any(deployment =>
                                                                                   deployment.Id == d.DeploymentId &&
                                                                                   deployment.CsProject!.AppId ==
@@ -104,9 +104,7 @@ public sealed class MetricExplorationService(
         var allowed = new HashSet<Guid>();
         foreach (var projects in rows.Values.Select(p => p.Project).Distinct().Chunk(500))
         foreach (var id in await db.Applications.AsNoTracking().Where(p => projects.Contains(p.Id) &&
-                                                                           p.UserId == query.Owner &&
-                                                                           (!options.Value.ManagedService ||
-                                                                            p.ManagedTelemetryConsent))
+                                                                           p.UserId == query.Owner)
                      .Select(p => p.Id).ToListAsync(token))
             allowed.Add(id);
         if (query.Project is { } selectedProject && !await db.Applications.AnyAsync(p =>
@@ -114,7 +112,7 @@ public sealed class MetricExplorationService(
             throw new UnauthorizedAccessException("Metric access denied.");
         if (rows.Values.Any(p => !allowed.Contains(p.Project)))
             notice =
-                "Ownership or managed-storage consent changed during this read; affected observations are unavailable.";
+                "Ownership changed during this read; affected observations are unavailable.";
         var all = rows.Values.Where(p => allowed.Contains(p.Project)).OrderByDescending(p => p.Timestamp)
             .ThenBy(p => p.Deployment)
             .ThenBy(p => p.Container, StringComparer.Ordinal).ThenBy(p => p.Metric, StringComparer.Ordinal).ToArray();
@@ -161,7 +159,8 @@ public sealed class MetricExplorationService(
 
             rows[key] = previous with
             {
-                Samples = previous.Samples + value.Samples, Sum = previous.Sum + value.Sum,
+                Samples = previous.Samples + value.Samples,
+                Sum = previous.Sum + value.Sum,
                 ImportedIntervals = previous.ImportedIntervals + value.ImportedIntervals,
                 Minimum = Math.Min(previous.Minimum, value.Minimum),
                 Maximum = Math.Max(previous.Maximum, value.Maximum),
@@ -188,6 +187,11 @@ public sealed class MetricExplorationService(
                 catch (OperationCanceledException) when (!token.IsCancellationRequested)
                 {
                     notice = "Detailed metric history timed out; displayed observations are partial.";
+                    return;
+                }
+                catch (TelemetryCompatibilityException error)
+                {
+                    notice = error.Message;
                     return;
                 }
                 catch (Exception error) when (error is HttpRequestException or IOException or InvalidOperationException)

@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Diagnostics;
+using Application.Ai;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -65,6 +66,14 @@ public sealed class ConsoleExceptionDiagnostics(
                     .AppendLine(Mask(ExceptionMessage(entry.Error), credentials, 4096));
                 if (entry.Error is HttpRequestException { StatusCode: { } status })
                     text.Append("HTTP status: ").Append((int)status).AppendLine();
+                if (entry.Error is AnalysisProviderAccessDeniedException denied)
+                {
+                    text.Append("AI provider: ").Append(denied.Provider).AppendLine();
+                    text.Append("Provider code: ").Append(denied.Code).AppendLine();
+                    if (denied.RequestId is { } requestId)
+                        text.Append("Provider request ID: ").Append(requestId).AppendLine();
+                }
+
                 foreach (var frame in new StackTrace(entry.Error, false).GetFrames()?.Take(20) ?? [])
                 {
                     var method = frame.GetMethod();

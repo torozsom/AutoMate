@@ -225,6 +225,8 @@ internal sealed class ResponsesAnalysisTransport(
             if (!response.IsSuccessStatusCode)
             {
                 var status = (int)response.StatusCode;
+                if (status == 403)
+                    throw await AccessDeniedAsync(response, provider, deadline, caller);
                 if (status is 408 or 500 or 502 or 503 or 504 ||
                     (status == 429 && await IsTemporaryRateLimitAsync(response.Content, provider,
                         response.Headers.RetryAfter is not null, deadline, caller)))
@@ -246,6 +248,32 @@ internal sealed class ResponsesAnalysisTransport(
         {
             throw new TransientAnalysisProviderException();
         }
+    }
+
+    /// <summary>Reads only bounded recognized denial metadata; messages and arbitrary response bodies are discarded.</summary>
+    private static async Task<AnalysisProviderAccessDeniedException> AccessDeniedAsync(HttpResponseMessage response,
+        string provider, CancellationToken deadline, CancellationToken caller)
+    {
+        string? code = null;
+        var requestId =
+            response.Headers.TryGetValues(provider == "azure-openai" ? "apim-request-id" : "x-request-id", out var ids)
+                ? ids.FirstOrDefault()
+                : null;
+        try
+        {
+            var bytes = await ReadBoundedAsync(response.Content, deadline, 8192);
+            using var body = JsonDocument.Parse(bytes);
+            if (body.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object &&
+                error.TryGetProperty("code", out var value) && value.ValueKind == JsonValueKind.String)
+                code = value.GetString();
+        }
+        catch (Exception error) when (error is JsonException or InvalidAnalysisResultException or IOException ||
+                                      (error is OperationCanceledException && !caller.IsCancellationRequested))
+        {
+            // Malformed, oversized or timed-out denial bodies still represent the original permanent 403.
+        }
+
+        return new AnalysisProviderAccessDeniedException(provider, code, requestId);
     }
 
     /// <summary>Reads only a bounded in-memory error envelope; unknown, quota and billing codes are not retried.</summary>

@@ -1,5 +1,5 @@
 .project-details-page {
-    max-width: 1320px;
+    max-width: 1600px;
 }
 
 .project-loading,
@@ -50,9 +50,11 @@
 
 .project-breadcrumb {
     color: var(--am-text);
-    font-size: clamp(1.45rem, 2vw, 1.9rem);
-    font-weight: 650;
-    line-height: 1.12;
+    font-size: clamp(1.875rem, 2.5vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+    margin: 0.5rem 0;
     overflow-wrap: anywhere;
 }
 
@@ -89,9 +91,9 @@
 }
 
 .action-button-deploy {
-    background: var(--am-success);
-    border-color: var(--am-success);
-    color: #fff;
+    background: var(--am-primary);
+    border-color: var(--am-primary);
+    color: var(--am-on-primary);
 }
 
 .project-section-tabs {
@@ -781,6 +783,11 @@
 .terminal-ai-shortcut:focus-visible {
     outline: 3px solid var(--am-primary);
     outline-offset: 3px;
+}
+
+.terminal-ai-shortcut:disabled {
+    opacity: .5;
+    cursor: default;
 }
 
 .console-section {

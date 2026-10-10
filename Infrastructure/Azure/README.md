@@ -42,8 +42,9 @@ behavior.
 
 - [Solution navigation map](../../.agents/navigation.md)
 
-Runtime polling checks owner opt-in or an authorized live viewer before provider calls and defaults to 60 seconds.
-Viewed observations are saved for replay. Cloud launch paths, including self-hosted launches, refresh ARM
+Runtime polling automatically collects active deployments independently of viewers and legacy preference flags, and
+defaults to 60 seconds. Observations are saved for replay. Cloud launch paths, including self-hosted launches, refresh
+ARM
 credentials at execution time and persist rotated credentials through the protected user mapping. Preparation failures
 are published through redaction to the deployment Build terminal. Numeric core/byte observations
 use Azure Monitor `UsageNanoCores` divided by one billion and `WorkingSetBytes`, rather than parsing display strings.

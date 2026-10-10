@@ -102,6 +102,9 @@ public static class TelemetryApplication
         app.MapGet("/status",
             async (DiskTelemetrySpool spool, CancellationToken token) => Results.Ok(await spool.StatusAsync(token)));
 
+        app.MapGet("/capabilities", () => Results.Ok(new TelemetryCapabilities(
+            TelemetryCapabilities.CurrentVersion, TelemetryCapabilities.RequiredArchiveOperations)));
+
         app.MapPost("/ingest", async (TelemetryIngestRequest request, TelemetryAdmissionPolicy admission,
             DiskTelemetrySpool spool,
             IDiagnosticRedactor redactor, IOptions<TelemetryStorageOptions> options, CancellationToken token) =>
@@ -121,7 +124,7 @@ public static class TelemetryApplication
                     unit != s.Unit))))
                 return Results.BadRequest();
             var project = await admission.GetAsync(e.ProjectId, e.DeploymentId, token);
-            if (project is null || (options.Value.ManagedService && !project.ManagedTelemetryConsent))
+            if (project is null)
                 return Results.StatusCode(403);
             var receipt = await spool.AppendAsync(project.UserId, redactor.Redact(e).Event,
                 request.Channel is null ? null : redactor.RedactText(request.Channel, 128), token);
@@ -143,9 +146,7 @@ public static class TelemetryApplication
         {
             if (!await db.Deployments.AnyAsync(d =>
                     d.Id == request.Deployment && d.CsProject!.AppId == request.Project &&
-                    d.CsProject.Application.UserId == request.Tenant &&
-                    (!builder.Configuration.GetValue<bool>("TelemetryStorage:ManagedService") ||
-                     d.CsProject.Application.ManagedTelemetryConsent), token)) return Results.StatusCode(403);
+                    d.CsProject.Application.UserId == request.Tenant, token)) return Results.StatusCode(403);
             try
             {
                 return Results.Ok(await archive.ReadAssessmentAsync(request, token));
@@ -160,9 +161,7 @@ public static class TelemetryApplication
         {
             if (!await db.Deployments.AnyAsync(d =>
                     d.Id == request.Deployment && d.CsProject!.AppId == request.Project &&
-                    d.CsProject.Application.UserId == request.Tenant &&
-                    (!builder.Configuration.GetValue<bool>("TelemetryStorage:ManagedService") ||
-                     d.CsProject.Application.ManagedTelemetryConsent), token)) return Results.StatusCode(403);
+                    d.CsProject.Application.UserId == request.Tenant, token)) return Results.StatusCode(403);
             if (request.Window.End <= request.Window.Start ||
                 request.Window.End - request.Window.Start > TimeSpan.FromDays(365))
                 return Results.BadRequest();
@@ -181,10 +180,7 @@ public static class TelemetryApplication
             AutoMateDbContext db, IDeploymentArchive archive, CancellationToken token) =>
         {
             if (!await db.Deployments.AnyAsync(d => d.Id == deployment && d.CsProject!.AppId == project &&
-                                                    d.CsProject.Application.UserId == tenant &&
-                                                    (!builder.Configuration.GetValue<bool>(
-                                                         "TelemetryStorage:ManagedService") ||
-                                                     d.CsProject.Application.ManagedTelemetryConsent), token))
+                                                    d.CsProject.Application.UserId == tenant, token))
                 return Results.StatusCode(403);
             return Results.Ok(await archive.ReadAsync(tenant, project, deployment, cursor ?? 0, backwards ?? true,
                 limit ?? 500, search, token));
@@ -210,9 +206,7 @@ public static class TelemetryApplication
         {
             if (!await db.Deployments.AnyAsync(d =>
                     d.Id == request.Deployment && d.CsProject!.AppId == request.Project &&
-                    d.CsProject.Application.UserId == request.Tenant &&
-                    (!builder.Configuration.GetValue<bool>("TelemetryStorage:ManagedService") ||
-                     d.CsProject.Application.ManagedTelemetryConsent), token)) return Results.StatusCode(403);
+                    d.CsProject.Application.UserId == request.Tenant, token)) return Results.StatusCode(403);
             if (request.End <= request.Start || request.MaximumPoints is < 1 or > 1000) return Results.BadRequest();
             return Results.Ok(await archive.ReadMetricsAsync(request.Tenant, request.Project, request.Deployment,
                 request.Start, request.End, request.MaximumPoints, token));
@@ -233,9 +227,7 @@ public static class TelemetryApplication
                 return Results.BadRequest();
             if (!await db.Deployments.AnyAsync(d =>
                     d.Id == request.Event.DeploymentId && d.CsProject!.AppId == request.Event.ProjectId &&
-                    d.CsProject.Application.UserId == request.TenantId &&
-                    (!builder.Configuration.GetValue<bool>("TelemetryStorage:ManagedService") ||
-                     d.CsProject.Application.ManagedTelemetryConsent), token)) return Results.StatusCode(403);
+                    d.CsProject.Application.UserId == request.TenantId, token)) return Results.StatusCode(403);
             if (request.EventId == Guid.Empty || request.OrderId <= 0 || request.Event.Message.Length > 8192 ||
                 request.Event.TimestampUtc > DateTimeOffset.UtcNow.AddMinutes(5)) return Results.BadRequest();
             return Results.Ok(await archive.AppendAsync(request, token));
@@ -245,9 +237,7 @@ public static class TelemetryApplication
         {
             if (!await db.Deployments.AnyAsync(d =>
                     d.Id == request.Deployment && d.CsProject!.AppId == request.Project &&
-                    d.CsProject.Application.UserId == request.Tenant &&
-                    (!builder.Configuration.GetValue<bool>("TelemetryStorage:ManagedService") ||
-                     d.CsProject.Application.ManagedTelemetryConsent), token))
+                    d.CsProject.Application.UserId == request.Tenant, token))
                 return Results.StatusCode(403);
             if (request.Points is null || request.Points.Count > 3000) return Results.BadRequest();
             await archive.ImportMetricsAsync(request, token);

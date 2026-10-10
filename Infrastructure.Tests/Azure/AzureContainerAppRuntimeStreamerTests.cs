@@ -149,12 +149,6 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
         });
 
-        if (!saved)
-        {
-            await streamer.PollOnceAsync(CancellationToken.None);
-            diagnostics.Events.Should().BeEmpty();
-            viewers.Renew("authorized-owner", project.Id, deploymentId);
-        }
 
         await streamer.PollOnceAsync(CancellationToken.None);
 

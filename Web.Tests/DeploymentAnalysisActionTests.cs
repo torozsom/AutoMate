@@ -4,7 +4,8 @@ using Application.Data.Apps;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
-using Web.Components.Pages;
+using Microsoft.Extensions.Logging.Abstractions;
+using Web.Components.Shared;
 using Xunit;
 
 namespace Web.Tests;
@@ -28,8 +29,8 @@ public sealed class DeploymentAnalysisActionTests
             Assert.True(((CancellationToken)args[4]!).CanBeCanceled);
             return Task.FromResult(true);
         };
-        await fixture.Invoke("SetAiConsentAsync", true);
-        Assert.True(fixture.Selected.Configuration!.AiDiagnosticEgressConsented);
+        await fixture.Invoke("ConsentAsync", true);
+        Assert.Equal(true, fixture.Get("_consented"));
         Assert.False(fixture.Other.Configuration!.AiDiagnosticEgressConsented);
         Assert.Contains("consent saved", fixture.Message);
     }
@@ -43,11 +44,11 @@ public sealed class DeploymentAnalysisActionTests
         using var fixture = new Fixture();
         fixture.Apps.Call = (_, _) =>
             uncertain ? Task.FromException<bool>(new Exception("private-secret")) : Task.FromResult(false);
-        await fixture.Invoke("SetAiConsentAsync", true);
-        Assert.False(fixture.Selected.Configuration!.AiDiagnosticEgressConsented);
-        Assert.Contains("Consent", fixture.Message);
+        await fixture.Invoke("ConsentAsync", true);
+        Assert.Equal(false, fixture.Get("_consented"));
+        Assert.Contains(uncertain ? "Analysis could not be updated" : "Consent", fixture.Message);
         Assert.DoesNotContain("private", fixture.Message);
-        Assert.False((bool)fixture.Get("_analysisBusy")!);
+        Assert.False((bool)fixture.Get("_busy")!);
     }
 
     /// <summary>All cancellation outcomes read authoritative saved state without requiring AI enablement or consent.</summary>
@@ -60,7 +61,7 @@ public sealed class DeploymentAnalysisActionTests
     {
         using var fixture = new Fixture();
         var active = fixture.View(AiAnalysisStatus.Running);
-        fixture.Set("_latestAnalysis", active);
+        fixture.Set("_latest", active);
         var saved = status is null ? null : fixture.View(status.Value);
         fixture.Analyses.Call = (method, args) =>
         {
@@ -75,8 +76,8 @@ public sealed class DeploymentAnalysisActionTests
             Assert.Equal("GetLatestAsync", method?.Name);
             return Task.FromResult(saved);
         };
-        await fixture.Invoke("CancelAnalysisAsync");
-        Assert.Same(saved, fixture.Get("_latestAnalysis"));
+        await fixture.Invoke("CancelAsync");
+        Assert.Same(saved, fixture.Get("_latest"));
         Assert.Contains(message, fixture.Message);
     }
 
@@ -86,7 +87,7 @@ public sealed class DeploymentAnalysisActionTests
     {
         using var fixture = new Fixture();
         var active = fixture.View(AiAnalysisStatus.Queued);
-        fixture.Set("_latestAnalysis", active);
+        fixture.Set("_latest", active);
         var calls = 0;
         fixture.Analyses.Call = (method, args) =>
         {
@@ -95,11 +96,11 @@ public sealed class DeploymentAnalysisActionTests
             calls++;
             return Task.FromException<DeploymentAnalysisCancellationResult>(new Exception("private-secret"));
         };
-        await fixture.Invoke("CancelAnalysisAsync");
-        await fixture.Invoke("CancelAnalysisAsync");
+        await fixture.Invoke("CancelAsync");
+        await fixture.Invoke("CancelAsync");
         Assert.Equal(2, calls);
-        Assert.Same(active, fixture.Get("_latestAnalysis"));
-        Assert.Contains("could not be confirmed", fixture.Message);
+        Assert.Same(active, fixture.Get("_latest"));
+        Assert.Contains("could not be updated", fixture.Message);
         Assert.DoesNotContain("private", fixture.Message);
     }
 
@@ -113,7 +114,7 @@ public sealed class DeploymentAnalysisActionTests
     public async Task Changed_deployment_discards_action_feedback(bool consent)
     {
         using var fixture = new Fixture();
-        fixture.Set("_latestAnalysis", fixture.View(AiAnalysisStatus.Queued));
+        fixture.Set("_latest", fixture.View(AiAnalysisStatus.Queued));
         var consentResponse = new TaskCompletionSource<bool>();
         var cancelResponse = new TaskCompletionSource<DeploymentAnalysisCancellationResult>();
         var calls = 0;
@@ -127,17 +128,19 @@ public sealed class DeploymentAnalysisActionTests
             calls++;
             return cancelResponse.Task;
         };
-        var method = consent ? "SetAiConsentAsync" : "CancelAnalysisAsync";
+        var method = consent ? "ConsentAsync" : "CancelAsync";
         var args = consent ? new object?[] { true } : [];
         var action = fixture.Invoke(method, args);
         await fixture.Invoke(method, args);
         Assert.Equal(1, calls);
         fixture.Deployment.Id = Guid.NewGuid();
+        fixture.Parameter("DeploymentId", (Guid?)fixture.Deployment.Id);
+        fixture.Set("_identity", (fixture.Owner, fixture.App.Id, (Guid?)fixture.Deployment.Id));
         consentResponse.SetResult(true);
         cancelResponse.SetResult(DeploymentAnalysisCancellationResult.Cancelled);
         await action;
-        Assert.Null(fixture.Get("_analysisMessage"));
-        Assert.False(fixture.Selected.Configuration!.AiDiagnosticEgressConsented);
+        Assert.Null(fixture.Get("_message"));
+        Assert.Equal(false, fixture.Get("_consented"));
     }
 
     /// <summary>Page state and isolated DI ports without provider, renderer or database activity.</summary>
@@ -147,7 +150,7 @@ public sealed class DeploymentAnalysisActionTests
         private const BindingFlags Flags = BindingFlags.Instance | BindingFlags.NonPublic;
 
         /// <summary>Real handler implementation.</summary>
-        private readonly ProjectDetails _component = new();
+        private readonly DeploymentAnalysisSection _component = new();
 
         /// <summary>Independent service scope provider.</summary>
         private readonly ServiceProvider _services;
@@ -159,19 +162,24 @@ public sealed class DeploymentAnalysisActionTests
             Selected.Deployments.Add(Deployment);
             App = new Domain.Entities.Application
             {
-                Name = "fixture", SourceType = SourceType.Local, SourcePathOrUrl = "fixture",
+                Name = "fixture",
+                SourceType = SourceType.Local,
+                SourcePathOrUrl = "fixture",
                 CsProjects = [Other, Selected]
             };
-            typeof(ProjectDetails).GetProperty("ProjectId")!.SetValue(_component, App.Id);
-            Set("_app", App);
-            Set("_currentUserId", Owner);
+            typeof(DeploymentAnalysisSection).GetProperty("ProjectId")!.SetValue(_component, App.Id);
+            Parameter("OwnerId", Owner);
+            Parameter("DeploymentId", (Guid?)Deployment.Id);
+            Parameter("CsProjectId", Selected.Id);
+            Set("_identity", (Owner, App.Id, (Guid?)Deployment.Id));
             var apps = DispatchProxy.Create<IApplicationService, OperationalLoggingTests.PortProxy>();
             var analyses = DispatchProxy.Create<IDeploymentAnalysisService, OperationalLoggingTests.PortProxy>();
             Apps = (OperationalLoggingTests.PortProxy)apps;
             Analyses = (OperationalLoggingTests.PortProxy)analyses;
             _services = new ServiceCollection().AddScoped(_ => apps).AddScoped(_ => analyses).BuildServiceProvider();
-            typeof(ProjectDetails).GetProperty("ScopeFactory", Flags)!.SetValue(_component,
+            typeof(DeploymentAnalysisSection).GetProperty("Scopes", Flags | BindingFlags.Public)!.SetValue(_component,
                 _services.GetRequiredService<IServiceScopeFactory>());
+            Parameter("Logger", NullLogger<DeploymentAnalysisSection>.Instance);
         }
 
         /// <summary>Application use-case probe.</summary>
@@ -196,7 +204,7 @@ public sealed class DeploymentAnalysisActionTests
         public Domain.Entities.Application App { get; }
 
         /// <summary>Safe page feedback.</summary>
-        public string Message => (string)Get("_analysisMessage")!;
+        public string Message => (string)Get("_message")!;
 
         /// <inheritdoc />
         public void Dispose()
@@ -207,19 +215,26 @@ public sealed class DeploymentAnalysisActionTests
         /// <summary>Invokes the real handler.</summary>
         public Task Invoke(string method, params object?[] args)
         {
-            return (Task)typeof(ProjectDetails).GetMethod(method, Flags)!.Invoke(_component, args)!;
+            return (Task)typeof(DeploymentAnalysisSection).GetMethod(method, Flags)!.Invoke(_component, args)!;
+        }
+
+        /// <summary>Supplies the shared component's deployment parameters or injected port.</summary>
+        public void Parameter(string name, object value)
+        {
+            typeof(DeploymentAnalysisSection).GetProperty(name, Flags | BindingFlags.Public)!.SetValue(_component,
+                value);
         }
 
         /// <summary>Seeds presentation state.</summary>
         public void Set(string field, object value)
         {
-            typeof(ProjectDetails).GetField(field, Flags)!.SetValue(_component, value);
+            typeof(DeploymentAnalysisSection).GetField(field, Flags)!.SetValue(_component, value);
         }
 
         /// <summary>Reads presentation state.</summary>
         public object? Get(string field)
         {
-            return typeof(ProjectDetails).GetField(field, Flags)!.GetValue(_component);
+            return typeof(DeploymentAnalysisSection).GetField(field, Flags)!.GetValue(_component);
         }
 
         /// <summary>Creates safe synthetic persisted state.</summary>

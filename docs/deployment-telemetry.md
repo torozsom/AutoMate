@@ -11,8 +11,8 @@ sends
 new terminal output to Loki and numeric CPU/memory observations to Mimir. Existing PostgreSQL logs remain readable until
 their 30-day expiry. Never provision a database per deployment.
 
-`DeploymentTelemetryStore` persists centrally redacted events before live delivery, including runtime observations
-collected during authorized viewing. Enable background collection to continue while the page is closed.
+`DeploymentTelemetryStore` persists centrally redacted events before live delivery, including automatic runtime
+observations while active, regardless of browser presence.
 Legacy outbox records (created before DiskGateway rollout) reuse
 `deployment_diagnostic_records` as a short-term outbox: immutable row ID, database order cursor, owner identity,
 ingestion
@@ -41,7 +41,8 @@ and explicitly reports truncation rather than claiming completeness.
 
 ## Owner experience and APIs
 
-Project terminals restore the latest deployment on reload and reconnect, merging specialized history, pending outbox
+Project terminals restore only Starting/Running deployments on reload and reconnect; Stopped/Failed deployments
+initialize empty. Active replay merges specialized history, pending outbox
 events and legacy PostgreSQL logs. Periodic catch-up recovers missed live output. Failed backend reads do not advance
 the replay cursor; bounded rendered identities deduplicate buffered messages. Overflow produces an omission notice.
 
@@ -56,14 +57,11 @@ Authenticated APIs authorize project ownership and deployment membership before 
 - `GET /api/projects/{projectId}/deployments/{deploymentId}/metrics?start=<UTC>&end=<UTC>&maximumPoints=500`
 
 Metric responses contain `points` and an optional `availability` notice. Neither API accepts arbitrary LogQL/PromQL.
-Build/deployment output is automatic. Background runtime logs/metrics default off and require the owner's checkbox on
-the
-project page. Host-owned collection continues without a browser; Docker collectors follow consent changes, and Azure
-checks consent each poll. Sampling defaults to 60 seconds. Managed storage additionally needs explicit project consent,
-a disclosed approved region and an approved DPA. Unconsented managed-service projects reject new telemetry persistence
-without PostgreSQL fallback and do not query or
-write external stores. Revocation stops external delivery; existing external data follows retention. Buffered external
-payloads are discarded with an explicit loss notice on revocation; subsequent output uses PostgreSQL.
+Build/deployment and runtime diagnostics are automatic in both hosting profiles, including with every browser closed.
+Docker and Azure collect the current active deployment without viewer or per-project preference gates. Sampling defaults
+to 60 seconds. Managed processing still requires an operator-approved region and DPA; AI egress remains separately
+consented and budgeted. Legacy preference APIs authorize ownership and retain collection/storage enabled even when older
+clients submit false. There is no PostgreSQL payload fallback. Existing history and volume contents are preserved.
 
 ## Compact self-managed pilot
 

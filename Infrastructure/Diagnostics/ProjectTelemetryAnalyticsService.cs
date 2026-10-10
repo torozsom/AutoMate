@@ -1,4 +1,5 @@
 using Application.Abstractions.Diagnostics;
+using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +21,8 @@ public sealed class ProjectTelemetryAnalyticsService(
     public async Task<ProjectTelemetryAnalytics> ReadAsync(Guid user, Guid project, DateTimeOffset start,
         DateTimeOffset end, CancellationToken token = default)
     {
+        if (storage?.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
+            throw new InvalidOperationException("Managed telemetry processing is not approved.");
         var range = new MetricTimeRange(start, end);
         range.Validate((clock ?? TimeProvider.System).GetUtcNow());
         if (!await db.Applications.AnyAsync(p => p.Id == project && p.UserId == user, token))
@@ -32,13 +35,15 @@ public sealed class ProjectTelemetryAnalyticsService(
         var total = outcomes.Sum(g => g.Count);
         var successful = outcomes.Where(g => g.Outcome == DeploymentOutcome.Succeeded).Sum(g => g.Count);
         var failed = outcomes.Where(g => g.Outcome == DeploymentOutcome.Failed).Sum(g => g.Count);
-        var duration = await selected.Where(d => d.FinishedAt != null && d.FinishedAt >= d.CreatedAt)
-            .Select(d => (double?)(d.FinishedAt!.Value - d.CreatedAt).TotalSeconds).AverageAsync(token);
+        var completed = selected.Where(d => d.FinishedAt != null && d.FinishedAt >= d.CreatedAt);
+        var duration = db.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite"
+            ? await ReadPortableDurationAsync(completed, token)
+            : await completed.Select(d => (double?)(d.FinishedAt!.Value - d.CreatedAt).TotalSeconds)
+                .AverageAsync(token);
         if (exploration is not null)
         {
             var observed = await exploration.ReadAsync(new MetricExplorationQuery(user, range, project), token);
             long? errors = null;
-            var managed = storage?.Value.ManagedService ?? false;
             var firstDay = new DateTimeOffset(start.UtcDateTime.Date, TimeSpan.Zero);
             if (firstDay < start) firstDay = firstDay.AddDays(1);
             var lastDay = new DateTimeOffset(end.UtcDateTime.Date, TimeSpan.Zero);
@@ -48,8 +53,7 @@ public sealed class ProjectTelemetryAnalyticsService(
                     errors = await db.DeploymentDailyTelemetry.AsNoTracking().Where(d => d.UserId == user &&
                             d.ProjectId == project && d.DayUtc >= firstDay && d.DayUtc < lastDay &&
                             d.Metric == "observed_log_errors" &&
-                            db.Applications.Any(p => p.Id == project && p.UserId == user &&
-                                                     (!managed || p.ManagedTelemetryConsent)))
+                            db.Applications.Any(p => p.Id == project && p.UserId == user))
                         .GroupBy(_ => 1).Select(g => (long?)g.Sum(d => d.ObservedErrors)).FirstOrDefaultAsync(token);
                 }
                 catch (OperationCanceledException)
@@ -84,5 +88,21 @@ public sealed class ProjectTelemetryAnalyticsService(
                 d.DeploymentId, d.DayUtc, redactor.RedactText(d.Container, 128), redactor.RedactText(d.Metric, 128),
                 redactor.RedactText(d.Unit, 64), d.SampleCount, d.SampleCount > 0 ? d.Sum / d.SampleCount : null,
                 d.Minimum, d.Maximum, d.ObservedErrors, d.Incomplete, d.UpdatedAt)).ToArray(), notice);
+    }
+
+    /// <summary>Streams timestamp pairs in constant memory for SQLite, which cannot translate interval averages.</summary>
+    private static async Task<double?> ReadPortableDurationAsync(IQueryable<Deployment> completed,
+        CancellationToken token)
+    {
+        double total = 0;
+        long count = 0;
+        await foreach (var row in completed.Select(d => new { d.CreatedAt, d.FinishedAt })
+                           .AsAsyncEnumerable().WithCancellation(token))
+        {
+            total += (row.FinishedAt!.Value - row.CreatedAt).TotalSeconds;
+            count++;
+        }
+
+        return count == 0 ? null : total / count;
     }
 }

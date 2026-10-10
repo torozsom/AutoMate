@@ -302,6 +302,15 @@ public sealed class DeploymentAnalysisWorker(
             analysis.FailureCode = "retry_exhausted";
             analysis.CompletedAt = clock.GetUtcNow();
         }
+        catch (AnalysisProviderAccessDeniedException error)
+        {
+            logger.LogError(error, "AI analysis execution failed: {FailureType}.", error.GetType().Name);
+            if (providerStarted) OperationalLog.Record(logger, AuditOperation.AnalysisProvider, AuditOutcome.Failed);
+            analysis.Status = AiAnalysisStatus.Failed;
+            analysis.FailureCode = AnalysisProviderAccessDeniedException.FailureCode;
+            analysis.Summary = AnalysisProviderAccessDeniedException.Guidance;
+            analysis.CompletedAt = clock.GetUtcNow();
+        }
         catch (AnalysisRetryExhaustedException)
         {
             analysis.Status = AiAnalysisStatus.Failed;
@@ -400,7 +409,8 @@ public sealed class DeploymentAnalysisWorker(
         {
             "invalid_response" => AuditOutcome.InvalidResult,
             "unavailable" or "unsupported_data" or "quota_exceeded" => AuditOutcome.Unavailable,
-            "provider_failure" or "recovery_exhausted" or "retry_exhausted" => AuditOutcome.Failed,
+            "provider_failure" or "provider_access_denied" or "recovery_exhausted" or "retry_exhausted" => AuditOutcome
+                .Failed,
             _ => analysis.Status == AiAnalysisStatus.Skipped ? AuditOutcome.Unavailable : AuditOutcome.Completed
         });
         return analysis.Status switch

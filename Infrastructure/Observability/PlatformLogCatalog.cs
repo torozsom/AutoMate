@@ -6,6 +6,7 @@ internal static class PlatformLogCatalog
     /// <summary>Fixed application messages; interpolated and unknown provider templates are excluded.</summary>
     internal static readonly HashSet<string> Templates = new(StringComparer.Ordinal)
     {
+        "Telemetry archive compatibility failed: {TelemetryCompatibility}.",
         "Archive cleanup unavailable: {FailureType}.",
         "Archive backfill unavailable: {FailureType}.",
         "Archive backfill deployment unavailable: {FailureType}.",
@@ -400,6 +401,7 @@ internal static class PlatformLogCatalog
         "Infrastructure.Diagnostics.TelemetryDailyAggregationWorker",
         "Infrastructure.Diagnostics.TelemetryDeliveryWorker",
         "Infrastructure.Diagnostics.TelemetryTags",
+        "Infrastructure.Diagnostics.TelemetryGatewayCompatibility",
         "Infrastructure.Docker.DaemonProgress",
         "Infrastructure.Docker.DockerBuildContextArchive",
         "Infrastructure.Docker.DockerBuildProgress",

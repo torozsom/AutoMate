@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Ai;
 using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Hosting;
 using Application.Ai;
 using Application.Data.Apps;
 using Application.Data.Users;
@@ -11,10 +12,13 @@ using Domain.Entities;
 using Domain.Enums;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using Web.Components.Layout;
 using Web.Components.Pages;
 using Web.Components.Shared;
 using Xunit;
@@ -28,15 +32,19 @@ public sealed class TelemetryPageRenderingTests
     [Fact]
     public async Task Summary_and_history_render_compact_cards_and_collapsed_details()
     {
-        var registrations = new ServiceCollection().AddLogging()
+        var registrations = new ServiceCollection().AddLogging().AddAuthorizationCore()
             .AddSingleton<IJSRuntime, StaticJs>().AddSingleton<AuthenticationStateProvider, FixtureAuthentication>()
+            .AddSingleton<AntiforgeryStateProvider, ConsoleRenderingTests.PreviewAntiforgery>()
+            .AddSingleton<IDeploymentCapabilities>(new ConsoleRenderingTests.PreviewCapabilities(true))
+            .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
             .AddSingleton(DispatchProxy.Create<IUserService, UnusedUserService>())
             .AddSingleton<IDeploymentHistoryService, FixtureHistory>()
             .AddSingleton<IProjectTelemetryAnalytics, FixtureAnalytics>()
             .AddSingleton<IDeploymentDetailsService, FixtureDetails>()
             .AddSingleton(DispatchProxy.Create<IDeploymentAnalysisService, FixtureAssessments>())
             .AddSingleton<NavigationManager, FixtureNavigation>();
-        foreach (var property in typeof(ProjectDetails).GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
+        foreach (var componentType in new[] { typeof(ProjectDetails), typeof(MainLayout), typeof(NavMenu) })
+        foreach (var property in componentType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
                      .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
                                  !p.PropertyType.IsGenericType))
             if (!registrations.Any(r => r.ServiceType == property.PropertyType))
@@ -51,8 +59,15 @@ public sealed class TelemetryPageRenderingTests
         Assert.Contains("Per observed container", Regex.Replace(project, @"\s+", " "));
         var details = await Render<FixtureProject>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid() });
+        Assert.Contains("aria-haspopup=\"dialog\"", details);
+        Assert.DoesNotContain("id=\"ai-analysis\"", details);
+        Assert.DoesNotContain("href=\"#ai-analysis\"", details);
+        var analysisDialog = await Render<FixtureProject>(renderer,
+            new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid(), ["AnalysisOpen"] = true });
+        Assert.Contains("role=\"dialog\"", analysisDialog);
+        Assert.Contains("assessment-context", analysisDialog);
         var anchors = new[]
-            { "overview", "logs", "metrics", "analytics", "ai-analysis", "configuration", "deployments" };
+            { "overview", "logs", "metrics", "analytics", "configuration", "deployments" };
         var previous = -1;
         foreach (var anchor in anchors)
         {
@@ -65,7 +80,7 @@ public sealed class TelemetryPageRenderingTests
         Assert.DoesNotContain("_notice", details);
         Assert.DoesNotContain("_metricAvailability", history);
         Assert.Contains("Total deployments", details);
-        Assert.Contains("View Details", details);
+        Assert.Contains("View Details", Regex.Replace(details, @"\s+", " "));
         Assert.Contains("/actions/runs/42", details);
         Assert.Contains("Saved to dashboard", details);
         Assert.Contains("This deployment predates", await Render<DeploymentConfigurationDetails>(renderer,
@@ -84,10 +99,14 @@ public sealed class TelemetryPageRenderingTests
         File.Copy(css, Path.Combine(directory, "Web.styles.css"), true);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
             Path.Combine(directory, "bootstrap.css"), true);
+        details = await Render<ConsoleRenderingTests.PreviewRoot>(renderer,
+            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, details)) });
+        history = await Render<ConsoleRenderingTests.PreviewRoot>(renderer,
+            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, history)) });
         foreach (var page in new[]
                  {
                      (Name: "project", Html: project), (Name: "history", Html: history),
-                     (Name: "details", Html: details)
+                     (Name: "details", Html: details), (Name: "details-analysis", Html: analysisDialog)
                  })
             await File.WriteAllTextAsync(Path.Combine(directory, page.Name + ".html"), Wrap(page.Html));
     }
@@ -104,9 +123,10 @@ public sealed class TelemetryPageRenderingTests
     private static string Wrap(string content)
     {
         return
-            "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'><link rel='stylesheet' href='/console.css'></head><body><div style='max-width:1120px;margin:auto;padding:16px'><small>UI verification · example provider data</small><button style='margin-left:16px' onclick=\"document.documentElement.dataset.bsTheme=document.documentElement.dataset.bsTheme==='dark'?'light':'dark'\">Toggle theme</button><button onclick=\"document.documentElement.style.fontSize='200%'\">200% text</button>" +
+            "<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/Web.styles.css'><link rel='stylesheet' href='/telemetry.css'><link rel='stylesheet' href='/console.css'><link rel='stylesheet' href='/obsidian.css'><link rel='stylesheet' href='/lib/bootstrap-icons/font/bootstrap-icons.css'></head><body><div style='padding:8px 16px;font-size:11px'><small>UI verification · example provider data</small><button style='margin-left:16px' onclick=\"document.documentElement.dataset.bsTheme=document.documentElement.dataset.bsTheme==='dark'?'light':'dark'\">Toggle theme</button><button onclick=\"document.documentElement.style.fontSize='200%'\">200% text</button></div>" +
             content +
-            "</div><script type='module'>import {attach} from '/js/telemetry-chart.js';document.querySelectorAll('.telemetry-chart').forEach(attach);import {attach as attachSections} from '/js/project-sections.js';document.querySelectorAll('.project-section-tabs').forEach(attachSections);</script></body></html>";
+            "<script type='module'>import {attach} from '/js/telemetry-chart.js';document.querySelectorAll('.telemetry-chart').forEach(attach);import {attach as attachSections} from '/js/project-sections.js';document.querySelectorAll('.project-section-tabs').forEach(attachSections);" +
+            "import {attachDialog} from '/js/console-ui.js';const shortcut=document.querySelector('button.terminal-ai-shortcut');if(shortcut)shortcut.addEventListener('click',async()=>{const html=await fetch('/details-analysis.html').then(r=>r.text());const fragment=new DOMParser().parseFromString(html,'text/html').querySelector('.console-dialog-backdrop');document.body.append(fragment);const root=fragment.querySelector('[role=dialog]');let registration;const close=()=>{fragment.remove();registration.dispose();};registration=attachDialog(root,{invokeMethodAsync(){close();return Promise.resolve();}});root.querySelector('header button').addEventListener('click',close);});</script></body></html>";
     }
 
     /// <summary>Finds the repository independently of test-output configuration.</summary>
@@ -121,6 +141,10 @@ public sealed class TelemetryPageRenderingTests
     /// <summary>Renders the real project markup without authentication/provider lifecycle side effects.</summary>
     public sealed class FixtureProject : ProjectDetails
     {
+        /// <summary>Renders the real analysis dialog for provider-free browser verification.</summary>
+        [Parameter]
+        public bool AnalysisOpen { get; set; }
+
         /// <inheritdoc />
         protected override Task OnInitializedAsync()
         {
@@ -153,6 +177,8 @@ public sealed class TelemetryPageRenderingTests
                 .SetValue(this, app);
             typeof(ProjectDetails).GetField("_isLoading", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(this, false);
+            typeof(ProjectDetails).GetField("_showAnalysisDialog", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(this, AnalysisOpen);
             return Task.CompletedTask;
         }
 

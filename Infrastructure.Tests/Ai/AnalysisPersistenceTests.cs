@@ -28,6 +28,20 @@ namespace Infrastructure.Tests.Ai;
 /// <summary>Verifies real metadata persistence and authorized safe readback without contacting a provider.</summary>
 public sealed class AnalysisPersistenceTests
 {
+    /// <summary>A permanent access denial is saved distinctly without scheduling a provider retry or retaining messages.</summary>
+    [Fact]
+    public async Task Provider_access_denial_is_persisted_without_retry()
+    {
+        await using var fixture = await Fixture.CreateAsync(() => Task.FromException<LlmAnalysisResponse>(
+            new AnalysisProviderAccessDeniedException("azure-openai", "AccessDenied", Guid.NewGuid().ToString())));
+        await fixture.ProcessAsync();
+        var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+        Assert.Equal(AiAnalysisStatus.Failed, saved.Status);
+        Assert.Equal(AnalysisProviderAccessDeniedException.FailureCode, saved.FailureCode);
+        Assert.Equal(AnalysisProviderAccessDeniedException.Guidance, saved.Summary);
+        Assert.Equal(0, (await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).ProviderRetryCount);
+    }
+
     /// <summary>Lease-fenced publication retains v2 sections and collection choices for both completed and empty-context runs.</summary>
     [Theory]
     [InlineData(false)]
@@ -40,7 +54,8 @@ public sealed class AnalysisPersistenceTests
             calls++;
             return Task.FromResult(AnalysisResultTests.Valid() with
             {
-                ResultSchemaVersion = 2, EvidenceReferences = ["order:1"],
+                ResultSchemaVersion = 2,
+                EvidenceReferences = ["order:1"],
                 Sections = new AssessmentSections(["token=private-observation"], [], [], ["Recorded evidence only."])
             });
         });

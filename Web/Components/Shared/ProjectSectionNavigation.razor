@@ -1,13 +1,12 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 <nav @ref="_navigation" class="project-section-tabs" aria-label="Project detail sections">
-    <a href="#overview">Overview</a>
-    <a href="#logs">Live Logs</a>
-    <a href="#metrics">Live Resource Utilization</a>
-    <a href="#analytics">Project Analytics</a>
-    <a href="#ai-analysis">AI Analysis</a>
-    <a href="#configuration">Configuration</a>
-    <a href="#deployments">Deployment History</a>
+    <a href="#overview"><i class="bi bi-house" aria-hidden="true"></i>Overview</a>
+    <a href="#logs"><i class="bi bi-terminal" aria-hidden="true"></i>Live Logs</a>
+    <a href="#metrics"><i class="bi bi-bar-chart" aria-hidden="true"></i>Live Resource Utilization</a>
+    <a href="#analytics"><i class="bi bi-graph-up" aria-hidden="true"></i>Project Analytics</a>
+    <a href="#configuration"><i class="bi bi-gear" aria-hidden="true"></i>Configuration</a>
+    <a href="#deployments"><i class="bi bi-clock-history" aria-hidden="true"></i>Deployment History</a>
 </nav>
 
 @code {
