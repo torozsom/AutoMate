@@ -34,13 +34,16 @@ The application is built with a strict Clean Architecture split:
 <div align="center">
   <img src="assets/homepage.png" width="100%" alt="AutoMate home page">
   <br><br>
+  <img src="assets/overview.png" width="100%" alt="AutoMate project details">
+  <br><br>
   <img src="assets/dashboard.png" width="100%" alt="AutoMate dashboard">
   <br><br>
   <img src="assets/project-detail-1.png" width="100%" alt="AutoMate project details">
   <br><br>
   <img src="assets/project-detail-2.png" width="100%" alt="AutoMate project details">
   <br><br>
-  <img src="assets/project-detail-3.png" width="100%" alt="AutoMate project details">
+  <img src="assets/config-form.png" width="100%" alt="AutoMate home page">
+  <br><br>
 </div>
 
 ---
