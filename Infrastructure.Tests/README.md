@@ -1,5 +1,9 @@
 # Infrastructure Tests
 
+Azure runtime tests verify database numeric persistence without terminal summaries. Azure AI tests cover finite
+rejection classifications, exact evidence, field bounds, incomplete/refused/malformed envelopes and compatible v2
+empty sections; worker fixtures verify safe persisted codes survive owner-authorized readback without partial output.
+
 Ai/AnalysisBudgetTests uses independent SQLite contexts to verify account quotas across projects, atomic reservations,
 shared tenant/global provider slots, rolling/time boundaries, project/result deletion survival, currency denial,
 retry/recovery charges and transaction failure cleanup. Persistence fixtures verify disabled spending finishes as
@@ -181,3 +185,7 @@ DeploymentCleanupHostedServiceTests prevents local Docker startup sync from chan
 
 AzureMonitorLogsTokenProviderTests verifies recognized consent errors produce fixed Data.Read guidance without retaining
 arbitrary provider response messages.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.

@@ -28,20 +28,20 @@ viewed deployments; live viewing and background history consent are independent.
 
 ## Source inventory
 
-- `DeploymentJob.cs`
-- `DeploymentJobQueue.cs`
-- `DeploymentJobWorker.cs`
-- `DeploymentConcurrencyOptions.cs`
-- `QueuedDeploymentJob.cs`
-- `CloudDeploymentStart.cs`
-- `CloudSaasOptions.cs`
-- `CloudDeploymentStart.cs`
-- `CloudSaasOptions.cs`
-- `DeploymentStatusNotifier.cs`
-- `ICloudDeploymentOrchestrator.cs`
-- `IDeploymentJobQueue.cs`
-- `IDeploymentStatusNotifier.cs`
-- `ILocalDeploymentOrchestrator.cs`
+- `Jobs/DeploymentJob.cs`
+- `Jobs/DeploymentJobQueue.cs`
+- `Jobs/DeploymentJobWorker.cs`
+- `Jobs/DeploymentConcurrencyOptions.cs`
+- `Jobs/QueuedDeploymentJob.cs`
+- `Cloud/CloudDeploymentStart.cs`
+- `Cloud/CloudSaasOptions.cs`
+- `Cloud/CloudDeploymentStart.cs`
+- `Cloud/CloudSaasOptions.cs`
+- `Status/DeploymentStatusNotifier.cs`
+- `Cloud/ICloudDeploymentOrchestrator.cs`
+- `Jobs/IDeploymentJobQueue.cs`
+- `Status/IDeploymentStatusNotifier.cs`
+- `Local/ILocalDeploymentOrchestrator.cs`
 
 ## Boundary
 
@@ -50,7 +50,7 @@ Application/Abstractions.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 Scheduler and status-subscriber failures export named failure types without exception objects. Subscriber isolation,
 status
@@ -62,3 +62,12 @@ boundary still omits exception objects and prose; queue/status behavior and cust
 Shutdown cancels queue consumption and observes any pending asynchronous read before disposing its iterator. Admitted
 jobs finish cancellation and release their scopes before the worker exits. This prevents channel iterator disposal
 faults during host shutdown without changing admission limits or per-project ordering.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Cloud/` — `Cloud/CloudDeploymentStart.cs`, `Cloud/CloudSaasOptions.cs`, `Cloud/GitHubWorkflowMonitoringOptions.cs`, `Cloud/ICloudDeploymentOrchestrator.cs`.
+- `Jobs/` — `Jobs/DeploymentConcurrencyOptions.cs`, `Jobs/DeploymentJob.cs`, `Jobs/DeploymentJobQueue.cs`, `Jobs/DeploymentJobWorker.cs`, `Jobs/IDeploymentJobQueue.cs`, `Jobs/QueuedDeploymentJob.cs`, `Jobs/DeploymentResourceConflictException.cs`.
+- `Local/` — `Local/ILocalDeploymentOrchestrator.cs`.
+- `Status/` — `Status/DeploymentStatusNotifier.cs`, `Status/IDeploymentStatusNotifier.cs`.

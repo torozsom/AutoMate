@@ -93,7 +93,7 @@ M5 now supplies bounded in-memory context selection and exact evidence-reference
 and Infrastructure/Ai. Final egress/host-boundary and tenant/region approval remain separate work. AI remains disabled
 by default. No PostgreSQL diagnostic payload writer is introduced.
 
-`Web.Tests/PlatformTelemetrySafetyTests.cs` covers ordinary providers, real SDK log exports, simple/batch trace
+`Web.Tests/Hosting/PlatformTelemetrySafetyTests.cs` covers ordinary providers, real SDK log exports, simple/batch trace
 suppression
 and actual OTLP protobuf over a loopback collector. Hosting-profile tests verify the registered factory and resources.
 SDK extension contracts are documented in the

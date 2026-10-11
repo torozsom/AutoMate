@@ -1,5 +1,9 @@
 # Web Tests
 
+Terminal presentation tests keep operational database records (including request RU charge) visible while suppressing
+utilization summaries in mixed replay. Analysis panel tests cover actionable current/legacy rejection guidance and
+the absence of successful-answer framing on failed runs.
+
 DeploymentAnalysisPanelTests covers remote projects without configuration: consent eligibility remains tied to the
 current deployment and explicit saving reads the created configuration back through the owner-authorized port.
 
@@ -137,3 +141,18 @@ samples and verify that older saved observations cannot overwrite newer Cosmos R
 
 HostingProfileRegistrationTests verifies Azure reconnect requests explicit static consent without requesting admin
 consent.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Analysis/` — `AnalysisReadinessTests.cs`, `Analysis/AssessmentContextControlsTests.cs`, `Analysis/DeploymentAnalysisActionTests.cs`, `Analysis/DeploymentAnalysisEndpointTests.cs`, `Analysis/DeploymentAnalysisPanelTests.cs`, `Analysis/DeploymentAnalysisPollingTests.cs`, `Analysis/DeploymentAnalysisSectionTests.cs`.
+- `Diagnostics/` — `Diagnostics/ConsoleExceptionDiagnosticsTests.cs`, `Diagnostics/DeploymentTracingTests.cs`, `Diagnostics/LogHubCancellationTests.cs`, `Diagnostics/OperationalLoggingTests.cs`, `Diagnostics/RealTimeLogStreamerTests.cs`, `Diagnostics/RequestAuditTests.cs`.
+- `Hosting/` — `Hosting/HostingProfileRegistrationTests.cs`, `Hosting/MetricResourceSafetyTests.cs`, `Hosting/PlatformTelemetrySafetyTests.cs`, `Hosting/TelemetryHostSafetyTests.cs`.
+- `Metrics/` — `Metrics/DeploymentMetricDisplayTests.cs`, `Metrics/MetricExplorationInteractionTests.cs`, `Metrics/MetricExplorationRenderingTests.cs`, `Metrics/ProjectDetailsMetricRecoveryTests.cs`, `Metrics/ProjectTelemetrySummaryTests.cs`, `Metrics/TelemetryChartRenderingTests.cs`, `Metrics/TelemetryPageRenderingTests.cs`, `Metrics/TelemetryPresentationTests.cs`.
+- `Presentation/` — `Presentation/ConsoleRenderingTests.cs`, `Presentation/DeploymentTerminalPresentationTests.cs`.
+- `Projects/` — `Projects/ConfigurationVariableLoadingTests.cs`, `Projects/DashboardStatusTests.cs`, `Projects/DeploymentFailurePrivacyTests.cs`, `Projects/DeploymentHistoryTests.cs`, `Projects/ProjectDetailsStopTests.cs`, `Projects/ProjectTerminalReplayTests.cs`, `Projects/WorkspaceOverviewLifecycleTests.cs`.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.

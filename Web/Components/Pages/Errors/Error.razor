@@ -1,0 +1,21 @@
+@namespace Web.Components.Pages
+@page "/Error"
+
+<PageTitle>Error</PageTitle>
+
+<div class="container page-shell">
+    <div class="auth-state">
+        <div class="auth-state-icon">
+            <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+        </div>
+        <h1>Something went wrong</h1>
+        <p class="page-description">AutoMate could not complete the request.</p>
+
+        @if (ShowRequestId)
+        {
+            <p class="resource-meta mb-0">
+                <strong>Request ID:</strong> <code>@RequestId</code>
+            </p>
+        }
+    </div>
+</div>

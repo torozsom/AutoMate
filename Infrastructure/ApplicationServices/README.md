@@ -18,7 +18,7 @@ behavior.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 Data/Apps/ApplicationService persists exact-project AI consent only after filtering application ownership and C#
 project membership. Explicit consent edits create missing remote-project configuration with the existing .NET default;

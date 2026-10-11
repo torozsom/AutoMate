@@ -90,3 +90,7 @@ evidence or credentials. Updated Web requires logs, metrics, metric-batch, asses
 import-metrics and delete. Deploy the matching host with its existing persistent volume before updated Web. Collection
 and persistence are automatic; project preference flags never gate ingestion, delivery or archive reads. Ownership and
 operator processing approval remain required.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.

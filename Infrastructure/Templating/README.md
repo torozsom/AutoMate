@@ -7,15 +7,15 @@ The legacy GHCR template remains available for self-hosted deployments.
 
 ## Source inventory
 
-- `CloudDeploymentSecretNames.cs`
-- `ScribanTemplateRenderer.cs`
-- `TemplateFileWriter.cs`
-- `TemplateManifestCatalog.cs`
-- `TemplateModelFactory.cs`
-- `TemplateNameNormalizer.cs`
-- `TemplatePaths.cs`
-- `TemplateRuleMatcher.cs`
-- `TemplatingService.cs`
+- `Models/CloudDeploymentSecretNames.cs`
+- `Rendering/ScribanTemplateRenderer.cs`
+- `Rendering/TemplateFileWriter.cs`
+- `Catalog/TemplateManifestCatalog.cs`
+- `Models/TemplateModelFactory.cs`
+- `Models/TemplateNameNormalizer.cs`
+- `Catalog/TemplatePaths.cs`
+- `Catalog/TemplateRuleMatcher.cs`
+- `Rendering/TemplatingService.cs`
 
 ## Boundary
 
@@ -24,7 +24,7 @@ behavior.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 Local Compose assets include AutoMate ownership labels. Web uses `AUTOMATE_DEPLOYMENT_ID`, supplied to the Compose
 process
@@ -43,3 +43,11 @@ may incur Azure Monitor ingestion charges. No credentials appear in discovery ta
 
 Both registry workflow variants start the app after infrastructure deployment. Bicep updates can retain a prior
 resource-level Stopped state; the explicit start resumes it without changing scale limits or network policy.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Catalog/` — `Catalog/TemplateManifestCatalog.cs`, `Catalog/TemplatePaths.cs`, `Catalog/TemplateRuleMatcher.cs`.
+- `Models/` — `Models/CloudDeploymentSecretNames.cs`, `Models/TemplateModelFactory.cs`, `Models/TemplateNameNormalizer.cs`.
+- `Rendering/` — `Rendering/ScribanTemplateRenderer.cs`, `Rendering/TemplateFileWriter.cs`, `Rendering/TemplatingService.cs`.

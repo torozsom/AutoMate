@@ -48,3 +48,7 @@ directly.
 
 Private Telemetry archives deployment diagnostics on its persistent volume; Web queries through IDeploymentArchive. See
 docs/adr/0004-permanent-deployment-history.md for migration and host ordering.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.

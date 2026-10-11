@@ -22,7 +22,7 @@ Infrastructure types are registered only in Web/Configs.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 SignalR writes emit fixed child spans with project GUIDs. Caller cancellation, deadline expiry and failures remain
 separate. Existing callbacks, arguments, routing and exceptions are unchanged; payloads and names are not span tags.

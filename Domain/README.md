@@ -18,3 +18,7 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 
 DeploymentOutcome records preparation success/failure separately from Running/Stopped.
 AiDeploymentAnalysis.RetainUntilDeleted separates saved-result lifetime from finite execution expiry.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.

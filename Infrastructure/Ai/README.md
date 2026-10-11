@@ -528,8 +528,23 @@ The $0.07 attempt reservation, $50 USD daily ceiling and disabled retries remain
 
 ## Provider access denial
 
+Result rejection now persists finite `invalid_response_*` reasons and emits only the fixed code. Readback allowlists
+these codes, including legacy `invalid_response`; rejected results remain permanent and do not gain automatic retries.
+Prompt `deployment-assessment-v5` and Azure-supported schema descriptions explain the existing overview/section/step
+limits and exact evidence identifiers within the same 2,048-byte fixed overhead allowance. Unsupported Azure schema
+keywords are not used. No output, context or spending allowance is increased and no raw response is retained.
+
 Responses transport classifies HTTP 403 as permanent `provider_access_denied`. It retains only an allowlisted provider,
 numeric HTTP status, recognized error code and validated request identifier from a bounded error envelope; arbitrary
 response messages and context are discarded. The worker persists fixed guidance and never retries this denial. Check
 endpoint/credential resource pairing, model/deployment permissions and network restrictions; retain existing egress
 consent, operator approvals and spending reservations.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Admission/` — `Admission/AnalysisBudgetGuard.cs`, `Admission/AnalysisEgressAuthorizer.cs`, `Admission/DeploymentAnalysisReadinessService.cs`.
+- `Context/` — `Context/AssessmentEvidenceReader.cs`, `Context/DeploymentAnalysisContextBuilder.cs`.
+- `Processing/` — `Processing/DeploymentAnalysisQueue.cs`, `Processing/DeploymentAnalysisRetentionService.cs`, `Processing/DeploymentAnalysisService.cs`, `Processing/DeploymentAnalysisWorker.cs`, `Processing/FailedDeploymentAnalysisDispatcher.cs`.
+- `Providers/` — `Providers/AnalysisProviderCatalog.cs`, `Providers/AzureOpenAiAnalysisProvider.cs`, `Providers/AzureOpenAiOptions.cs`, `Providers/OpenAiAnalysisProvider.cs`, `Providers/ResponsesAnalysisTransport.cs`.

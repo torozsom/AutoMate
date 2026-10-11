@@ -1,0 +1,158 @@
+@namespace Web.Components.Pages
+@page "/dashboard"
+
+<PageTitle>Projects · AutoMate</PageTitle>
+<div class="container page-shell projects-page">
+    <header class="console-page-heading">
+        <div>
+            <div class="page-eyebrow">Workspace</div>
+            <h1>Projects</h1>
+            <p class="page-description">Your source projects, deployment state and next actions.</p></div>
+        <div class="console-row-actions">@if (DeploymentCapabilities.LocalDeploymentsEnabled)
+            {
+                <a href="/local-repos" class="btn btn-outline-secondary">Local sources</a>
+            }
+            <a href="/github-repos" class="btn btn-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i> Import
+                repository</a></div>
+    </header>
+    <AuthorizeView>
+        <Authorized>
+            <section class="azure-connection-strip" aria-label="Azure account connection">
+                <div class="console-row-actions"><i class="bi bi-microsoft" aria-hidden="true"></i>
+                    <div><strong>Azure connection</strong><small
+                            class="console-subtext">@(_isAzureConnected ? "Account connected · cloud deployment available" : "Connect an account to deploy GitHub projects to Container Apps")</small>
+                    </div>
+                </div>
+                <div class="console-row-actions"><span
+                        class="badge deployment-badge @(_isAzureConnected ? "deployment-badge-success" : "deployment-badge-neutral")">@(_isAzureConnected ? "Connected" : "Not connected")</span>
+                    <button class="btn btn-sm btn-outline-secondary"
+                            @onclick="() => _showAzureConnect = true">@(_isAzureConnected ? "Manage connection" : "Connect Azure")</button>
+                </div>
+            </section>
+            @if (_globalErrorMessage is { } error)
+            {
+                <div class="alert alert-danger" role="alert">@error <button class="btn-close" @onclick="ClearMessages"
+                                                                            aria-label="Dismiss"></button>
+                </div>
+            }
+            @if (_globalSuccessMessage is { } success)
+            {
+                <div class="alert alert-success" role="status">@success</div>
+            }
+            @if (_inventory is { } inventory)
+            {
+                <div class="console-kpis">
+                    <KpiCard Label="Saved projects" Value="@inventory.SavedProjects.ToString()"
+                             Detail="Across your workspace"/>
+                    <KpiCard Label="Running projects" Value="@inventory.RunningProjects.ToString()"
+                             Detail="Latest deployment is running"/>
+                    <KpiCard Label="GitHub sources" Value="@inventory.GitHubProjects.ToString()"
+                             Detail="Azure deployment target"/>
+                    <KpiCard Label="Local sources" Value="@inventory.LocalProjects.ToString()"
+                             Detail="Docker deployment target"/>
+                </div>
+            }
+            <section class="console-panel">
+                <form class="console-toolbar inventory-toolbar" @onsubmit="ApplyFilters"
+                      @onsubmit:preventDefault="true">
+                    <label class="inventory-search">Search projects<input class="form-control" type="search"
+                                                                          maxlength="200" placeholder="Name or source…"
+                                                                          @bind="_search"/></label>
+                    <label>Source<select class="form-select" @bind="_source">
+                            <option value="">All sources</option>
+                            <option value="Remote">GitHub</option>
+                            <option value="Local">Local</option>
+                        </select></label>
+                    <label>Latest status<select class="form-select" @bind="_status">
+                            <option value="">All statuses</option>
+                            <option>Starting</option>
+                            <option>Running</option>
+                            <option>Failed</option>
+                            <option>Stopped</option>
+                        </select></label>
+                    <label>Sort<select class="form-select" @bind="_sort">
+                            <option value="activity">Latest activity</option>
+                            <option value="name">Project name</option>
+                            <option value="saved">Recently saved</option>
+                        </select></label>
+                    <button type="submit" class="btn btn-outline-secondary">Apply</button>
+                </form>
+                @if (_isLoading)
+                {
+                    <p role="status" class="console-empty">Loading projects…</p>
+                }
+                else if (_inventory is { Total: > 0 } inventoryPage)
+                {
+                    <ProjectInventoryTable Inventory="inventoryPage" AzureConnected="_isAzureConnected"
+                                           LocalEnabled="DeploymentCapabilities.LocalDeploymentsEnabled"
+                                           IsDeploying="IsDeploying" IsStopping="IsStopping"
+                                           OnDeploy="DeployInventoryAsync" OnStop="StopInventoryAsync"
+                                           OnRemove="ConfirmRemoval"/>
+                    <nav class="console-pagination" aria-label="Projects pagination"><span>@inventoryPage.Total projects · Page @inventoryPage.Page of @Math.Max(1, (inventoryPage.Total + 19) / 20)</span>
+                        <div class="console-row-actions"><a
+                                class="btn btn-outline-secondary @(inventoryPage.Page <= 1 ? "disabled" : null)"
+                                aria-disabled="@(inventoryPage.Page <= 1)" href="@InventoryUrl(inventoryPage.Page - 1)">Previous</a><a
+                                class="btn btn-outline-secondary @(inventoryPage.Page * 20 >= inventoryPage.Total ? "disabled" : null)"
+                                aria-disabled="@(inventoryPage.Page * 20 >= inventoryPage.Total)"
+                                href="@InventoryUrl(inventoryPage.Page + 1)">Next</a></div>
+                    </nav>
+                }
+                else
+                {
+                    <div class="console-empty"><i class="bi bi-folder2-open" aria-hidden="true"></i>
+                        <h2>@(_inventory?.SavedProjects == 0 ? "No projects saved yet" : "No matching projects")</h2>
+                        <p>Import a repository or adjust your search and filters.</p></div>
+                }
+            </section>
+            @if (_showAzureConnect)
+            {
+                <ConsoleDialog Title="Connect Azure" Eyebrow="Cloud account" OnClose="CloseAzureDialog">
+                    <div class="console-dialog-body"><p class="page-description">Choose the account type used by your
+                            Azure subscription.</p>
+                        <section class="azure-account-option"><h3>Work or school account</h3>
+                            <p>Sign in through your organization.</p><a href="/api/auth/azure-login"
+                                                                        class="btn btn-primary">Continue with
+                                Microsoft</a></section>
+                        <section class="azure-account-option"><h3>Personal account</h3><label for="azure-tenant-id">Azure
+                                tenant ID</label><input id="azure-tenant-id" class="form-control"
+                                                        placeholder="00000000-0000-0000-0000-000000000000"
+                                                        @bind="_azureTenantId"/>
+                            <p class="console-meta">Find this under Microsoft Entra ID → Overview in Azure Portal.</p>
+                            <button type="button" class="btn btn-outline-secondary"
+                                    @onclick="ConnectPersonalAzureAccount">Connect personal account
+                            </button>
+                        </section>
+                        @if (_globalErrorMessage is { } validation)
+                        {
+                            <p class="alert alert-warning" role="alert">@validation</p>
+                        }
+                    </div>
+                </ConsoleDialog>
+            }
+            @if (_removeProject is { } remove)
+            {
+                <ConsoleDialog Title="Remove project?" Eyebrow="Project deletion" OnClose="CancelRemoval">
+                    <div class="console-dialog-body"><p>This removes the saved project, its deployment history and saved
+                            assessments. Provider resources are managed separately.</p>
+                        <div class="console-row-actions">
+                            <button class="btn btn-outline-secondary" @onclick="CancelRemoval">Cancel</button>
+                            <button class="btn btn-danger" @onclick="() => RemoveConfirmedAsync(remove)">Remove
+                                project
+                            </button>
+                        </div>
+                    </div>
+                </ConsoleDialog>
+            }
+            @if (_showConfigModal && _currentDeployConfig is not null && _selectedProjectPath is not null)
+            {
+                <ConfigurationForm Config="_currentDeployConfig" ProjectPath="@_selectedProjectPath"
+                                   IsCloudDeployment="_currentDeployConfig.IsCloudDeployment" OnCancel="HideConfigModal"
+                                   OnDeployConfirmed="ExecuteDeploymentAsync"/>
+            }
+        </Authorized>
+        <NotAuthorized>
+            <div class="console-empty"><h2>Sign in to view your projects</h2><a href="/login" class="btn btn-primary">Sign
+                    in</a></div>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>

@@ -36,7 +36,8 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
 
-        <None Update="Scanner\database-providers.json">
+        <None Update="Scanner\Catalog\database-providers.json">
+            <TargetPath>Scanner/database-providers.json</TargetPath>
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>

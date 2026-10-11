@@ -15,7 +15,7 @@ secrets; SaaS startup requires a shared certificate to encrypt the database key 
 ## Source inventory
 
 - `AutoMateDbContext.cs`
-- `Migrations/` — EF Core schema history, including GitHub workflow/job streaming checkpoints.
+- `../Migrations/` — EF Core schema history, including GitHub workflow/job streaming checkpoints.
 
 GitHub workflow checkpoints retain only state fingerprints, line counts, and redacted-content hashes needed to resume
 diagnostic streaming; they never store raw GitHub Actions log content.
@@ -30,7 +30,7 @@ behavior.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 `AddSpecializedTelemetryStorage` adds explicit runtime/managed-egress preferences, tenant leases, durable rate/series
 state and diagnostic outbox fields. `AddTelemetryBufferAccounting` backfills tenant/global buffer byte accounting.

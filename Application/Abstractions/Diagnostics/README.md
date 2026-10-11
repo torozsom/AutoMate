@@ -11,18 +11,18 @@ separate UI delivery port and is not a diagnostic persistence or analysis API.
 
 ## Source inventory
 
-- `DeploymentDiagnosticEvent.cs` — source, typed source identity/stream, kind, severity, correlation, terminal
+- `Events/DeploymentDiagnosticEvent.cs` — source, typed source identity/stream, kind, severity, correlation, terminal
   channel, and ordering contract.
-- `IDeploymentDiagnosticPublisher.cs` — non-blocking ingestion boundary.
-- `IDiagnosticRedactor.cs` — safe-copy redaction boundary.
-- `IDeploymentDiagnosticStore.cs` — redacted persistence and bounded context boundary shared by replay and analysis.
-- `DeploymentTerminalLog.cs` — persisted terminal message and bounded history contracts with a durable order cursor.
+- `Events/IDeploymentDiagnosticPublisher.cs` — non-blocking ingestion boundary.
+- `Redaction/IDiagnosticRedactor.cs` — safe-copy redaction boundary.
+- `History/IDeploymentDiagnosticStore.cs` — redacted persistence and bounded context boundary shared by replay and analysis.
+- `Events/DeploymentTerminalLog.cs` — persisted terminal message and bounded history contracts with a durable order cursor.
 
 ## Related documentation
 
-- [Solution navigation map](../../../.agents/navigation.md)
+- [Solution navigation map](../../../navigation.md)
 
-`DeploymentTelemetry.cs` defines separate log/metric write/query ports, typed numeric samples, bounded history responses
+`Metrics/DeploymentTelemetry.cs` defines separate log/metric write/query ports, typed numeric samples, bounded history responses
 and owner-authorized preferences. History availability and cursor-advance flags distinguish delayed storage and
 omissions.
 
@@ -59,7 +59,7 @@ semantics.
 
 ## Metric exploration
 
-MetricExploration.cs owns frozen UTC windows, per-container/deployment sufficient statistics, paginated numeric reads
+Metrics/MetricExploration.cs owns frozen UTC windows, per-container/deployment sufficient statistics, paginated numeric reads
 and private batch projections. The range policy is independent of AI context limits. See
 ../../../docs/metric-exploration.md.
 
@@ -67,3 +67,13 @@ DeploymentMetricCatalog defines the shared finite metric names/units for Web and
 DeploymentRuntimeMetricSnapshot carries project/deployment/resource/component identity, provider timestamp and
 numeric samples. ILogStreamer adds typed delivery while retaining the CPU/memory callback. Terminal projections
 mark Azure collector availability annotations so saved replay presents them outside deployment output too.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Delivery/` — `Delivery/IDeploymentRuntimeViewers.cs`, `Delivery/ITelemetryGateway.cs`, `Delivery/TelemetryCapabilities.cs`.
+- `Events/` — `Events/DeploymentDiagnosticEvent.cs`, `Events/DeploymentTerminalLog.cs`, `Events/IDeploymentDiagnosticPublisher.cs`.
+- `History/` — `History/IDeploymentArchive.cs`, `History/IDeploymentDiagnosticStore.cs`, `History/TelemetryHistoryV2.cs`.
+- `Metrics/` — `Metrics/DeploymentTelemetry.cs`, `Metrics/MetricExploration.cs`, `Metrics/ProjectTelemetryAnalytics.cs`.
+- `Redaction/` — `Redaction/DiagnosticRedaction.cs`, `Redaction/IDiagnosticRedactor.cs`.

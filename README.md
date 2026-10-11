@@ -360,7 +360,7 @@ shared capacity/budgets and reload shutdown guard execution without blocking dep
 See [architecture, onboarding and ordered metadata upgrades](docs/ai-analysis.md),
 [monitoring and shutdown](docs/ai-analysis-operations.md), [pilot acceptance](docs/ai-analysis-rollout.md) and
 [implementation decisions](docs/adr/0003-ai-analysis-execution-and-rollout.md). Provider/account/model/region approvals,
-live migration application and an internal pilot remain pending; [PLAN.md](Web/PLAN.md) tracks those gates.
+live migration application and an internal pilot remain pending; [AI rollout record](docs/ai-analysis-rollout.md) tracks those gates.
 The [owned PostgreSQL verification runner](deploy/verification/README.md) tests migrations/shared locks without using
 an application database. [Azure OpenAI preparation](docs/azure-openai-integration-plan.md) records the requested next
 adapter and remaining resource/identity/deployment inputs; Azure egress is not enabled.

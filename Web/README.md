@@ -68,3 +68,7 @@ Every chart group uses a shared UTC range picker (10-minute through five-year pr
 Numeric metric/outcome tables use independent 10/25/50-row pagination. Completed AI answers have a bright purple border;
 context settings, consent, request status and run metadata stay outside that border. Repository
 source pages retain their earlier card presentation. See ../docs/metric-exploration.md.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.

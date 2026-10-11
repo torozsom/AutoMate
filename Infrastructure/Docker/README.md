@@ -19,18 +19,18 @@ host port before starting Docker. A conflict is reported as a redacted build dia
 
 ## Source inventory
 
-- `DockerBuildContextArchive.cs`
-- `DockerBuildProgress.cs`
-- `DockerCli.cs`
-- `DockerComposeProjectParser.cs`
-- `DockerContainerParameters.cs`
-- `DockerMetricsLine.cs`
-- `DockerNameNormalizer.cs`
-- `DockerOptions.cs`
-- `DockerPortParser.cs`
-- `DockerProcessStartInfoFactory.cs`
-- `DockerRegexes.cs`
-- `DockerService.cs`
+- `Build/DockerBuildContextArchive.cs`
+- `Build/DockerBuildProgress.cs`
+- `Cli/DockerCli.cs`
+- `Compose/DockerComposeProjectParser.cs`
+- `Runtime/DockerContainerParameters.cs`
+- `Diagnostics/DockerMetricsLine.cs`
+- `Compose/DockerNameNormalizer.cs`
+- `Runtime/DockerOptions.cs`
+- `Compose/DockerPortParser.cs`
+- `Cli/DockerProcessStartInfoFactory.cs`
+- `Cli/DockerRegexes.cs`
+- `Runtime/DockerService.cs`
 
 ## Boundary
 
@@ -39,7 +39,7 @@ behavior.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 Runtime collectors run while an authorized project page is viewing the deployment, or follow explicit owner opt-in
 without a browser. Viewed output is saved for replay. `LocalRuntimeRecoveryService` restores missing collectors
@@ -101,3 +101,13 @@ delivery remain unchanged.
 
 Ownership-verified Docker observations record the selected deployment’s application container identity and actual image
 in its immutable configuration snapshot. Database credentials, environment values and inspect payloads are excluded.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Build/` — `Build/DockerBuildContextArchive.cs`, `Build/DockerBuildProgress.cs`.
+- `Cli/` — `Cli/DockerCli.cs`, `Cli/DockerProcessStartInfoFactory.cs`, `Cli/DockerRegexes.cs`.
+- `Compose/` — `Compose/DockerComposeProjectParser.cs`, `Compose/DockerNameNormalizer.cs`, `Compose/DockerPortParser.cs`.
+- `Diagnostics/` — `Diagnostics/DockerDiagnosticCollector.cs`, `Diagnostics/DockerDiagnosticNormalizer.cs`, `Diagnostics/DockerLogDecoder.cs`, `Diagnostics/DockerLogReplayWindow.cs`, `Diagnostics/DockerMetricDelivery.cs`, `Diagnostics/DockerMetricsLine.cs`.
+- `Runtime/` — `Runtime/DisabledDockerService.cs`, `Runtime/DockerService.cs`, `Runtime/DockerContainerParameters.cs`, `Runtime/DockerOptions.cs`.

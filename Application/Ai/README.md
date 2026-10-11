@@ -1,5 +1,10 @@
 # AI result policy
 
+Invalid results carry a finite `AnalysisResultRejection` category and fixed `invalid_response_*` code. Categories
+cover incomplete output, refusal, malformed envelope/JSON, schema, field limits, provenance, evidence and response size.
+The exception contains no provider payload. Legacy `invalid_response` stays readable. Exact authored guidance identifies
+the failure without exposing arbitrary messages. Whole-result rejection, redaction and existing limits remain enforced.
+
 `Enabled`, `AutomaticAnalysisEnabled` and `ProviderEgressEnabled` are independent default-off flags. `ApprovedTenantIds`
 is the explicit staged owner-account cohort, with current per-project consent still required. The
 [operator rollout path](../../docs/ai-analysis-operations.md#staged-feature-enablement-and-shutdown) defines promotion
@@ -118,3 +123,11 @@ Empty configuration-only context never qualifies as evidence. Existing input/ove
 AnalysisSkipReason appends BudgetNotConfigured, BudgetConfigurationInvalid and BudgetCurrencyMismatch without changing
 existing enum values. AnalysisSkipPolicy maps these to finite authored guidance; budget_exceeded explains shared account
 reservations and the midnight UTC reset. These are AutoMate reservations, not Azure invoice reconciliation.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Context/` — `Context/AnalysisContextBudget.cs`, `Context/AnalysisContextSelector.cs`, `Context/AnalysisEvidence.cs`, `Context/AssessmentSelection.cs`.
+- `Policy/` — `Policy/AiAnalysisOptions.cs`, `Policy/AnalysisBudgetPolicy.cs`, `Policy/AnalysisEgressPolicy.cs`, `Policy/AnalysisRetryPolicy.cs`, `Policy/AnalysisSkipPolicy.cs`.
+- `Results/` — `Results/AnalysisProviderAccessDeniedException.cs`, `Results/AnalysisResultValidator.cs`.

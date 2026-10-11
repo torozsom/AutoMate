@@ -30,10 +30,10 @@ Docker Compose output within the deployment's creation-time window and maps it t
 
 ## Source inventory
 
-- `DiagnosticRedactor.cs` — credential-pattern and sensitive-attribute masking.
-- `DeploymentDiagnosticPipeline.cs` — bounded publisher and hosted dispatcher.
-- `DeploymentDiagnosticStore.cs` — 30-day redacted diagnostic retention and bounded context construction.
-- `DeploymentDiagnosticRetentionService.cs` — bounded deletion of expired records.
+- `Redaction/DiagnosticRedactor.cs` — credential-pattern and sensitive-attribute masking.
+- `Delivery/DeploymentDiagnosticPipeline.cs` — bounded publisher and hosted dispatcher.
+- `Storage/DeploymentDiagnosticStore.cs` — 30-day redacted diagnostic retention and bounded context construction.
+- `Storage/DeploymentDiagnosticRetentionService.cs` — bounded deletion of expired records.
 
 ## Boundary
 
@@ -42,7 +42,7 @@ never make Web, SignalR, or provider payload types part of the diagnostic contra
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 ## Specialized storage
 
@@ -89,7 +89,7 @@ Successful dispatch never copies terminal messages into platform logs, including
 pattern-based, so arbitrary private text must remain confined to authorized tenant storage and presentation.
 Redaction already emits only counts and finite source/kind values. New platform audit events never duplicate diagnostic
 payloads; existing disk gateway and Loki/Mimir storage paths remain unchanged. Real SDK failure exports are tested in
-`Web.Tests/OperationalLoggingTests.cs`; Web/Observability now enforces the platform logging/trace boundary.
+`Web.Tests/Diagnostics/OperationalLoggingTests.cs`; Web/Observability now enforces the platform logging/trace boundary.
 
 Redaction, persistence confirmation and live delivery have fixed child spans under the ingestion/dispatch trace, with
 GUID correlation and safe outcomes. Checkpoints and stored event trace/span IDs keep their existing semantics. Custom
@@ -185,3 +185,15 @@ Azure managed database metrics extend the fixed series catalog with `automate_cp
 `automate_memory_used_percent` and `automate_database_ru_usage_percent`, all in `percent`. These retain native provider
 units independently of the existing core/byte gauges. Update the private Telemetry service alongside Web so its
 validation accepts the same catalog; redaction, gateway durability, retention and owner-scoped readback are unchanged.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Archive/` — `Archive/ArchiveMetricBatchReader.cs`, `Archive/DeploymentArchiveBackfillWorker.cs`, `Archive/DeploymentArchiveCleanupWorker.cs`, `Archive/DiskDeploymentArchive.cs`, `Archive/DiskDeploymentArchive.Metrics.cs`, `Archive/DeploymentHistoryService.cs`.
+- `Delivery/` — `Delivery/DeploymentDiagnosticPipeline.cs`, `Delivery/DiskTelemetryDeliveryWorker.cs`, `Delivery/TelemetryDeliveryWorker.cs`, `Delivery/TelemetryGatewayClient.cs`, `Delivery/TelemetryGatewayCompatibility.cs`, `Delivery/TelemetryHttpTransport.cs`.
+- `Metrics/` — `Metrics/DeploymentMetricNormalizer.cs`, `Metrics/MetricExplorationService.cs`, `Metrics/ProjectTelemetryAnalyticsService.cs`, `Metrics/TelemetryDailyAggregationWorker.cs`, `Metrics/TelemetryStorageMetrics.cs`.
+- `Policy/` — `Policy/TelemetryAdmissionPolicy.cs`, `Policy/TelemetryProjectPolicyCache.cs`, `Policy/TelemetryStorageOptions.cs`, `Policy/TelemetryStorageOptionsValidator.cs`.
+- `Redaction/` — `Redaction/DiagnosticRedactor.cs`.
+- `Runtime/` — `Runtime/DeploymentRuntimeViewers.cs`.
+- `Storage/` — `Storage/DeploymentDiagnosticRetentionService.cs`, `Storage/DeploymentDiagnosticStore.cs`, `Storage/DeploymentTelemetryStore.cs`, `Storage/DiskTelemetrySpool.cs`, `Storage/LokiDeploymentLogs.cs`, `Storage/MimirDeploymentMetrics.cs`, `Storage/TelemetryWriteBoundary.cs`.
