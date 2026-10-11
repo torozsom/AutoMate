@@ -60,7 +60,9 @@ public sealed class DeploymentCleanupHostedService(
 
             // 1. Mark 'Starting' as 'Failed'
             var updatedCount = await dbContext.Deployments
-                .Where(d => d.Status == DeploymentStatus.Starting)
+                .Where(d => d.Status == DeploymentStatus.Starting &&
+                            d.CsProject!.Application.SourceType == SourceType.Local &&
+                            d.CloudResourceId == null && d.CloudGitHubActionRunId == null)
                 .ExecuteUpdateAsync(setters => setters
                         .SetProperty(d => d.Status, DeploymentStatus.Failed),
                     cancellationToken);
@@ -73,7 +75,9 @@ public sealed class DeploymentCleanupHostedService(
             var runningDeployments = await dbContext.Deployments
                 .Include(d => d.CsProject)
                 .ThenInclude(csp => csp!.Application)
-                .Where(d => d.Status == DeploymentStatus.Running || d.Status == DeploymentStatus.Stopped)
+                .Where(d => (d.Status == DeploymentStatus.Running || d.Status == DeploymentStatus.Stopped) &&
+                            d.CsProject!.Application.SourceType == SourceType.Local &&
+                            d.CloudResourceId == null && d.CloudGitHubActionRunId == null)
                 .ToListAsync(cancellationToken);
 
             if (runningDeployments.Count > 0)

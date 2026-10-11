@@ -167,3 +167,17 @@ statuses, retained results after 121 days, multiple runs and outcome survival af
 
 DeploymentJobWorkerTests deterministically delays queue cancellation beyond active-job completion and verifies that
 shutdown waits for the read before iterator disposal, with no faulted worker task.
+
+Azure runtime regressions cover managed-environment log scope, web metric failure isolation, owned database discovery,
+native percentage units, durable-only database checkpoints/retry and partial Azure Monitor response rejection.
+Cloud template tests verify diagnostic export and ownership tags for every supported managed database provider.
+These tests use synthetic HTTP and SQLite; actual Azure RBAC, Bicep deployment and ingestion require a customer test
+subscription and are not established by these credential-free tests.
+
+Azure repair regressions add provider registration/denial/cancellation, trusted inventory pagination, SQL children,
+native timestamp/dimension aggregation, equal-ingestion delayed arrivals, durable rejection and collector restart.
+Both registry workflows start previously stopped resources; rendered Bicep is compiled for all five database types.
+DeploymentCleanupHostedServiceTests prevents local Docker startup sync from changing remote cloud history.
+
+AzureMonitorLogsTokenProviderTests verifies recognized consent errors produce fixed Data.Read guidance without retaining
+arbitrary provider response messages.

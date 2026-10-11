@@ -39,6 +39,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OpenTelemetry.Logs;
@@ -482,6 +483,8 @@ public static class ServiceConfiguration
             });
 
             // External API Clients with Resilience
+            services.AddHttpClient("AzureRuntime", client => client.Timeout = TimeSpan.FromSeconds(15))
+                .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
             services.AddHttpClient<IGitHubService, GitHubService>()
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
                 .AddStandardResilienceHandler();
@@ -673,6 +676,13 @@ public static class ServiceConfiguration
                     options.Scope.Add(AzureManagementScope);
 
                     options.SaveTokens = true;
+
+                    options.Events.OnRedirectToAuthorizationEndpoint = context =>
+                    {
+                        context.Response.Redirect(QueryHelpers.AddQueryString(context.RedirectUri, "prompt",
+                            "consent"));
+                        return Task.CompletedTask;
+                    };
 
                     options.Events.OnCreatingTicket = async context =>
                     {

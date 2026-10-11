@@ -128,3 +128,12 @@ OAuth or make provider calls.
 
 ProjectDetailsMetricRecoveryTests covers reconnect callbacks after disposal and delayed metric replies or disposed
 providers after the page closes, without renderer/provider access after cancellation.
+
+Azure diagnostics regressions verify the real remote project markup includes the Azure Databases terminal and that
+saved native database CPU/memory percentages retain their units after reload.
+
+Typed SignalR metric tests preserve project/deployment/provider timestamp identity, filter unknown units/nonfinite
+samples and verify that older saved observations cannot overwrite newer Cosmos RU samples.
+
+HostingProfileRegistrationTests verifies Azure reconnect requests explicit static consent without requesting admin
+consent.

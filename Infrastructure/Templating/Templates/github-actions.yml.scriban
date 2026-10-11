@@ -125,3 +125,10 @@ jobs:
 {{- end }}
           deploymentName: automate-aca-${{ "{{" }} github.run_number {{ "}}" }}
           failOnStdErr: false
+
+      - name: Start deployed container app
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            SUBSCRIPTION_ID=$(az account show --query id --output tsv)
+            az rest --method post --uri "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${AZURE_RESOURCE_GROUP}/providers/Microsoft.App/containerApps/${CONTAINER_APP_NAME}/start?api-version=2025-07-01" --only-show-errors --output none

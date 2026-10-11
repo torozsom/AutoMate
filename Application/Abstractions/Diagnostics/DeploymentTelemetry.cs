@@ -5,6 +5,30 @@ namespace Application.Abstractions.Diagnostics;
 /// <summary>A numeric observation with provider-independent units; absent values are never zero-filled.</summary>
 public sealed record DeploymentMetricSample(string Name, double Value, string Unit);
 
+/// <summary>Shared finite metric series and native units accepted by transport and storage.</summary>
+public static class DeploymentMetricCatalog
+{
+    /// <summary>Metric names are fixed; arbitrary series and units are never sent to a browser or backend.</summary>
+    public static IReadOnlyDictionary<string, string> Units { get; } = new Dictionary<string, string>
+    {
+        ["automate_cpu_usage_cores"] = "cores",
+        ["automate_memory_used_bytes"] = "bytes",
+        ["automate_memory_limit_bytes"] = "bytes",
+        ["automate_cpu_usage_percent"] = "percent",
+        ["automate_memory_used_percent"] = "percent",
+        ["automate_database_ru_usage_percent"] = "percent"
+    };
+}
+
+/// <summary>Redacted live numeric observations with the deployment identity needed to reject stale deliveries.</summary>
+public sealed record DeploymentRuntimeMetricSnapshot(
+    Guid ProjectId,
+    Guid DeploymentId,
+    string ResourceName,
+    DeploymentDiagnosticComponent Component,
+    DateTimeOffset Timestamp,
+    IReadOnlyList<DeploymentMetricSample> Samples);
+
 /// <summary>Immutable redacted delivery envelope shared by storage adapters.</summary>
 public sealed record DeploymentLogEnvelope(
     Guid EventId,

@@ -62,3 +62,8 @@ semantics.
 MetricExploration.cs owns frozen UTC windows, per-container/deployment sufficient statistics, paginated numeric reads
 and private batch projections. The range policy is independent of AI context limits. See
 ../../../docs/metric-exploration.md.
+
+DeploymentMetricCatalog defines the shared finite metric names/units for Web and private Telemetry.
+DeploymentRuntimeMetricSnapshot carries project/deployment/resource/component identity, provider timestamp and
+numeric samples. ILogStreamer adds typed delivery while retaining the CPU/memory callback. Terminal projections
+mark Azure collector availability annotations so saved replay presents them outside deployment output too.

@@ -86,3 +86,43 @@ Permanent history rollout: apply PreserveDeploymentHistory, update the private a
 update Web/workers. The archive lives under the existing persistent spool volume. Bounded resumable backfill imports
 still-available legacy/backend records; expired data cannot be recovered. Budget reservations ($0.07 per attempt, $50
 daily), disabled retries, receipt expiry and accounting cleanup remain unchanged.
+
+## Azure web and managed database diagnostics
+
+Container Apps logs are queried against the managed environment resolved from the selected app, then filtered by app
+and persisted deployment revision. Managed databases are separate Azure resources rather than DB containers in the
+Container App. Updated Bicep tags their project/app ownership and exports resource logs to the shared Log Analytics
+workspace. AutoMate polls verified tagged PostgreSQL/MySQL/SQL Database/Cosmos MongoDB/Redis resources, routes their
+redacted output to **Azure Databases**, and saves logs/typed metrics through the same private gateway and archive.
+
+Roll out Web and private Telemetry together, then regenerate and redeploy cloud infrastructure (or apply verified
+ownership tags and equivalent diagnostic settings). Existing web deployments resolve their environment from ARM;
+database discovery requires `automate-project-id` (project GUID without dashes) and `automate-container-app` tags on
+each monitored resource, with SQL tags on the database. The connected Azure user needs resource/metrics read access
+and access to the environment/workspace and database logs. The workflow identity needs diagnostic-setting write access.
+Provider-specific log generation remains subject to enabled database categories/auditing settings. Export has Azure
+Monitor ingestion costs and latency; collection defaults to the existing 60-second cadence. Failed or partial queries
+produce safe notices and never advance a log cursor past unconfirmed storage. Native percentage gauges remain
+percentages; unavailable samples remain gaps. There is no raw PostgreSQL payload fallback.
+
+Register Microsoft.Insights before launching the workflow and allow registration propagation before diagnostic
+writes. Operational defaults are MongoRequests, PostgreSQLLogs and SQL Errors/Timeouts/Deadlocks. MySQL and Redis
+remain metrics-only unless broader logging is explicitly configured. Query text, parameters, documents and diagnostic
+graphs are excluded from AutoMate projections. Cosmos resource-specific CDBMongoRequests is also read for legacy
+settings. The OAuth app must declare the Log Analytics API Data.Read delegated permission; the connected owner must
+consent to it. Entra error 65001 requires this configuration/consent step, not an Azure role escalation.
+
+Apply AzureLogIngestionCursors before updated collectors; native event time is retained while ingestion time/hash
+orders delayed arrivals. A rejected or partial page never advances beyond durably acknowledged records. Bounded
+inventory supports trusted ARM pagination and explicitly enumerated owned SQL databases. Shared database events
+belong to the latest verified active deployment. Container Apps samples sum pods in the verified revision; Cosmos
+RU uses Maximum. Both metric request bounds use UTC Z timestamps. Cosmos does not expose CPU/memory gauges.
+
+See [Microsoft's environment log model](https://learn.microsoft.com/en-us/azure/container-apps/log-monitoring),
+[Container Apps metrics](https://learn.microsoft.com/en-us/azure/container-apps/metrics), and
+[diagnostic settings](https://learn.microsoft.com/en-us/azure/azure-monitor/platform/diagnostic-settings).
+
+Live Azure verification identified legacy console records without _ResourceId. The collector resolves the environment's
+workspace and ARM-provided environment aliases, then requires exact environment/app/revision matches. Ingestion cursors
+use microsecond bins and lexical strcmp so PostgreSQL round trips do not prevent next-page progress. Cloud CPU cards
+show observed cores; Cosmos cards show normalized RU percent.

@@ -48,6 +48,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Serializes initial, reconnect and periodic replay handshakes.</summary>
     private readonly SemaphoreSlim _terminalReplayGate = new(1, 1);
 
+    /// <summary>Native per-series observations fence out stale live and saved samples.</summary>
+    private readonly Dictionary<string, Dictionary<string, DeploymentMetricPoint>> _typedMetrics = new();
+
     /// A string to track the currently active tab in the UI, defaulting to "build".
     private string _activeTab = "build";
 
@@ -56,6 +59,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// A nullable variable to hold the app details fetched from the database.
     private Domain.Entities.Application? _app;
+
+    /// <summary>Displays redacted managed Azure database resource logs.</summary>
+    private Terminal? _azureDatabaseTerminal;
 
     /// A terminal instance for Azure Container Apps system and revision output.
     private Terminal? _azureSystemTerminal;
@@ -736,6 +742,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private void ResetTerminalState()
     {
         _containerMetrics.Clear();
+        _typedMetrics.Clear();
         _metricContainerNames.Clear();
         _currentMetricIndex = 0;
         _nextMetricReplayAt = DateTimeOffset.MinValue;
@@ -1073,12 +1080,23 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _hubConnection.On<string>("ReceiveTerminalNotice", message =>
                 InvokeAsync(() => WriteTerminalNoticeAsync(message)));
 
+            _hubConnection.On<DeploymentRuntimeMetricSnapshot>("ReceiveDeploymentMetrics", snapshot => InvokeAsync(() =>
+            {
+                if (_analysisDisposed || !CanReplayTerminalHistory() || snapshot.ProjectId != ProjectId ||
+                    snapshot.DeploymentId != _terminalDeploymentId) return;
+                ApplyTypedMetrics(snapshot.ResourceName, snapshot.Samples.Select(s => new DeploymentMetricPoint(
+                    snapshot.ResourceName, s.Name, s.Unit, snapshot.Timestamp, s.Value, s.Value, s.Value)));
+                _showSavedMetricNotice = false;
+                StateHasChanged();
+            }));
+
             _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
                 (containerName, cpuUsage, memoryUsage) =>
                 {
                     return InvokeAsync(() =>
                     {
-                        if (_analysisDisposed || !CanReplayTerminalHistory()) return;
+                        if (_analysisDisposed || !CanReplayTerminalHistory() ||
+                            _typedMetrics.ContainsKey(containerName)) return;
                         _containerMetrics[containerName] = (cpuUsage, memoryUsage);
                         _showSavedMetricNotice = false;
                         if (!_metricContainerNames.Contains(containerName)) _metricContainerNames.Add(containerName);
@@ -1190,7 +1208,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private async Task RestoreMetricSnapshotAsync()
     {
         if (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested ||
-            !CanReplayTerminalHistory() || !_terminalDeploymentId.HasValue || _containerMetrics.Count > 0 ||
+            !CanReplayTerminalHistory() || !_terminalDeploymentId.HasValue ||
             DateTimeOffset.UtcNow < _nextMetricReplayAt) return;
         _nextMetricReplayAt = DateTimeOffset.UtcNow.AddSeconds(60);
         var deploymentId = _terminalDeploymentId.Value;
@@ -1200,9 +1218,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         try
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
-            var end = DateTimeOffset.UtcNow;
+            var end = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60 * 60);
             var history = await scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>()
-                .ReadMetricsAsync(_currentUserId, projectId, deploymentId, end.AddMinutes(-15), end, 15,
+                .ReadMetricsAsync(_currentUserId, projectId, deploymentId, end.AddMinutes(-15), end, 500,
                     token);
             if (_analysisDisposed || token.IsCancellationRequested) return;
             await InvokeAsync(() =>
@@ -1211,9 +1229,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     !IsCurrentTerminalRead(projectId, deploymentId, generation)) return;
                 foreach (var group in history.Points.GroupBy(p => p.Container))
                 {
-                    if (_containerMetrics.ContainsKey(group.Key)) continue;
-                    _containerMetrics[group.Key] = DeploymentMetricDisplay.Latest(group);
-                    if (!_metricContainerNames.Contains(group.Key)) _metricContainerNames.Add(group.Key);
+                    ApplyTypedMetrics(group.Key, group);
                     _showSavedMetricNotice = true;
                 }
 
@@ -1232,12 +1248,27 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>Merges native samples by resource and series; delayed deliveries never replace newer observations.</summary>
+    private void ApplyTypedMetrics(string resource, IEnumerable<DeploymentMetricPoint> points)
+    {
+        if (!_typedMetrics.TryGetValue(resource, out var samples))
+            _typedMetrics[resource] = samples = new Dictionary<string, DeploymentMetricPoint>();
+        foreach (var point in points)
+            if (double.IsFinite(point.Average) && point.Average >= 0 &&
+                DeploymentMetricCatalog.Units.TryGetValue(point.Name, out var unit) && point.Unit == unit &&
+                (!samples.TryGetValue(point.Name, out var current) || point.Timestamp > current.Timestamp))
+                samples[point.Name] = point;
+        _containerMetrics[resource] =
+            DeploymentMetricDisplay.Latest(samples.Values, _app?.SourceType == SourceType.Remote);
+        if (!_metricContainerNames.Contains(resource)) _metricContainerNames.Add(resource);
+    }
+
     private async Task ClearTerminalsAsync()
     {
         foreach (var terminal in new[]
                  {
                      _buildTerminal, _webTerminal, _githubActionsTerminal,
-                     _azureWebTerminal, _azureSystemTerminal
+                     _azureWebTerminal, _azureSystemTerminal, _azureDatabaseTerminal
                  }.Concat(_dbTerminals.Values))
             if (terminal is not null)
                 await terminal.ClearAsync();
@@ -1245,6 +1276,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     private async Task WriteTerminalLogAsync(DeploymentTerminalLog terminalLog, bool isReplay = false)
     {
+        if (terminalLog.IsAvailabilityNotice)
+        {
+            await WriteTerminalNoticeAsync(terminalLog.Message);
+            return;
+        }
+
         var liveOnly = terminalLog.OrderId < 0;
         if (!liveOnly && (terminalLog.OrderId <= _lastTerminalOrderId ||
                           _renderedTerminalIds.Contains(terminalLog.OrderId))) return;
@@ -1262,6 +1299,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             "github-actions" => _githubActionsTerminal,
             "azure-web" => _azureWebTerminal,
             "azure-system" => _azureSystemTerminal,
+            "azure-db" => _azureDatabaseTerminal,
             _ when _dbTerminals.TryGetValue(terminalLog.TerminalChannel, out var databaseTerminal) => databaseTerminal,
             _ => null
         };

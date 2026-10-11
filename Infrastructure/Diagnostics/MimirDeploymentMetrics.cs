@@ -15,12 +15,7 @@ public sealed class MimirDeploymentMetrics(
     : IDeploymentMetricWriter, IDeploymentMetricQuery, IDailyDeploymentMetricQuery
 {
     /// <summary>Fixed series names prevent arbitrary metric/label injection.</summary>
-    internal static readonly IReadOnlyDictionary<string, string> Units = new Dictionary<string, string>
-    {
-        ["automate_cpu_usage_cores"] = "cores",
-        ["automate_memory_used_bytes"] = "bytes",
-        ["automate_memory_limit_bytes"] = "bytes"
-    };
+    internal static readonly IReadOnlyDictionary<string, string> Units = DeploymentMetricCatalog.Units;
 
     public static IReadOnlyDictionary<string, string> SupportedUnits => Units;
 

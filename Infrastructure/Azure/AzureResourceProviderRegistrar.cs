@@ -24,6 +24,7 @@ internal sealed class AzureResourceProviderRegistrar(
     private static readonly string[] BaseRequiredResourceProviders =
     [
         "Microsoft.App",
+        "Microsoft.Insights",
         "Microsoft.OperationalInsights"
     ];
 
@@ -57,12 +58,10 @@ internal sealed class AzureResourceProviderRegistrar(
         {
             if (!response.IsSuccessStatusCode)
             {
-                var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
                 if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
                     throw new InvalidOperationException(
-                        $"AutoMate cannot register Azure resource provider '{providerNamespace}' on subscription '{subscriptionId}'. " +
-                        "Register it manually in Azure Portal, or connect with an Azure account that can register resource providers at subscription scope. Azure response: " +
-                        responseText);
+                        $"AutoMate cannot register Azure resource provider '{providerNamespace}'. " +
+                        "Register it manually in Azure Portal, or connect with an Azure account that can register resource providers at subscription scope.");
 
                 response.EnsureSuccessStatusCode();
             }

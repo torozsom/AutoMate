@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using FluentAssertions;
 using Infrastructure.Azure;
 using Infrastructure.Tests.TestSupport;
@@ -8,6 +9,37 @@ namespace Infrastructure.Tests.Azure;
 
 public sealed class AzureMonitorLogsClientTests
 {
+    /// <summary>Native event time remains distinct from the ordered ingestion cursor for delayed arrivals.</summary>
+    [Fact]
+    public async Task Query_preserves_delayed_event_time_and_equal_ingestion_hash_cursor()
+    {
+        var ingestion = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+        var client = new AzureMonitorLogsClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(request =>
+        {
+            var query = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult()).RootElement
+                .GetProperty("query").GetString()!;
+            Assert.Contains("IngestedAt > datetime", query);
+            Assert.Contains("strcmp(CursorHash, 'hash-a') > 0", query);
+            Assert.Contains("order by IngestedAt asc, CursorHash asc", query);
+            Assert.Contains("hash_sha256(strcat(tostring(TimeGenerated)", query);
+            Assert.DoesNotContain("format_datetime", query);
+            Assert.Contains("1microsecond", query);
+            Assert.Contains("EnvironmentName_s", query);
+            Assert.Contains("'verified-env'", query);
+            return DelegateHttpMessageHandler.Json("""
+                                                   {"tables":[{"columns":[{"name":"TimeGenerated"},{"name":"IngestedAt"},{"name":"Message"},{"name":"CursorHash"}],"rows":[["2026-10-10T09:00:00Z","2026-10-10T11:00:00Z","delayed","hash-b"]]}]}
+                                                   """);
+        })));
+        var result = await client.QueryAsync("/subscriptions/sub/providers/Microsoft.App/managedEnvironments/env",
+            "token",
+            AzureContainerAppLogSource.Console, "app", ingestion.AddMinutes(-1), 10, default, "rev", ingestion,
+            "hash-a", "verified-env", "arm-env");
+        var record = Assert.Single(result.Records);
+        Assert.Equal(ingestion.AddHours(-2), record.TimestampUtc);
+        Assert.Equal(ingestion, record.IngestionTimestampUtc);
+        Assert.Equal("hash-b", record.CursorHash);
+    }
+
     [Fact]
     public async Task Query_normalizes_records_and_uses_resource_scoped_endpoint()
     {
@@ -38,8 +70,8 @@ public sealed class AzureMonitorLogsClientTests
         sentRequest!.RequestUri!.AbsoluteUri.Should().Be(
             "https://api.loganalytics.azure.com/v1/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/containerApps/app/query");
         sentRequest.Headers.Authorization.Should().Be(new AuthenticationHeaderValue("Bearer", "monitor-token"));
-        sentBody.Should().Contain("ContainerAppConsoleLogs_CL")
-            .And.Contain("ContainerAppConsoleLogs");
+        sentBody.Should().Contain("ContainerAppConsoleLogs*")
+            .And.Contain("ContainerAppName_s");
     }
 
     [Fact]
@@ -53,5 +85,18 @@ public sealed class AzureMonitorLogsClientTests
 
         result.IsSuccess.Should().BeFalse();
         result.FailureReason.Should().Contain("Log Analytics Reader").And.NotContain("token");
+    }
+
+    /// <summary>Partial Azure results cannot silently lose records by committing a cursor.</summary>
+    [Fact]
+    public async Task Query_rejects_partial_success_without_exposing_provider_details()
+    {
+        var client = new AzureMonitorLogsClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(_ =>
+            DelegateHttpMessageHandler.Json("""{"tables": [], "error": {"message": "secret-provider-detail"}}"""))));
+        var result = await client.QueryAsync("/subscriptions/sub/providers/Microsoft.App/managedEnvironments/env",
+            "token", AzureContainerAppLogSource.Console, "app", DateTimeOffset.UtcNow, 10, default);
+        Assert.False(result.IsSuccess);
+        Assert.Empty(result.Records);
+        Assert.DoesNotContain("secret-provider-detail", result.FailureReason);
     }
 }

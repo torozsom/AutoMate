@@ -34,6 +34,30 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
     /// </summary>
     private const string UnknownMetricValue = "n/a";
 
+    /// <summary>Resolves the owning environment's workspace for legacy custom tables with no resource attribution.</summary>
+    internal async Task<AzureContainerAppLogScope?> GetEnvironmentLogScopeAsync(string environmentId,
+        string accessToken,
+        CancellationToken cancellationToken)
+    {
+        using var document = await SendRequestAsync(
+            $"{AzureConstants.ManagementEndpoint}{environmentId}?api-version={ContainerAppApiVersion}",
+            accessToken, cancellationToken);
+        if (document is null) return null;
+        if (document.RootElement.TryGetProperty("properties", out var properties) &&
+            properties.TryGetProperty("appLogsConfiguration", out var logs) &&
+            logs.TryGetProperty("logAnalyticsConfiguration", out var analytics) &&
+            analytics.TryGetProperty("customerId", out var customer) &&
+            Guid.TryParse(customer.GetString(), out var workspace))
+        {
+            var domain = GetString(properties, "defaultDomain");
+            if (string.IsNullOrWhiteSpace(domain)) return null;
+            return new AzureContainerAppLogScope($"/workspaces/{workspace:D}", domain.Split('.')[0],
+                environmentId.Split('/').Last());
+        }
+
+        return new AzureContainerAppLogScope(environmentId, null, null);
+    }
+
     /// <summary>
     ///     Reads the latest ready revision and ingress FQDN for a Container App.
     /// </summary>
@@ -60,7 +84,7 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
             template.TryGetProperty("containers", out var containers) &&
             containers.ValueKind == JsonValueKind.Array && containers.GetArrayLength() > 0)
             image = GetString(containers[0], "image");
-        return new AzureContainerAppState(latestRevision, fqdn, image);
+        return new AzureContainerAppState(latestRevision, fqdn, image, GetString(properties, "managedEnvironmentId"));
     }
 
     /// <summary>
@@ -69,16 +93,16 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
     public async Task<AzureContainerAppMetrics?> GetMetricsAsync(string resourceId, string accessToken,
         CancellationToken cancellationToken, string? revision = null)
     {
-        var endTime = DateTimeOffset.UtcNow;
+        var endTime = AzureMetricObservations.CompletedMinute();
         var startTime = endTime.AddMinutes(-5);
         var requestUri = AzureConstants.ManagementEndpoint + resourceId +
                          $"/providers/microsoft.insights/metrics?api-version={MetricsApiVersion}" +
                          $"&metricnames={CpuMetricName},{MemoryMetricName}" +
-                         $"&timespan={Uri.EscapeDataString($"{startTime:O}/{endTime:O}")}&interval=PT1M&aggregation=Average";
+                         $"&timespan={Uri.EscapeDataString($"{startTime.UtcDateTime:O}/{endTime.UtcDateTime:O}")}&interval=PT1M&aggregation=Average";
         if (!string.IsNullOrWhiteSpace(revision))
-            requestUri += "&$filter=" +
-                          Uri.EscapeDataString("revisionName eq '" +
-                                               revision.Replace("'", "''", StringComparison.Ordinal) + "'");
+            requestUri += "&$filter=" + Uri.EscapeDataString("revisionName eq '" +
+                                                             revision.Replace("'", "''", StringComparison.Ordinal) +
+                                                             "' and podName eq '*'");
 
         using var document = await SendRequestAsync(requestUri, accessToken, cancellationToken);
         if (document == null)
@@ -92,26 +116,13 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
         if (!document.RootElement.TryGetProperty("value", out var values) || values.ValueKind != JsonValueKind.Array)
             return null;
 
-        foreach (var metric in values.EnumerateArray())
-        {
-            var name = metric.GetProperty("name").GetProperty("value").GetString();
-            var latestAverage = GetLatestAverage(metric);
-            if (latestAverage == null)
-                continue;
-
-            if (string.Equals(name, CpuMetricName, StringComparison.OrdinalIgnoreCase))
-            {
-                cpuCores = latestAverage.Value / 1_000_000_000;
-                cpu = string.Create(CultureInfo.InvariantCulture, $"{cpuCores.Value:0.##} cores");
-            }
-            else if (string.Equals(name, MemoryMetricName, StringComparison.OrdinalIgnoreCase))
-            {
-                memoryBytes = latestAverage;
-                memory = FormatBytes(latestAverage.Value);
-            }
-        }
-
-        return new AzureContainerAppMetrics(cpu, memory, cpuCores, memoryBytes);
+        var observations = AzureMetricObservations.Parse(document.RootElement, "Average", true);
+        var latest = observations.LastOrDefault();
+        cpuCores = latest?.Samples.FirstOrDefault(s => s.Unit == "cores")?.Value;
+        memoryBytes = latest?.Samples.FirstOrDefault(s => s.Unit == "bytes")?.Value;
+        if (cpuCores is { } cores) cpu = string.Create(CultureInfo.InvariantCulture, $"{cores:0.##} cores");
+        if (memoryBytes is { } bytes) memory = FormatBytes(bytes);
+        return new AzureContainerAppMetrics(cpu, memory, cpuCores, memoryBytes, observations);
     }
 
     /// <summary>
@@ -123,33 +134,12 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
         using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
-        using var response = await httpClientFactory.CreateClient().SendAsync(request, cancellationToken);
+        using var response = await httpClientFactory.CreateClient("AzureRuntime").SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
             return null;
 
         await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
         return await JsonDocument.ParseAsync(contentStream, cancellationToken: cancellationToken);
-    }
-
-    /// <summary>
-    ///     Finds the most recent average sample in an Azure Monitor metric payload.
-    /// </summary>
-    private static double? GetLatestAverage(JsonElement metric)
-    {
-        if (!metric.TryGetProperty("timeseries", out var timeSeries) || timeSeries.ValueKind != JsonValueKind.Array)
-            return null;
-
-        foreach (var series in timeSeries.EnumerateArray())
-        {
-            if (!series.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-                continue;
-
-            foreach (var point in data.EnumerateArray().Reverse())
-                if (point.TryGetProperty("average", out var average) && average.TryGetDouble(out var value))
-                    return value;
-        }
-
-        return null;
     }
 
     /// <summary>

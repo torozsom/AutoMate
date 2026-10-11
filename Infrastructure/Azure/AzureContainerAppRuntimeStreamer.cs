@@ -31,6 +31,10 @@ public sealed class AzureContainerAppRuntimeStreamer(
     private const string CloudWebContainerName = "cloud-web";
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
     private readonly AzureContainerAppClient _containerAppClient = new(httpClientFactory);
+
+    /// <summary>Reads tagged managed databases independently of Container Apps logs.</summary>
+    private readonly AzureManagedDatabaseClient _databaseClient = new(httpClientFactory);
+
     private readonly Guid _leaseOwner = Guid.NewGuid();
     private readonly AzureMonitorLogsClient _monitorLogsClient = new(httpClientFactory);
     private readonly ConcurrentDictionary<string, string> _reportedIssues = new();
@@ -134,6 +138,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
 
         target.ExpectedRevision ??= deployment.CloudContainerRevision;
+        var active = await db.Deployments.Where(d => d.Status == DeploymentStatus.Running &&
+                                                     d.CsProject!.AppId == target.ProjectId &&
+                                                     d.CloudResourceId == target.ResourceId)
+            .Select(d => new { d.Id, d.CreatedAt }).Take(1001).ToArrayAsync(cancellationToken);
+        target.CollectDatabases = active.Length <= 1000 && active.OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.Id).FirstOrDefault()?.Id == target.DeploymentId;
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsNpgsql())
         {
@@ -148,44 +158,82 @@ public sealed class AzureContainerAppRuntimeStreamer(
 
         if (policyScope.ServiceProvider.GetService<AzureArmCredentialsProvider>() is { } credentials)
             target.AzureCredentials = await credentials.GetAsync(target.UserId, cancellationToken);
-        await PollStateAndMetricsAsync(target, cancellationToken);
+        try
+        {
+            await PollStateAndMetricsAsync(target, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            await PublishIssueOnceAsync(target, "metrics",
+                "Azure Container Apps state or metrics query failed; log collection will continue.", cancellationToken);
+        }
 
         var tokenResult = await monitorTokenProvider.GetTokenAsync(target.UserId, cancellationToken);
         if (!tokenResult.IsSuccess)
         {
             await PublishIssueOnceAsync(target, "token", tokenResult.FailureReason!, cancellationToken);
+            await PollDatabasesAsync(target, null, cancellationToken);
             return;
         }
 
         ClearIssue(target, "token");
+
         await using var scope = scopeFactory.CreateAsyncScope();
         var checkpoints = new AzureContainerAppLogCheckpointStore(
             scope.ServiceProvider.GetRequiredService<AutoMateDbContext>());
-        await TailSourceAsync(target, AzureContainerAppLogSource.Console, tokenResult.AccessToken!, checkpoints,
-            cancellationToken);
-        await TailSourceAsync(target, AzureContainerAppLogSource.System, tokenResult.AccessToken!, checkpoints,
-            cancellationToken);
-    }
-
-    private async Task PollStateAndMetricsAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
-    {
-        var state = await _containerAppClient.GetStateAsync(target.ResourceId, target.AzureCredentials.AccessToken,
-            cancellationToken);
-        if (target.ExpectedRevision is null && state is not null)
-        {
-            if (_targets.Values.Count(t => t.ResourceId == target.ResourceId) > 1)
+        foreach (var source in new[] { AzureContainerAppLogSource.Console, AzureContainerAppLogSource.System })
+            try
             {
-                await PublishIssueOnceAsync(target, "revision",
-                    "Runtime collection needs an explicit deployment revision.", cancellationToken);
-                return;
+                await TailSourceAsync(target, source, tokenResult.AccessToken!, checkpoints, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException ||
+                                       !cancellationToken.IsCancellationRequested)
+            {
+                await PublishIssueOnceAsync(target, source.ToString().ToLowerInvariant(),
+                    "Azure log query failed; collection will retry without advancing its checkpoint.",
+                    cancellationToken);
             }
 
-            target.ExpectedRevision = state.LatestRevision;
-            await using var scope = scopeFactory.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-            var deployment = await db.Deployments.SingleAsync(d => d.Id == target.DeploymentId, cancellationToken);
-            deployment.CloudContainerRevision ??= target.ExpectedRevision;
-            await db.SaveChangesAsync(cancellationToken);
+        await PollDatabasesAsync(target, null, cancellationToken);
+        await PollDatabasesAsync(target, tokenResult.AccessToken, cancellationToken);
+    }
+
+    /// <summary>Resolves the environment log scope and publishes only observed, revision-scoped web metrics.</summary>
+    private async Task PollStateAndMetricsAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
+    {
+        AzureContainerAppState? state = null;
+        try
+        {
+            state = await _containerAppClient.GetStateAsync(target.ResourceId, target.AzureCredentials.AccessToken,
+                cancellationToken);
+            if (!string.IsNullOrWhiteSpace(state?.ManagedEnvironmentId))
+            {
+                var logScope = await _containerAppClient.GetEnvironmentLogScopeAsync(state.ManagedEnvironmentId,
+                    target.AzureCredentials.AccessToken, cancellationToken);
+                if (logScope is not null)
+                {
+                    target.LogResourceId = logScope.ResourceId;
+                    target.LogEnvironmentName = logScope.EnvironmentName;
+                    target.LogEnvironmentResourceName = logScope.ResourceName;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            await PublishIssueOnceAsync(target, "state",
+                "Azure environment discovery failed; metrics collection will continue.", cancellationToken);
+        }
+
+        if (state is null)
+            await PublishIssueOnceAsync(target, "state",
+                "Azure Container App state is unavailable. Verify Azure read access.", cancellationToken);
+        else
+            ClearIssue(target, "state");
+        if (target.ExpectedRevision is null)
+        {
+            await PublishIssueOnceAsync(target, "revision", "Runtime collection needs a verified deployment revision.",
+                cancellationToken);
+            return;
         }
 
         if (state != null && state.LatestRevision == target.ExpectedRevision &&
@@ -230,28 +278,160 @@ public sealed class AzureContainerAppRuntimeStreamer(
             cancellationToken, () => _containerAppClient.GetMetricsAsync(target.ResourceId,
                 target.AzureCredentials.AccessToken,
                 cancellationToken, target.ExpectedRevision));
-        if (metrics != null)
-            await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
-                    DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
-                    DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
-                    $"Azure Container Apps metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
-                    new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, CloudWebContainerName),
-                    new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
-                    SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
-                        DeploymentDiagnosticStream.Metric, target.ExpectedRevision),
-                    Metrics: NumericSamples(metrics)),
-                cancellationToken);
+        if (metrics is null)
+        {
+            await PublishIssueOnceAsync(target, "metrics",
+                "Azure Container Apps metrics are unavailable. Verify Azure Monitor read access.", cancellationToken);
+        }
+        else
+        {
+            ClearIssue(target, "metrics");
+            foreach (var observation in metrics.Observations ?? [])
+                await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
+                        DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
+                        DeploymentDiagnosticSeverity.Information, observation.Timestamp,
+                        $"Azure Container Apps metrics: CPU {metrics.Cpu}, memory {metrics.Memory}.",
+                        new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, CloudWebContainerName),
+                        new Dictionary<string, string> { ["cpu"] = metrics.Cpu, ["memory"] = metrics.Memory },
+                        SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Container,
+                            DeploymentDiagnosticStream.Metric, target.ExpectedRevision),
+                        Metrics: observation.Samples,
+                        EventId: MetricEventId(target, CloudWebContainerName, observation)),
+                    cancellationToken);
+        }
     }
 
-    /// <summary>Preserves ARM numeric units without reparsing localized display text.</summary>
-    private static IReadOnlyList<DeploymentMetricSample> NumericSamples(AzureContainerAppMetrics metrics)
+    /// <summary>Collects each managed database independently so a database failure cannot suppress web diagnostics.</summary>
+    private async Task PollDatabasesAsync(ContainerAppStreamTarget target, string? logsToken,
+        CancellationToken cancellationToken)
     {
-        var samples = new List<DeploymentMetricSample>();
-        if (metrics.CpuCores is { } cpu && double.IsFinite(cpu) && cpu >= 0)
-            samples.Add(new DeploymentMetricSample("automate_cpu_usage_cores", cpu, "cores"));
-        if (metrics.MemoryBytes is { } memory && double.IsFinite(memory) && memory >= 0)
-            samples.Add(new DeploymentMetricSample("automate_memory_used_bytes", memory, "bytes"));
-        return samples;
+        if (!target.CollectDatabases) return;
+        if (logsToken is null)
+            try
+            {
+                target.Databases = await _databaseClient.DiscoverAsync(target.ResourceId, target.ProjectId,
+                    target.ContainerAppName, target.AzureCredentials.AccessToken, cancellationToken);
+                ClearIssue(target, "database-inventory");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException ||
+                                       !cancellationToken.IsCancellationRequested)
+            {
+                await PublishIssueOnceAsync(target, "database-inventory",
+                    "Azure database discovery is unavailable. Verify resource-group read access and AutoMate resource tags.",
+                    cancellationToken);
+                return;
+            }
+
+        foreach (var database in target.Databases)
+        {
+            var key = "db-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(database.ResourceId)))[..24];
+            var issue = key + (logsToken is null ? "-metrics" : "-logs");
+            try
+            {
+                if (logsToken is null)
+                    await PublishDatabaseMetricsAsync(target, database, cancellationToken);
+                else if (database.HasOperationalLogs)
+                    await TailDatabaseAsync(target, database, key, logsToken, cancellationToken);
+                if (logsToken is null) ClearIssue(target, issue);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException ||
+                                       !cancellationToken.IsCancellationRequested)
+            {
+                await PublishIssueOnceAsync(target, issue,
+                    "Azure database diagnostics are temporarily unavailable. Verify Monitor permissions and diagnostic settings.",
+                    cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>Publishes native database gauges through the same redacted live and durable metric pipeline.</summary>
+    private async Task PublishDatabaseMetricsAsync(ContainerAppStreamTarget target, AzureManagedDatabase database,
+        CancellationToken cancellationToken)
+    {
+        var observations = await DeploymentTracing.RunAsync(DeploymentOperation.AzureMetrics, target.ProjectId,
+            target.DeploymentId, cancellationToken,
+            () => _databaseClient.MetricObservationsAsync(database, target.AzureCredentials.AccessToken,
+                cancellationToken));
+        foreach (var observation in observations)
+        {
+            var samples = observation.Samples;
+            var cpu = samples.FirstOrDefault(s => s.Name == "automate_cpu_usage_percent");
+            var memory =
+                samples.FirstOrDefault(s => s.Name.StartsWith("automate_memory_used_", StringComparison.Ordinal));
+            await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
+                DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
+                DeploymentDiagnosticSeverity.Information, observation.Timestamp,
+                $"Azure database metrics: {database.Name}.",
+                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, database.Name),
+                new Dictionary<string, string>
+                {
+                    ["cpu"] = cpu is null ? "n/a" : $"{cpu.Value:0.##}%",
+                    ["memory"] = memory is null ? "n/a" :
+                        memory.Unit == "bytes" ? $"{memory.Value / 1048576:0.##} MiB" : $"{memory.Value:0.##}%"
+                }, SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Database,
+                    DeploymentDiagnosticStream.Metric, database.ResourceId), Metrics: samples,
+                EventId: MetricEventId(target, database.ResourceId, observation)), cancellationToken);
+        }
+    }
+
+    /// <summary>Advances one database cursor only for confirmed writes, preserving retry identity across restart.</summary>
+    private async Task TailDatabaseAsync(ContainerAppStreamTarget target, AzureManagedDatabase database, string key,
+        string logsToken, CancellationToken cancellationToken)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var store = new AzureContainerAppLogCheckpointStore(
+            scope.ServiceProvider.GetRequiredService<AutoMateDbContext>());
+        var checkpoint = await store.GetOrCreateAsync(target.DeploymentId, key, cancellationToken);
+        var from = (checkpoint.LastIngestionTimestamp ??
+                    checkpoint.LastTimestamp ?? DateTimeOffset.UtcNow - options.Value.InitialLookback) -
+                   options.Value.OverlapWindow;
+        for (var page = 0; page < Math.Clamp(options.Value.MaximumPagesPerPoll, 1, 100); page++)
+        {
+            var result = await DeploymentTracing.RunAsync(DeploymentOperation.AzureLogs, target.ProjectId,
+                target.DeploymentId, cancellationToken,
+                () => _monitorLogsClient.QueryDatabaseAsync(database.ResourceId, logsToken, from,
+                    options.Value.BatchSize, checkpoint.LastIngestionTimestamp, checkpoint.LastIngestionTieBreaker,
+                    cancellationToken),
+                result => result.IsSuccess);
+            if (!result.IsSuccess)
+            {
+                await PublishIssueOnceAsync(target, key + "-logs", result.FailureReason!, cancellationToken);
+                break;
+            }
+
+            ClearIssue(target, key + "-logs");
+            var confirmed = true;
+            foreach (var record in result.Records.OrderBy(r => r.IngestionTimestampUtc ?? r.TimestampUtc)
+                         .ThenBy(CreateTieBreaker, StringComparer.Ordinal))
+            {
+                var hash = CreateTieBreaker(record);
+                if (!IsAfterCheckpoint(record, hash, checkpoint)) continue;
+                var diagnostic = new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
+                    DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Log,
+                    DeploymentDiagnosticSeverity.Information, record.TimestampUtc,
+                    $"[{database.Name}] {record.Message}",
+                    new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "azure-db"),
+                    SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Database,
+                        DeploymentDiagnosticStream.System, database.ResourceId),
+                    EventId: new Guid(
+                        SHA256.HashData(Encoding.UTF8.GetBytes($"{target.DeploymentId:N}/{key}/{hash}"))[..16]));
+                if (diagnostics is not IDurableDeploymentDiagnosticPublisher durable ||
+                    !await durable.PublishDurablyAsync(diagnostic, cancellationToken))
+                {
+                    confirmed = false;
+                    break;
+                }
+
+                checkpoint.LastTimestamp = record.TimestampUtc;
+                checkpoint.LastTieBreaker = hash;
+                checkpoint.LastIngestionTimestamp = record.IngestionTimestampUtc ?? record.TimestampUtc;
+                checkpoint.LastIngestionTieBreaker = hash;
+            }
+
+            checkpoint.LastSuccessfulQueryAt = DateTimeOffset.UtcNow;
+            await store.SaveAsync(cancellationToken);
+            if (!confirmed || result.Records.Count < options.Value.BatchSize) break;
+        }
     }
 
     private async Task TailSourceAsync(ContainerAppStreamTarget target, AzureContainerAppLogSource source,
@@ -260,16 +440,26 @@ public sealed class AzureContainerAppRuntimeStreamer(
         var sourceName = source.ToString().ToLowerInvariant();
         var checkpoint = await checkpoints.GetOrCreateAsync(target.DeploymentId, sourceName, cancellationToken);
         var settings = options.Value;
-        var from = (checkpoint.LastTimestamp ?? DateTimeOffset.UtcNow.Subtract(settings.InitialLookback))
+        var from = (checkpoint.LastIngestionTimestamp ??
+                    checkpoint.LastTimestamp ?? DateTimeOffset.UtcNow.Subtract(settings.InitialLookback))
             .Subtract(settings.OverlapWindow);
         for (var page = 0; page < Math.Clamp(settings.MaximumPagesPerPoll, 1, 100); page++)
         {
             if (string.IsNullOrWhiteSpace(target.ExpectedRevision)) return;
+            if (string.IsNullOrWhiteSpace(target.LogResourceId))
+            {
+                await PublishIssueOnceAsync(target, sourceName,
+                    "Azure log environment is unavailable. Verify Container App read access.", cancellationToken);
+                return;
+            }
+
             var result = await DeploymentTracing.RunAsync(DeploymentOperation.AzureLogs, target.ProjectId,
                 target.DeploymentId,
-                cancellationToken, () => _monitorLogsClient.QueryAsync(target.ResourceId, accessToken, source,
+                cancellationToken, () => _monitorLogsClient.QueryAsync(target.LogResourceId ?? target.ResourceId,
+                    accessToken, source,
                     target.ContainerAppName, from, settings.BatchSize, cancellationToken, target.ExpectedRevision,
-                    checkpoint.LastTimestamp, checkpoint.LastTieBreaker), result => result.IsSuccess);
+                    checkpoint.LastIngestionTimestamp, checkpoint.LastIngestionTieBreaker,
+                    target.LogEnvironmentName, target.LogEnvironmentResourceName), result => result.IsSuccess);
             if (!result.IsSuccess)
             {
                 await PublishIssueOnceAsync(target, sourceName, result.FailureReason!, cancellationToken);
@@ -277,11 +467,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
             }
 
             ClearIssue(target, sourceName);
-            foreach (var record in result.Records.OrderBy(item => item.TimestampUtc).ThenBy(CreateTieBreaker,
-                         StringComparer.Ordinal))
+            foreach (var record in result.Records.OrderBy(item => item.IngestionTimestampUtc ?? item.TimestampUtc)
+                         .ThenBy(CreateTieBreaker,
+                             StringComparer.Ordinal))
             {
                 var tieBreaker = CreateTieBreaker(record);
-                if (!IsAfterCheckpoint(record.TimestampUtc, tieBreaker, checkpoint))
+                if (!IsAfterCheckpoint(record, tieBreaker, checkpoint))
                 {
                     AutoMateTelemetry.DiagnosticDuplicates.Add(1,
                         new KeyValuePair<string, object?>("deployment.source", "AzureContainerApps"));
@@ -295,13 +486,21 @@ public sealed class AzureContainerAppRuntimeStreamer(
                             Encoding.UTF8.GetBytes($"{target.DeploymentId:N}/{source}/{tieBreaker}"))[..16]);
                 var diagnostic = CreateLogEvent(target, source, record) with { EventId = eventId };
                 if (diagnostics is not IDurableDeploymentDiagnosticPublisher durable ||
-                    !await durable.PublishDurablyAsync(diagnostic, cancellationToken)) return;
+                    !await durable.PublishDurablyAsync(diagnostic, cancellationToken))
+                {
+                    await checkpoints.SaveAsync(cancellationToken);
+                    return;
+                }
+
                 checkpoint.LastTimestamp = record.TimestampUtc;
                 checkpoint.LastTieBreaker = tieBreaker;
+                checkpoint.LastIngestionTimestamp = record.IngestionTimestampUtc ?? record.TimestampUtc;
+                checkpoint.LastIngestionTieBreaker = tieBreaker;
 
-                if (DateTimeOffset.UtcNow - record.TimestampUtc > settings.FreshnessWarningAge)
+                var ingestionDelay = (record.IngestionTimestampUtc ?? record.TimestampUtc) - record.TimestampUtc;
+                if (ingestionDelay > settings.FreshnessWarningAge)
                     await PublishIssueOnceAsync(target, $"{sourceName}-freshness",
-                        $"Azure {sourceName} log ingestion is delayed; newest delivered record is {(DateTimeOffset.UtcNow - record.TimestampUtc).TotalMinutes:0} minute(s) old.",
+                        $"Azure {sourceName} log ingestion was delayed by {ingestionDelay.TotalMinutes:0} minute(s).",
                         cancellationToken);
                 else
                     ClearIssue(target, $"{sourceName}-freshness");
@@ -370,13 +569,27 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 new KeyValuePair<string, object?>("deployment.source", "AzureContainerApps"));
     }
 
-    private static bool IsAfterCheckpoint(DateTimeOffset timestamp, string tieBreaker,
+    private static bool IsAfterCheckpoint(AzureMonitorLogRecord record, string tieBreaker,
         AzureContainerAppLogCheckpoint checkpoint)
     {
-        if (checkpoint.LastTimestamp is null) return true;
-        var timestampComparison = timestamp.CompareTo(checkpoint.LastTimestamp.Value);
+        var previous = record.IngestionTimestampUtc is null
+            ? checkpoint.LastTimestamp
+            : checkpoint.LastIngestionTimestamp;
+        var hash = record.IngestionTimestampUtc is null
+            ? checkpoint.LastTieBreaker
+            : checkpoint.LastIngestionTieBreaker;
+        if (previous is null) return true;
+        var timestampComparison = (record.IngestionTimestampUtc ?? record.TimestampUtc).CompareTo(previous.Value);
         return timestampComparison > 0 || (timestampComparison == 0 &&
-                                           string.CompareOrdinal(tieBreaker, checkpoint.LastTieBreaker) > 0);
+                                           string.CompareOrdinal(tieBreaker, hash) > 0);
+    }
+
+    /// <summary>Gives an Azure metric minute a stable retry identity independent of polling time.</summary>
+    private static Guid MetricEventId(ContainerAppStreamTarget target, string resource,
+        AzureMetricObservation observation)
+    {
+        return new Guid(SHA256.HashData(
+            Encoding.UTF8.GetBytes($"{target.DeploymentId:N}/{resource}/{observation.Timestamp:O}"))[..16]);
     }
 
     private static string CreateTieBreaker(AzureMonitorLogRecord record)
@@ -440,7 +653,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
                         d.CloudContainerAppName!, azure)
                     { ExpectedRevision = d.CloudContainerRevision });
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException || !token.IsCancellationRequested)
             {
                 logger.LogWarning("Cloud runtime recovery requires Azure reconnection for deployment {DeploymentId}.",
                     d.Id);
@@ -456,10 +669,23 @@ public sealed class AzureContainerAppRuntimeStreamer(
         string containerAppName,
         AzureCloudCredentialsDto azureCredentials)
     {
+        /// <summary>Only the latest verified active deployment collects shared database observations.</summary>
+        public bool CollectDatabases { get; set; }
+
         public Guid ProjectId { get; } = projectId;
         public Guid DeploymentId { get; } = deploymentId;
         public Guid UserId { get; } = userId;
         public string ResourceId { get; } = resourceId;
+
+        /// <summary>Environment ARM scope resolved from the selected app, refreshed with state reads.</summary>
+        public string? LogResourceId { get; set; }
+
+        public string? LogEnvironmentName { get; set; }
+        public string? LogEnvironmentResourceName { get; set; }
+
+        /// <summary>Verified tagged inventory retained only in memory between metrics and log polling.</summary>
+        public IReadOnlyList<AzureManagedDatabase> Databases { get; set; } = [];
+
         public string ContainerAppName { get; } = containerAppName;
         public AzureCloudCredentialsDto AzureCredentials { get; set; } = azureCredentials;
         public string? ExpectedRevision { get; set; }

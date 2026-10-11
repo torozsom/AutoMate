@@ -17,6 +17,37 @@ namespace Web.Tests;
 /// <summary>Verifies that deadlines cancel real transport writes while retaining browser callback compatibility.</summary>
 public sealed class RealTimeLogStreamerTests
 {
+    /// <summary>Typed delivery preserves native timestamp/identity and accepts only the fixed numeric catalog.</summary>
+    [Fact]
+    public async Task Typed_metrics_preserve_identity_time_and_filter_invalid_samples()
+    {
+        var calls = new List<(string Method, object?[] Arguments)>();
+        var project = Guid.NewGuid();
+        var streamer = Create(project, (method, args, _) =>
+        {
+            calls.Add((method, args));
+            return Task.CompletedTask;
+        });
+        var snapshot = new DeploymentRuntimeMetricSnapshot(project, Guid.NewGuid(), "cosmos",
+            DeploymentDiagnosticComponent.Database,
+            DateTimeOffset.Parse("2026-10-10T11:00:00Z"),
+            [
+                new DeploymentMetricSample("automate_database_ru_usage_percent", 42, "percent"),
+                new DeploymentMetricSample("arbitrary", 1, "percent"),
+                new DeploymentMetricSample("automate_cpu_usage_cores", double.NaN, "cores"),
+                new DeploymentMetricSample("automate_memory_used_bytes", 1, "percent")
+            ]);
+        await streamer.StreamDeploymentMetricsAsync(snapshot);
+        var call = Assert.Single(calls);
+        Assert.Equal(nameof(ILogClient.ReceiveDeploymentMetrics), call.Method);
+        var delivered = Assert.IsType<DeploymentRuntimeMetricSnapshot>(call.Arguments[0]);
+        Assert.Equal(snapshot.ProjectId, delivered.ProjectId);
+        Assert.Equal(snapshot.DeploymentId, delivered.DeploymentId);
+        Assert.Equal(snapshot.Timestamp, delivered.Timestamp);
+        Assert.Equal(snapshot.Component, delivered.Component);
+        Assert.Equal(snapshot.Samples[0], Assert.Single(delivered.Samples));
+    }
+
     /// <summary>Terminal/notice/metric callbacks apply the final policy even to legacy or bypassed caller text.</summary>
     [Fact]
     public async Task Every_transport_callback_masks_sensitive_text_without_changing_cursors_or_groups()

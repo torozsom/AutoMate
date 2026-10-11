@@ -358,17 +358,37 @@ public sealed class DeploymentDiagnosticDispatcher(
     private Task DeliverToTerminalAsync(DeploymentDiagnosticEvent diagnosticEvent, string? channel, long orderId,
         CancellationToken cancellationToken)
     {
+        if (diagnosticEvent is
+            {
+                Source: DeploymentDiagnosticSource.AzureContainerApps,
+                Kind: DeploymentDiagnosticKind.Annotation, Attributes: not null
+            } &&
+            diagnosticEvent.Attributes.ContainsKey("issue"))
+            return logStreamer.StreamTerminalNoticeAsync(diagnosticEvent.ProjectId, diagnosticEvent.Message,
+                cancellationToken);
         return diagnosticEvent.TerminalChannel.Kind switch
         {
             DeploymentTerminalChannelKind.Build or DeploymentTerminalChannelKind.System or
                 DeploymentTerminalChannelKind.Container => logStreamer.StreamTerminalLogAsync(
                     DeploymentTerminalLog.FromEvent(orderId, diagnosticEvent, channel!), cancellationToken),
-            DeploymentTerminalChannelKind.Metrics => logStreamer.StreamContainerMetricsAsync(diagnosticEvent.ProjectId,
-                diagnosticEvent.TerminalChannel.Target!,
-                diagnosticEvent.Attributes?.GetValueOrDefault("cpu") ?? "unknown",
-                diagnosticEvent.Attributes?.GetValueOrDefault("memory") ?? "unknown", cancellationToken),
+            DeploymentTerminalChannelKind.Metrics => DeliverMetricsAsync(diagnosticEvent, cancellationToken),
             _ => throw new ArgumentOutOfRangeException()
         };
+    }
+
+    /// <summary>Delivers typed observations and preserves the original callback for older browser clients.</summary>
+    private async Task DeliverMetricsAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken token)
+    {
+        if (diagnosticEvent.DeploymentId is { } deployment && diagnosticEvent.Metrics is { Count: > 0 } samples)
+            await logStreamer.StreamDeploymentMetricsAsync(new DeploymentRuntimeMetricSnapshot(
+                diagnosticEvent.ProjectId,
+                deployment, diagnosticEvent.TerminalChannel.Target!,
+                diagnosticEvent.SourceIdentity?.Component ?? DeploymentDiagnosticComponent.Container,
+                diagnosticEvent.TimestampUtc, samples), token);
+        await logStreamer.StreamContainerMetricsAsync(diagnosticEvent.ProjectId,
+            diagnosticEvent.TerminalChannel.Target!,
+            diagnosticEvent.Attributes?.GetValueOrDefault("cpu") ?? "unknown",
+            diagnosticEvent.Attributes?.GetValueOrDefault("memory") ?? "unknown", token);
     }
 
     internal static string GetTerminalChannel(DeploymentDiagnosticEvent diagnosticEvent)

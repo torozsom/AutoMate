@@ -11,11 +11,17 @@ public sealed class AzureContainerAppLogCheckpoint : BaseEntity
     /// <summary>Owning deployment.</summary>
     public Deployment Deployment { get; set; } = null!;
 
-    /// <summary>Logical source name, currently <c>console</c> or <c>system</c>.</summary>
+    /// <summary>Logical source name: <c>console</c>, <c>system</c>, or a bounded <c>db-</c> resource hash.</summary>
     public string Source { get; set; } = string.Empty;
 
     /// <summary>Timestamp of the last delivered record.</summary>
     public DateTimeOffset? LastTimestamp { get; set; }
+
+    /// <summary>Last durably accepted Azure ingestion time, independent of delayed event timestamps.</summary>
+    public DateTimeOffset? LastIngestionTimestamp { get; set; }
+
+    /// <summary>Stable ordering hash for records sharing an ingestion time.</summary>
+    public string? LastIngestionTieBreaker { get; set; }
 
     /// <summary>Deterministic hash used to order records with the same timestamp.</summary>
     public string? LastTieBreaker { get; set; }

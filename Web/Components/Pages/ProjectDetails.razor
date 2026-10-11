@@ -218,6 +218,13 @@
                                         </button>
                                     </li>
                                     <li class="nav-item" role="presentation">
+                                        <button class="nav-link @GetTabClass("azure-db")" type="button" role="tab"
+                                                @onclick='() => SetActiveTab("azure-db")'>
+                                            <i class="bi bi-database" aria-hidden="true"></i>
+                                            <span>Azure Databases</span>
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
                                         <button class="nav-link @GetTabClass("azure-system")" type="button" role="tab"
                                                 @onclick='() => SetActiveTab("azure-system")'>
                                             <i class="bi bi-gear" aria-hidden="true"></i>
@@ -274,6 +281,10 @@
                                     <Terminal @ref="_azureWebTerminal" Id="azure-web-term"
                                               OnReady='() => OnTerminalReady(_azureWebTerminal, "Azure Web")'/>
                                 </div>
+                                <div style="@GetTerminalStyle("azure-db")">
+                                    <Terminal @ref="_azureDatabaseTerminal" Id="azure-db-term"
+                                              OnReady='() => OnTerminalReady(_azureDatabaseTerminal, "Azure Databases")'/>
+                                </div>
                                 <div style="@GetTerminalStyle("azure-system")">
                                     <Terminal @ref="_azureSystemTerminal" Id="azure-system-term"
                                               OnReady='() => OnTerminalReady(_azureSystemTerminal, "Azure System")'/>
@@ -324,6 +335,7 @@
 
                         var currentContainer = _metricContainerNames[_currentMetricIndex];
                         var metrics = _containerMetrics[currentContainer];
+                        var ruMetric = _typedMetrics.GetValueOrDefault(currentContainer)?.GetValueOrDefault("automate_database_ru_usage_percent");
 
                         <div class="metrics-panel">
                             <button class="btn metric-nav-button" @onclick="PreviousMetric"
@@ -345,13 +357,18 @@
                             <div class="metric-cards">
                                 <div class="metric-card">
                                     <div class="metric-card-head">
-                                        <span>CPU</span>
+                                        <span>@(ruMetric is null ? "CPU" : "RU utilization")</span>
                                         <i class="bi bi-cpu" aria-hidden="true"></i>
                                     </div>
-                                    <div class="metric-value">@metrics.Cpu</div>
-                                    <div class="metric-track" aria-hidden="true">
-                                        <span style="@GetMetricTrackStyle(metrics.Cpu, false)"></span>
-                                    </div>
+                                    <div
+                                        class="metric-value">@(ruMetric is null ? metrics.Cpu : TelemetryPresentation.Format(ruMetric.Average, ruMetric.Name))</div>
+                                    @if (ruMetric is not null || !metrics.Cpu.EndsWith(" cores", StringComparison.Ordinal))
+                                    {
+                                        <div class="metric-track" aria-hidden="true">
+                                            <span
+                                                style="@GetMetricTrackStyle(ruMetric is null ? metrics.Cpu : TelemetryPresentation.Format(ruMetric.Average, ruMetric.Name), false)"></span>
+                                        </div>
+                                    }
                                 </div>
 
                                 <div class="metric-card">
@@ -359,7 +376,8 @@
                                         <span>Memory</span>
                                         <i class="bi bi-memory" aria-hidden="true"></i>
                                     </div>
-                                    <div class="metric-value">@metrics.Memory</div>
+                                    <div
+                                        class="metric-value">@(ruMetric is null ? metrics.Memory : "Not exposed by Cosmos DB")</div>
                                     <div class="metric-track" aria-hidden="true">
                                         <span style="@GetMetricTrackStyle(metrics.Memory, true)"></span>
                                     </div>

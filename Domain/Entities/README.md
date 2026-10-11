@@ -64,3 +64,8 @@ deletion cascades the marker. It contains neither diagnostic context nor log/met
 Deployment records own non-secret configuration snapshots, resolved artifacts, an outcome independent of runtime status,
 and completion time. Legacy snapshots remain absent. DeploymentArchiveCleanup is a durable deletion outbox without
 foreign keys to deleted owners.
+
+Azure runtime checkpoints also support hashed managed-database source identities; rows contain cursor metadata only,
+with no database connection strings or log content. Deployment/source uniqueness remains unchanged.
+Nullable ingestion timestamp/hash fields distinguish delayed arrivals from event time; apply AzureLogIngestionCursors
+without clearing existing cursor rows or archived history.

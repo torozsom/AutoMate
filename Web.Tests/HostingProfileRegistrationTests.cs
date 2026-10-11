@@ -9,8 +9,11 @@ using Application.Orchestration;
 using Infrastructure.Ai;
 using Infrastructure.Diagnostics;
 using Infrastructure.Observability;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -28,6 +31,26 @@ namespace Web.Tests;
 /// <summary>Verifies profile-specific validation using the production Web composition root.</summary>
 public sealed class HostingProfileRegistrationTests
 {
+    /// <summary>Azure reconnect requests newly declared delegated permissions without tenant-wide consent.</summary>
+    [Fact]
+    public async Task Azure_reconnect_requests_explicit_static_consent()
+    {
+        var builder = CreateBuilder("SelfHosted");
+        builder.AddApplicationServices();
+        await using var provider = builder.Services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptionsMonitor<OAuthOptions>>()
+            .Get("Microsoft");
+        var http = new DefaultHttpContext();
+        var context = new RedirectContext<OAuthOptions>(
+            http, new AuthenticationScheme("Microsoft", null,
+                typeof(OAuthHandler<OAuthOptions>)),
+            options, new AuthenticationProperties(),
+            "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?scope=https%3A%2F%2Fmanagement.azure.com%2F.default");
+        await options.Events.OnRedirectToAuthorizationEndpoint(context);
+        Assert.Contains("prompt=consent", http.Response.Headers.Location.ToString());
+        Assert.DoesNotContain("adminconsent", http.Response.Headers.Location.ToString());
+    }
+
     /// <summary>Production composition selects Azure in either profile and checks its own key without provider I/O.</summary>
     [Theory]
     [InlineData("SelfHosted")]

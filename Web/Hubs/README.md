@@ -37,3 +37,6 @@ Join/leave/replay emit correlated child spans. Replay disconnects are Canceled/U
 Failed/Error and invalid tokens/access are Denied/Error. Tokens, identities, connection IDs and payloads are excluded.
 The .NET server source provides invocation parents;
 see [SignalR diagnostics](https://learn.microsoft.com/en-us/aspnet/core/signalr/diagnostics?view=aspnetcore-10.0).
+
+ILogClient.ReceiveDeploymentMetrics adds deployment-scoped numeric observations with provider timestamps.
+Existing authorized project groups and ReceiveContainerMetrics remain compatible.

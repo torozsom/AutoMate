@@ -9,4 +9,5 @@ internal sealed record AzureContainerAppMetrics(
     string Cpu,
     string Memory,
     double? CpuCores = null,
-    double? MemoryBytes = null);
+    double? MemoryBytes = null,
+    IReadOnlyList<AzureMetricObservation>? Observations = null);

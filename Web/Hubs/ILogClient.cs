@@ -7,6 +7,9 @@ namespace Web.Hubs;
 /// </summary>
 public interface ILogClient
 {
+    /// <summary>Receives native numeric samples with source, timestamp and deployment correlation.</summary>
+    Task ReceiveDeploymentMetrics(DeploymentRuntimeMetricSnapshot snapshot);
+
     /// <summary>
     ///     Receives redacted output for one source-aware terminal channel.
     /// </summary>

@@ -12,6 +12,38 @@ namespace Web.Tests;
 /// <summary>Verifies that pending metric reads cannot update a closed page or report expected disposal as failure.</summary>
 public sealed class ProjectDetailsMetricRecoveryTests
 {
+    /// <summary>Older recovery data cannot replace a newer RU observation or fabricate Cosmos CPU/memory.</summary>
+    [Fact]
+    public void Typed_metric_merge_rejects_old_samples_and_retains_native_ru()
+    {
+        var page = new ProjectDetails();
+        var apply = typeof(ProjectDetails).GetMethod("ApplyTypedMetrics",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var now = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+        apply.Invoke(page,
+        [
+            "cosmos",
+            new[]
+            {
+                new DeploymentMetricPoint("cosmos", "automate_database_ru_usage_percent", "percent", now, 42, 42, 42)
+            }
+        ]);
+        apply.Invoke(page,
+        [
+            "cosmos",
+            new[]
+            {
+                new DeploymentMetricPoint("cosmos", "automate_database_ru_usage_percent", "percent", now.AddMinutes(-1),
+                    3, 3, 3)
+            }
+        ]);
+        var state = (Dictionary<string, Dictionary<string, DeploymentMetricPoint>>)typeof(ProjectDetails)
+            .GetField("_typedMetrics", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(page)!;
+        var point = Assert.Single(state["cosmos"]).Value;
+        Assert.Equal(42, point.Average);
+        Assert.Equal(now, point.Timestamp);
+    }
+
     /// <summary>A reconnect callback after disposal must not touch a disposed cancellation source or service provider.</summary>
     [Fact]
     public async Task Disposed_page_does_not_start_metric_recovery()

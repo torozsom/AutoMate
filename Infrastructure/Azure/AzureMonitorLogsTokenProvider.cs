@@ -51,8 +51,25 @@ public sealed class AzureMonitorLogsTokenProvider(
 
         using var response = await httpClientFactory.CreateClient().SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
-            return new AzureMonitorLogsTokenResult(null,
-                "Azure Monitor Logs token exchange was denied. Reconnect Azure or verify consent.");
+        {
+            // Only recognized numeric consent failures affect guidance; arbitrary Entra messages remain private.
+            var consentRequired = false;
+            try
+            {
+                using var failure = await JsonDocument.ParseAsync(
+                    await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+                consentRequired = failure.RootElement.TryGetProperty("error_codes", out var codes) &&
+                                  codes.ValueKind == JsonValueKind.Array && codes.EnumerateArray()
+                                      .Any(code => code.TryGetInt32(out var value) && value == 65001);
+            }
+            catch (JsonException)
+            {
+            }
+
+            return new AzureMonitorLogsTokenResult(null, consentRequired
+                ? "Azure Monitor Logs consent is missing. The operator must configure the Log Analytics API Data.Read delegated permission, then reconnect Azure to grant consent."
+                : "Azure Monitor Logs token exchange was denied. Reconnect Azure or verify consent.");
+        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);

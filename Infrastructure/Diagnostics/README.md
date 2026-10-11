@@ -180,3 +180,8 @@ defaults without changing saved history.
 A protocol/version mismatch, access denial and an unreachable host have distinct finite operator diagnostics and safe
 availability guidance; an empty authorized archive response is valid history. Preserve the archive volume when
 rebuilding/recreating Telemetry.
+
+Azure managed database metrics extend the fixed series catalog with `automate_cpu_usage_percent`,
+`automate_memory_used_percent` and `automate_database_ru_usage_percent`, all in `percent`. These retain native provider
+units independently of the existing core/byte gauges. Update the private Telemetry service alongside Web so its
+validation accepts the same catalog; redaction, gateway durability, retention and owner-scoped readback are unchanged.

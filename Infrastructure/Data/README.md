@@ -86,3 +86,7 @@ queues archive cleanup in the same transaction, including account cascades.
 
 AutomaticTelemetryCollection backfills existing runtime/storage compatibility flags and adds true defaults. It preserves
 all saved diagnostic/history rows; downgrade removes defaults without restoring historical opt-out values.
+
+AzureLogIngestionCursors adds two nullable fields to existing Azure log checkpoints: last_ingestion_timestamp and
+last_ingestion_tie_breaker (128 characters). Apply before running updated collectors. Existing event-time cursors,
+deployment history and diagnostic payloads are preserved; no backfill fabricates ingestion times.

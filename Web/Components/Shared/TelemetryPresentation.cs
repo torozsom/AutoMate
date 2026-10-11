@@ -20,8 +20,14 @@ public static class TelemetryPresentation
     {
         return name switch
         {
-            Cpu => "CPU usage", Memory => "Memory usage", MemoryLimit => "Memory limit",
-            "observed_log_errors" => "Observed log errors", _ => name
+            Cpu => "CPU usage",
+            Memory => "Memory usage",
+            MemoryLimit => "Memory limit",
+            "automate_cpu_usage_percent" => "CPU usage (%)",
+            "automate_memory_used_percent" => "Memory usage (%)",
+            "automate_database_ru_usage_percent" => "Database RU usage (%)",
+            "observed_log_errors" => "Observed log errors",
+            _ => name
         };
     }
 
@@ -42,7 +48,8 @@ public static class TelemetryPresentation
             return number.ToString("0.##", CultureInfo.CurrentCulture) + " " + units[unit];
         }
 
-        return number.ToString("0.#########", CultureInfo.CurrentCulture) + (metric == Cpu ? " cores" : "");
+        return number.ToString("0.#########", CultureInfo.CurrentCulture) + (metric == Cpu ? " cores" :
+            metric.EndsWith("_percent", StringComparison.Ordinal) ? "%" : "");
     }
 
     /// <summary>Weights daily means by actual sample counts, excluding missing rows.</summary>

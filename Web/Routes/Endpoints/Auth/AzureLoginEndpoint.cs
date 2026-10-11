@@ -165,7 +165,8 @@ public sealed class AzureLoginEndpoint : IEndpoint
                 ["response_mode"] = "query",
                 ["scope"] = $"openid profile email offline_access {AzureManagementScope}",
                 ["state"] = state,
-                ["prompt"] = "select_account"
+                // Reconnecting must include newly declared diagnostic permissions in static consent.
+                ["prompt"] = "consent"
             });
 
         return Results.Redirect(authorizationUrl);

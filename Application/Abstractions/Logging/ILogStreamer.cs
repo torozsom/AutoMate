@@ -7,6 +7,13 @@ namespace Application.Abstractions.Logging;
 /// </summary>
 public interface ILogStreamer
 {
+    /// <summary>Streams typed deployment metrics; older adapters retain their legacy metric callback.</summary>
+    Task StreamDeploymentMetricsAsync(DeploymentRuntimeMetricSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
     /// <summary>Streams redacted output to one stable, source-aware terminal channel.</summary>
     Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog, CancellationToken cancellationToken = default);
 

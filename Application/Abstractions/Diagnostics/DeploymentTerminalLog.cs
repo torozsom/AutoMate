@@ -18,14 +18,17 @@ public sealed record DeploymentTerminalLog(
     string? SourceCursor = null,
     string? TraceId = null,
     string? SpanId = null,
-    long? Sequence = null)
+    long? Sequence = null,
+    bool IsAvailabilityNotice = false)
 {
     /// <summary>Preserves safe source metadata identically for live delivery and specialized-store replay.</summary>
     public static DeploymentTerminalLog FromEvent(long orderId, DeploymentDiagnosticEvent e, string channel)
     {
         return new DeploymentTerminalLog(orderId, e.ProjectId, e.DeploymentId, channel, e.Message, e.EventId,
             e.SourceIdentity?.Stream, e.Severity, e.TimestampUtc, e.SourceIdentity?.InstanceId, e.Cursor,
-            e.TraceId, e.SpanId, e.Sequence);
+            e.TraceId, e.SpanId, e.Sequence,
+            e.Source == DeploymentDiagnosticSource.AzureContainerApps &&
+            e.Kind == DeploymentDiagnosticKind.Annotation && e.Attributes?.ContainsKey("issue") == true);
     }
 }
 

@@ -184,3 +184,6 @@ disabled
 and factory HTTP loggers removed. Exact Azure resource routing and protected key presence use `AzureOpenAiOptions`;
 unknown providers and mismatched routes remain unavailable. No SDK, migration or Application contract change is needed.
 See [Azure setup](../../docs/azure-openai-setup.md) for the complete manual pilot configuration.
+
+Microsoft OAuth reconnect requests explicit static consent, including the registered diagnostic permissions. Azure
+runtime HTTP requests have bounded timeouts and do not follow redirects.

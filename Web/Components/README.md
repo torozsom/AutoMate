@@ -166,3 +166,17 @@ displayed outside terminal output.
 Only completed provider answers (summary, observations, recommendations, limitations and evidence references) receive
 the bright purple border, in both the project dialog and deployment history. Settings, consent, status and run metadata
 remain outside the answer border; pending or failed runs do not display an answer frame.
+
+Remote project terminals include Azure Databases for managed database resource logs, labeled with the source resource
+name. Live and replay routing share `azure-db`; reset clears that terminal with the other deployment terminals.
+Saved utilization supports native managed-database CPU/memory percentages without interpreting them as core or byte
+measurements. Shared labels and formatting also identify database RU percentages.
+
+Current metric cards consume deployment-scoped ReceiveDeploymentMetrics observations and refresh authorized saved
+snapshots every 60 seconds. Only newer provider timestamps replace samples. Cosmos cards show RU utilization and
+explicitly unsupported CPU/memory; revision/page changes reject stale replies. Collector annotations remain outside
+terminal output on both live delivery and saved replay. The AI answer's purple frame is unchanged.
+
+Cloud CPU cards display observed cores directly, with no invented utilization denominator. Docker's existing percentage
+display remains. Saved metric recovery aligns windows to completed UTC minutes so saved buckets cannot displace newer
+native live timestamps.

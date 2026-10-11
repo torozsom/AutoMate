@@ -55,3 +55,7 @@ statuses, cancellation and retry behavior are unchanged.
 DeploymentSnapshotCapture whitelists non-secret launch settings before provider side effects, then records discovered
 runtime/commit/image facts. Current configuration edits never rewrite previous snapshots. Preparation outcomes persist
 independently of later stops.
+
+DeploymentCleanupHostedService reconciles only Local-source deployments without Azure resource/workflow identity.
+Remote Azure launches and running deployments never become Failed/Stopped merely because Docker has no matching
+Compose project. Azure runtime recovery owns their verified resource/revision mapping after restart.

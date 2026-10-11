@@ -391,6 +391,7 @@ public class AutoMateDbContext(
         checkpoint.HasIndex(item => new { item.DeploymentId, item.Source }).IsUnique();
         checkpoint.Property(item => item.Source).HasMaxLength(32).IsRequired();
         checkpoint.Property(item => item.LastTieBreaker).HasMaxLength(128);
+        checkpoint.Property(item => item.LastIngestionTieBreaker).HasMaxLength(128);
         checkpoint.HasOne(item => item.Deployment)
             .WithMany(deployment => deployment.AzureContainerAppLogCheckpoints)
             .HasForeignKey(item => item.DeploymentId)

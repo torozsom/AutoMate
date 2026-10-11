@@ -59,6 +59,8 @@ public sealed class TelemetryPageRenderingTests
         Assert.Contains("Per observed container", Regex.Replace(project, @"\s+", " "));
         var details = await Render<FixtureProject>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid() });
+        Assert.Contains("Azure Databases", details);
+        Assert.Contains("azure-db-term", details);
         Assert.Contains("aria-haspopup=\"dialog\"", details);
         Assert.DoesNotContain("id=\"ai-analysis\"", details);
         Assert.DoesNotContain("href=\"#ai-analysis\"", details);
