@@ -86,8 +86,11 @@ ProjectTelemetrySummary receives the already resolved owner from ProjectDetails 
 for each analytics load. This prevents its EF queries from sharing the parent's circuit context during overlapping
 rendering/history loads; the application service still checks ownership.
 
-`Shared/DeploymentTerminalPresentation.cs` formats live and saved stderr with a plain `[stderr]` marker, preserving
-line endings and legacy/stdout text. Stored event messages remain unchanged so replay identities remain stable.
+`Shared/DeploymentTerminalPresentation.cs` formats Azure web, system and database output into CRLF-separated rows
+with recorded UTC timestamps and stream labels (`STDOUT`, `STDERR`, `SYSTEM`, `STATUS`). Each line of a multiline
+message receives the same timestamp, retaining indentation. Older Azure records without timestamps show only the
+stream label. Other channels retain their existing text and plain `[stderr]` marker. Stored event messages remain
+unchanged so replay identities remain stable.
 The existing Build tab also receives strictly owned local Docker lifecycle and subscription notices.
 
 Deployment preparation/queue failures show fixed guidance rather than provider exception text. The known local
