@@ -1,16 +1,34 @@
-/** Installs scoped section navigation, including enhanced-navigation fragments and the terminal AI shortcut. */
+/**
+ * Installs scoped section navigation and scroll tracking; the caller owns disposal.
+ * @param {HTMLElement} nav - Navigation within a mounted project console.
+ * @returns {object} Registration whose dispose method cancels scheduled work and removes listeners.
+ */
 export function attach(nav) {
     const root = nav.closest('.project-console');
     const links = [...nav.querySelectorAll('a[href^="#"]')];
-    const sections = links.map(link => root.querySelector(link.hash)).filter(Boolean);
+    const sections = links.map(
+        /**
+         * Resolves a navigation fragment within this project console.
+         * @param {HTMLAnchorElement} link - Section navigation link.
+         * @returns {Element|null} Matching section, or null when absent.
+         */
+        link => root.querySelector(link.hash)).filter(Boolean);
     let disposed = false;
     let frame;
+    /**
+     * Measures the sticky shell and navigation clearance above a target section.
+     * @returns {number} Vertical clearance in CSS pixels, including a 20-pixel margin.
+     */
     const offset = () => {
         const top = document.querySelector('.top-row');
         return (top && getComputedStyle(top).position === 'sticky' ? top.getBoundingClientRect().height : 0)
             + nav.getBoundingClientRect().height + 20;
     };
 
+    /**
+     * Updates the active link and aria-current from the current section positions.
+     * @returns {void} No value; disposed registrations do nothing.
+     */
     function mark() {
         if (disposed) return;
         let active = sections[0];
@@ -25,8 +43,21 @@ export function attach(nav) {
         }
     }
 
+    /**
+     * Focuses and scrolls to a known section, honoring reduced-motion preference.
+     * @param {string} hash - Section fragment to resolve.
+     * @param {boolean} update - Whether to push a changed fragment into browser history.
+     * @param {boolean} animate - Whether smooth scrolling is requested.
+     * @returns {void} No value; unknown sections and disposed registrations do nothing.
+     */
     function go(hash, update, animate) {
-        const target = sections.find(section => '#' + section.id === hash);
+        const target = sections.find(
+            /**
+             * Matches the section against the requested fragment.
+             * @param {HTMLElement} section - Known project section.
+             * @returns {boolean} True when its ID matches the fragment.
+             */
+            section => '#' + section.id === hash);
         if (!target || disposed) return;
         if (update && location.hash !== hash) history.pushState(null, '', location.pathname + location.search + hash);
         const heading = target.querySelector('h2') ?? target;
@@ -39,15 +70,34 @@ export function attach(nav) {
         mark();
     }
 
+    /**
+     * Intercepts unmodified primary clicks on known project section links.
+     * @param {MouseEvent} event - Delegated click event.
+     * @returns {void} No value; unrelated clicks retain native browser behavior.
+     */
     function click(event) {
         const link = event.target.closest('a[href^="#"]');
         if (!link || !root.contains(link) || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-        if (!sections.some(section => '#' + section.id === link.hash)) return;
+        if (!sections.some(
+            /**
+             * Checks whether the clicked fragment names a known section.
+             * @param {HTMLElement} section - Known project section.
+             * @returns {boolean} True when the section matches the clicked link.
+             */
+            section => '#' + section.id === link.hash)) return;
         event.preventDefault();
         go(link.hash, true, true);
     }
 
+    /**
+     * Restores the current fragment without adding history or animation.
+     * @returns {void} No value.
+     */
     const restore = () => go(location.hash, false, false);
+    /**
+     * Coalesces scroll and resize updates into one animation frame.
+     * @returns {void} No value.
+     */
     const scroll = () => {
         cancelAnimationFrame(frame);
         frame = requestAnimationFrame(mark);
@@ -60,11 +110,20 @@ export function attach(nav) {
     // Native fragment scrolling can fire before the first animation frame and cancel a pending scroll update.
     restore();
     mark();
-    const initialRestore = setTimeout(() => {
-        restore();
-        mark();
-    }, 0);
+    const initialRestore = setTimeout(
+        /**
+         * Repeats initial fragment restoration after native browser scrolling settles.
+         * @returns {void} No value.
+         */
+        () => {
+            restore();
+            mark();
+        }, 0);
     return {
+        /**
+         * Cancels pending navigation updates and detaches all scoped listeners.
+         * @returns {void} No value.
+         */
         dispose() {
             disposed = true;
             cancelAnimationFrame(frame);

@@ -13,10 +13,15 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.GitHub;
 
-/// <summary>Checks signed delivery acceptance, deduplication, and bounded metadata persistence.</summary>
+/// <summary>
+///     Checks signed delivery acceptance, deduplication, and bounded metadata persistence.
+/// </summary>
 public sealed class GitHubWebhookReceiverTests
 {
-    /// <summary>Only one verified receipt is retained for a redelivered GitHub event.</summary>
+    /// <summary>
+    ///     Only one verified receipt is retained for a redelivered GitHub event.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Receiver_verifies_signature_and_deduplicates_delivery_id()
     {
@@ -28,18 +33,27 @@ public sealed class GitHubWebhookReceiverTests
         var user = new RemoteUser { AccountId = "123", Email = "user@example.test", Username = "user" };
         var project = new Domain.Entities.Application
         {
-            UserId = user.Id, Name = "web", SourceType = SourceType.Remote,
+            UserId = user.Id,
+            Name = "web",
+            SourceType = SourceType.Remote,
             SourcePathOrUrl = "https://github.com/acme/web"
         };
         db.Users.Add(user);
         db.Applications.Add(project);
         db.CloudDeploymentRuns.Add(new CloudDeploymentRun
         {
-            UserId = user.Id, ProjectId = project.Id, IdempotencyKey = "key",
-            InstallationId = 17, RepositoryId = 42, RepositoryOwner = "acme",
-            RepositoryName = "web", BranchName = "automate/azure-deployment",
-            EnvironmentName = "Production", WorkflowFileName = "deploy.yml",
-            RegistryServer = "customer.azurecr.io", NextAttemptAt = DateTimeOffset.UtcNow
+            UserId = user.Id,
+            ProjectId = project.Id,
+            IdempotencyKey = "key",
+            InstallationId = 17,
+            RepositoryId = 42,
+            RepositoryOwner = "acme",
+            RepositoryName = "web",
+            BranchName = "automate/azure-deployment",
+            EnvironmentName = "Production",
+            WorkflowFileName = "deploy.yml",
+            RegistryServer = "customer.azurecr.io",
+            NextAttemptAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
         var receiver = new GitHubWebhookReceiver(db, Options.Create(new GitHubAppOptions
@@ -53,9 +67,13 @@ public sealed class GitHubWebhookReceiverTests
             repository = new { id = 42 },
             workflow_run = new
             {
-                id = 99, run_attempt = 1, head_sha = new string('a', 40),
+                id = 99,
+                run_attempt = 1,
+                head_sha = new string('a', 40),
                 head_branch = "automate/azure-deployment",
-                path = ".github/workflows/deploy.yml", status = "completed", conclusion = "success"
+                path = ".github/workflows/deploy.yml",
+                status = "completed",
+                conclusion = "success"
             }
         });
         var signature = "sha256=" + Convert.ToHexString(HMACSHA256.HashData(

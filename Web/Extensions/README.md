@@ -13,4 +13,4 @@ Infrastructure types are registered only in Web/Configs.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)

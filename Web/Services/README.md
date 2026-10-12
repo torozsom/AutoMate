@@ -22,7 +22,7 @@ Infrastructure types are registered only in Web/Configs.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 SignalR writes emit fixed child spans with project GUIDs. Caller cancellation, deadline expiry and failures remain
 separate. Existing callbacks, arguments, routing and exceptions are unchanged; payloads and names are not span tags.
@@ -31,3 +31,6 @@ The shared `IDiagnosticRedactor` is also enforced at the final SignalR write bou
 availability notices and live metric display strings. This protects legacy/bypassed callers as well as the normal
 redacted pipeline. GUIDs, cursor/event identity, safe channels, callback names, cancellation and deadlines stay the
 same.
+
+ReceiveDeploymentMetrics is additive to the legacy CPU/memory callback. RealTimeLogStreamer validates fixed
+metric names/units, finite nonnegative values and bounded redacted resource names before authorized group delivery.

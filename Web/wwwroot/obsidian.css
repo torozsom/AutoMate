@@ -364,12 +364,12 @@ body {
 }
 
 .ai-analysis-accent {
-    border-color: #7653b5 !important;
+    border-color: #9333ea !important;
     border-radius: 12px;
 }
 
 [data-bs-theme="dark"] .ai-analysis-accent {
-    border-color: #493361 !important;
+    border-color: #c084fc !important;
 }
 
 .assessment-context {

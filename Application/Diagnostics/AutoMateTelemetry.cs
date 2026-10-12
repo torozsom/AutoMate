@@ -8,10 +8,19 @@ namespace Application.Diagnostics;
 /// </summary>
 public static class AutoMateTelemetry
 {
+    /// <summary>Latest observed cloud-run queue count.</summary>
     private static long _cloudQueued;
+
+    /// <summary>Latest observed active cloud-run count.</summary>
     private static long _cloudActive;
+
+    /// <summary>Latest observed verified-webhook backlog.</summary>
     private static long _cloudWebhookBacklog;
+
+    /// <summary>Latest observed workflow-reconciliation backlog.</summary>
     private static long _cloudReconciliationBacklog;
+
+    /// <summary>Latest observed oldest queued cloud-run age, in milliseconds.</summary>
     private static long _cloudOldestQueueAgeMs;
 
     /// <summary>Activity source for security-sensitive request outcomes.</summary>
@@ -26,21 +35,27 @@ public static class AutoMateTelemetry
     /// <summary>Meter for deployment collection and delivery health.</summary>
     public static readonly Meter DeploymentMeter = new("AutoMate.Deployments");
 
+    /// <summary>Current count of admitted deployment operations awaiting execution.</summary>
     public static readonly UpDownCounter<long> DeploymentJobsQueued = DeploymentMeter.CreateUpDownCounter<long>(
         "automate.deployment.jobs.queued");
 
+    /// <summary>Current count of executing deployment operations.</summary>
     public static readonly UpDownCounter<long> DeploymentJobsActive = DeploymentMeter.CreateUpDownCounter<long>(
         "automate.deployment.jobs.active");
 
+    /// <summary>Count of admitted operations whose execution started.</summary>
     public static readonly Counter<long> DeploymentJobsStarted = DeploymentMeter.CreateCounter<long>(
         "automate.deployment.jobs.started");
 
+    /// <summary>Count of operations that completed successfully.</summary>
     public static readonly Counter<long> DeploymentJobsCompleted = DeploymentMeter.CreateCounter<long>(
         "automate.deployment.jobs.completed");
 
+    /// <summary>Count of operations that finished without success.</summary>
     public static readonly Counter<long> DeploymentJobsFailed = DeploymentMeter.CreateCounter<long>(
         "automate.deployment.jobs.failed");
 
+    /// <summary>Time spent queued before execution, in milliseconds, by finite scheduler lane.</summary>
     public static readonly Histogram<double> DeploymentQueueWait = DeploymentMeter.CreateHistogram<double>(
         "automate.deployment.jobs.queue_wait", "ms");
 
@@ -152,7 +167,10 @@ public static class AutoMateTelemetry
     public static readonly UpDownCounter<long> DiagnosticQueueDepth = DeploymentMeter.CreateUpDownCounter<long>(
         "automate.deployment.diagnostics.queue.depth");
 
-    /// <summary>Provider log age at ingestion; measures delivery freshness without source identifiers as labels.</summary>
+    /// <summary>
+    ///     Provider log age at ingestion; measures delivery freshness without source identifiers as
+    ///     labels.
+    /// </summary>
     public static readonly Histogram<double> DiagnosticCursorLag = DeploymentMeter.CreateHistogram<double>(
         "automate.deployment.diagnostics.cursor.lag", "s");
 
@@ -168,7 +186,14 @@ public static class AutoMateTelemetry
     public static readonly Counter<long> CollectorReconnects = DeploymentMeter.CreateCounter<long>(
         "automate.deployment.collector.reconnects");
 
-    /// <summary>Publishes a bounded database snapshot to the process's observable gauges.</summary>
+    /// <summary>
+    ///     Publishes a bounded database snapshot to the process's observable gauges.
+    /// </summary>
+    /// <param name="queued">The current queued-operation count.</param>
+    /// <param name="active">The current active-operation count.</param>
+    /// <param name="webhookBacklog">The current verified webhook backlog.</param>
+    /// <param name="reconciliationBacklog">The current cloud workflow reconciliation backlog.</param>
+    /// <param name="oldestQueueAgeMs">The oldest waiting operation age in milliseconds.</param>
     public static void SetCloudControlPlaneSnapshot(long queued, long active, long webhookBacklog,
         long reconciliationBacklog, long oldestQueueAgeMs)
     {

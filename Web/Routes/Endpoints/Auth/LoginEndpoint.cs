@@ -11,12 +11,15 @@ namespace Web.Routes.Endpoints.Auth;
 ///     Endpoint for handling local user login via form post.
 /// </summary>
 /// <remarks>
-///     IMPORTANT: Requires a valid Antiforgery Token from the frontend.
-///     In Blazor, ensure your login form includes the <AntiforgeryToken /> component.
+///     IMPORTANT: Requires a valid Antiforgery Token from the frontend. In Blazor, ensure your login
+///     form includes the <AntiforgeryToken /> component.
 /// </remarks>
 public sealed class LoginEndpoint : IEndpoint
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Maps local credential login and authentication-cookie creation.
+    /// </summary>
+    /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/login", async (

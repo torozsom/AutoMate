@@ -82,3 +82,13 @@ Typed `AssessmentSelection` admission, owner-authorized per-deployment preferenc
 Different options under the same request ID return Conflict. Context remains ephemeral; only selection/status/window
 metadata and validated authored results persist. Skipped results may include collection provenance, with fixed safe
 guidance. See [contracts and rollout](../../../docs/status-aware-assessments.md).
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Context/` — `Context/AssessmentDetails.cs`, `Context/IDeploymentAnalysisContextBuilder.cs`.
+- `Execution/` — `Execution/IDeploymentAnalysisQueue.cs`, `Execution/IDeploymentAnalysisReadiness.cs`,
+  `Execution/IDeploymentAnalysisService.cs`.
+- `Policy/` — `Policy/IAnalysisBudgetGuard.cs`, `Policy/IAnalysisEgressAuthorizer.cs`.
+- `Results/` — `Results/IAnalysisResultValidator.cs`, `Results/ILlmAnalysisProvider.cs`.

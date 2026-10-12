@@ -1,0 +1,68 @@
+@*
+    Presents local credential login and provider sign-in with query-based operation feedback.
+*@
+@namespace Web.Components.Pages
+@page "/login"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+
+<PageTitle>Login</PageTitle>
+
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <div class="page-eyebrow">Account access</div>
+            <h1 class="login-title">Welcome back</h1>
+        </div>
+
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger" role="alert">
+                @ErrorMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="alert alert-success" role="alert">
+                @SuccessMessage
+            </div>
+        }
+
+        <form action="/api/auth/login" method="post">
+            <AntiforgeryToken/>
+
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email" name="email" class="form-control" id="email"
+                       placeholder="Enter your email" required autocomplete="email">
+            </div>
+
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password" name="password" class="form-control" id="password"
+                       placeholder="Enter your password" required autocomplete="current-password">
+            </div>
+
+            <div class="row g-3 mt-1 auth-actions">
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary w-100 h-100">
+                        Sign in
+                    </button>
+                </div>
+                <div class="col-12">
+                    <a href="/api/auth/github-login"
+                       class="btn btn-github w-100 h-100 d-flex align-items-center justify-content-center gap-2">
+                        <i class="bi bi-github fs-4"></i>
+                        Continue with GitHub
+                    </a>
+                </div>
+            </div>
+
+            <div class="mt-4 text-center">
+                <p class="mb-0">Don't have an account yet? <a href="/register" class="text-decoration-none fw-bold">Register
+                        here</a></p>
+            </div>
+        </form>
+    </div>
+</div>

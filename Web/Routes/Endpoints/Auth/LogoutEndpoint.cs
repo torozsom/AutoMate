@@ -9,7 +9,10 @@ namespace Web.Routes.Endpoints.Auth;
 /// </summary>
 public sealed class LogoutEndpoint : IEndpoint
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Maps authorized authentication-cookie logout.
+    /// </summary>
+    /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/auth/logout", async (HttpContext context, ILogger<LogoutEndpoint> logger) =>

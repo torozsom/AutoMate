@@ -1,0 +1,48 @@
+# Infrastructure/Migrations
+
+Related files are grouped by responsibility. Existing .NET namespaces and public identities are preserved.
+
+- `AnalysisQueue/` — `AnalysisQueue/20261005091947_AddAnalysisQueueLeases.cs`,
+  `AnalysisQueue/20261005091947_AddAnalysisQueueLeases.Designer.cs`,
+  `AnalysisQueue/20261005094754_AddAnalysisRetryScheduling.cs`,
+  `AnalysisQueue/20261005094754_AddAnalysisRetryScheduling.Designer.cs`,
+  `AnalysisQueue/20261005102239_AddAnalysisAdmissionReceipts.cs`,
+  `AnalysisQueue/20261005102239_AddAnalysisAdmissionReceipts.Designer.cs`,
+  `AnalysisQueue/20261005104851_AddFailedDeploymentAnalysisEvents.cs`,
+  `AnalysisQueue/20261005104851_AddFailedDeploymentAnalysisEvents.Designer.cs`.
+- `AnalysisResults/` — `AnalysisResults/20261002062913_AddDeploymentDiagnosticsAndAiAnalysis.cs`,
+  `AnalysisResults/20261002062913_AddDeploymentDiagnosticsAndAiAnalysis.Designer.cs`,
+  `AnalysisResults/20261004201350_AddAiAnalysisResultProvenance.cs`,
+  `AnalysisResults/20261004201350_AddAiAnalysisResultProvenance.Designer.cs`,
+  `AnalysisResults/20261009091530_StatusAwareAssessments.cs`,
+  `AnalysisResults/20261009091530_StatusAwareAssessments.Designer.cs`.
+- `Checkpoints/` — `Checkpoints/20260928200050_AddGitHubWorkflowCheckpoints.cs`,
+  `Checkpoints/20260928200050_AddGitHubWorkflowCheckpoints.Designer.cs`,
+  `Checkpoints/20260928212104_AddAzureContainerAppLogCheckpoints.cs`,
+  `Checkpoints/20260928212104_AddAzureContainerAppLogCheckpoints.Designer.cs`,
+  `Checkpoints/20261004112450_AddCloudTelemetryCollectorLeases.cs`,
+  `Checkpoints/20261004112450_AddCloudTelemetryCollectorLeases.Designer.cs`,
+  `Checkpoints/20261011001842_AzureLogIngestionCursors.cs`,
+  `Checkpoints/20261011001842_AzureLogIngestionCursors.Designer.cs`.
+- `CloudRuns/` — `CloudRuns/20261003101739_AddSaasCloudRuns.cs`,
+  `CloudRuns/20261003101739_AddSaasCloudRuns.Designer.cs`, `CloudRuns/20261003103139_AddCloudInstallationBudget.cs`,
+  `CloudRuns/20261003103139_AddCloudInstallationBudget.Designer.cs`,
+  `CloudRuns/20261003105303_AddCloudWebhookBranch.cs`, `CloudRuns/20261003105303_AddCloudWebhookBranch.Designer.cs`,
+  `CloudRuns/20261003105945_AddCloudAdmissionIndexes.cs`,
+  `CloudRuns/20261003105945_AddCloudAdmissionIndexes.Designer.cs`.
+- `Identity/` — `Identity/20260522134720_Initial.cs`, `Identity/20260522134720_Initial.Designer.cs`,
+  `Identity/20260524171414_RefactorRemoteUser.cs`, `Identity/20260524171414_RefactorRemoteUser.Designer.cs`.
+- `RetentionAndPolicy/` — `RetentionAndPolicy/20261005190054_AddAiTenantBudgets.cs`,
+  `RetentionAndPolicy/20261005190054_AddAiTenantBudgets.Designer.cs`,
+  `RetentionAndPolicy/20261008202231_PreserveDeploymentHistory.cs`,
+  `RetentionAndPolicy/20261008202231_PreserveDeploymentHistory.Designer.cs`,
+  `RetentionAndPolicy/20261010141504_AutomaticTelemetryCollection.cs`,
+  `RetentionAndPolicy/20261010141504_AutomaticTelemetryCollection.Designer.cs`.
+- `Telemetry/` — `Telemetry/20261002144610_AddTerminalLogReplay.cs`,
+  `Telemetry/20261002144610_AddTerminalLogReplay.Designer.cs`,
+  `Telemetry/20261003161839_AddSpecializedTelemetryStorage.cs`,
+  `Telemetry/20261003161839_AddSpecializedTelemetryStorage.Designer.cs`,
+  `Telemetry/20261003170209_AddTelemetryBufferAccounting.cs`,
+  `Telemetry/20261003170209_AddTelemetryBufferAccounting.Designer.cs`,
+  `Telemetry/20261004111715_AddSaaSTelemetryAnalytics.cs`,
+  `Telemetry/20261004111715_AddSaaSTelemetryAnalytics.Designer.cs`.

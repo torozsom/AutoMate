@@ -3,10 +3,16 @@ using Infrastructure.ApplicationServices.Orchestration;
 
 namespace Infrastructure.Tests.Orchestration;
 
-/// <summary>Checks the customer-visible failure policy against untrusted exception suffixes.</summary>
+/// <summary>
+///     Checks the customer-visible failure policy against untrusted exception suffixes.
+/// </summary>
 public sealed class CloudFailurePrivacyTests
 {
-    /// <summary>Recognized provider failures keep actionable guidance without copying their payload.</summary>
+    /// <summary>
+    ///     Recognized provider failures keep actionable guidance without copying their payload.
+    /// </summary>
+    /// <param name="prefix">Bounded namespace, path or emitted-log prefix.</param>
+    /// <param name="guidance">Expected fixed customer-facing failure guidance.</param>
     [Theory]
     [InlineData("Reconnect Azure", "Reconnect Azure")]
     [InlineData("Azure authorization expired", "Reconnect Azure")]

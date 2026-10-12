@@ -12,5 +12,6 @@ public interface IEmailSenderService
     /// <param name="subject">The subject of the email.</param>
     /// <param name="message">The HTML content of the email.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task that completes after the email send operation finishes.</returns>
     Task SendEmailAsync(string toEmail, string subject, string message, CancellationToken cancellationToken = default);
 }

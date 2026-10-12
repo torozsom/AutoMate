@@ -52,10 +52,14 @@ resolve shared deployment services without configuring a GitHub App.
 
 ## Source inventory
 
-- `AppConfiguration.cs`
-- `AzureSubscriptionResolver.cs`
-- `JwtPayloadReader.cs`
-- `ServiceConfiguration.cs`
+ACA uses separate `AzureRuntime` metadata/query and `AzureLiveLogs` streaming HTTP clients. Both reject redirects;
+the live reader uses ResponseHeadersRead with a fifteen-second header timeout and independently cancelled body reads.
+The hosted Azure runtime coordinator owns reader shutdown and periodically renews collection leases.
+
+- `Hosting/AppConfiguration.cs`
+- `Azure/AzureSubscriptionResolver.cs`
+- `Azure/JwtPayloadReader.cs`
+- `Hosting/ServiceConfiguration.cs`
 
 ## Boundary
 
@@ -64,7 +68,7 @@ Infrastructure types are registered only in Web/Configs.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 `TelemetryStorage` requires Loki/Mimir and validates endpoints, transport, managed onboarding and quotas
 at startup. [Telemetry hosting](../../docs/deployment-telemetry.md) documents operator secrets and retention controls.
@@ -110,7 +114,7 @@ logs retain the failure type and omit the raw exception. Web/Observability now s
 through the registered ILoggerFactory and SDK processors.
 Its explicit catalog and typed allowlists retain safe audit correlation and omit unapproved payloads. Real SDK
 exports/resource attributes and default authorization behavior are tested
-without a collector in `Web.Tests/OperationalLoggingTests.cs` and hosting-profile tests.
+without a collector in `Web.Tests/Diagnostics/OperationalLoggingTests.cs` and hosting-profile tests.
 
 Tracing includes Microsoft.AspNetCore.SignalR.Server. SQL command and DeploymentTelemetry HTTP Information chatter is
 suppressed by tracked category defaults; warnings/errors and application Information remain visible. Temporarily set
@@ -184,3 +188,16 @@ disabled
 and factory HTTP loggers removed. Exact Azure resource routing and protected key presence use `AzureOpenAiOptions`;
 unknown providers and mismatched routes remain unavailable. No SDK, migration or Application contract change is needed.
 See [Azure setup](../../docs/azure-openai-setup.md) for the complete manual pilot configuration.
+
+Microsoft OAuth reconnect requests explicit static consent, including the registered diagnostic permissions. Azure
+runtime HTTP requests have bounded timeouts and do not follow redirects.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Azure/` — `Azure/AzureSubscriptionResolver.cs`, `Azure/JwtPayloadReader.cs`.
+- `Hosting/` — `Hosting/AnalysisHealthChecks.cs`, `Hosting/AppConfiguration.cs`, `Hosting/HostingProfileOptions.cs`,
+  `Hosting/ServiceConfiguration.cs`.
+- `Observability/` — `Observability/OpenTelemetryOptions.cs`, `Observability/OpenTelemetryOptionsValidator.cs`,
+  `Observability/SecurityAuditResultHandler.cs`.

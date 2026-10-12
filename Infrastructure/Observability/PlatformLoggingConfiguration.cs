@@ -8,10 +8,17 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Observability;
 
-/// <summary>Installs the shared pre-provider logging boundary in Web and private Telemetry hosts.</summary>
+/// <summary>
+///     Installs the shared pre-provider logging boundary in Web and private Telemetry hosts.
+/// </summary>
 public static class PlatformLoggingConfiguration
 {
-    /// <summary>Wraps the host factory once, sanitizing all registered providers without changing filters or ownership.</summary>
+    /// <summary>
+    ///     Wraps the host factory once, sanitizing all registered providers without changing
+    ///     filters or ownership.
+    /// </summary>
+    /// <param name="services">Provides the service collection boundary used by this operation.</param>
+    /// <returns>The same collection with shared platform safety services registered.</returns>
     public static IServiceCollection AddSafePlatformLogging(this IServiceCollection services)
     {
         if (services.Any(service => service.ServiceType == typeof(RegistrationMarker))) return services;
@@ -37,6 +44,8 @@ public static class PlatformLoggingConfiguration
         return services;
     }
 
-    /// <summary>Marks that this collection has had its logging factory wrapped.</summary>
+    /// <summary>
+    ///     Marks that this collection has had its logging factory wrapped.
+    /// </summary>
     private sealed class RegistrationMarker;
 }

@@ -9,10 +9,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.GitHub;
 
-/// <summary>Checks secure GitHub Actions job-log download and decoding behavior.</summary>
+/// <summary>
+///     Checks secure GitHub Actions job-log download and decoding behavior.
+/// </summary>
 public sealed class GitHubServiceWorkflowLogTests
 {
-    /// <summary>Verifies that OAuth credentials are not sent to GitHub's signed log host.</summary>
+    /// <summary>
+    ///     Verifies that OAuth credentials are not sent to GitHub's signed log host.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task DownloadWorkflowJobLogsAsync_follows_the_signed_redirect_without_forwarding_the_access_token()
     {
@@ -45,7 +50,10 @@ public sealed class GitHubServiceWorkflowLogTests
         downloadRequest!.Headers.Authorization.Should().BeNull();
     }
 
-    /// <summary>Verifies that ZIP bytes are decoded before reaching the terminal pipeline.</summary>
+    /// <summary>
+    ///     Verifies that ZIP bytes are decoded before reaching the terminal pipeline.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task DownloadWorkflowJobLogsAsync_decodes_the_zip_archive_before_streaming_to_the_terminal()
     {
@@ -88,49 +96,88 @@ public sealed class GitHubServiceWorkflowLogTests
         result.Content.Should().NotContain("PK");
     }
 
-    /// <summary>Provides a cache-free GitHub service dependency for HTTP-focused tests.</summary>
+    /// <summary>
+    ///     Provides a cache-free GitHub service dependency for HTTP-focused tests.
+    /// </summary>
     private sealed class NoOpDistributedCache : IDistributedCache
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies a cache miss for every synchronous read.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
+        /// <returns>Null for every call in this fixture.</returns>
         public byte[]? Get(string key)
         {
             return null;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies a cache miss for every asynchronous read.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning null for every fixture call.</returns>
         public Task<byte[]?> GetAsync(string key, CancellationToken token = default)
         {
             return Task.FromResult<byte[]?>(null);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no refresh work in this fixture.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
         public void Refresh(string key)
         {
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live refresh work.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task RefreshAsync(string key, CancellationToken token = default)
         {
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no remove work in this fixture.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
         public void Remove(string key)
         {
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live remove work.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task RemoveAsync(string key, CancellationToken token = default)
         {
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no set work in this fixture.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
+        /// <param name="value">Synthetic cached bytes; ignored by this fixture.</param>
+        /// <param name="options">Cache-entry settings supplied to the fake; ignored by this fixture.</param>
         public void Set(string key, byte[] value, DistributedCacheEntryOptions options)
         {
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live set work.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key; ignored by this fixture.</param>
+        /// <param name="value">Synthetic cached bytes; ignored by this fixture.</param>
+        /// <param name="options">Cache-entry settings supplied to the fake; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task SetAsync(string key, byte[] value, DistributedCacheEntryOptions options,
             CancellationToken token = default)
         {

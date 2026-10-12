@@ -14,10 +14,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Orchestration;
 
-/// <summary>Verifies host ownership, replacement and consent using real isolated SQLite policy reads.</summary>
+/// <summary>
+///     Verifies host ownership, replacement and consent using real isolated SQLite policy reads.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class LocalDiagnosticSupervisionTests
 {
-    /// <summary>Slow source cleanup retains same-project ownership without holding the shared registry gate.</summary>
+    /// <summary>
+    ///     Slow source cleanup retains same-project ownership without holding the shared registry gate.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Slow_project_shutdown_does_not_block_another_project_or_overlap_its_replacement()
     {
@@ -45,7 +51,11 @@ public sealed class LocalDiagnosticSupervisionTests
         Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon" && !s.Stopped.Task.IsCompleted);
     }
 
-    /// <summary>Lifecycle and runtime collection start without viewers or legacy opt-in and stop with the host.</summary>
+    /// <summary>
+    ///     Lifecycle and runtime collection start without viewers or legacy opt-in and stop with the
+    ///     host.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Operation_starts_daemon_before_return_and_host_shutdown_awaits_it()
     {
@@ -60,7 +70,10 @@ public sealed class LocalDiagnosticSupervisionTests
         Assert.False(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
     }
 
-    /// <summary>Replacement awaits cancellation acknowledgements and cannot remove its new registry entry.</summary>
+    /// <summary>
+    ///     Replacement awaits cancellation acknowledgements and cannot remove its new registry entry.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Replacement_awaits_old_sources_and_keeps_new_target_active()
     {
@@ -92,7 +105,11 @@ public sealed class LocalDiagnosticSupervisionTests
         Assert.False(harness.Manager.IsActive(next.ProjectId, next.DeploymentId));
     }
 
-    /// <summary>Legacy disabling cannot stop automatic collection; explicit project shutdown still cancels all sources.</summary>
+    /// <summary>
+    ///     Legacy disabling cannot stop automatic collection; explicit project shutdown still cancels
+    ///     all sources.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Legacy_flag_cannot_disable_runtime_collection()
     {
@@ -117,7 +134,11 @@ public sealed class LocalDiagnosticSupervisionTests
             (await check.ServiceProvider.GetRequiredService<AutoMateDbContext>().Deployments.SingleAsync()).Status);
     }
 
-    /// <summary>A transient log task failure is retried independently, without restarting a healthy metrics source.</summary>
+    /// <summary>
+    ///     A transient log task failure is retried independently, without restarting a healthy metrics
+    ///     source.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Completed_log_source_is_retried_while_metrics_continue()
     {
@@ -130,7 +151,14 @@ public sealed class LocalDiagnosticSupervisionTests
         Assert.True(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
     }
 
-    /// <summary>Owns an isolated metadata database and the actual host supervisor.</summary>
+    /// <summary>
+    ///     Owns an isolated metadata database and the actual host supervisor.
+    /// </summary>
+    /// <param name="services">Fixture dependency provider.</param>
+    /// <param name="keeper">Open SQLite connection retaining the in-memory fixture database.</param>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="source">Synthetic diagnostic or project source selected by the scenario.</param>
+    /// <param name="manager">Host-managed local diagnostic supervisor.</param>
     private sealed class Harness(
         ServiceProvider services,
         SqliteConnection keeper,
@@ -150,7 +178,10 @@ public sealed class LocalDiagnosticSupervisionTests
         /// <summary>Production host supervisor.</summary>
         public LocalDeploymentLogStreamManager Manager { get; } = manager;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture services, connections and background resources.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async ValueTask DisposeAsync()
         {
             await Manager.StopAsync(CancellationToken.None);
@@ -159,7 +190,11 @@ public sealed class LocalDiagnosticSupervisionTests
             await keeper.DisposeAsync();
         }
 
-        /// <summary>Seeds only deployment metadata; log and metric payloads are never written to the database.</summary>
+        /// <summary>
+        ///     Seeds only deployment metadata; log and metric payloads are never written to the database.
+        /// </summary>
+        /// <param name="consent">Legacy preference value used to verify automatic collection behavior.</param>
+        /// <returns>A task returning the configured harness instance or response for this scenario.</returns>
         public static async Task<Harness> CreateAsync(bool consent)
         {
             var connection = "Data Source=supervisor-" + Guid.NewGuid().ToString("N") + ";Mode=Memory;Cache=Shared";
@@ -207,11 +242,18 @@ public sealed class LocalDiagnosticSupervisionTests
         }
     }
 
-    /// <summary>SQLite representation that supports chronological policy selection.</summary>
+    /// <summary>
+    ///     SQLite representation that supports chronological policy selection.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
+    /// <param name="protection">Ephemeral fixture data-protection provider.</param>
     private sealed class PolicyContext(DbContextOptions<AutoMateDbContext> options, IDataProtectionProvider protection)
         : AutoMateDbContext(options, protection)
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="builder">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
@@ -220,7 +262,9 @@ public sealed class LocalDiagnosticSupervisionTests
         }
     }
 
-    /// <summary>Independent tracked source tasks with delayed cancellation acknowledgement.</summary>
+    /// <summary>
+    ///     Independent tracked source tasks with delayed cancellation acknowledgement.
+    /// </summary>
     private sealed class TestSource : IDockerDiagnosticSource
     {
         /// <summary>Optional provider cleanup delay independent of caller cancellation.</summary>
@@ -241,7 +285,13 @@ public sealed class LocalDiagnosticSupervisionTests
         /// <summary>Confirms independent runtime tasks were started.</summary>
         public TaskCompletionSource RuntimeStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Starts the controlled daemon source and signals subscription to the caller.
+        /// </summary>
+        /// <param name="target">Verified project, deployment and provider resource inventory; ignored by this fixture.</param>
+        /// <param name="subscribed">Called after the diagnostic source has established its subscription.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public Task MonitorDaemonAsync(DockerDeploymentTarget target, Action subscribed,
             CancellationToken cancellationToken)
         {
@@ -250,14 +300,26 @@ public sealed class LocalDiagnosticSupervisionTests
             return task;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Runs the fixture-controlled log source without contacting Docker.
+        /// </summary>
+        /// <param name="target">Verified project, deployment and provider resource inventory; ignored by this fixture.</param>
+        /// <param name="container">Recorded container identity to select; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public Task MonitorContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
             CancellationToken cancellationToken)
         {
             return RunAsync("logs", cancellationToken);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Starts the controlled metric source and signals runtime collection.
+        /// </summary>
+        /// <param name="target">Verified project, deployment and provider resource inventory; ignored by this fixture.</param>
+        /// <param name="container">Recorded container identity to select; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public Task MonitorMetricsAsync(DockerDeploymentTarget target, DockerContainerTarget container,
             CancellationToken cancellationToken)
         {
@@ -266,7 +328,13 @@ public sealed class LocalDiagnosticSupervisionTests
             return task;
         }
 
-        /// <summary>Completes only after source cleanup, making detached replacement races observable.</summary>
+        /// <summary>
+        ///     Completes only after source cleanup, making detached replacement races observable.
+        /// </summary>
+        /// <param name="kind">Synthetic operation or response kind.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A pending operation that completes through cancellation rather than producing a value.</returns>
+        /// <exception cref="IOException">The fixture injects the configured storage or output failure.</exception>
         private async Task RunAsync(string kind, CancellationToken token)
         {
             var subscription = new Subscription(kind);
@@ -296,7 +364,10 @@ public sealed class LocalDiagnosticSupervisionTests
         }
     }
 
-    /// <summary>Safe source identity and acknowledged cleanup.</summary>
+    /// <summary>
+    ///     Safe source identity and acknowledged cleanup.
+    /// </summary>
+    /// <param name="Kind">Synthetic operation or response kind.</param>
     private sealed record Subscription(string Kind)
     {
         /// <summary>Completes after cancellation cleanup.</summary>

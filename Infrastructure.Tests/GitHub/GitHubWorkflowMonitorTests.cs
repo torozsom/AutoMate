@@ -15,10 +15,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.GitHub;
 
-/// <summary>Verifies that workflow progress precedes completed-run log output.</summary>
+/// <summary>
+///     Verifies that workflow progress precedes completed-run log output.
+/// </summary>
 public sealed class GitHubWorkflowMonitorTests
 {
-    /// <summary>Ensures no job text is requested before the run and its final step finish.</summary>
+    /// <summary>
+    ///     Ensures no job text is requested before the run and its final step finish.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Completed_run_logs_follow_live_job_and_step_progress()
     {
@@ -95,13 +100,20 @@ public sealed class GitHubWorkflowMonitorTests
             .Be("build output\r\n");
     }
 
-    /// <summary>Captures diagnostics in publication order for assertions.</summary>
+    /// <summary>
+    ///     Captures diagnostics in publication order for assertions.
+    /// </summary>
     private sealed class RecordingPublisher : IDeploymentDiagnosticPublisher
     {
         /// <summary>Diagnostics emitted by the monitor in delivery order.</summary>
         public List<DeploymentDiagnosticEvent> Events { get; } = [];
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records normalized fixture observations and reports the configured publication outcome.
+        /// </summary>
+        /// <param name="diagnosticEvent">The normalized diagnostic observation to process.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent,
             CancellationToken cancellationToken = default)
         {
@@ -110,23 +122,37 @@ public sealed class GitHubWorkflowMonitorTests
         }
     }
 
-    /// <summary>Leaves test diagnostics unchanged so ordering can be asserted directly.</summary>
+    /// <summary>
+    ///     Leaves test diagnostics unchanged so ordering can be asserted directly.
+    /// </summary>
     private sealed class PassThroughRedactor : IDiagnosticRedactor
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns fixture text unchanged so normalization assertions observe the supplied content.
+        /// </summary>
+        /// <param name="value">Synthetic input text.</param>
+        /// <param name="maximumCharacters">The maximum permitted text length; ignored by this fixture.</param>
+        /// <returns>The supplied fixture value.</returns>
         public string RedactText(string value, int maximumCharacters = 4096)
         {
             return value;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns the original synthetic event with zero masking counts.
+        /// </summary>
+        /// <param name="diagnosticEvent">The normalized diagnostic observation to process.</param>
+        /// <returns>The configured redaction result instance or response for this scenario.</returns>
         public RedactionResult Redact(DeploymentDiagnosticEvent diagnosticEvent)
         {
             return new RedactionResult(diagnosticEvent, 0);
         }
     }
 
-    /// <summary>Returns one running snapshot followed by a completed snapshot and job log.</summary>
+    /// <summary>
+    ///     Returns one running snapshot followed by a completed snapshot and job log.
+    /// </summary>
+    /// <param name="publisher">Accepts normalized observations for bounded redaction and durable delivery.</param>
     private sealed class WorkflowSequenceGitHubService(RecordingPublisher publisher) : IGitHubService
     {
         /// <summary>Number of workflow status requests made by the monitor.</summary>
@@ -138,14 +164,48 @@ public sealed class GitHubWorkflowMonitorTests
         /// <summary>Whether the download followed the completed step diagnostic.</summary>
         public bool JobLogRequestedAfterCompletedRun { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies no matching deployment commit in the workflow-sequence fixture.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="branchName">
+        ///     The repository branch used for deployment assets or workflow selection; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="marker">
+        ///     The stable deployment marker used to find an existing generated commit; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning null for every fixture call.</returns>
         public Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
             string branchName, string marker, CancellationToken cancellationToken = default)
         {
             return Task.FromResult<string?>(null);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Advances the synthetic workflow from in-progress to successful completion on successive
+        ///     polls.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="workflowFileName">The workflow filename selected for dispatch or lookup; ignored by this fixture.</param>
+        /// <param name="branchName">
+        ///     The repository branch used for deployment assets or workflow selection; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="headSha">
+        ///     The optional commit identity used to restrict workflow-run lookup; ignored by this fixture.
+        /// </param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>
+        ///     A task returning the configured git hub workflow run dto result, or null when the fixture
+        ///     supplies no value.
+        /// </returns>
         public Task<GitHubWorkflowRunDto?> GetLatestWorkflowRunAsync(string accessToken, string repoOwner,
             string repoName, string workflowFileName, string branchName, string? headSha = null,
             CancellationToken cancellationToken = default)
@@ -159,7 +219,15 @@ public sealed class GitHubWorkflowMonitorTests
             });
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies job and step states matching the controlled workflow poll phase.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="runId">Verified durable cloud or provider workflow-run identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public Task<IReadOnlyList<GitHubWorkflowJobDto>> GetWorkflowJobsAsync(string accessToken, string repoOwner,
             string repoName, long runId, CancellationToken cancellationToken = default)
         {
@@ -187,7 +255,15 @@ public sealed class GitHubWorkflowMonitorTests
             return Task.FromResult(jobs);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records log-download ordering and returns the configured synthetic job output.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="jobId">The GitHub workflow job identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured git hub workflow job log download instance or response for this scenario.</returns>
         public Task<GitHubWorkflowJobLogDownload> DownloadWorkflowJobLogsAsync(string accessToken, string repoOwner,
             string repoName, long jobId, CancellationToken cancellationToken = default)
         {
@@ -201,7 +277,15 @@ public sealed class GitHubWorkflowMonitorTests
                 "build output"));
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies an empty run-log archive in the workflow-sequence fixture.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="runId">Verified durable cloud or provider workflow-run identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning an empty synthetic result collection.</returns>
         public Task<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>> DownloadWorkflowRunLogEntriesAsync(
             string accessToken, string repoOwner, string repoName, long runId,
             CancellationToken cancellationToken = default)
@@ -209,14 +293,36 @@ public sealed class GitHubWorkflowMonitorTests
             return Task.FromResult<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>>([]);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies an empty repository catalog without contacting GitHub.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="forceRefresh">Whether repository caching is bypassed; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken, bool forceRefresh = false,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new List<GitHubRepositoryDto>());
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies a fixed synthetic commit identity without writing repository files.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="files">
+        ///     The generated files to commit, with their repository-relative destinations; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="branchName">
+        ///     The repository branch used for deployment assets or workflow selection; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="commitMessage">Synthetic repository commit message; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the synthetic text produced for this scenario.</returns>
         public Task<string> CommitCloudDeploymentFilesAsync(string accessToken, string repoOwner, string repoName,
             List<TemplateFile> files, string branchName = "automate/azure-deployment",
             string commitMessage = "Add AutoMate Azure deployment workflow",
@@ -225,14 +331,37 @@ public sealed class GitHubWorkflowMonitorTests
             return Task.FromResult("commit");
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live upsert repository secrets work.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="secrets">
+        ///     The repository secret values to encrypt before submission; never log them; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task UpsertRepositorySecretsAsync(string accessToken, string repoOwner, string repoName,
             IReadOnlyDictionary<string, string> secrets, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live dispatch workflow work.
+        /// </summary>
+        /// <param name="accessToken">The provider access token; never include it in diagnostics; ignored by this fixture.</param>
+        /// <param name="repoOwner">The GitHub repository owner or organization; ignored by this fixture.</param>
+        /// <param name="repoName">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="workflowFileName">The workflow filename selected for dispatch or lookup; ignored by this fixture.</param>
+        /// <param name="branchName">
+        ///     The repository branch used for deployment assets or workflow selection; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task DispatchWorkflowAsync(string accessToken, string repoOwner, string repoName,
             string workflowFileName, string branchName, CancellationToken cancellationToken = default)
         {

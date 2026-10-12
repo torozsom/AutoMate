@@ -7,7 +7,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.ApplicationServices.Data.Apps;
 
-/// <summary>Projects bounded owner-scoped metadata and aggregate queries without provider calls.</summary>
+/// <summary>
+///     Projects bounded owner-scoped metadata and aggregate queries without provider calls.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="exploration">Provides the metric exploration? boundary used by this operation.</param>
 public sealed class WorkspaceQuery(
     AutoMateDbContext db,
     TimeProvider clock,
@@ -15,7 +23,13 @@ public sealed class WorkspaceQuery(
     IMetricExploration? exploration = null)
     : IWorkspaceQuery
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Searches and pages owned projects without loading entity graphs or credentials.
+    /// </summary>
+    /// <param name="owner">The internal owner account identity used for authorization.</param>
+    /// <param name="request">The owner-scoped inventory search, filters, sort and page.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning a bounded owner-scoped inventory page and owner totals.</returns>
     public async Task<ProjectInventoryPage> ProjectsAsync(Guid owner, ProjectInventoryRequest request,
         CancellationToken token = default)
     {
@@ -59,7 +73,19 @@ public sealed class WorkspaceQuery(
             total, page, saved, running, github, saved - github);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads current workspace state and recorded activity over 7, 30 or 90 UTC days.
+    /// </summary>
+    /// <param name="owner">The internal owner account identity used for authorization.</param>
+    /// <param name="days">The supported workspace lookback: 7, 30 or 90 days.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning owner-scoped recorded deployment activity and observed resource
+    ///     summaries.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     The requested lookback is not one of the supported 7, 30 or 90 day periods.
+    /// </exception>
     public async Task<WorkspaceOverview> OverviewAsync(Guid owner, int days, CancellationToken token = default)
     {
         RequireOwner(owner);
@@ -69,7 +95,16 @@ public sealed class WorkspaceQuery(
         return await OverviewAsync(owner, new MetricTimeRange(start, end), token);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads a frozen UTC window with bounded chart aggregation.
+    /// </summary>
+    /// <param name="owner">The internal owner account identity used for authorization.</param>
+    /// <param name="range">The selected frozen observation window or assessment range.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning owner-scoped recorded deployment activity and observed resource
+    ///     summaries.
+    /// </returns>
     public async Task<WorkspaceOverview> OverviewAsync(Guid owner, MetricTimeRange range,
         CancellationToken token = default)
     {
@@ -188,7 +223,11 @@ public sealed class WorkspaceQuery(
             recent, attention.Concat(queued).ToArray(), notice, observations);
     }
 
-    /// <summary>Rejects missing internal identities rather than treating anonymous users as owners.</summary>
+    /// <summary>
+    ///     Rejects missing internal identities rather than treating anonymous users as owners.
+    /// </summary>
+    /// <param name="owner">Internal owner account identity used to authorize the operation.</param>
+    /// <exception cref="UnauthorizedAccessException">An authenticated workspace owner is required.</exception>
     private static void RequireOwner(Guid owner)
     {
         if (owner == Guid.Empty) throw new UnauthorizedAccessException("An authenticated workspace owner is required.");

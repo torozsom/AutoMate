@@ -65,5 +65,24 @@ Reference-only controls and illustrative claims are omitted; current application
 ## Metric refinements
 
 Every chart group uses a shared UTC range picker (10-minute through five-year presets, custom five-minute minimum).
-Numeric metric/outcome tables use independent 10/25/50-row pagination. AI sections have a purple border; repository
+Numeric metric/outcome tables use independent 10/25/50-row pagination. Completed AI answers have a bright purple border;
+context settings, consent, request status and run metadata stay outside that border. Repository
 source pages retain their earlier card presentation. See ../docs/metric-exploration.md.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
+existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
+layouts.
+
+## Source documentation
+
+Handwritten C# types and callables, including private helpers and inline Razor code, use multiline XML summaries,
+matching parameter/type-parameter tags, and return descriptions for value-returning and asynchronous operations.
+Document supported escaping exceptions; handled failures belong in the behavior description. Fields and properties
+may use single-line XML summaries. Component-level descriptions use Razor `@* ... *@` comments so they do not render
+into HTML. Browser functions and nested callbacks use multiline JSDoc with typed parameters, returns and applicable
+failure contracts. Preserve generated code and vendored Bootstrap distributions and licenses.
+
+The complete local coverage and behavior-preservation checks are recorded in the ignored
+`.artifacts/web-doc-audit/report.md` verification artifact.

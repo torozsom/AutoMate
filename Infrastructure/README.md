@@ -48,3 +48,23 @@ directly.
 
 Private Telemetry archives deployment diagnostics on its persistent volume; Web queries through IDeploymentArchive. See
 docs/adr/0004-permanent-deployment-history.md for migration and host ordering.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
+existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
+layouts.
+
+## XML documentation
+
+Use concise multiline XML summaries for types, constructors, methods and local functions, including private and nested
+declarations. Document every parameter and type parameter, returned values or asynchronous completion, and supported
+exception conditions. Fields and properties may use single-line summaries. Adapter documentation must match its
+Application contract while explaining concrete ownership, cancellation, durability, retry and failure-handling behavior.
+Use explicit method documentation rather than standalone inheritdoc markers.
+
+Review EF migration, designer and snapshot files too, but preserve generated markers, migration identities, SQL and
+model
+operations. EF regeneration may replace generated-file comments. C# cannot emit XML documentation for local functions;
+their XML source summaries use narrowly scoped CS1587 suppression and are checked by the source documentation audit.
+Documentation-only edits must preserve executable tokens and all persistence/provider behavior.

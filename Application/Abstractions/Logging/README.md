@@ -23,4 +23,8 @@ Application/Abstractions.
 
 ## Related documentation
 
-- [Solution navigation map](../../../.agents/navigation.md)
+- [Solution navigation map](../../../navigation.md)
+
+ILogStreamer adds StreamDeploymentMetricsAsync for typed project/deployment/resource observations. Existing CPU/memory
+delivery remains for older clients; implementations without typed delivery retain the default no-op contract. Terminal
+notices use the separate operational-guidance channel.

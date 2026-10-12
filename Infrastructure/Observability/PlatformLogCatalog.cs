@@ -1,6 +1,9 @@
 namespace Infrastructure.Observability;
 
-/// <summary>Reviewed source literals; new templates/categories require explicit review before platform export.</summary>
+/// <summary>
+///     Reviewed source literals; new templates/categories require explicit review before
+///     platform export.
+/// </summary>
 internal static class PlatformLogCatalog
 {
     /// <summary>Fixed application messages; interpolated and unknown provider templates are excluded.</summary>

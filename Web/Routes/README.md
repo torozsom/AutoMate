@@ -54,3 +54,7 @@ the project analysis panel also exposes cancellation through the Application por
 `DeploymentAnalysisEndpoint` also exposes authenticated GET/PUT deployment analysis preferences and POST typed analysis
 requests. PUT/POST require antiforgery tokens; owner identity comes from the authenticated user service. Option-conflict
 retries return HTTP 409. The [assessment guide](../../docs/status-aware-assessments.md) documents request bodies.
+
+Azure reconnect explicitly requests static consent (prompt=consent) so newly declared Log Analytics API Data.Read is
+included alongside existing delegated permissions. Users consent for themselves; the flow does not request tenant-wide
+admin consent.

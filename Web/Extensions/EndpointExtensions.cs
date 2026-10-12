@@ -10,12 +10,13 @@ namespace Web.Extensions;
 public static class EndpointExtensions
 {
     /// <summary>
-    ///     Scans the specified assembly (or the calling assembly) via Reflection, finds all concrete
-    ///     classes implementing <see cref="IEndpoint" />, and registers them automatically.
+    ///     Discovers concrete endpoint types in the supplied or executing assembly and registers them in
+    ///     mapping order.
     /// </summary>
     /// <param name="services">The IServiceCollection to add the endpoints to.</param>
     /// <param name="assembly">The assembly to scan. Defaults to the executing assembly.</param>
     /// <returns>The IServiceCollection so that additional calls can be chained.</returns>
+    /// <exception cref="System.Reflection.ReflectionTypeLoadException">Types in the supplied assembly cannot be loaded.</exception>
     public static IServiceCollection AddEndpoints(this IServiceCollection services, Assembly? assembly = null)
     {
         assembly ??= Assembly.GetExecutingAssembly();
@@ -33,6 +34,11 @@ public static class EndpointExtensions
     }
 
 
+    /// <summary>
+    ///     Orders static assets before ordinary endpoints and the Razor fallback.
+    /// </summary>
+    /// <param name="endpointType">Discovered endpoint implementation type.</param>
+    /// <returns>Zero for static assets, 200 for Razor fallback, or 100 for other endpoints.</returns>
     private static int GetEndpointRegistrationOrder(Type endpointType)
     {
         return endpointType.Name switch

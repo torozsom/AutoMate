@@ -1,5 +1,10 @@
 # Components
 
+Component descriptions use Razor `@* ... *@` comments. Handwritten members inside `@code` blocks and code-behind files
+use XML documentation: multiline summaries for types and callables, parameter and return contracts, and confirmed
+escaping exceptions. These comments describe presentation behavior, ownership and resource lifetimes without adding
+rendered content; concise field and property summaries may remain on one line.
+
 Dashboard deployment-status notifications marshal model changes and rendering together through InvokeAsync.
 Async callback failures are observed and logged with fixed guidance, GUIDs and failure types; queued callbacks after
 disposal are ignored. DashboardStatusTests exercises Running/Failed/Stopped notifications from background tasks using
@@ -7,15 +12,19 @@ a real renderer dispatcher, including disposal.
 
 ## Telemetry presentation
 
+Azure terminal rows distinguish `[METRIC]` summaries from stdout/stderr, system and status rows. Summaries retain
+Azure's observation timestamp and native units; the existing numeric utilization displays remain separate.
+
 Project details separates live utilization and Project Analytics. Deployment Details opens with an overview, saved logs
 and historical resource summaries. Charts and numeric tables are collapsed by default;
 range changes preserve log paging and channels. Independent asynchronous scopes isolate history and analytics database
 reads, and cancelled/stale responses cannot overwrite newer selections.
 
-`Shared/TelemetryChart.razor` renders labeled SVG charts, visible isolated observations and gaps. Its local
+`Shared/Metrics/TelemetryChart.razor` renders labeled SVG charts, visible isolated observations and gaps. Its local
 `wwwroot/js/telemetry-chart.js` module handles pointer/touch and arrow-key inspection without server roundtrips,
 maintains legible axis text when resized, and disposes listeners/observers. Shared presentation styles use AutoMate's
-light/dark theme tokens. `Shared/TelemetryPresentation.cs` owns friendly names, binary memory units, sub-core precision,
+light/dark theme tokens. `Shared/Metrics/TelemetryPresentation.cs` owns friendly names, binary memory units, sub-core
+precision,
 rounded axes and sample-weighted daily averages. Historical summaries average returned interval aggregates; raw sample
 counts are unavailable there. Memory capacity remains supporting text rather than flattening the usage chart.
 
@@ -54,14 +63,14 @@ Infrastructure types are registered only in Web/Configs.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
-`Pages/DeploymentHistory.razor` provides historical channel pages and CPU/memory charts.
+`Pages/Projects/DeploymentHistory.razor` provides historical channel pages and CPU/memory charts.
 Its isolated stylesheet bounds the terminal viewport so xterm fitting cannot grow the page. Saved output is rendered
 independently of metric queries; metric-provider failures keep the logs visible and show a separate availability notice.
 Changing history pages or channels replaces terminal content instead of accumulating it. The shared xterm wrapper
 coalesces resize notifications and fits only when the viewport dimensions change.
-`Shared/TelemetryPreferences.razor`
+`Shared/Metrics/TelemetryPreferences.razor`
 displays automatic collection, retention and sampling without consent controls. Project replay tracks a confirmed cursor
 separately from bounded
 rendered live identities and does not advance on failed backend reads. Self-hosted pages also periodically catch up.
@@ -86,8 +95,12 @@ ProjectTelemetrySummary receives the already resolved owner from ProjectDetails 
 for each analytics load. This prevents its EF queries from sharing the parent's circuit context during overlapping
 rendering/history loads; the application service still checks ownership.
 
-`Shared/DeploymentTerminalPresentation.cs` formats live and saved stderr with a plain `[stderr]` marker, preserving
-line endings and legacy/stdout text. Stored event messages remain unchanged so replay identities remain stable.
+`Shared/Console/DeploymentTerminalPresentation.cs` formats Azure web, system and database output into CRLF-separated
+rows
+with recorded UTC timestamps and stream labels (`STDOUT`, `STDERR`, `SYSTEM`, `STATUS`). Each line of a multiline
+message receives the same timestamp, retaining indentation. Older Azure records without timestamps show only the
+stream label. Other channels retain their existing text and plain `[stderr]` marker. Stored event messages remain
+unchanged so replay identities remain stable.
 The existing Build tab also receives strictly owned local Docker lifecycle and subscription notices.
 
 Deployment preparation/queue failures show fixed guidance rather than provider exception text. The known local
@@ -162,3 +175,25 @@ project AI navigation anchor or inline section. Deployment history retains inlin
 egress consent and cancellation belong to the shared section. Closing the dialog stops UI polling without canceling
 server work; route/deployment changes close it and fence delayed replies. Terminal history/connection failures are
 displayed outside terminal output.
+
+Only completed provider answers (summary, observations, recommendations, limitations and evidence references) receive
+the bright purple border, in both the project dialog and deployment history. Settings, consent, status and run metadata
+remain outside the answer border; pending or failed runs do not display an answer frame.
+
+Remote project terminals include Azure Databases for managed database resource logs, labeled with the source resource
+name. Live and replay routing share `azure-db`; reset clears that terminal with the other deployment terminals.
+Shared terminal presentation hides saved/live database `Metric` stream summaries while keeping archive records and
+replay identities intact, so hidden rows cannot block subsequent operational logs. Numeric metrics remain available.
+AI failures display fixed guidance for finite response rejection reasons; legacy failures remain readable and no
+rejected/partial response receives the answer border.
+Saved utilization supports native managed-database CPU/memory percentages without interpreting them as core or byte
+measurements. Shared labels and formatting also identify database RU percentages.
+
+Current metric cards consume deployment-scoped ReceiveDeploymentMetrics observations and refresh authorized saved
+snapshots every 60 seconds. Only newer provider timestamps replace samples. Cosmos cards show RU utilization and
+explicitly unsupported CPU/memory; revision/page changes reject stale replies. Collector annotations remain outside
+terminal output on both live delivery and saved replay. The AI answer's purple frame is unchanged.
+
+Cloud CPU cards display observed cores directly, with no invented utilization denominator. Docker's existing percentage
+display remains. Saved metric recovery aligns windows to completed UTC minutes so saved buckets cannot displace newer
+native live timestamps.

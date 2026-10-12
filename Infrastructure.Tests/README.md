@@ -1,5 +1,21 @@
 # Infrastructure Tests
 
+## Source documentation
+
+Test types, scenarios, constructors and private helpers use multiline XML summaries. Include matching parameter and
+type-parameter descriptions, return/completion semantics and confirmed escaping failures. Fakes describe their actual
+recording, ignored inputs, fixed responses and deliberate rejection paths rather than inheriting production promises.
+Fields and properties may use concise single-line summaries. Local functions also have XML comments, with narrowly
+scoped CS1587 suppression because C# does not emit their XML documentation. Tested exceptions inside assertion
+callbacks are scenario evidence rather than escaping method contracts.
+
+The complete review of both test projects and executable-code comparisons is recorded in the ignored
+`.artifacts/tests-doc-audit/report.md` verification artifact.
+
+Azure runtime tests verify database numeric persistence without terminal summaries. Azure AI tests cover finite
+rejection classifications, exact evidence, field bounds, incomplete/refused/malformed envelopes and compatible v2
+empty sections; worker fixtures verify safe persisted codes survive owner-authorized readback without partial output.
+
 Ai/AnalysisBudgetTests uses independent SQLite contexts to verify account quotas across projects, atomic reservations,
 shared tenant/global provider slots, rolling/time boundaries, project/result deletion survival, currency denial,
 retry/recovery charges and transaction failure cleanup. Persistence fixtures verify disabled spending finishes as
@@ -167,3 +183,23 @@ statuses, retained results after 121 days, multiple runs and outcome survival af
 
 DeploymentJobWorkerTests deterministically delays queue cancellation beyond active-job completion and verifies that
 shutdown waits for the read before iterator disposal, with no faulted worker task.
+
+Azure runtime regressions cover managed-environment log scope, web metric failure isolation, owned database discovery,
+native percentage units, durable-only database checkpoints/retry and partial Azure Monitor response rejection.
+Cloud template tests verify diagnostic export and ownership tags for every supported managed database provider.
+These tests use synthetic HTTP and SQLite; actual Azure RBAC, Bicep deployment and ingestion require a customer test
+subscription and are not established by these credential-free tests.
+
+Azure repair regressions add provider registration/denial/cancellation, trusted inventory pagination, SQL children,
+native timestamp/dimension aggregation, equal-ingestion delayed arrivals, durable rejection and collector restart.
+Both registry workflows start previously stopped resources; rendered Bicep is compiled for all five database types.
+DeploymentCleanupHostedServiceTests prevents local Docker startup sync from changing remote cloud history.
+
+AzureMonitorLogsTokenProviderTests verifies recognized consent errors produce fixed Data.Read guidance without retaining
+arbitrary provider response messages.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
+existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
+layouts.

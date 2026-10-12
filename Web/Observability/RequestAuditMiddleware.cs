@@ -3,10 +3,19 @@ using System.Security.Claims;
 
 namespace Web.Observability;
 
-/// <summary>Audits HTTP operation boundaries without recording URLs, queries, headers, cookies or request bodies.</summary>
+/// <summary>
+///     Audits HTTP operation boundaries without recording URLs, queries, headers, cookies or request
+///     bodies.
+/// </summary>
+/// <param name="next">Next middleware delegate.</param>
+/// <param name="logger">The logger used for fixed operational events without diagnostic payloads.</param>
 public sealed class RequestAuditMiddleware(RequestDelegate next, ILogger<RequestAuditMiddleware> logger)
 {
-    /// <summary>Records starts, response outcomes and exceptions while preserving request behavior.</summary>
+    /// <summary>
+    ///     Records starts, response outcomes and exceptions while preserving request behavior.
+    /// </summary>
+    /// <param name="context">Current authenticated HTTP request and response.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     public async Task InvokeAsync(HttpContext context)
     {
         var requestId = Guid.NewGuid();
@@ -36,7 +45,11 @@ public sealed class RequestAuditMiddleware(RequestDelegate next, ILogger<Request
         }
     }
 
-    /// <summary>Uses finite route areas rather than customer-controlled path or endpoint text.</summary>
+    /// <summary>
+    ///     Uses finite route areas rather than customer-controlled path or endpoint text.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
+    /// <returns>A finite audit-area label selected from the request path.</returns>
     private static string Area(PathString path)
     {
         if (path.StartsWithSegments("/api/auth") || path.StartsWithSegments("/signin-github") ||

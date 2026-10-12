@@ -8,13 +8,24 @@ namespace Web.Hubs;
 public interface ILogClient
 {
     /// <summary>
+    ///     Receives native numeric samples with source, timestamp and deployment correlation.
+    /// </summary>
+    /// <param name="snapshot">Typed resource metrics with project, deployment and provider timestamp.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
+    Task ReceiveDeploymentMetrics(DeploymentRuntimeMetricSnapshot snapshot);
+
+    /// <summary>
     ///     Receives redacted output for one source-aware terminal channel.
     /// </summary>
-    /// <param name="terminalChannel">The stable channel used to route output to the correct terminal.</param>
-    /// <param name="message">The terminal message received from the server.</param>
+    /// <param name="terminalLog">Redacted deployment output with channel and replay identity.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task ReceiveTerminalLog(DeploymentTerminalLog terminalLog);
 
+    /// <summary>
+    ///     Receives safe availability guidance for display outside deployment terminal output.
+    /// </summary>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     Task ReceiveTerminalNotice(string message);
 
     /// <summary>

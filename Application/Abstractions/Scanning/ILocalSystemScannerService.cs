@@ -12,16 +12,19 @@ public interface ILocalSystemScannerService
     /// </summary>
     /// <param name="rootPath">The root directory path where scanning begins.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns>A list of LocalProjectDto objects representing the found projects.</returns>
+    /// <returns>A task returning a list of LocalProjectDto objects representing the found projects.</returns>
     Task<List<LocalProjectDto>> ScanForProjectsAsync(string rootPath, CancellationToken cancellationToken = default);
 
 
     /// <summary>
-    ///     Finds the root directory of a solution by traversing up the directory tree
-    ///     looking for .git, .sln, or .slnx files.
+    ///     Finds the root directory of a solution by traversing up the directory tree looking for
+    ///     .git, .sln, or .slnx files.
     /// </summary>
     /// <param name="projectFilePath">The full path to the project file.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns>The full path to the solution root directory, or the project directory as a fallback.</returns>
+    /// <returns>
+    ///     A task returning the full path to the solution root directory, or the project directory
+    ///     as a fallback.
+    /// </returns>
     Task<string> FindSolutionRootAsync(string projectFilePath, CancellationToken cancellationToken = default);
 }

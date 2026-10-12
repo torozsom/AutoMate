@@ -90,3 +90,20 @@ evidence or credentials. Updated Web requires logs, metrics, metric-batch, asses
 import-metrics and delete. Deploy the matching host with its existing persistent volume before updated Web. Collection
 and persistence are automatic; project preference flags never gate ingestion, delivery or archive reads. Ownership and
 operator processing approval remain required.
+
+## Source organization
+
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
+existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
+layouts.
+
+## Source documentation
+
+Handwritten types and callables use multiline XML summaries, matching parameter/type-parameter tags and return
+descriptions for value-returning or asynchronous operations. Document confirmed escaping exceptions and keep field
+and property summaries concise. Top-level startup statements and anonymous route handlers use ordinary comments;
+XML documentation does not attach to those statements. Host construction returns an unstarted application, while
+option validation and exclusive spool ownership are startup responsibilities.
+
+The file-by-file review and unchanged-token verification are recorded in the ignored
+`.artifacts/telemetry-doc-audit/report.md` artifact.

@@ -1,4 +1,7 @@
 ﻿@using Web.Components.Pages
+@*
+    Resolves routed components and applies the application layout and authorization views.
+*@
 <CascadingAuthenticationState>
     <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(NotFound)">
         <Found Context="routeData">
@@ -10,7 +13,12 @@
 
 @code {
 
-    /// <summary>Dispose deployment presenters and scroll listeners when the selected project or deployment changes.</summary>
+    /// <summary>
+    ///     Dispose deployment presenters and scroll listeners when the selected project or deployment
+    ///     changes.
+    /// </summary>
+    /// <param name="data">Current route component and parameters.</param>
+    /// <returns>The routed component type name combined with its project parameter when present.</returns>
     private static string RouteKey(RouteData data)
     {
         return data.PageType.FullName + ":" +

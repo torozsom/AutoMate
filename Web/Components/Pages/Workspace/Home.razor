@@ -1,0 +1,61 @@
+@*
+    Introduces AutoMate and links to authenticated workspace and repository workflows.
+*@
+@namespace Web.Components.Pages
+@page "/"
+@using Microsoft.AspNetCore.Authorization
+@attribute [AllowAnonymous]
+
+<AuthorizeView>
+    <Authorized>
+        <PageTitle>Overview · AutoMate</PageTitle>
+        <WorkspaceOverviewPanel/>
+    </Authorized>
+
+    <NotAuthorized>
+        <div class="hero-section">
+            <div class="hero-content">
+                <div class="page-eyebrow">Your deployment workspace</div>
+                <h1 class="hero-title">Deploy with clarity.</h1>
+                <p class="hero-subtitle">
+                    Connect source repositories, configure runtime services, and monitor deployments from one focused
+                    console.
+                </p>
+                <a href="/register" class="btn btn-light btn-lg px-4 fw-bold">Get started</a>
+            </div>
+        </div>
+
+        <div class="container mb-5">
+            <div class="row g-4">
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-diagram-3" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">Pipelines</h2>
+                        <p class="page-description">Set up deployment pipelines with clear runtime configuration.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-cpu" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">Automation</h2>
+                        <p class="page-description">Reduce manual deployment steps across local and cloud targets.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-box-seam" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">Builds</h2>
+                        <p class="page-description">Track project builds and deployment state from one place.</p>
+                    </div>
+                </div>
+                <div class="col-md-3 col-sm-6">
+                    <div class="feature-card">
+                        <div class="feature-icon"><i class="bi bi-arrow-repeat" aria-hidden="true"></i></div>
+                        <h2 class="feature-title">CI/CD</h2>
+                        <p class="page-description">Bridge repository workflows with deployment monitoring.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>

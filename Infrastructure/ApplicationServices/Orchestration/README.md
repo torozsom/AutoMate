@@ -55,3 +55,22 @@ statuses, cancellation and retry behavior are unchanged.
 DeploymentSnapshotCapture whitelists non-secret launch settings before provider side effects, then records discovered
 runtime/commit/image facts. Current configuration edits never rewrite previous snapshots. Preparation outcomes persist
 independently of later stops.
+
+DeploymentCleanupHostedService reconciles only Local-source deployments without Azure resource/workflow identity.
+Remote Azure launches and running deployments never become Failed/Stopped merely because Docker has no matching
+Compose project. Azure runtime recovery owns their verified resource/revision mapping after restart.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `CloudPreparation/` — `CloudPreparation/CloudCsProjectResolver.cs`, `CloudPreparation/CloudDeploymentDefaults.cs`,
+  `CloudPreparation/CloudDeploymentOrchestrator.cs`, `CloudPreparation/CloudDeploymentRequestValidator.cs`,
+  `CloudPreparation/CloudRepositorySecretBuilder.cs`, `CloudPreparation/OrchestrationNameNormalizer.cs`.
+- `CloudRuns/` — `CloudRuns/CloudDeploymentRunService.cs`, `CloudRuns/CloudDeploymentScheduler.cs`,
+  `CloudRuns/CloudRunMetricsService.cs`, `CloudRuns/CloudRunMonitor.cs`, `CloudRuns/CloudRunMonitorService.cs`,
+  `CloudRuns/CloudRunProcessor.cs`, `CloudRuns/CloudRunRetentionService.cs`, `CloudRuns/CloudRunSnapshot.cs`.
+- `Lifecycle/` — `Lifecycle/DeploymentCleanupHostedService.cs`, `Lifecycle/DeploymentSnapshotCapture.cs`,
+  `Lifecycle/DeploymentStatusUpdater.cs`, `Lifecycle/GitHubWorkflowMonitor.cs`.
+- `Local/` — `Local/LocalDeploymentLogStreamManager.cs`, `Local/LocalDeploymentOrchestrator.cs`,
+  `Local/LocalDockerTargets.cs`, `Local/LocalRuntimeRecoveryService.cs`.

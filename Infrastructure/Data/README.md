@@ -15,7 +15,7 @@ secrets; SaaS startup requires a shared certificate to encrypt the database key 
 ## Source inventory
 
 - `AutoMateDbContext.cs`
-- `Migrations/` — EF Core schema history, including GitHub workflow/job streaming checkpoints.
+- `../Migrations/` — EF Core schema history, including GitHub workflow/job streaming checkpoints.
 
 GitHub workflow checkpoints retain only state fingerprints, line counts, and redacted-content hashes needed to resume
 diagnostic streaming; they never store raw GitHub Actions log content.
@@ -30,7 +30,7 @@ behavior.
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
 `AddSpecializedTelemetryStorage` adds explicit runtime/managed-egress preferences, tenant leases, durable rate/series
 state and diagnostic outbox fields. `AddTelemetryBufferAccounting` backfills tenant/global buffer byte accounting.
@@ -86,3 +86,7 @@ queues archive cleanup in the same transaction, including account cascades.
 
 AutomaticTelemetryCollection backfills existing runtime/storage compatibility flags and adds true defaults. It preserves
 all saved diagnostic/history rows; downgrade removes defaults without restoring historical opt-out values.
+
+AzureLogIngestionCursors adds two nullable fields to existing Azure log checkpoints: last_ingestion_timestamp and
+last_ingestion_tie_breaker (128 characters). Apply before running updated collectors. Existing event-time cursors,
+deployment history and diagnostic payloads are preserved; no backfill fabricates ingestion times.

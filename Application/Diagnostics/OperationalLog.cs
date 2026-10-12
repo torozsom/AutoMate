@@ -2,7 +2,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Diagnostics;
 
-/// <summary>Fixed audit operations; diagnostic text, identities and provider payloads are never event properties.</summary>
+/// <summary>
+///     Fixed audit operations; diagnostic text, identities and provider payloads are never
+///     event properties.
+/// </summary>
 public enum AuditOperation
 {
     /// <summary>Local or external authentication.</summary>
@@ -24,7 +27,9 @@ public enum AuditOperation
     AnalysisRetention = 5
 }
 
-/// <summary>Finite outcomes suitable for searching operational logs.</summary>
+/// <summary>
+///     Finite outcomes suitable for searching operational logs.
+/// </summary>
 public enum AuditOutcome
 {
     /// <summary>An operation began.</summary>
@@ -54,20 +59,37 @@ public enum AuditOutcome
     /// <summary>Expired/deleted work was discarded.</summary>
     Discarded,
 
-    /// <summary>An external authentication ticket was prepared; final cookie sign-in has not yet completed.</summary>
+    /// <summary>
+    ///     An external authentication ticket was prepared; final cookie sign-in has not yet
+    ///     completed.
+    /// </summary>
     Prepared,
 
-    /// <summary>A transient provider failure was durably scheduled for a later consent-checked attempt.</summary>
+    /// <summary>
+    ///     A transient provider failure was durably scheduled for a later consent-checked attempt.
+    /// </summary>
     RetryScheduled,
 
     /// <summary>The owner durably canceled an analysis; this user action is recorded at Information.</summary>
     CanceledByOwner
 }
 
-/// <summary>Emits fixed structured audit events and GUID-only correlation scopes through ILogger.</summary>
+/// <summary>
+///     Emits fixed structured audit events and GUID-only correlation scopes through ILogger.
+/// </summary>
 public static class OperationalLog
 {
-    /// <summary>Attaches correlation metadata, never names, paths, users, credentials or diagnostic payloads.</summary>
+    /// <summary>
+    ///     Attaches correlation metadata, never names, paths, users, credentials or diagnostic
+    ///     payloads.
+    /// </summary>
+    /// <param name="logger">The logger used for fixed operational events without diagnostic payloads.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <returns>The logger correlation scope, or null if the logger creates no scope.</returns>
     public static IDisposable? BeginCorrelation(ILogger logger, Guid? deploymentId = null, Guid? analysisId = null,
         Guid? projectId = null)
     {
@@ -78,7 +100,13 @@ public static class OperationalLog
         return logger.BeginScope(attributes);
     }
 
-    /// <summary>Records only allowlisted operation/outcome names with stable event IDs and no exception objects.</summary>
+    /// <summary>
+    ///     Records only allowlisted operation/outcome names with stable event IDs and no exception
+    ///     objects.
+    /// </summary>
+    /// <param name="logger">The logger used for fixed operational events without diagnostic payloads.</param>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="outcome">The finite recorded operation or deployment outcome.</param>
     public static void Record(ILogger logger, AuditOperation operation, AuditOutcome outcome)
     {
         var operationName = Enum.GetName(operation) ?? "Unknown";

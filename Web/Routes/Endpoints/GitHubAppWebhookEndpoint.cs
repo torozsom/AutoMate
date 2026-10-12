@@ -4,10 +4,15 @@ using Application.Abstractions.Hosting;
 
 namespace Web.Routes.Endpoints;
 
-/// <summary>Public HTTPS ingress for signed GitHub App workflow notifications.</summary>
+/// <summary>
+///     Public HTTPS ingress for signed GitHub App workflow notifications.
+/// </summary>
 public sealed class GitHubAppWebhookEndpoint : IEndpoint
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Maps bounded signed GitHub App webhook ingress when the hosting profile supports it.
+    /// </summary>
+    /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
         if (app.ServiceProvider.GetRequiredService<IDeploymentCapabilities>().LocalDeploymentsEnabled)

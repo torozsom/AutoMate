@@ -1,0 +1,101 @@
+using System.Text;
+using Domain.DTO;
+using Infrastructure.Templating;
+
+namespace Application.Orchestration;
+
+/// <summary>
+///     Builds GitHub Actions repository secrets required by generated cloud deployment
+///     workflows.
+/// </summary>
+internal static class CloudRepositorySecretBuilder
+{
+    /// <summary>
+    ///     Creates the complete secret dictionary for Azure identity, registry, database, and
+    ///     custom env values.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="oidcSetup">Verified managed-identity and federated-trust setup.</param>
+    /// <returns>The selection with its documented bounds and ordering.</returns>
+    public static Dictionary<string, string> Build(CloudDeploymentRequestDto request,
+        AzureOidcSetupResultDto oidcSetup)
+    {
+        var secrets = new Dictionary<string, string>
+        {
+            ["AZURE_CLIENT_ID"] = oidcSetup.ClientId,
+            ["AZURE_TENANT_ID"] = oidcSetup.TenantId,
+            ["AZURE_SUBSCRIPTION_ID"] = oidcSetup.SubscriptionId
+        };
+        if (!request.Config.CloudRegistryName.EndsWith(".azurecr.io", StringComparison.OrdinalIgnoreCase))
+            secrets["GHCR_PAT"] = string.IsNullOrWhiteSpace(request.GitHubContainerRegistryToken)
+                ? request.GitHubAccessToken
+                : request.GitHubContainerRegistryToken;
+        else if (!string.IsNullOrWhiteSpace(oidcSetup.RegistryPullIdentityResourceId))
+            secrets["AZURE_ACR_PULL_IDENTITY_ID"] = oidcSetup.RegistryPullIdentityResourceId;
+
+        AddDatabaseSecrets(secrets, request.Config.Databases);
+        AddCustomEnvironmentSecrets(secrets, request.Config.CustomEnvVars);
+
+        return secrets;
+    }
+
+    /// <summary>
+    ///     Adds base64-encoded database login secrets for database types that require credentials.
+    /// </summary>
+    /// <param name="secrets">The repository secret values to encrypt before submission; never log them.</param>
+    /// <param name="databases">Configured database components for this deployment.</param>
+    private static void AddDatabaseSecrets(Dictionary<string, string> secrets, IEnumerable<DatabaseConfigDto> databases)
+    {
+        foreach (var (database, index) in databases.Select((database, index) => (database, index)))
+        {
+            if (!RequiresDatabaseLogin(database.DbType))
+                continue;
+
+            secrets[CloudDeploymentSecretNames.GetDatabaseUsernameSecretName(index)] =
+                Base64Encode(string.IsNullOrWhiteSpace(database.DbUser) ? "automateadmin" : database.DbUser.Trim());
+            secrets[CloudDeploymentSecretNames.GetDatabasePasswordSecretName(index)] =
+                Base64Encode(database.DbPassword ?? string.Empty);
+        }
+    }
+
+    /// <summary>
+    ///     Adds base64-encoded custom environment value secrets in stable key order.
+    /// </summary>
+    /// <param name="secrets">The repository secret values to encrypt before submission; never log them.</param>
+    /// <param name="environmentVariables">
+    ///     Runtime environment values; secrets must not enter diagnostics.
+    /// </param>
+    private static void AddCustomEnvironmentSecrets(Dictionary<string, string> secrets,
+        IReadOnlyDictionary<string, string> environmentVariables)
+    {
+        foreach (var (envVar, index) in environmentVariables
+                     .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Key))
+                     .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
+                     .Select((envVar, index) => (envVar, index)))
+            secrets[CloudDeploymentSecretNames.GetCustomEnvironmentSecretName(index, envVar.Key.Trim())] =
+                Base64Encode(envVar.Value ?? string.Empty);
+    }
+
+    /// <summary>
+    ///     Encodes secret values because generated Bicep decodes them at deployment time.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The base64encode derived from the validated input.</returns>
+    private static string Base64Encode(string value)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
+    }
+
+    /// <summary>
+    ///     Indicates whether a database provider requires generated login credentials.
+    /// </summary>
+    /// <param name="databaseType">Supported database provider kind.</param>
+    /// <returns>Whether the documented requires database login condition holds.</returns>
+    private static bool RequiresDatabaseLogin(string databaseType)
+    {
+        return databaseType.Trim().ToLowerInvariant() is "postgresql" or "postgres" or "mysql" or "sqlserver"
+            or "sql-server" or "mssql" or "microsoft sql server";
+    }
+}

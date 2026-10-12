@@ -9,10 +9,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Tests.GitHub;
 
-/// <summary>Verifies durable GitHub Actions workflow and job checkpoints.</summary>
+/// <summary>
+///     Verifies durable GitHub Actions workflow and job checkpoints.
+/// </summary>
 public sealed class GitHubWorkflowCheckpointStoreTests
 {
-    /// <summary>Ensures a new job checkpoint is persisted once and reused after reloading.</summary>
+    /// <summary>
+    ///     Ensures a new job checkpoint is persisted once and reused after reloading.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task GetOrCreateJob_inserts_new_job_and_reuses_it_after_reload()
     {

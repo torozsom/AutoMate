@@ -69,6 +69,12 @@ var {{ db.bicep_password_value }} = base64ToString({{ db.bicep_password_param }}
 var {{ env_var.bicep_decoded_value }} = base64ToString({{ env_var.bicep_value_param }})
 {{- end }}
 
+// Non-secret tags bind runtime discovery to the owning project and Container App.
+var telemetryTags = {
+  'automate-project-id': '{{ automate_project_id }}'
+  'automate-container-app': containerAppName
+}
+
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsWorkspaceName
   location: location
@@ -99,6 +105,7 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
 resource postgres{{ db.index }} 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
   name: db{{ db.index }}ServerName
   location: location
+  tags: telemetryTags
   sku: {
     name: 'Standard_B1ms'
     tier: 'Burstable'
@@ -143,6 +150,7 @@ var db{{ db.index }}ConnectionString = format('Host={0};Port=5432;Database={{ db
 resource mysql{{ db.index }} 'Microsoft.DBforMySQL/flexibleServers@2023-12-30' = {
   name: db{{ db.index }}ServerName
   location: location
+  tags: telemetryTags
   sku: {
     name: 'Standard_B1ms'
     tier: 'Burstable'
@@ -195,6 +203,7 @@ resource sqlServer{{ db.index }}Database 'Microsoft.Sql/servers/databases@2023-0
   parent: sqlServer{{ db.index }}
   name: '{{ db.name }}'
   location: location
+  tags: telemetryTags
   sku: {
     name: 'Basic'
     tier: 'Basic'
@@ -216,6 +225,7 @@ var db{{ db.index }}ConnectionString = format('Server=tcp:{0},1433;Initial Catal
 resource cosmosMongo{{ db.index }} 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' = {
   name: db{{ db.index }}ServerName
   location: location
+  tags: telemetryTags
   kind: 'MongoDB'
   properties: {
     databaseAccountOfferType: 'Standard'
@@ -256,6 +266,7 @@ var db{{ db.index }}ConnectionString = format('mongodb://{0}:{1}@{0}.mongo.cosmo
 resource redis{{ db.index }} 'Microsoft.Cache/Redis@2023-08-01' = {
   name: db{{ db.index }}ServerName
   location: location
+  tags: telemetryTags
   properties: {
     sku: {
       name: 'Basic'
@@ -268,6 +279,34 @@ resource redis{{ db.index }} 'Microsoft.Cache/Redis@2023-08-01' = {
 }
 
 var db{{ db.index }}ConnectionString = format('{0}:6380,password={1},ssl=True,abortConnect=False', redis{{ db.index }}.properties.hostName, redis{{ db.index }}.listKeys().primaryKey)
+{{- end }}
+
+{{- if db.type == 'PostgreSQL' || db.type == 'SQLServer' || db.type == 'MongoDB' }}
+// Export operational diagnostics only; audit and query text remain customer controlled.
+resource db{{ db.index }}Diagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'automate-runtime'
+  scope: {{ if db.type == 'PostgreSQL' }}postgres{{ db.index }}{{ else if db.type == 'MySQL' }}mysql{{ db.index }}{{ else if db.type == 'SQLServer' }}sqlServer{{ db.index }}Database{{ else if db.type == 'MongoDB' }}cosmosMongo{{ db.index }}{{ else }}redis{{ db.index }}{{ end }}
+  properties: {
+    workspaceId: logAnalytics.id
+    logAnalyticsDestinationType: 'AzureDiagnostics'
+    logs: [
+      {
+        category: '{{ if db.type == 'PostgreSQL' }}PostgreSQLLogs{{ else if db.type == 'SQLServer' }}Errors{{ else }}MongoRequests{{ end }}'
+        enabled: true
+      }
+{{- if db.type == 'SQLServer' }}
+      {
+        category: 'Timeouts'
+        enabled: true
+      }
+      {
+        category: 'Deadlocks'
+        enabled: true
+      }
+{{- end }}
+    ]
+  }
+}
 {{- end }}
 
 {{- end }}

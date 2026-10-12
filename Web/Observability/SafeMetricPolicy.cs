@@ -3,7 +3,9 @@ using OpenTelemetry.Metrics;
 
 namespace Web.Observability;
 
-/// <summary>Approves metric identities and removes request/provider-derived dimensions before aggregation.</summary>
+/// <summary>
+///     Approves metric identities and removes request/provider-derived dimensions before aggregation.
+/// </summary>
 public static class SafeMetricPolicy
 {
     /// <summary>Fixed instruments owned by AutoMate; their remaining dimensions are emitted by reviewed finite sources.</summary>
@@ -77,14 +79,23 @@ public static class SafeMetricPolicy
         "dotnet.assembly.count", "dotnet.exceptions", "dotnet.process.memory.working_set", "dotnet.process.cpu.time"
     };
 
-    /// <summary>Configures views before exporters and explicitly disables exemplars, which otherwise retain removed tags.</summary>
+    /// <summary>
+    ///     Configures views before exporters and explicitly disables exemplars, which otherwise retain
+    ///     removed tags.
+    /// </summary>
+    /// <param name="builder">Metric provider builder receiving reviewed views.</param>
     public static void Configure(MeterProviderBuilder builder)
     {
         builder.SetExemplarFilter(ExemplarFilterType.AlwaysOff);
         builder.AddView(View);
     }
 
-    /// <summary>Drops unfamiliar identities; filters dimensions before they can enter SDK aggregation or export.</summary>
+    /// <summary>
+    ///     Drops unfamiliar identities; filters dimensions before they can enter SDK aggregation or
+    ///     export.
+    /// </summary>
+    /// <param name="instrument">Metric instrument whose name and dimensions are reviewed.</param>
+    /// <returns>A reviewed metric view, or the SDK drop configuration for an unfamiliar instrument.</returns>
     private static MetricStreamConfiguration View(Instrument instrument)
     {
         if (instrument.Meter.Name is "AutoMate.Deployments" or "AutoMate.Security" or "AutoMate.TelemetryStorage"
@@ -105,7 +116,12 @@ public static class SafeMetricPolicy
         return MetricStreamConfiguration.Drop;
     }
 
-    /// <summary>Limits each instrument to dimensions from its reviewed emitters; values never come from provider text.</summary>
+    /// <summary>
+    ///     Limits each instrument to dimensions from its reviewed emitters; values never come from
+    ///     provider text.
+    /// </summary>
+    /// <param name="name">Metric or configuration name to resolve.</param>
+    /// <returns>The explicit selection or approved dimension names for this operation.</returns>
     private static string[] Dimensions(string name)
     {
         return name switch
@@ -128,7 +144,12 @@ public static class SafeMetricPolicy
         };
     }
 
-    /// <summary>Retains runtime-owned finite heap and CPU modes, excluding exception classes and external strings.</summary>
+    /// <summary>
+    ///     Retains runtime-owned finite heap and CPU modes, excluding exception classes and external
+    ///     strings.
+    /// </summary>
+    /// <param name="name">Metric or configuration name to resolve.</param>
+    /// <returns>The explicit selection or approved dimension names for this operation.</returns>
     private static string[] RuntimeDimensions(string name)
     {
         return name switch

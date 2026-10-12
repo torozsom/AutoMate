@@ -1,8 +1,8 @@
 namespace Application.Abstractions.Hosting;
 
 /// <summary>
-///     Describes deployment operations enabled for the running AutoMate instance.
-///     Capabilities are enforced by the worker and orchestrators, not only by the UI.
+///     Describes deployment operations enabled for the running AutoMate instance. Capabilities
+///     are enforced by the worker and orchestrators, not only by the UI.
 /// </summary>
 public interface IDeploymentCapabilities
 {

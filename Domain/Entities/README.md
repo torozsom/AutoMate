@@ -9,21 +9,23 @@ Persisted business entities with no EF Core or transport dependencies.
 
 ## Source inventory
 
-- `Application.cs`
-- `AzureContainerAppLogCheckpoint.cs`
+- `Projects/Application.cs`
+- `Diagnostics/AzureContainerAppLogCheckpoint.cs`
 - `BaseEntity.cs`
-- `Configuration.cs`
-- `CsProject.cs`
-- `CloudDeploymentRun.cs`, `CloudRunOutbox.cs`, `CloudWebhookDelivery.cs`, `CloudInstallationBudget.cs` — SaaS
+- `Projects/Configuration.cs`
+- `Projects/CsProject.cs`
+- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`,
+  `Cloud/CloudInstallationBudget.cs` — SaaS
   control-plane state, verified webhook inbox, and installation cooldowns.
-- `CloudDeploymentRun.cs`, `CloudRunOutbox.cs`, `CloudWebhookDelivery.cs`, `CloudInstallationBudget.cs` — SaaS
+- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`,
+  `Cloud/CloudInstallationBudget.cs` — SaaS
   control-plane state, verified webhook inbox, and installation cooldowns.
-- `Deployment.cs`
-- `GitHubWorkflowCheckpoint.cs`
-- `GitHubWorkflowJobCheckpoint.cs`
-- `LocalUser.cs`
-- `RemoteUser.cs`
-- `User.cs`
+- `Deployments/Deployment.cs`
+- `Diagnostics/GitHubWorkflowCheckpoint.cs`
+- `Diagnostics/GitHubWorkflowJobCheckpoint.cs`
+- `Users/LocalUser.cs`
+- `Users/RemoteUser.cs`
+- `Users/User.cs`
 
 ## Boundary
 
@@ -31,9 +33,10 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 
 ## Related documentation
 
-- [Solution navigation map](../../.agents/navigation.md)
+- [Solution navigation map](../../navigation.md)
 
-`TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state. Application runtime
+`Diagnostics/TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state.
+Application runtime
 and managed-storage flags default to true and remain temporary compatibility fields. Diagnostic collection and approved
 storage are automatic; AI egress consent remains separate.
 
@@ -64,3 +67,25 @@ deletion cascades the marker. It contains neither diagnostic context nor log/met
 Deployment records own non-secret configuration snapshots, resolved artifacts, an outcome independent of runtime status,
 and completion time. Legacy snapshots remain absent. DeploymentArchiveCleanup is a durable deletion outbox without
 foreign keys to deleted owners.
+
+Azure runtime checkpoints also support hashed managed-database source identities; rows contain cursor metadata only,
+with no database connection strings or log content. Deployment/source uniqueness remains unchanged.
+Nullable ingestion timestamp/hash fields distinguish delayed arrivals from event time; apply AzureLogIngestionCursors
+without clearing existing cursor rows or archived history.
+
+## Folder organization
+
+Folders group related files while retaining the module's existing .NET namespaces and public contracts.
+
+- `Ai/` — `Ai/AiAnalysisBudgetEntry.cs`, `Ai/AiAnalysisRequest.cs`, `Ai/AiDeploymentAnalysis.cs`,
+  `Ai/DeploymentAnalysisWorkItem.cs`, `Ai/FailedDeploymentAnalysisEvent.cs`.
+- `Cloud/` — `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudInstallationBudget.cs`, `Cloud/CloudRunOutbox.cs`,
+  `Cloud/CloudWebhookDelivery.cs`.
+- `Deployments/` — `Deployments/Deployment.cs`, `Deployments/DeploymentConfigurationSnapshot.cs`,
+  `Deployments/DeploymentArchiveCleanup.cs`.
+- `Diagnostics/` — `Diagnostics/AzureContainerAppLogCheckpoint.cs`, `Diagnostics/GitHubWorkflowCheckpoint.cs`,
+  `Diagnostics/GitHubWorkflowJobCheckpoint.cs`, `Diagnostics/DeploymentDailyTelemetry.cs`,
+  `Diagnostics/DeploymentDiagnosticRecord.cs`, `Diagnostics/DeploymentDiagnosticSnapshot.cs`,
+  `Diagnostics/TelemetryTenantState.cs`.
+- `Projects/` — `Projects/Application.cs`, `Projects/Configuration.cs`, `Projects/CsProject.cs`.
+- `Users/` — `Users/User.cs`, `Users/LocalUser.cs`, `Users/RemoteUser.cs`.

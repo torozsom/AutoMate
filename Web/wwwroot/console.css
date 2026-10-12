@@ -690,13 +690,13 @@
 
 /* Assessment identity and deliberate separation of connection and dialog actions. */
 .ai-analysis-accent {
-    border: 2px solid #7653b5 !important;
+    border: 2px solid #9333ea !important;
     border-radius: 8px;
     padding: 24px;
 }
 
 [data-bs-theme="dark"] .ai-analysis-accent {
-    border-color: #b59be5 !important;
+    border-color: #c084fc !important;
 }
 
 .azure-connection-strip > .console-row-actions:first-child {

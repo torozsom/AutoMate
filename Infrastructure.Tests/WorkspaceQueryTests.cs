@@ -13,10 +13,17 @@ using Npgsql;
 
 namespace Infrastructure.Tests;
 
-/// <summary>Runs production SQL projections in owned disposable PostgreSQL schemas, without provider requests.</summary>
+/// <summary>
+///     Runs production SQL projections in owned disposable PostgreSQL schemas, without provider
+///     requests.
+/// </summary>
+/// <exception cref="HttpRequestException">The returned task faults when the fixture failure is selected.</exception>
 public sealed class WorkspaceQueryTests
 {
-    /// <summary>Inventory filters precede paging, counts are owner-scoped, and ordering is stable.</summary>
+    /// <summary>
+    ///     Inventory filters precede paging, counts are owner-scoped, and ordering is stable.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Inventory_pages_filters_and_owner_boundaries()
     {
@@ -42,7 +49,11 @@ public sealed class WorkspaceQueryTests
         Assert.Empty(db.ChangeTracker.Entries());
     }
 
-    /// <summary>Stopped success, unknown outcomes, missing durations, weighted samples and owner isolation remain accurate.</summary>
+    /// <summary>
+    ///     Stopped success, unknown outcomes, missing durations, weighted samples and owner isolation
+    ///     remain accurate.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Overview_preserves_recorded_outcome_and_observation_semantics()
     {
@@ -81,7 +92,10 @@ public sealed class WorkspaceQueryTests
         Assert.Equal(1, project.FailedDeployments);
     }
 
-    /// <summary>A telemetry table outage leaves deployment activity usable and supplies fixed guidance.</summary>
+    /// <summary>
+    ///     A telemetry table outage leaves deployment activity usable and supplies fixed guidance.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Telemetry_outage_is_isolated_and_invalid_inputs_are_rejected()
     {
@@ -99,7 +113,10 @@ public sealed class WorkspaceQueryTests
             service.OverviewAsync(fixture.Owner, 7, new CancellationToken(true)));
     }
 
-    /// <summary>Short windows use archived observations, filter before pagination and reject other owners.</summary>
+    /// <summary>
+    ///     Short windows use archived observations, filter before pagination and reject other owners.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Detailed_metrics_page_containers_and_authorize_private_batches()
     {
@@ -177,7 +194,11 @@ public sealed class WorkspaceQueryTests
         }
     }
 
-    /// <summary>Partial day boundaries exclude unrelated daily summaries and complete UTC days retain sample weighting.</summary>
+    /// <summary>
+    ///     Partial day boundaries exclude unrelated daily summaries and complete UTC days retain sample
+    ///     weighting.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Long_windows_use_complete_days_without_boundary_double_counting()
     {
@@ -242,11 +263,26 @@ public sealed class WorkspaceQueryTests
         }
     }
 
-    /// <summary>Private HTTP-equivalent fixture delegates batch authorization to production SQL.</summary>
+    /// <summary>
+    ///     Private HTTP-equivalent fixture delegates batch authorization to production SQL.
+    /// </summary>
+    /// <param name="reader">Bounded archive metric reader used by the fixture.</param>
+    /// <param name="disk">Underlying archive adapter wrapped by the fixture.</param>
+    /// <param name="unavailable">Whether to inject dependency unavailability.</param>
+    /// <exception cref="HttpRequestException">The returned task faults when the fixture failure is selected.</exception>
     private sealed class BatchPort(ArchiveMetricBatchReader reader, IDeploymentArchive disk, bool unavailable = false)
         : IDeploymentArchive
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Delegates archive batches unless the fixture is configured to return a faulted outage task.
+        /// </summary>
+        /// <param name="request">Synthetic archive-batch selection.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>
+        ///     A task returning the configured archive metric batch instance or response for this scenario.
+        ///     A configured outage returns a faulted task instead.
+        /// </returns>
+        /// <exception cref="HttpRequestException">The returned task faults when the fixture failure is selected.</exception>
         public Task<ArchiveMetricBatch> ReadMetricBatchAsync(ArchiveMetricBatchRequest request, CancellationToken token)
         {
             return unavailable
@@ -254,50 +290,97 @@ public sealed class WorkspaceQueryTests
                 : reader.ReadAsync(request, token);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Forwards append to the underlying fixture adapter.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured deployment log envelope instance or response for this scenario.</returns>
         public Task<DeploymentLogEnvelope> AppendAsync(DeploymentLogEnvelope e, CancellationToken token)
         {
             return disk.AppendAsync(e, token);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Forwards the bounded history read to the fixture archive.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity.</param>
+        /// <param name="project">Synthetic project identity.</param>
+        /// <param name="deployment">Synthetic deployment identity.</param>
+        /// <param name="cursor">Opaque history position, or null to read the latest page.</param>
+        /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+        /// <param name="limit">Requested count or configured admission bound.</param>
+        /// <param name="search">The optional plain-text search term.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
             long cursor, bool backwards, int limit, string? search, CancellationToken token)
         {
             return disk.ReadAsync(tenant, project, deployment, cursor, backwards, limit, search, token);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies configured saved metric history for component assertions.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity.</param>
+        /// <param name="project">Synthetic project identity.</param>
+        /// <param name="deployment">Synthetic deployment identity.</param>
+        /// <param name="start">UTC observation-window start.</param>
+        /// <param name="end">UTC observation-window end.</param>
+        /// <param name="maximumPoints">The maximum number of returned aggregate points.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public Task<IReadOnlyList<DeploymentMetricPoint>> ReadMetricsAsync(Guid tenant, Guid project, Guid deployment,
             DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken token)
         {
             return disk.ReadMetricsAsync(tenant, project, deployment, start, end, maximumPoints, token);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Forwards delete project to the underlying fixture adapter.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity.</param>
+        /// <param name="project">Synthetic project identity.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public Task DeleteProjectAsync(Guid tenant, Guid project, CancellationToken token)
         {
             return disk.DeleteProjectAsync(tenant, project, token);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Forwards import metrics to the underlying fixture adapter.
+        /// </summary>
+        /// <param name="import">The retained interval statistics to import idempotently.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public Task ImportMetricsAsync(ArchiveMetricImport import, CancellationToken token)
         {
             return disk.ImportMetricsAsync(import, token);
         }
     }
 
-    /// <summary>Controls UTC windows without mutating application time.</summary>
+    /// <summary>
+    ///     Controls UTC windows without mutating application time.
+    /// </summary>
+    /// <param name="value">Controlled UTC timestamp.</param>
     private sealed class FixedClock(DateTimeOffset value) : TimeProvider
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns the controlled UTC clock value.
+        /// </summary>
+        /// <returns>The fixture-controlled UTC time.</returns>
         public override DateTimeOffset GetUtcNow()
         {
             return value;
         }
     }
 
-    /// <summary>Owns a generated schema only in the explicitly configured isolated verification database.</summary>
+    /// <summary>
+    ///     Owns a generated schema only in the explicitly configured isolated verification database.
+    /// </summary>
+    /// <param name="connection">Fixture database connection or explicitly isolated connection string.</param>
+    /// <param name="schema">Isolated PostgreSQL schema owned by the fixture.</param>
     private sealed class Fixture(string connection, string schema) : IAsyncDisposable
     {
         /// <summary>Fixture owner.</summary>
@@ -318,7 +401,10 @@ public sealed class WorkspaceQueryTests
         /// <summary>Generated safe schema identity.</summary>
         private string Schema => schema;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Removes the isolated PostgreSQL schema owned by the fixture.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async ValueTask DisposeAsync()
         {
             await using var db = new NpgsqlConnection(connection);
@@ -327,7 +413,10 @@ public sealed class WorkspaceQueryTests
             await command.ExecuteNonQueryAsync();
         }
 
-        /// <summary>Independent production EF context.</summary>
+        /// <summary>
+        ///     Independent production EF context.
+        /// </summary>
+        /// <returns>An independent metadata context owned by the caller.</returns>
         public AutoMateDbContext Db()
         {
             var settings = new NpgsqlConnectionStringBuilder(connection) { SearchPath = schema, Pooling = false };
@@ -338,7 +427,10 @@ public sealed class WorkspaceQueryTests
             return new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
         }
 
-        /// <summary>Creates a schema, applies real migrations and seeds public metadata.</summary>
+        /// <summary>
+        ///     Creates a schema, applies real migrations and seeds public metadata.
+        /// </summary>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync()
         {
             var fixture = new Fixture(Environment.GetEnvironmentVariable("AUTOMATE_AI_TEST_DB")!,
