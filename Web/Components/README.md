@@ -1,5 +1,10 @@
 # Components
 
+Component descriptions use Razor `@* ... *@` comments. Handwritten members inside `@code` blocks and code-behind files
+use XML documentation: multiline summaries for types and callables, parameter and return contracts, and confirmed
+escaping exceptions. These comments describe presentation behavior, ownership and resource lifetimes without adding
+rendered content; concise field and property summaries may remain on one line.
+
 Dashboard deployment-status notifications marshal model changes and rendering together through InvokeAsync.
 Async callback failures are observed and logged with fixed guidance, GUIDs and failure types; queued callbacks after
 disposal are ignored. DashboardStatusTests exercises Running/Failed/Stopped notifications from background tasks using
@@ -18,7 +23,8 @@ reads, and cancelled/stale responses cannot overwrite newer selections.
 `Shared/Metrics/TelemetryChart.razor` renders labeled SVG charts, visible isolated observations and gaps. Its local
 `wwwroot/js/telemetry-chart.js` module handles pointer/touch and arrow-key inspection without server roundtrips,
 maintains legible axis text when resized, and disposes listeners/observers. Shared presentation styles use AutoMate's
-light/dark theme tokens. `Shared/Metrics/TelemetryPresentation.cs` owns friendly names, binary memory units, sub-core precision,
+light/dark theme tokens. `Shared/Metrics/TelemetryPresentation.cs` owns friendly names, binary memory units, sub-core
+precision,
 rounded axes and sample-weighted daily averages. Historical summaries average returned interval aggregates; raw sample
 counts are unavailable there. Memory capacity remains supporting text rather than flattening the usage chart.
 
@@ -89,7 +95,8 @@ ProjectTelemetrySummary receives the already resolved owner from ProjectDetails 
 for each analytics load. This prevents its EF queries from sharing the parent's circuit context during overlapping
 rendering/history loads; the application service still checks ownership.
 
-`Shared/Console/DeploymentTerminalPresentation.cs` formats Azure web, system and database output into CRLF-separated rows
+`Shared/Console/DeploymentTerminalPresentation.cs` formats Azure web, system and database output into CRLF-separated
+rows
 with recorded UTC timestamps and stream labels (`STDOUT`, `STDERR`, `SYSTEM`, `STATUS`). Each line of a multiline
 message receives the same timestamp, retaining indentation. Older Azure records without timestamps show only the
 stream label. Other channels retain their existing text and plain `[stderr]` marker. Stored event messages remain

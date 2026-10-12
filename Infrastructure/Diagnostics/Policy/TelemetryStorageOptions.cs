@@ -1,6 +1,8 @@
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Specialized storage configuration; secrets must come from environment or a secret store.</summary>
+/// <summary>
+///     Specialized storage configuration; secrets must come from environment or a secret store.
+/// </summary>
 public sealed class TelemetryStorageOptions
 {
     /// <summary>Configuration section.</summary>
@@ -12,8 +14,13 @@ public sealed class TelemetryStorageOptions
     /// <summary>DiskGateway bypasses the application database for new telemetry payloads.</summary>
     public string DeliveryMode { get; set; } = "PostgresOutbox";
 
+    /// <summary>Private authenticated telemetry gateway endpoint.</summary>
     public string GatewayUrl { get; set; } = "";
+
+    /// <summary>Server-only ingestion credential; never expose it to clients or logs.</summary>
     public string GatewayToken { get; set; } = "";
+
+    /// <summary>Selects the required private spool/archive gateway for new diagnostic writes.</summary>
     public bool DiskGateway => DeliveryMode == "DiskGateway";
 
     /// <summary>Loki base URI including any gateway prefix.</summary>
@@ -28,7 +35,10 @@ public sealed class TelemetryStorageOptions
     /// <summary>Gateway authorization header supplied through a secret store.</summary>
     public string Authorization { get; set; } = "";
 
-    /// <summary>Optional operator-selected public CA certificate for a private TLS gateway; applies only to telemetry HTTP.</summary>
+    /// <summary>
+    ///     Optional operator-selected public CA certificate for a private TLS gateway; applies only
+    ///     to telemetry HTTP.
+    /// </summary>
     public string CaCertificatePath { get; set; } = "";
 
     /// <summary>Allows plaintext transport only on private development networks.</summary>
@@ -70,13 +80,20 @@ public sealed class TelemetryStorageOptions
     /// <summary>Whether specialized storage is selected.</summary>
     public bool Specialized => Backend == "LokiMimir";
 
-    /// <summary>Validates security and finite resource limits before startup.</summary>
+    /// <summary>
+    ///     Validates security and finite resource limits before startup.
+    /// </summary>
+    /// <returns>Whether the documented valid condition holds.</returns>
     public bool IsValid()
     {
         return !GetValidationErrors().Any();
     }
 
-    /// <summary>Reports actionable setting names without exposing configured URLs, tokens, or other values.</summary>
+    /// <summary>
+    ///     Reports actionable setting names without exposing configured URLs, tokens, or other
+    ///     values.
+    /// </summary>
+    /// <returns>The validation errors selection with its documented bounds and ordering.</returns>
     public IEnumerable<string> GetValidationErrors()
     {
         if (Backend != "Postgres" && !Specialized)
@@ -114,7 +131,11 @@ public sealed class TelemetryStorageOptions
             yield return "Managed telemetry requires TelemetryStorage:ProcessingRegion.";
     }
 
-    /// <summary>Rejects userinfo and unapproved plaintext endpoints.</summary>
+    /// <summary>
+    ///     Rejects userinfo and unapproved plaintext endpoints.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>Whether the documented valid uri condition holds.</returns>
     private bool ValidUri(string value)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&

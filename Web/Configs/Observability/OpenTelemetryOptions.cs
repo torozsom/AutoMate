@@ -1,6 +1,8 @@
 namespace Web.Configs;
 
-/// <summary>Controls OpenTelemetry export without placing credentials in application settings.</summary>
+/// <summary>
+///     Controls OpenTelemetry export without placing credentials in application settings.
+/// </summary>
 public sealed class OpenTelemetryOptions
 {
     /// <summary>Configuration section name.</summary>
@@ -16,8 +18,8 @@ public sealed class OpenTelemetryOptions
     public bool ExportConsole { get; init; }
 
     /// <summary>
-    ///     Optional absolute HTTP(S) collector URL without URL credentials, query or fragment; authentication belongs in
-    ///     protected exporter configuration.
+    ///     Optional absolute HTTP(S) collector URL without URL credentials, query or fragment;
+    ///     authentication belongs in protected exporter configuration.
     /// </summary>
     public string? OtlpEndpoint { get; init; }
 }

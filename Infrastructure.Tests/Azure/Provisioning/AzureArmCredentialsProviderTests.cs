@@ -11,10 +11,16 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Azure;
 
-/// <summary>Verifies launches obtain current ARM credentials instead of reusing an expired login token.</summary>
+/// <summary>
+///     Verifies launches obtain current ARM credentials instead of reusing an expired login token.
+/// </summary>
 public sealed class AzureArmCredentialsProviderTests
 {
-    /// <summary>Refresh token rotation is persisted; failures give a safe reconnect message.</summary>
+    /// <summary>
+    ///     Refresh token rotation is persisted; failures give a safe reconnect message.
+    /// </summary>
+    /// <param name="success">Whether the configured operation succeeds.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -27,8 +33,13 @@ public sealed class AzureArmCredentialsProviderTests
         await db.Database.EnsureCreatedAsync();
         var user = new RemoteUser
         {
-            Username = "test", Email = "test@example.invalid", AccountId = "1", AzureTenantId = "tenant",
-            AzureSubscriptionId = "subscription", AzureAccessToken = "expired", AzureRefreshToken = "refresh",
+            Username = "test",
+            Email = "test@example.invalid",
+            AccountId = "1",
+            AzureTenantId = "tenant",
+            AzureSubscriptionId = "subscription",
+            AzureAccessToken = "expired",
+            AzureRefreshToken = "refresh",
             AzureTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(-2)
         };
         db.Users.Add(user);

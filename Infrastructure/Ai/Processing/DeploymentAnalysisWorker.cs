@@ -13,14 +13,28 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Processes queued diagnoses in bounded independent scopes; every slot retains lease renewal and result fencing.</summary>
+/// <summary>
+///     Processes queued diagnoses in bounded independent scopes; every slot retains lease
+///     renewal and result fencing.
+/// </summary>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class DeploymentAnalysisWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<DeploymentAnalysisWorker> logger,
     TimeProvider clock,
     IOptions<AiAnalysisOptions> options) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Runs bounded analysis slots with fenced ownership, current egress approval and safe
+    ///     result persistence.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var concurrency = options.Value.MaximumConcurrency;
@@ -29,7 +43,12 @@ public sealed class DeploymentAnalysisWorker(
         return Task.WhenAll(Enumerable.Range(0, concurrency).Select(_ => RunConsumerAsync(stoppingToken)));
     }
 
-    /// <summary>A slot claims only when free, awaits all lease cleanup before reuse and never shares a processing scope.</summary>
+    /// <summary>
+    ///     A slot claims only when free, awaits all lease cleanup before reuse and never shares a
+    ///     processing scope.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RunConsumerAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -67,7 +86,14 @@ public sealed class DeploymentAnalysisWorker(
             }
     }
 
-    /// <summary>Renews through independent scopes and gives interrupted work a bounded best-effort release on shutdown.</summary>
+    /// <summary>
+    ///     Renews through independent scopes and gives interrupted work a bounded best-effort
+    ///     release on shutdown.
+    /// </summary>
+    /// <param name="services">Resolves the current scoped operation dependencies.</param>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task RunLeasedAsync(IServiceProvider services, DeploymentAnalysisWorkItem work,
         CancellationToken stoppingToken)
     {
@@ -116,7 +142,14 @@ public sealed class DeploymentAnalysisWorker(
         }
     }
 
-    /// <summary>A failed/expired renewal cancels local processing; final database fencing rejects late uncooperative results.</summary>
+    /// <summary>
+    ///     A failed/expired renewal cancels local processing; final database fencing rejects late
+    ///     uncooperative results.
+    /// </summary>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="owned">Owns cancellation of the supervised work and must be disposed by its owner.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RenewLeaseAsync(DeploymentAnalysisWorkItem work, CancellationTokenSource owned,
         CancellationToken token)
     {
@@ -148,7 +181,14 @@ public sealed class DeploymentAnalysisWorker(
         }
     }
 
-    /// <summary>Stores only a complete validated response under its current lease; failures never copy exception messages.</summary>
+    /// <summary>
+    ///     Stores only a complete validated response under its current lease; failures never copy
+    ///     exception messages.
+    /// </summary>
+    /// <param name="services">Resolves the current scoped operation dependencies.</param>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal static Task ProcessAsync(IServiceProvider services, DeploymentAnalysisWorkItem work,
         CancellationToken cancellationToken)
     {
@@ -157,7 +197,14 @@ public sealed class DeploymentAnalysisWorker(
             () => ProcessCoreAsync(services, work, cancellationToken), outcome => outcome);
     }
 
-    /// <summary>Returns only the committed outcome; stale writes and retries cannot report a completed analysis.</summary>
+    /// <summary>
+    ///     Returns only the committed outcome; stale writes and retries cannot report a completed
+    ///     analysis.
+    /// </summary>
+    /// <param name="services">Resolves the current scoped operation dependencies.</param>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the analysis outcome projection derived from the verified inputs.</returns>
     private static async Task<AnalysisOutcome> ProcessCoreAsync(IServiceProvider services,
         DeploymentAnalysisWorkItem work,
         CancellationToken cancellationToken)
@@ -423,7 +470,16 @@ public sealed class DeploymentAnalysisWorker(
         };
     }
 
-    /// <summary>Atomically queues a future attempt under the current lease; stores scheduling metadata only.</summary>
+    /// <summary>
+    ///     Atomically queues a future attempt under the current lease; stores scheduling metadata
+    ///     only.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="delay">Bounded wait before the next scheduled attempt.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning whether the documented schedule retry async condition holds.</returns>
     private static async Task<bool> ScheduleRetryAsync(AutoMateDbContext db, TimeProvider clock,
         DeploymentAnalysisWorkItem work, TimeSpan delay, CancellationToken token)
     {
@@ -459,8 +515,12 @@ public sealed class DeploymentAnalysisWorker(
     }
 }
 
-/// <summary>Fixed safe terminal outcome after the configured number of interrupted acquisitions.</summary>
+/// <summary>
+///     Fixed safe terminal outcome after the configured number of interrupted acquisitions.
+/// </summary>
 internal sealed class AnalysisRecoveryExhaustedException() : Exception("Analysis recovery attempts are exhausted.");
 
-/// <summary>Safe terminal outcome when reloaded configuration no longer permits a queued retry.</summary>
+/// <summary>
+///     Safe terminal outcome when reloaded configuration no longer permits a queued retry.
+/// </summary>
 internal sealed class AnalysisRetryExhaustedException() : Exception("AI provider retry limit reached.");

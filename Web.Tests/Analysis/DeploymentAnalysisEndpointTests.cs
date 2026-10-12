@@ -20,12 +20,19 @@ using Xunit;
 namespace Web.Tests;
 
 /// <summary>
-///     Exercises the real DELETE/cancel routes, authorization middleware and antiforgery validator over loopback
-///     HTTP.
+///     Exercises the real DELETE/cancel routes, authorization middleware and antiforgery validator
+///     over loopback HTTP.
 /// </summary>
 public sealed class DeploymentAnalysisEndpointTests
 {
-    /// <summary>New admissions require authentication/antiforgery and expose immutable option conflicts.</summary>
+    /// <summary>
+    ///     New admissions require authentication/antiforgery and expose immutable option conflicts.
+    /// </summary>
+    /// <param name="authenticated">Whether the synthetic principal is authenticated.</param>
+    /// <param name="csrf">Whether valid antiforgery proof is supplied.</param>
+    /// <param name="conflict">Whether the use case reports an active-operation conflict.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, true, false, 401)]
     [InlineData(true, false, false, 400)]
@@ -39,7 +46,14 @@ public sealed class DeploymentAnalysisEndpointTests
             "RequestManualAsync");
     }
 
-    /// <summary>Preference mutations preserve authenticated owner and forgery checks.</summary>
+    /// <summary>
+    ///     Preference mutations preserve authenticated owner and forgery checks.
+    /// </summary>
+    /// <param name="authenticated">Whether the synthetic principal is authenticated.</param>
+    /// <param name="csrf">Whether valid antiforgery proof is supplied.</param>
+    /// <param name="exists">Whether the owned resource exists.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, true, true, 401)]
     [InlineData(true, false, true, 400)]
@@ -51,7 +65,14 @@ public sealed class DeploymentAnalysisEndpointTests
         await VerifyRouteAsync(authenticated, csrf, exists, status, "SavePreferencesAsync");
     }
 
-    /// <summary>Deletion requires authentication/antiforgery and maps the owner-scoped use-case result.</summary>
+    /// <summary>
+    ///     Deletion requires authentication/antiforgery and maps the owner-scoped use-case result.
+    /// </summary>
+    /// <param name="authenticated">Whether the synthetic principal is authenticated.</param>
+    /// <param name="csrf">Whether valid antiforgery proof is supplied.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, true, DeploymentAnalysisDeletionResult.Deleted, 401)]
     [InlineData(true, false, DeploymentAnalysisDeletionResult.Deleted, 400)]
@@ -64,7 +85,15 @@ public sealed class DeploymentAnalysisEndpointTests
         await VerifyRouteAsync(authenticated, csrf, outcome, status, "DeleteAsync");
     }
 
-    /// <summary>Cancellation uses authenticated ownership, antiforgery and fixed safe HTTP outcomes.</summary>
+    /// <summary>
+    ///     Cancellation uses authenticated ownership, antiforgery and fixed safe HTTP outcomes.
+    /// </summary>
+    /// <param name="authenticated">Whether the synthetic principal is authenticated.</param>
+    /// <param name="csrf">Whether valid antiforgery proof is supplied.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <param name="validOwner">Whether the principal resolves to the expected owner.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, true, DeploymentAnalysisCancellationResult.Cancelled, 401, true)]
     [InlineData(true, false, DeploymentAnalysisCancellationResult.Cancelled, 400, true)]
@@ -78,7 +107,16 @@ public sealed class DeploymentAnalysisEndpointTests
         await VerifyRouteAsync(authenticated, csrf, outcome, status, "CancelAsync", validOwner);
     }
 
-    /// <summary>Runs production route/middleware on loopback with strict application-port fakes.</summary>
+    /// <summary>
+    ///     Runs production route/middleware on loopback with strict application-port fakes.
+    /// </summary>
+    /// <param name="authenticated">Whether the synthetic principal is authenticated.</param>
+    /// <param name="csrf">Whether valid antiforgery proof is supplied.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <param name="methodName">Private component method to invoke.</param>
+    /// <param name="validOwner">Whether the principal resolves to the expected owner.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static async Task VerifyRouteAsync(bool authenticated, bool csrf, object outcome, int status,
         string methodName, bool validOwner = true)
     {
@@ -144,26 +182,45 @@ public sealed class DeploymentAnalysisEndpointTests
         Assert.Equal(authenticated && csrf && validOwner ? 1 : 0, calls);
     }
 
-    /// <summary>Supplies application ports without contacting users, persistence or providers.</summary>
+    /// <summary>
+    ///     Supplies application ports without contacting users, persistence or providers.
+    /// </summary>
     public class PortProxy : DispatchProxy
     {
         /// <summary>Test-specific response behavior.</summary>
         public Func<MethodInfo?, object?[]?, object?> Call { get; set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             return Call(method, args);
         }
     }
 
-    /// <summary>Authenticates only explicitly supplied synthetic test principals.</summary>
+    /// <summary>
+    ///     Authenticates only explicitly supplied synthetic test principals.
+    /// </summary>
+    /// <param name="options">Authentication options monitor supplied by the framework.</param>
+    /// <param name="logger">The logger used for fixed operational events without diagnostic payloads.</param>
+    /// <param name="encoder">Framework URL encoder required by fixture authentication.</param>
     private sealed class FixtureAuthentication(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
         UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Builds a synthetic principal from the fixture owner header, or supplies no authentication
+        ///     result.
+        /// </summary>
+        /// <returns>A task returning the configured authenticate result instance or response for this scenario.</returns>
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
             var owner = Request.Headers["Fixture-Owner"].ToString();

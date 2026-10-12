@@ -9,10 +9,17 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Verifies exact-project consent persistence and authorization without diagnostic payload storage.</summary>
+/// <summary>
+///     Verifies exact-project consent persistence and authorization without diagnostic payload
+///     storage.
+/// </summary>
 public sealed class AnalysisConsentTests
 {
-    /// <summary>Remote projects without configuration support explicit consent, durable readback and revocation.</summary>
+    /// <summary>
+    ///     Remote projects without configuration support explicit consent, durable readback and
+    ///     revocation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Remote_project_without_configuration_can_grant_and_revoke_consent()
     {
@@ -44,7 +51,12 @@ public sealed class AnalysisConsentTests
         Assert.False((await db.Set<Configuration>().SingleAsync()).AiDiagnosticEgressConsented);
     }
 
-    /// <summary>Consent affects only the requested project and survives a fresh context, including revocation.</summary>
+    /// <summary>
+    ///     Consent affects only the requested project and survives a fresh context, including
+    ///     revocation.
+    /// </summary>
+    /// <param name="consented">Current owner-consent state under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -82,9 +94,11 @@ public sealed class AnalysisConsentTests
     }
 
     /// <summary>
-    ///     Wrong owners, application/project mismatches and absent configurations cannot update another project's
-    ///     consent.
+    ///     Wrong owners, application/project mismatches and absent configurations cannot update another
+    ///     project's consent.
     /// </summary>
+    /// <param name="invalid">Invalid setting or input supplied by the scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("owner")]
     [InlineData("application")]

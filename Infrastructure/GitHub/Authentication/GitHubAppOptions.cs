@@ -1,6 +1,8 @@
 namespace Infrastructure.GitHub;
 
-/// <summary>GitHub App credentials supplied by the SaaS secret provider.</summary>
+/// <summary>
+///     GitHub App credentials supplied by the SaaS secret provider.
+/// </summary>
 public sealed class GitHubAppOptions
 {
     /// <summary>Configuration section name.</summary>

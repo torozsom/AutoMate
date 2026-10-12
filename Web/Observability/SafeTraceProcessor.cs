@@ -6,7 +6,11 @@ using OpenTelemetry;
 
 namespace Web.Observability;
 
-/// <summary>Sanitizes before simple/batch exporters; spans with immutable untrusted events/links fail closed.</summary>
+/// <summary>
+///     Sanitizes before simple/batch exporters; spans with immutable untrusted events/links fail
+///     closed.
+/// </summary>
+/// <param name="policy">Reviewed export or authorization policy.</param>
 public sealed class SafeTraceProcessor(PlatformTelemetryPolicy policy) : BaseProcessor<Activity>
 {
     /// <summary>Finite omission reasons, without identifiers or payloads.</summary>
@@ -24,7 +28,10 @@ public sealed class SafeTraceProcessor(PlatformTelemetryPolicy policy) : BasePro
         "github.logs.download", "azure.runtime.poll", "azure.logs.query", "azure.metrics.query"
     };
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Sanitizes span metadata and omits spans with untrusted immutable events or links.
+    /// </summary>
+    /// <param name="activity">Trace span to sanitize or omit.</param>
     public override void OnEnd(Activity activity)
     {
         if (activity.Events.Any() || activity.Links.Any())
@@ -62,7 +69,11 @@ public sealed class SafeTraceProcessor(PlatformTelemetryPolicy policy) : BasePro
         };
     }
 
-    /// <summary>Both SDK export processors honor the Recorded flag; no payload is sent for an omitted span.</summary>
+    /// <summary>
+    ///     Both SDK export processors honor the Recorded flag; no payload is sent for an omitted span.
+    /// </summary>
+    /// <param name="activity">Trace span to sanitize or omit.</param>
+    /// <param name="reason">Fixed reason for omitting the span.</param>
     private static void Omit(Activity activity, string reason)
     {
         activity.ActivityTraceFlags &= ~ActivityTraceFlags.Recorded;

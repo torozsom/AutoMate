@@ -13,18 +13,15 @@ using Microsoft.Extensions.Options;
 namespace Infrastructure.Docker;
 
 /// <summary>
-///     Coordinates Docker daemon operations used by local deployments and runtime log streaming.
+///     Coordinates Docker daemon operations used by local deployments and runtime log
+///     streaming.
 /// </summary>
 public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDisposable
 {
-    /// <summary>
-    ///     Helper for packaging Docker build contexts while honoring .dockerignore rules.
-    /// </summary>
+    /// <summary>Helper for packaging Docker build contexts while honoring .dockerignore rules.</summary>
     private readonly DockerBuildContextArchive _buildContextArchive;
 
-    /// <summary>
-    ///     Docker daemon client used for direct Docker Engine operations.
-    /// </summary>
+    /// <summary>Docker daemon client used for direct Docker Engine operations.</summary>
     private readonly DockerClient _client;
 
     /// <summary>Timestamp source for compatibility stream registrations.</summary>
@@ -33,32 +30,36 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
     /// <summary>Owns normalized, bounded and reconnecting subscriptions.</summary>
     private readonly DockerDiagnosticCollector _collector;
 
-    /// <summary>
-    ///     Helper for Docker CLI operations that are not covered by Docker.DotNet.
-    /// </summary>
+    /// <summary>Helper for Docker CLI operations that are not covered by Docker.DotNet.</summary>
     private readonly DockerCli _dockerCli;
 
-    /// <summary>
-    ///     Logger for Docker service operations.
-    /// </summary>
+    /// <summary>Logger for Docker service operations.</summary>
     private readonly ILogger<DockerService> _logger;
 
-    /// <summary>
-    ///     Runtime options bound from the Docker configuration section.
-    /// </summary>
+    /// <summary>Runtime options bound from the Docker configuration section.</summary>
     private readonly DockerOptions _options;
 
     /// <summary>Protects legacy SDK build progress before host logging.</summary>
     private readonly IDiagnosticRedactor _redactor;
 
-    /// <summary>
-    ///     Tracks whether the Docker client has already been disposed.
-    /// </summary>
+    /// <summary>Tracks whether the Docker client has already been disposed.</summary>
     private bool _disposed;
 
     /// <summary>
-    ///     Initializes Docker daemon and CLI helpers using platform-specific Docker connection settings.
+    ///     Initializes Docker daemon and CLI helpers using platform-specific Docker connection
+    ///     settings.
     /// </summary>
+    /// <param name="logger">
+    ///     Receives reviewed operational events without diagnostic payloads or credentials.
+    /// </param>
+    /// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+    /// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="telemetry">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="live">Delivers redacted observations to authorized browser groups.</param>
+    /// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+    /// <param name="viewers">Provides the deployment runtime viewers boundary used by this operation.</param>
+    /// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+    /// <param name="scopes">Creates independent scopes for concurrent background work.</param>
     public DockerService(ILogger<DockerService> logger, IDeploymentDiagnosticPublisher diagnostics,
         IOptions<DockerOptions> options, IOptions<TelemetryStorageOptions> telemetry,
         ILogStreamer live, IDiagnosticRedactor redactor, IDeploymentRuntimeViewers viewers, TimeProvider clock,
@@ -80,7 +81,9 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
         _collector = new DockerDiagnosticCollector(_client, diagnostics, redactor, clock, _logger, scopes);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Releases owned resources and completes the documented service lifetime.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -91,21 +94,44 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
         _disposed = true;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Monitors daemon events; signals the first subscription attempt so deployment can proceed
+    ///     safely.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="subscribed">Called after the diagnostic source has established its subscription.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task representing daemon monitoring until cancellation or source termination.</returns>
     public Task MonitorDaemonAsync(DockerDeploymentTarget target, Action subscribed,
         CancellationToken cancellationToken)
     {
         return _collector.MonitorDaemonAsync(target, subscribed, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Streams a verified project's container with bounded parsing, replay and reconnect
+    ///     handling.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="container">Verified owned Docker container and terminal identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task representing owned-container log monitoring until cancellation or termination.</returns>
     public Task MonitorContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
         CancellationToken cancellationToken)
     {
         return _collector.MonitorContainerAsync(target, container, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Samples a verified container while preserving the independent live/history metric
+    ///     cadence.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="container">Verified owned Docker container and terminal identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task representing owned-container metric monitoring until cancellation or termination.
+    /// </returns>
     public async Task MonitorMetricsAsync(DockerDeploymentTarget target, DockerContainerTarget container,
         CancellationToken cancellationToken)
     {
@@ -115,7 +141,11 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
                 cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Checks if the Docker daemon is available and responsive.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning whether the Docker daemon is reachable.</returns>
     public async Task<bool> PingAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -130,7 +160,13 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Builds a Docker image from a source code directory.
+    /// </summary>
+    /// <param name="sourcePath">The Docker build-context directory.</param>
+    /// <param name="imageTag">The Docker image tag to build or run.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning whether the Docker image build succeeded.</returns>
     public async Task<bool> BuildImageAsync(string sourcePath, string imageTag,
         CancellationToken cancellationToken = default)
     {
@@ -185,7 +221,17 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Starts a Docker container from a specified image, mapping the given host port to the
+    ///     container port.
+    /// </summary>
+    /// <param name="imageTag">The Docker image tag to build or run.</param>
+    /// <param name="containerName">The exact Docker container name.</param>
+    /// <param name="hostPort">The port exposed on the Docker host.</param>
+    /// <param name="containerPort">The application port inside the container.</param>
+    /// <param name="envVarsJson">The JSON environment-variable map supplied to the container.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the started container identity, or null when startup fails.</returns>
     public async Task<string?> StartContainerAsync(string imageTag, string containerName, int hostPort,
         int containerPort = 8080, string? envVarsJson = null, CancellationToken cancellationToken = default)
     {
@@ -226,7 +272,15 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Executes the 'docker compose up' command in the specified working directory.
+    /// </summary>
+    /// <param name="workingDir">The local directory containing the Compose deployment.</param>
+    /// <param name="projectName">The project name used for deployment artifacts or Compose lookup.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning whether Compose up completed successfully.</returns>
     public async Task<bool> RunDockerComposeUpAsync(string workingDir, string projectName, Guid projectId,
         Guid deploymentId,
         CancellationToken cancellationToken = default)
@@ -239,7 +293,17 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
             "up", "-d", "--build");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Executes the 'docker compose down' command in the specified working directory.
+    /// </summary>
+    /// <param name="workingDir">The local directory containing the Compose deployment.</param>
+    /// <param name="projectName">The project name used for deployment artifacts or Compose lookup.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <returns>A task returning whether Compose down completed successfully.</returns>
     public async Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
         CancellationToken cancellationToken = default, Guid? deploymentId = null)
     {
@@ -251,13 +315,25 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
             "down");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Gets a list of all currently running Docker Compose project names.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the discovered running Compose project names.</returns>
     public async Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken = default)
     {
         return await _dockerCli.GetRunningProjectNamesAsync(cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Starts streaming logs for a specified container to the log streamer.
+    /// </summary>
+    /// <param name="containerName">The exact Docker container name.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="containerSuffixOrTabId">The stable container terminal suffix used by the browser.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task representing the container-log subscription until cancellation or termination.</returns>
     public Task StreamContainerLogsAsync(string containerName, Guid projectId, Guid deploymentId,
         string containerSuffixOrTabId, CancellationToken cancellationToken)
     {
@@ -267,7 +343,17 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
         return _collector.MonitorContainerAsync(target, container, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Starts streaming metrics for a specified container to the log streamer.
+    /// </summary>
+    /// <param name="containerName">The exact Docker container name.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="containerSuffixOrTabId">The stable container terminal suffix used by the browser.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task representing the container-metric subscription until cancellation or termination.
+    /// </returns>
     public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, Guid deploymentId,
         string containerSuffixOrTabId,
         CancellationToken cancellationToken)
@@ -276,7 +362,12 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
             cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Gets the host port mapped to the specified container.
+    /// </summary>
+    /// <param name="containerName">The exact Docker container name.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the discovered host port, or zero when no port is available.</returns>
     public async Task<int> GetContainerHostPortAsync(string containerName,
         CancellationToken cancellationToken = default)
     {

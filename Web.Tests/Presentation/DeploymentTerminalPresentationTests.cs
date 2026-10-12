@@ -4,10 +4,15 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Checks equal live/history text treatment without relying on terminal colors.</summary>
+/// <summary>
+///     Checks equal live/history text treatment without relying on terminal colors.
+/// </summary>
 public sealed class DeploymentTerminalPresentationTests
 {
-    /// <summary>Saved metric summaries disappear without deleting operational records or blocking later replay rows.</summary>
+    /// <summary>
+    ///     Saved metric summaries disappear without deleting operational records or blocking later
+    ///     replay rows.
+    /// </summary>
     [Fact]
     public void Database_metric_rows_are_hidden_and_later_operational_rows_survive()
     {
@@ -27,7 +32,9 @@ public sealed class DeploymentTerminalPresentationTests
         Assert.Equal(2, new[] { metric, operational }.Max(row => row.OrderId));
     }
 
-    /// <summary>Additive source metadata distinguishes stderr while retaining legacy payload compatibility.</summary>
+    /// <summary>
+    ///     Additive source metadata distinguishes stderr while retaining legacy payload compatibility.
+    /// </summary>
     [Fact]
     public void Stderr_is_visible_and_legacy_stdout_text_remains_unchanged()
     {
@@ -39,7 +46,12 @@ public sealed class DeploymentTerminalPresentationTests
             DeploymentTerminalPresentation.Format(log with { Stream = DeploymentDiagnosticStream.StandardError }));
     }
 
-    /// <summary>Azure records remain separate rows across live writes and concatenated saved history.</summary>
+    /// <summary>
+    ///     Azure records remain separate rows across live writes and concatenated saved history.
+    /// </summary>
+    /// <param name="channel">Recorded log channel to select.</param>
+    /// <param name="stream">Synthetic output stream or destination used by the fixture.</param>
+    /// <param name="label">Accessible label or presentation text under test.</param>
     [Theory]
     [InlineData("azure-web", DeploymentDiagnosticStream.StandardOutput, "STDOUT")]
     [InlineData("azure-db", DeploymentDiagnosticStream.StandardError, "STDERR")]
@@ -58,7 +70,10 @@ public sealed class DeploymentTerminalPresentationTests
         Assert.Equal("first", log.Message);
     }
 
-    /// <summary>Multiline exceptions retain indentation with one timestamped row per physical line.</summary>
+    /// <summary>
+    ///     Multiline exceptions retain indentation with one timestamped row per physical line.
+    /// </summary>
+    /// <param name="newline">Line-ending variant used by the output scenario.</param>
     [Theory]
     [InlineData("\n")]
     [InlineData("\r\n")]
@@ -73,7 +88,11 @@ public sealed class DeploymentTerminalPresentationTests
             DeploymentTerminalPresentation.Format(log));
     }
 
-    /// <summary>Older Azure records still separate cleanly without inventing a source timestamp.</summary>
+    /// <summary>
+    ///     Older Azure records still separate cleanly without inventing a source timestamp.
+    /// </summary>
+    /// <param name="channel">Recorded log channel to select.</param>
+    /// <param name="label">Accessible label or presentation text under test.</param>
     [Theory]
     [InlineData("azure-web", "STDOUT")]
     [InlineData("azure-db", "STDOUT")]

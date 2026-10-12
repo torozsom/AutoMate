@@ -20,9 +20,17 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Azure;
 
+/// <summary>
+///     Verifies isolated Azure runtime source collection and durable acknowledgement using
+///     synthetic provider responses.
+/// </summary>
 public sealed class AzureContainerAppRuntimeStreamerTests
 {
-    /// <summary>Revisionless platform events belong to the newest active deployment without leaking foreign revision logs.</summary>
+    /// <summary>
+    ///     Revisionless platform events belong to the newest active deployment without leaking foreign
+    ///     revision logs.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task App_system_events_are_collected_only_by_latest_active_deployment()
     {
@@ -90,7 +98,12 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         Assert.DoesNotContain(publisher.Events, e => e.DeploymentId == newer && e.Message == "[Azure system] first");
     }
 
-    /// <summary>Restarted collectors accept delayed equal-ingestion events only after durable acknowledgement.</summary>
+    /// <summary>
+    ///     Restarted collectors accept delayed equal-ingestion events only after durable
+    ///     acknowledgement.
+    /// </summary>
+    /// <param name="accepted">Expected admission or operation success.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -155,6 +168,10 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         Assert.Equal(accepted ? "hash-b" : "hash-a", checkpoint.LastIngestionTieBreaker);
     }
 
+    /// <summary>
+    ///     Verifies that parallel deployments in one project keep distinct revision logs.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Parallel_deployments_in_one_project_keep_distinct_revision_logs()
     {
@@ -242,6 +259,13 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         }
     }
 
+    /// <summary>
+    ///     Verifies that poll once routes console and system records with deployment correlation.
+    /// </summary>
+    /// <param name="saved">Whether the fixture deployment already has saved identity metadata.</param>
+    /// <param name="accepted">Expected admission or operation success.</param>
+    /// <param name="expectedRevision">Exact expected Azure revision identity.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true, true, "rev-1")]
     [InlineData(false, true, "rev-1")]
@@ -312,7 +336,11 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         Assert.All(checkpoints, c => Assert.Equal(accepted, c.LastTimestamp is not null));
     }
 
-    /// <summary>Managed DB diagnostics keep native units and retry unconfirmed logs without cursor loss.</summary>
+    /// <summary>
+    ///     Managed DB diagnostics keep native units and retry unconfirmed logs without cursor loss.
+    /// </summary>
+    /// <param name="accepted">Expected admission or operation success.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -387,6 +415,11 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         Assert.DoesNotContain(publisher.Events, e => e.Message.Contains("synthetic provider detail"));
     }
 
+    /// <summary>
+    ///     Returns synthetic ARM or Log Analytics responses for the requested fixture endpoint.
+    /// </summary>
+    /// <param name="request">Synthetic HTTP request observed by the handler.</param>
+    /// <returns>The configured HTTP response message instance or response for this scenario.</returns>
     private static HttpResponseMessage Respond(HttpRequestMessage request)
     {
         if (request.RequestUri!.Host == "management.azure.com")
@@ -405,6 +438,13 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             : RecordsJson("revision provisioned", "system", "ContainerAppSystemLogs"));
     }
 
+    /// <summary>
+    ///     Builds a single synthetic Azure diagnostic row with the supplied message, stream and table.
+    /// </summary>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <param name="stream">Synthetic output stream or destination used by the fixture.</param>
+    /// <param name="sourceTable">Recorded Azure diagnostic category or table.</param>
+    /// <returns>The synthetic text produced for this scenario.</returns>
     private static string RecordsJson(string message, string stream, string sourceTable)
     {
         return $$"""
@@ -415,6 +455,13 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                  """;
     }
 
+    /// <summary>
+    ///     Creates fixture metadata and saves a running deployment for the supplied identity.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
+    /// <param name="protector">Ephemeral fixture data-protection provider.</param>
+    /// <param name="deploymentId">Synthetic deployment identity.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static async Task SeedDeploymentAsync(DbContextOptions<AutoMateDbContext> options,
         IDataProtectionProvider protector, Guid deploymentId)
     {
@@ -441,11 +488,23 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         await dbContext.SaveChangesAsync();
     }
 
+    /// <summary>
+    ///     Records normalized observations and returns the configured durable acknowledgement.
+    /// </summary>
     private sealed class RecordingPublisher : IDeploymentDiagnosticPublisher, IDurableDeploymentDiagnosticPublisher
     {
+        /// <summary>Configured durable acknowledgement returned by the synthetic publisher.</summary>
         public bool Accepted { get; init; } = true;
+
+        /// <summary>Synthetic events captured or supplied by this fixture.</summary>
         public List<DeploymentDiagnosticEvent> Events { get; } = [];
 
+        /// <summary>
+        ///     Records normalized fixture observations and reports the configured publication outcome.
+        /// </summary>
+        /// <param name="diagnosticEvent">The normalized diagnostic observation to process.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent,
             CancellationToken cancellationToken = default)
         {
@@ -457,6 +516,12 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             return ValueTask.CompletedTask;
         }
 
+        /// <summary>
+        ///     Records normalized fixture observations and reports the configured publication outcome.
+        /// </summary>
+        /// <param name="diagnosticEvent">The normalized diagnostic observation to process.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
         public Task<bool> PublishDurablyAsync(DeploymentDiagnosticEvent diagnosticEvent,
             CancellationToken cancellationToken)
         {
@@ -469,8 +534,17 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         }
     }
 
+    /// <summary>
+    ///     Supplies a fixed synthetic Log Analytics access token without external authentication.
+    /// </summary>
     private sealed class SuccessfulTokenProvider : IAzureMonitorLogsTokenProvider
     {
+        /// <summary>
+        ///     Supplies a fixed synthetic Log Analytics token without an external token exchange.
+        /// </summary>
+        /// <param name="userId">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured Azure monitor logs token result instance or response for this scenario.</returns>
         public Task<AzureMonitorLogsTokenResult> GetTokenAsync(Guid userId,
             CancellationToken cancellationToken = default)
         {

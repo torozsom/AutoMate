@@ -1,6 +1,8 @@
 namespace Domain.Enums;
 
-/// <summary>Records the most recent outcome of retrieving one GitHub Actions job log.</summary>
+/// <summary>
+///     Records the most recent outcome of retrieving one GitHub Actions job log.
+/// </summary>
 public enum GitHubWorkflowLogAvailability
 {
     /// <summary>No download has been attempted.</summary>

@@ -4,10 +4,15 @@ using Infrastructure.Tests.TestSupport;
 
 namespace Infrastructure.Tests.Azure;
 
-/// <summary>Verifies Azure Monitor names and conversion to the shared metric units.</summary>
+/// <summary>
+///     Verifies Azure Monitor names and conversion to the shared metric units.
+/// </summary>
 public sealed class AzureContainerAppClientTests
 {
-    /// <summary>Legacy custom records use only the workspace returned by the verified owning environment.</summary>
+    /// <summary>
+    ///     Legacy custom records use only the workspace returned by the verified owning environment.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Environment_scope_resolves_workspace_without_exposing_shared_keys()
     {
@@ -25,7 +30,10 @@ public sealed class AzureContainerAppClientTests
         Assert.Equal("env", scope.ResourceName);
     }
 
-    /// <summary>Azure CPU nanocores become cores; working set bytes stay numeric bytes.</summary>
+    /// <summary>
+    ///     Azure CPU nanocores become cores; working set bytes stay numeric bytes.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Metrics_use_supported_names_and_normalize_nanocores()
     {
@@ -57,7 +65,10 @@ public sealed class AzureContainerAppClientTests
         result.Memory.Should().Be("1.5 MiB");
     }
 
-    /// <summary>Missing Azure samples remain missing rather than becoming zeros.</summary>
+    /// <summary>
+    ///     Missing Azure samples remain missing rather than becoming zeros.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Metrics_without_samples_preserve_gaps()
     {

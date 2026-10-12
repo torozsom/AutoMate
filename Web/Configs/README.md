@@ -197,5 +197,7 @@ runtime HTTP requests have bounded timeouts and do not follow redirects.
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
 - `Azure/` — `Azure/AzureSubscriptionResolver.cs`, `Azure/JwtPayloadReader.cs`.
-- `Hosting/` — `Hosting/AnalysisHealthChecks.cs`, `Hosting/AppConfiguration.cs`, `Hosting/HostingProfileOptions.cs`, `Hosting/ServiceConfiguration.cs`.
-- `Observability/` — `Observability/OpenTelemetryOptions.cs`, `Observability/OpenTelemetryOptionsValidator.cs`, `Observability/SecurityAuditResultHandler.cs`.
+- `Hosting/` — `Hosting/AnalysisHealthChecks.cs`, `Hosting/AppConfiguration.cs`, `Hosting/HostingProfileOptions.cs`,
+  `Hosting/ServiceConfiguration.cs`.
+- `Observability/` — `Observability/OpenTelemetryOptions.cs`, `Observability/OpenTelemetryOptionsValidator.cs`,
+  `Observability/SecurityAuditResultHandler.cs`.

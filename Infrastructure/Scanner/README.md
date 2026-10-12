@@ -37,6 +37,8 @@ Successfully scanned empty configuration remains an empty result; malformed opti
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
 - `Catalog/` — `Catalog/DatabaseProviderRuleCatalog.cs`, `Catalog/database-providers.json`.
-- `Environment/` — `Environment/DotEnvLineParser.cs`, `Environment/JsonConfigurationFlattener.cs`, `Environment/ProjectEnvironmentVariableExtractor.cs`.
+- `Environment/` — `Environment/DotEnvLineParser.cs`, `Environment/JsonConfigurationFlattener.cs`,
+  `Environment/ProjectEnvironmentVariableExtractor.cs`.
 - `Filesystem/` — `Filesystem/LocalScannerDirectoryRules.cs`, `Filesystem/LocalSystemScannerService.cs`.
-- `Projects/` — `Projects/CsprojMetadataReader.cs`, `Projects/LocalCsProjectParser.cs`, `Projects/ProjectDependencyGraphScanner.cs`, `Projects/ProjectScannerService.cs`, `Projects/ScannerPortProvider.cs`.
+- `Projects/` — `Projects/CsprojMetadataReader.cs`, `Projects/LocalCsProjectParser.cs`,
+  `Projects/ProjectDependencyGraphScanner.cs`, `Projects/ProjectScannerService.cs`, `Projects/ScannerPortProvider.cs`.

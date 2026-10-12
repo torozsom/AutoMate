@@ -10,14 +10,27 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Runs on the single telemetry service, not every web replica; retries replace daily results.</summary>
+/// <summary>
+///     Runs on the single telemetry service, not every web replica; retries replace daily
+///     results.
+/// </summary>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
 public sealed class TelemetryDailyAggregationWorker(
     IServiceScopeFactory scopes,
     IOptions<TelemetryStorageOptions> options,
     ILogger<TelemetryDailyAggregationWorker> logger,
     IDiagnosticRedactor redactor) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Refreshes weighted daily sufficient statistics from recorded observations.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(1));
@@ -34,7 +47,12 @@ public sealed class TelemetryDailyAggregationWorker(
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Replaces recent daily observations and deletes expired summaries without zero-filling missing metrics.</summary>
+    /// <summary>
+    ///     Replaces recent daily observations and deletes expired summaries without zero-filling
+    ///     missing metrics.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task AggregateOnceAsync(CancellationToken token)
     {
         await using var scope = scopes.CreateAsyncScope();

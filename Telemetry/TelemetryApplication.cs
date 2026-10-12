@@ -11,10 +11,26 @@ using Microsoft.Extensions.Options;
 
 namespace Telemetry;
 
-/// <summary>Builds the private ingestion host with shared safe logging and its existing authenticated disk-gateway routes.</summary>
+/// <summary>
+///     Composes the private telemetry host, safe platform logging and authenticated ingestion/archive routes.
+/// </summary>
 public static class TelemetryApplication
 {
-    /// <summary>Creates the production application; optional host customization runs after service registration before build.</summary>
+    /// <summary>
+    ///     Registers telemetry dependencies and maps the private HTTP pipeline without starting the host.
+    /// </summary>
+    /// <param name="args">Command-line arguments used by the application builder to configure the host.</param>
+    /// <param name="configure">
+    ///     Optional builder customization invoked after production service registration and before host construction.
+    /// </param>
+    /// <returns>The configured, unstarted application; the caller owns its startup, shutdown and disposal.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Builder customization has already built the host, preventing a second build.
+    /// </exception>
+    /// <remarks>
+    ///     Customization and host-construction failures propagate to the caller. Startup validates options and acquires
+    ///     the exclusive spool-volume lock; only one active host may own that volume. Apply database migrations separately.
+    /// </remarks>
     public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
     {
         var builder = WebApplication.CreateBuilder(args);
@@ -76,7 +92,10 @@ public static class TelemetryApplication
 
         var app = builder.Build();
 
-        // This private service credential authenticates AutoMate servers, never customer browsers.
+        /*
+         * Authenticate every route with the private server credential using fixed-time hash comparison.
+         * Missing or incorrect credentials return 401; downstream telemetry-provider failures retain only their status.
+         */
         app.Use(async (context, next) =>
         {
             var expected = context.RequestServices.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value
@@ -99,12 +118,18 @@ public static class TelemetryApplication
             }
         });
 
+        /* Return bounded spool status; the request token cancels the asynchronous status read. */
         app.MapGet("/status",
             async (DiskTelemetrySpool spool, CancellationToken token) => Results.Ok(await spool.StatusAsync(token)));
 
+        /* Publish the archive protocol and operation catalog without tenant data or credentials. */
         app.MapGet("/capabilities", () => Results.Ok(new TelemetryCapabilities(
             TelemetryCapabilities.CurrentVersion, TelemetryCapabilities.RequiredArchiveOperations)));
 
+        /*
+         * Reject malformed, oversized or unsupported observations with 400 and denied admission with 403.
+         * Resolve the owner through admission policy, redact again and return the durable spool receipt.
+         */
         app.MapPost("/ingest", async (TelemetryIngestRequest request, TelemetryAdmissionPolicy admission,
             DiskTelemetrySpool spool,
             IDiagnosticRedactor redactor, IOptions<TelemetryStorageOptions> options, CancellationToken token) =>
@@ -131,6 +156,7 @@ public static class TelemetryApplication
             return Results.Ok(receipt);
         });
 
+        /* Verify the tenant/project/deployment relationship before returning bounded pending output. */
         app.MapGet("/pending/{tenant:guid}/{project:guid}/{deployment:guid}", async (Guid tenant, Guid project,
             Guid deployment,
             AutoMateDbContext db, DiskTelemetrySpool spool, CancellationToken token) =>
@@ -141,6 +167,7 @@ public static class TelemetryApplication
             return Results.Ok(await spool.PendingAsync(tenant, project, deployment, token));
         });
 
+        /* Read the owned immutable log-context selection; invalid archive arguments become 400 responses. */
         app.MapPost("/archive/assessment", async (ArchiveAssessmentQuery request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
         {
@@ -156,6 +183,7 @@ public static class TelemetryApplication
                 return Results.BadRequest();
             }
         });
+        /* Read selected metric evidence only for an owned deployment and a positive window of at most 365 days. */
         app.MapPost("/archive/assessment-metrics", async (ArchiveAssessmentQuery request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
         {
@@ -175,6 +203,7 @@ public static class TelemetryApplication
             }
         });
 
+        /* Read owned log history, defaulting to the latest backward page of 500 records when options are absent. */
         app.MapGet("/archive/{tenant:guid}/{project:guid}/{deployment:guid}", async (Guid tenant, Guid project,
             Guid deployment, long? cursor, bool? backwards, int? limit, string? search,
             AutoMateDbContext db, IDeploymentArchive archive, CancellationToken token) =>
@@ -185,6 +214,7 @@ public static class TelemetryApplication
             return Results.Ok(await archive.ReadAsync(tenant, project, deployment, cursor ?? 0, backwards ?? true,
                 limit ?? 500, search, token));
         });
+        /* Delegate bounded partition reads; denied ownership becomes 403 and invalid request arguments become 400. */
         app.MapPost("/archive/metric-batch", async (ArchiveMetricBatchRequest request, ArchiveMetricBatchReader reader,
             CancellationToken token) =>
         {
@@ -201,6 +231,7 @@ public static class TelemetryApplication
                 return Results.BadRequest();
             }
         });
+        /* Read owned metric history after checking positive bounds and a requested point limit from 1 through 1,000. */
         app.MapPost("/archive/metrics", async (ArchiveMetricRequest request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
         {
@@ -211,7 +242,10 @@ public static class TelemetryApplication
             return Results.Ok(await archive.ReadMetricsAsync(request.Tenant, request.Project, request.Deployment,
                 request.Start, request.End, request.MaximumPoints, token));
         });
-        // Import uses a separate route: historical timestamps are valid here, while ordinary ingestion stays bounded.
+        /*
+         * Import validated historical envelopes separately from ordinary ingestion's 30-day timestamp boundary.
+         * Preserve positive ordering and event identity, verify ownership, and return the archive acknowledgement.
+         */
         app.MapPost("/archive/import", async (DeploymentLogEnvelope request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
         {
@@ -232,6 +266,7 @@ public static class TelemetryApplication
                 request.Event.TimestampUtc > DateTimeOffset.UtcNow.AddMinutes(5)) return Results.BadRequest();
             return Results.Ok(await archive.AppendAsync(request, token));
         });
+        /* Import at most 3,000 points for an owned deployment; acknowledge only after the archive operation completes. */
         app.MapPost("/archive/import-metrics", async (ArchiveMetricImport request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
         {
@@ -243,6 +278,7 @@ public static class TelemetryApplication
             await archive.ImportMetricsAsync(request, token);
             return Results.Ok(new { });
         });
+        /* Delete retained history only after project removal and an owner-matching durable cleanup request. */
         app.MapPost("/archive/delete", async (ArchiveDeleteRequest request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
         {

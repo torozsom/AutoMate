@@ -7,10 +7,23 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Rebuildable numeric lookup; immutable checksummed archive segments remain authoritative.</summary>
+/// <summary>
+///     Rebuildable numeric lookup; immutable checksummed archive segments remain authoritative.
+/// </summary>
 public sealed partial class DiskDeploymentArchive
 {
-    /// <summary>Reads indexed metric payloads only, rebuilding at most 2,000 legacy segments per request.</summary>
+    /// <summary>
+    ///     Reads indexed metric payloads only, rebuilding at most 2,000 legacy segments per
+    ///     request.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <param name="range">The selected frozen observation window or assessment range.</param>
+    /// <param name="container">Verified owned container identity used for observation routing.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning bounded numeric partitions and their continuation metadata.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<ArchiveMetricBatch> ReadIndexedMetricsAsync(Guid tenant, Guid project, Guid deployment,
         MetricTimeRange range, string? container, CancellationToken token)
     {
@@ -115,7 +128,11 @@ public sealed partial class DiskDeploymentArchive
                     ? "Metric lookup recovery is in progress; displayed observations are partial. Refresh to continue recovery."
                     : null);
 
-            /// <summary>Raw samples supersede imported copies without changing observed sample counts.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+            /// <summary>
+            ///     Raw samples supersede imported copies without changing observed sample counts.
+            /// </summary>
+            /// <param name="value">The value to normalize, redact or validate.</param>
             void Add(MetricObservation value)
             {
                 var key = (value.Container, value.Metric, value.Unit, value.Timestamp);
@@ -147,6 +164,7 @@ public sealed partial class DiskDeploymentArchive
                     Maximum = Math.Max(previous.Maximum, value.Maximum)
                 };
             }
+#pragma warning restore CS1587
         }
         catch (Exception error) when (error is IOException or InvalidDataException or JsonException)
         {
@@ -161,7 +179,11 @@ public sealed partial class DiskDeploymentArchive
         }
     }
 
-    /// <summary>Internal day-boundary fragments may be shorter than the public five-minute window.</summary>
+    /// <summary>
+    ///     Internal day-boundary fragments may be shorter than the public five-minute window.
+    /// </summary>
+    /// <param name="range">The selected frozen observation window or assessment range.</param>
+    /// <exception cref="ArgumentException">Invalid archived metric window.</exception>
     private static void ValidateArchiveWindow(MetricTimeRange range)
     {
         if (range.Start.Offset != TimeSpan.Zero || range.End.Offset != TimeSpan.Zero || range.End <= range.Start ||
@@ -169,7 +191,14 @@ public sealed partial class DiskDeploymentArchive
             throw new ArgumentException("Invalid archived metric window.");
     }
 
-    /// <summary>Seals derived day counts so missing references after a restart trigger recovery rather than silent gaps.</summary>
+    /// <summary>
+    ///     Seals derived day counts so missing references after a restart trigger recovery rather
+    ///     than silent gaps.
+    /// </summary>
+    /// <param name="index">Validated numeric position or durable lookup identity.</param>
+    /// <param name="ready">Provider-ready revision identity used for resource verification.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private static async Task WriteLookupManifestAsync(string index, string ready, CancellationToken token)
     {
         var days = Directory.EnumerateDirectories(index).ToDictionary(day => Path.GetFileName(day),
@@ -180,7 +209,13 @@ public sealed partial class DiskDeploymentArchive
         File.Move(ready + ".tmp", ready, true);
     }
 
-    /// <summary>Indexes a new event without storing its diagnostic message or changing the durable receipt.</summary>
+    /// <summary>
+    ///     Indexes a new event without storing its diagnostic message or changing the durable
+    ///     receipt.
+    /// </summary>
+    /// <param name="envelope">The immutable redacted event and durable routing metadata.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task IndexMetricEnvelopeAsync(DeploymentLogEnvelope envelope, CancellationToken token)
     {
         var partition = Partition(envelope.TenantId, envelope.Event.ProjectId,
@@ -193,7 +228,15 @@ public sealed partial class DiskDeploymentArchive
         await File.WriteAllTextAsync(Path.Combine(index, envelope.EventId.ToString("N") + ".segment.done"), "1", token);
     }
 
-    /// <summary>Atomically replaces a derived checksummed day lookup; its source is verified on every read.</summary>
+    /// <summary>
+    ///     Atomically replaces a derived checksummed day lookup; its source is verified on every
+    ///     read.
+    /// </summary>
+    /// <param name="partition">Verified tenant/project/deployment archive partition.</param>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="time">The observation timestamp to assign to a UTC bucket.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private static async Task WriteMetricReferenceAsync(string partition, string source, DateTimeOffset time,
         CancellationToken token)
     {

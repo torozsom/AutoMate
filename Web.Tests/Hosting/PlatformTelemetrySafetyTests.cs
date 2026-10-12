@@ -20,10 +20,16 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Exercises policy at actual provider/export boundaries with adversarial untrusted metadata.</summary>
+/// <summary>
+///     Exercises policy at actual provider/export boundaries with adversarial untrusted metadata.
+/// </summary>
 public sealed class PlatformTelemetrySafetyTests
 {
-    /// <summary>Actual HttpClientFactory framework events retain safe request/response details through the host factory.</summary>
+    /// <summary>
+    ///     Actual HttpClientFactory framework events retain safe request/response details through the
+    ///     host factory.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Real_http_client_logging_preserves_framework_summaries_without_request_urls()
     {
@@ -44,7 +50,10 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.DoesNotContain("additional text fields withheld", text);
     }
 
-    /// <summary>HTTP summaries retain method, timing, status and source while excluding URLs and provider payloads.</summary>
+    /// <summary>
+    ///     HTTP summaries retain method, timing, status and source while excluding URLs and provider
+    ///     payloads.
+    /// </summary>
     [Fact]
     public void Framework_requests_and_authentication_keep_detailed_safe_operation_metadata()
     {
@@ -69,7 +78,10 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.DoesNotContain(PlatformTelemetryPolicy.UnknownMessage, text);
     }
 
-    /// <summary>Reviewed lifecycle summaries retain operational meaning without exporting host addresses or paths.</summary>
+    /// <summary>
+    ///     Reviewed lifecycle summaries retain operational meaning without exporting host addresses or
+    ///     paths.
+    /// </summary>
     [Fact]
     public void Lifecycle_and_compose_summaries_remain_searchable_without_unmasking_sensitive_values()
     {
@@ -96,7 +108,10 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.DoesNotContain(PlatformTelemetryPolicy.UnknownMessage, text);
     }
 
-    /// <summary>Both ordinary providers and SDK exports receive safe detached state/scopes, preserving audit correlation.</summary>
+    /// <summary>
+    ///     Both ordinary providers and SDK exports receive safe detached state/scopes, preserving audit
+    ///     correlation.
+    /// </summary>
     [Fact]
     public void Log_providers_never_receive_payloads_exception_objects_or_unapproved_scope_values()
     {
@@ -154,7 +169,12 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.Equal("Denied", audit.Attributes["Outcome"]);
     }
 
-    /// <summary>Unsupported immutable events/links and excessive tags are suppressed for both SDK export processor types.</summary>
+    /// <summary>
+    ///     Unsupported immutable events/links and excessive tags are suppressed for both SDK export
+    ///     processor types.
+    /// </summary>
+    /// <param name="batch">Exported SDK record batch or batch-export variant.</param>
+    /// <param name="payload">Serialized payload subject to bounded validation and redaction.</param>
     [Theory]
     [InlineData(false, "event")]
     [InlineData(true, "event")]
@@ -190,7 +210,11 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.Empty(exporter.Records);
     }
 
-    /// <summary>Real OTLP serialization omits HTTP/SQL/baggage/status/name payloads while retaining status and IDs.</summary>
+    /// <summary>
+    ///     Real OTLP serialization omits HTTP/SQL/baggage/status/name payloads while retaining status
+    ///     and IDs.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Otlp_wire_contains_safe_http_status_and_correlation_without_payloads()
     {
@@ -244,33 +268,54 @@ public sealed class PlatformTelemetrySafetyTests
         Assert.True(packet.AsSpan().IndexOf(Convert.FromHexString(traceId.ToString())) >= 0);
     }
 
-    /// <summary>Returns a synthetic rejection without network access.</summary>
+    /// <summary>
+    ///     Returns a synthetic rejection without network access.
+    /// </summary>
     private sealed class SafeHttpFixture : HttpMessageHandler
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies the configured synthetic HTTP response and propagates fixture callback failures.
+        /// </summary>
+        /// <param name="request">Synthetic HTTP request observed by the handler; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured HTTP response message instance or response for this scenario.</returns>
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden));
         }
     }
 
-    /// <summary>Unknown external objects must never have their formatter invoked.</summary>
+    /// <summary>
+    ///     Unknown external objects must never have their formatter invoked.
+    /// </summary>
     private sealed class NeverFormat
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects to string because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public override string ToString()
         {
             throw new InvalidOperationException("Untrusted formatter invoked.");
         }
     }
 
-    /// <summary>Copies safe metadata as the actual trace exporter sees it.</summary>
+    /// <summary>
+    ///     Copies safe metadata as the actual trace exporter sees it.
+    /// </summary>
     private sealed class PrivacyTraceExporter : BaseExporter<Activity>
     {
         /// <summary>Exported detached data.</summary>
         public ConcurrentQueue<string> Records { get; } = new();
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Captures span text and metadata to verify that unsafe payloads never reach exporters.
+        /// </summary>
+        /// <param name="batch">Exported SDK record batch or batch-export variant.</param>
+        /// <returns>The export outcome after the fixture captures its SDK records.</returns>
         public override ExportResult Export(in Batch<Activity> batch)
         {
             foreach (var activity in batch)
@@ -286,7 +331,9 @@ public sealed class PlatformTelemetrySafetyTests
         }
     }
 
-    /// <summary>Captures the state reaching an ordinary non-OTel logger provider.</summary>
+    /// <summary>
+    ///     Captures the state reaching an ordinary non-OTel logger provider.
+    /// </summary>
     private sealed class CaptureProvider : ILoggerProvider, ISupportExternalScope
     {
         /// <summary>Factory-owned shared scopes.</summary>
@@ -295,39 +342,69 @@ public sealed class PlatformTelemetrySafetyTests
         /// <summary>Detached provider observations.</summary>
         public ConcurrentQueue<object> Records { get; } = new();
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Creates a logger writing to the fixture capture provider.
+        /// </summary>
+        /// <param name="categoryName">Logger category reviewed before platform output.</param>
+        /// <returns>A logger attached to the fixture capture provider.</returns>
         public ILogger CreateLogger(string categoryName)
         {
             return new CaptureLogger(this, categoryName);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no dispose work in this fixture.
+        /// </summary>
         public void Dispose()
         {
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Stores the external scope provider used by subsequent fixture logging.
+        /// </summary>
+        /// <param name="scopeProvider">Scope provider used to capture logger correlation.</param>
         public void SetScopeProvider(IExternalScopeProvider scopeProvider)
         {
             _scopes = scopeProvider;
         }
 
-        /// <summary>Receives exactly the state/formatter that standard console providers receive.</summary>
+        /// <summary>
+        ///     Receives exactly the state/formatter that standard console providers receive.
+        /// </summary>
+        /// <param name="owner">Capture provider or owner name used by the fixture.</param>
+        /// <param name="category">Reviewed logger category or provider diagnostic category.</param>
         private sealed class CaptureLogger(CaptureProvider owner, string category) : ILogger
         {
-            /// <inheritdoc />
+            /// <summary>
+            ///     Pushes the supplied state into the fixture scope provider.
+            /// </summary>
+            /// <param name="state">Synthetic readiness or structured logger state.</param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
+            /// <returns>A disposable scope from the fixture external scope provider.</returns>
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull
             {
                 return owner._scopes.Push(state);
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Enables every log level so the fixture can observe all emitted records.
+            /// </summary>
+            /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+            /// <returns>True for every call in this fixture.</returns>
             public bool IsEnabled(LogLevel level)
             {
                 return true;
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Captures or checks the logger call using the fixture assertions and supplied formatter.
+            /// </summary>
+            /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+            /// <param name="eventId">The stable event identity used to deduplicate retries.</param>
+            /// <param name="state">Synthetic readiness or structured logger state.</param>
+            /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
+            /// <param name="formatter">Provider log formatter; untrusted rendered text is not exported.</param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
             public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception,
                 Func<TState, Exception?, string> formatter)
             {

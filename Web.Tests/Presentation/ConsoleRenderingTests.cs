@@ -21,10 +21,18 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Renders real console surfaces with clearly identified metadata fixtures and no external services.</summary>
+/// <summary>
+///     Renders real console surfaces with clearly identified metadata fixtures and no external
+///     services.
+/// </summary>
 public sealed class ConsoleRenderingTests
 {
-    /// <summary>Checks real page structure, link targets and missing-data presentation; emits local review fixtures.</summary>
+    /// <summary>
+    ///     Checks real page structure, link targets and missing-data presentation; emits local review
+    ///     fixtures.
+    /// </summary>
+    /// <param name="localEnabled">Whether fixture capabilities enable local deployment.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -131,7 +139,10 @@ public sealed class ConsoleRenderingTests
         Assert.Contains("Your deployment activity", empty);
     }
 
-    /// <summary>Example data covers partial observations, runtime stops and legacy missing durations.</summary>
+    /// <summary>
+    ///     Example data covers partial observations, runtime stops and legacy missing durations.
+    /// </summary>
+    /// <returns>The configured workspace overview instance or response for this scenario.</returns>
     internal static WorkspaceOverview Data()
     {
         var now = DateTimeOffset.UtcNow;
@@ -162,7 +173,10 @@ public sealed class ConsoleRenderingTests
             "Some recorded daily statistics are incomplete.");
     }
 
-    /// <summary>Compact inventory fixture.</summary>
+    /// <summary>
+    ///     Compact inventory fixture.
+    /// </summary>
+    /// <returns>The configured project inventory page instance or response for this scenario.</returns>
     private static ProjectInventoryPage Inventory()
     {
         return new ProjectInventoryPage([
@@ -177,13 +191,22 @@ public sealed class ConsoleRenderingTests
         ], 3, 1, 3, 1, 2, 1);
     }
 
-    /// <summary>Injects private fixture state without adding production preview paths.</summary>
+    /// <summary>
+    ///     Injects private fixture state without adding production preview paths.
+    /// </summary>
+    /// <param name="type">Fixture type or behavior variant.</param>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="field">Private field name accessed by the fixture.</param>
+    /// <param name="value">Fixture member value to assign.</param>
     private static void Set(Type type, object target, string field, object value)
     {
         type.GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
     }
 
-    /// <summary>Locates the solution independently of output folder.</summary>
+    /// <summary>
+    ///     Locates the solution independently of output folder.
+    /// </summary>
+    /// <returns>The synthetic text produced for this scenario.</returns>
     private static string Root()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -192,7 +215,11 @@ public sealed class ConsoleRenderingTests
         return directory!.FullName;
     }
 
-    /// <summary>Loads the actual styles and provider-free local browser interaction modules.</summary>
+    /// <summary>
+    ///     Loads the actual styles and provider-free local browser interaction modules.
+    /// </summary>
+    /// <param name="html">Rendered fixture HTML to inspect.</param>
+    /// <returns>The synthetic text produced for this scenario.</returns>
     private static string Wrap(string html)
     {
         return
@@ -201,23 +228,31 @@ public sealed class ConsoleRenderingTests
             "<script type='module'>import {attach} from '/js/telemetry-chart.js'; document.querySelectorAll('.telemetry-chart').forEach(attach); import {attachDialog} from '/js/console-ui.js'; document.querySelectorAll('[role=dialog]').forEach(root=>attachDialog(root,{invokeMethodAsync(){root.parentElement.remove(); return Promise.resolve();}})); const menu=document.querySelector('.mobile-nav-toggle');if(menu)menu.addEventListener('click',()=>{const target=document.getElementById('workspace-navigation');target.classList.toggle('nav-open');menu.setAttribute('aria-expanded',target.classList.contains('nav-open'));});</script></body></html>";
     }
 
-    /// <summary>Runs real shell composition for both supported hosting profiles.</summary>
+    /// <summary>
+    ///     Runs real shell composition for both supported hosting profiles.
+    /// </summary>
+    /// <param name="localEnabled">Whether fixture capabilities enable local deployment.</param>
     internal sealed class PreviewCapabilities(bool localEnabled) : IDeploymentCapabilities
     {
-        /// <inheritdoc />
+        /// <summary>Whether fixture capabilities permit local deployment.</summary>
         public bool LocalDeploymentsEnabled => localEnabled;
 
-        /// <inheritdoc />
+        /// <summary>Whether fixture capabilities permit cloud deployment.</summary>
         public bool CloudDeploymentsEnabled => true;
     }
 
-    /// <summary>Owner and identity are fake and never point to live resources.</summary>
+    /// <summary>
+    ///     Owner and identity are fake and never point to live resources.
+    /// </summary>
     private sealed class PreviewAuthentication : AuthenticationStateProvider
     {
         /// <summary>Selected hosting preview identity.</summary>
         public bool Authenticated { get; set; } = true;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies the synthetic principal selected by the fixture authentication state.
+        /// </summary>
+        /// <returns>A task returning the configured authentication state instance or response for this scenario.</returns>
         public override Task<AuthenticationState> GetAuthenticationStateAsync()
         {
             return Task.FromResult(
@@ -232,16 +267,30 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Provider-free fixture read model.</summary>
+    /// <summary>
+    ///     Provider-free fixture read model.
+    /// </summary>
     private sealed class PreviewQuery : IWorkspaceQuery
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies the synthetic workspace overview used by console previews.
+        /// </summary>
+        /// <param name="owner">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="days">Requested overview period in days; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured workspace overview instance or response for this scenario.</returns>
         public Task<WorkspaceOverview> OverviewAsync(Guid owner, int days, CancellationToken token = default)
         {
             return Task.FromResult(Data());
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies the synthetic project inventory used by console previews.
+        /// </summary>
+        /// <param name="owner">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="request">Project filters and paging supplied to the inventory fixture; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured project inventory page instance or response for this scenario.</returns>
         public Task<ProjectInventoryPage> ProjectsAsync(Guid owner, ProjectInventoryRequest request,
             CancellationToken token = default)
         {
@@ -249,7 +298,9 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Cascades authentication and renders the real layout and page.</summary>
+    /// <summary>
+    ///     Cascades authentication and renders the real layout and page.
+    /// </summary>
     public sealed class PreviewRoot : ComponentBase
     {
         /// <summary>Page under review.</summary>
@@ -264,7 +315,10 @@ public sealed class ConsoleRenderingTests
         [Inject]
         public AuthenticationStateProvider Authentication { get; set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Builds the synthetic component tree used by the rendering fixture.
+        /// </summary>
+        /// <param name="b">Blazor builder receiving the fixture component tree.</param>
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
             b.OpenComponent<CascadingValue<Task<AuthenticationState>>>(0);
@@ -283,10 +337,15 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Real Projects markup with isolated presentation state.</summary>
+    /// <summary>
+    ///     Real Projects markup with isolated presentation state.
+    /// </summary>
     public class PreviewProjects : Dashboard
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Seeds the project inventory and connected presentation state without live owner queries.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         protected override Task OnInitializedAsync()
         {
             Set(typeof(Dashboard), this, "_inventory", Inventory());
@@ -295,17 +354,25 @@ public sealed class ConsoleRenderingTests
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live on parameters set work.
+        /// </summary>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         protected override Task OnParametersSetAsync()
         {
             return Task.CompletedTask;
         }
     }
 
-    /// <summary>Real connection dialog presentation.</summary>
+    /// <summary>
+    ///     Real connection dialog presentation.
+    /// </summary>
     public sealed class PreviewAzure : PreviewProjects
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Seeds the dashboard preview and opens its Azure connection panel.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         protected override async Task OnInitializedAsync()
         {
             await base.OnInitializedAsync();
@@ -313,10 +380,15 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Real source list presentation.</summary>
+    /// <summary>
+    ///     Real source list presentation.
+    /// </summary>
     public sealed class PreviewGitHub : GitHubRepos
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Seeds GitHub repository cards without authentication or provider calls.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         protected override Task OnInitializedAsync()
         {
             Set(typeof(GitHubRepos), this, "_isLoading", false);
@@ -340,10 +412,15 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Real local source list presentation.</summary>
+    /// <summary>
+    ///     Real local source list presentation.
+    /// </summary>
     public sealed class PreviewLocal : LocalGitRepos
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Seeds local repository discovery cards without filesystem scanning.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         protected override Task OnInitializedAsync()
         {
             Set(typeof(LocalGitRepos), this, "_hasScanned", true);
@@ -365,10 +442,14 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Real configuration form, seeded without reading repository files.</summary>
+    /// <summary>
+    ///     Real configuration form, seeded without reading repository files.
+    /// </summary>
     public sealed class PreviewConfiguration : ConfigurationForm
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies synthetic cloud and database settings for the configuration preview.
+        /// </summary>
         protected override void OnInitialized()
         {
             Config = new DeploymentConfigDto
@@ -391,10 +472,15 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Real email confirmation guidance without token operations.</summary>
+    /// <summary>
+    ///     Real email confirmation guidance without token operations.
+    /// </summary>
     public sealed class PreviewVerify : VerifyEmail
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Selects the check-email presentation without executing verification.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         protected override Task OnInitializedAsync()
         {
             CheckEmail = true;
@@ -402,10 +488,23 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>No external port operation is allowed in static previews.</summary>
+    /// <summary>
+    ///     No external port operation is allowed in static previews.
+    /// </summary>
     public class EmptyPort : DispatchProxy
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             if (method?.ReturnType == typeof(bool)) return true;
@@ -424,41 +523,78 @@ public sealed class ConsoleRenderingTests
         }
     }
 
-    /// <summary>Preview navigation does not cause requests.</summary>
+    /// <summary>
+    ///     Preview navigation does not cause requests.
+    /// </summary>
     private sealed class PreviewNavigation : NavigationManager
     {
-        /// <summary>Initializes loopback fixture URLs.</summary>
+        /// <summary>
+        ///     Initializes loopback fixture URLs.
+        /// </summary>
         public PreviewNavigation()
         {
             Initialize("http://localhost/", "http://localhost/");
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no navigate to core work in this fixture.
+        /// </summary>
+        /// <param name="uri">Validated provider endpoint URI; ignored by this fixture.</param>
+        /// <param name="forceLoad">
+        ///     Whether navigation requested a full load; the preview does not navigate; ignored by this
+        ///     fixture.
+        /// </param>
         protected override void NavigateToCore(string uri, bool forceLoad)
         {
         }
     }
 
-    /// <summary>Static rendering never calls browser/provider JavaScript.</summary>
+    /// <summary>
+    ///     Static rendering never calls browser/provider JavaScript.
+    /// </summary>
     private sealed class StaticJs : IJSRuntime
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns a default synthetic interop result without executing browser JavaScript.
+        /// </summary>
+        /// <param name="identifier">Provider or user identity to resolve; ignored by this fixture.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <typeparam name="T">Type of the requested interop result.</typeparam>
+        /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<T> InvokeAsync<T>(string identifier, object?[]? args)
         {
             return ValueTask.FromResult(default(T)!);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns a default synthetic interop result without executing browser JavaScript.
+        /// </summary>
+        /// <param name="identifier">Provider or user identity to resolve; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <typeparam name="T">Type of the requested interop result.</typeparam>
+        /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<T> InvokeAsync<T>(string identifier, CancellationToken token, object?[]? args)
         {
             return ValueTask.FromResult(default(T)!);
         }
     }
 
-    /// <summary>Fake form token used only by offline previews.</summary>
+    /// <summary>
+    ///     Fake form token used only by offline previews.
+    /// </summary>
     internal sealed class PreviewAntiforgery : AntiforgeryStateProvider
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies a fixed preview-only antiforgery token without making an HTTP request.
+        /// </summary>
+        /// <returns>The configured antiforgery request token instance or response for this scenario.</returns>
         public override AntiforgeryRequestToken GetAntiforgeryToken()
         {
             return new AntiforgeryRequestToken("preview-only", "__RequestVerificationToken");

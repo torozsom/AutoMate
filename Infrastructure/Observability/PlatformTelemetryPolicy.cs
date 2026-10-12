@@ -10,7 +10,11 @@ using Infrastructure.Diagnostics;
 
 namespace Infrastructure.Observability;
 
-/// <summary>Explicit platform telemetry allowlists; terminal diagnostics use their separate redacted storage pipeline.</summary>
+/// <summary>
+///     Explicit platform telemetry allowlists; terminal diagnostics use their separate redacted
+///     storage pipeline.
+/// </summary>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
 public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor)
 {
     /// <summary>Safe fallback for unknown templates and free-form messages.</summary>
@@ -45,7 +49,12 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         "TelemetryCompatibilityException", "TelemetryProviderException", "ObjectDisposedException"
     };
 
-    /// <summary>Allows source categories from reviewed code only, retaining existing filters for known categories.</summary>
+    /// <summary>
+    ///     Allows source categories from reviewed code only, retaining existing filters for known
+    ///     categories.
+    /// </summary>
+    /// <param name="category">Reviewed logger category or provider diagnostic category.</param>
+    /// <returns>The category derived from the validated input.</returns>
     public string Category(string? category)
     {
         return category is not null && PlatformLogCatalog.Categories.Contains(category)
@@ -53,7 +62,12 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
             : "AutoMate.Platform";
     }
 
-    /// <summary>Snapshots approved typed fields without invoking arbitrary objects' formatters or ToString methods.</summary>
+    /// <summary>
+    ///     Snapshots approved typed fields without invoking arbitrary objects' formatters or
+    ///     ToString methods.
+    /// </summary>
+    /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+    /// <returns>The fields selection with its documented bounds and ordering.</returns>
     public Dictionary<string, object?> Fields(object? state)
     {
         var safe = new Dictionary<string, object?>(StringComparer.Ordinal);
@@ -75,7 +89,15 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         return safe;
     }
 
-    /// <summary>Validates field names and their value domains together.</summary>
+    /// <summary>
+    ///     Validates field names and their value domains together.
+    /// </summary>
+    /// <param name="key">Stable lookup or configuration key.</param>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>
+    ///     The bounded projection of the documented configuration or status fields, or null when no
+    ///     value is available.
+    /// </returns>
     public object? Field(string key, object? value)
     {
         if (key == "UserId" && value is null or "unavailable") return "unavailable";
@@ -145,7 +167,14 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         return null;
     }
 
-    /// <summary>Builds detached structured state from approved literals and typed properties.</summary>
+    /// <summary>
+    ///     Builds detached structured state from approved literals and typed properties.
+    /// </summary>
+    /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+    /// <param name="category">Reviewed logger category or provider diagnostic category.</param>
+    /// <param name="eventCode">Reviewed finite operational event identifier.</param>
+    /// <param name="exception">Optional original exception reviewed before safe platform logging.</param>
+    /// <returns>Reviewed finite message and structured fields safe for registered providers.</returns>
     public SafePlatformLog Log(object? state, string? category = null, int eventCode = 0, Exception? exception = null)
     {
         var fields = Fields(state);
@@ -205,44 +234,67 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         return new SafePlatformLog(redactor.RedactText(message), fields.ToArray());
     }
 
-    /// <summary>Returns only explicitly named enum values, including typed enums without arbitrary formatting.</summary>
+    /// <summary>
+    ///     Returns only explicitly named enum values, including typed enums without arbitrary
+    ///     formatting.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <typeparam name="T">Type of the operation result.</typeparam>
+    /// <returns>The enum value derived from the validated input, or null when no value is available.</returns>
     private static string? EnumValue<T>(object? value) where T : struct, Enum
     {
         if (value is T item && Enum.IsDefined(item)) return Enum.GetName(item);
         return value is string name && Enum.GetNames<T>().Contains(name, StringComparer.Ordinal) ? name : null;
     }
 
-    /// <summary>Finds structured placeholders while ignoring alignment/format specifiers.</summary>
+    /// <summary>
+    ///     Finds structured placeholders while ignoring alignment/format specifiers.
+    /// </summary>
+    /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
     [GeneratedRegex(@"\{([A-Za-z0-9_.]+)(?:[^{}]*)\}", RegexOptions.CultureInvariant, 100)]
     private static partial Regex Placeholder();
 }
 
-/// <summary>Immutable safe ILogger state, also exported as structured SDK attributes.</summary>
+/// <summary>
+///     Immutable safe ILogger state, also exported as structured SDK attributes.
+/// </summary>
+/// <param name="message">The message supplied to the operation.</param>
+/// <param name="fields">Reviewed structured log fields with payloads excluded.</param>
 public sealed class SafePlatformLog(string message, IReadOnlyList<KeyValuePair<string, object?>> fields)
     : IReadOnlyList<KeyValuePair<string, object?>>
 {
     /// <summary>Safe formatted message.</summary>
     public string Message { get; } = message;
 
-    /// <inheritdoc />
+    /// <summary>Number of reviewed structured properties.</summary>
     public int Count => fields.Count;
 
-    /// <inheritdoc />
+    /// <summary>Reviewed structured property at the requested position.</summary>
+    /// <param name="index">Validated numeric position or durable lookup identity.</param>
     public KeyValuePair<string, object?> this[int index] => fields[index];
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Enumerates reviewed structured properties without exposing discarded provider fields.
+    /// </summary>
+    /// <returns>An enumerator over the reviewed structured log properties.</returns>
     public IEnumerator<KeyValuePair<string, object?>> GetEnumerator()
     {
         return fields.GetEnumerator();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Enumerates reviewed structured properties without exposing discarded provider fields.
+    /// </summary>
+    /// <returns>An enumerator over the reviewed structured log properties.</returns>
     IEnumerator IEnumerable.GetEnumerator()
     {
         return GetEnumerator();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Returns the fixed reviewed platform message, excluding arbitrary formatter output.
+    /// </summary>
+    /// <returns>The fixed safe platform message without arbitrary formatter output.</returns>
     public override string ToString()
     {
         return Message;

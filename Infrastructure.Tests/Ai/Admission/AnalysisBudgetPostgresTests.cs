@@ -14,10 +14,17 @@ using Work = Application.Abstractions.Ai.DeploymentAnalysisWorkItem;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Executes real ordered migrations and shared admission/reservation locks in disposable PostgreSQL schemas.</summary>
+/// <summary>
+///     Executes real ordered migrations and shared admission/reservation locks in disposable
+///     PostgreSQL schemas.
+/// </summary>
 public sealed class AnalysisBudgetPostgresTests
 {
-    /// <summary>Independent connections share an owner quota, including after result/project deletion and restart.</summary>
+    /// <summary>
+    ///     Independent connections share an owner quota, including after result/project deletion and
+    ///     restart.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Concurrent_admission_and_project_deletion_preserve_owner_allowance()
     {
@@ -48,7 +55,11 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.Equal("tenant_quota_exceeded", denied.Analysis!.FailureCode);
     }
 
-    /// <summary>The real advisory lock prevents concurrent overspend and reuses one live reservation without refund.</summary>
+    /// <summary>
+    ///     The real advisory lock prevents concurrent overspend and reuses one live reservation without
+    ///     refund.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Concurrent_spending_and_recovery_preserve_conservative_reservations()
     {
@@ -82,7 +93,11 @@ public sealed class AnalysisBudgetPostgresTests
                 .ReserveAttemptAsync(work.First(item => item.AnalysisId != charged.AnalysisId)));
     }
 
-    /// <summary>Distinct tenants share the global reservation cap, while tenant capacity remains independently bounded.</summary>
+    /// <summary>
+    ///     Distinct tenants share the global reservation cap, while tenant capacity remains
+    ///     independently bounded.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Concurrent_provider_slots_enforce_global_and_tenant_capacity()
     {
@@ -111,7 +126,11 @@ public sealed class AnalysisBudgetPostgresTests
         }
     }
 
-    /// <summary>Cancellation while actually waiting for the advisory lock writes no charge and leaves later attempts usable.</summary>
+    /// <summary>
+    ///     Cancellation while actually waiting for the advisory lock writes no charge and leaves later
+    ///     attempts usable.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Canceled_lock_wait_rolls_back_without_charge_and_next_attempt_succeeds()
     {
@@ -152,7 +171,11 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.Single(await waiting.AiAnalysisBudgetEntries.ToListAsync());
     }
 
-    /// <summary>The actual migration preserves consuming receipts for deleted results without inventing provider charges.</summary>
+    /// <summary>
+    ///     The actual migration preserves consuming receipts for deleted results without inventing
+    ///     provider charges.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Budget_migration_backfills_only_retained_consuming_admissions()
     {
@@ -187,7 +210,11 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.Empty(await migration.Database.GetPendingMigrationsAsync());
     }
 
-    /// <summary>The real deletion trigger handles project deletion and account cascades in the same transaction.</summary>
+    /// <summary>
+    ///     The real deletion trigger handles project deletion and account cascades in the same
+    ///     transaction.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Archive_cleanup_is_transactional_and_covers_account_cascades()
     {
@@ -211,11 +238,18 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.False(await db.Deployments.AnyAsync(d => fixture.Deployments.Take(4).Contains(d.Id)));
     }
 
-    /// <summary>Seeds the earlier schema through its actual pre-history model; later migration adds the new columns.</summary>
+    /// <summary>
+    ///     Seeds the earlier schema through its actual pre-history model; later migration adds the new
+    ///     columns.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
     private sealed class LegacyBudgetContext(DbContextOptions<AutoMateDbContext> options)
         : AutoMateDbContext(options, new EphemeralDataProtectionProvider())
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Builds the earlier metadata model used by migration and backfill scenarios.
+        /// </summary>
+        /// <param name="model">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder model)
         {
             base.OnModelCreating(model);
@@ -227,7 +261,13 @@ public sealed class AnalysisBudgetPostgresTests
         }
     }
 
-    /// <summary>Owns only a generated schema in the explicitly isolated test database; never drops that database.</summary>
+    /// <summary>
+    ///     Owns only a generated schema in the explicitly isolated test database; never drops that
+    ///     database.
+    /// </summary>
+    /// <param name="schema">Isolated PostgreSQL schema owned by the fixture.</param>
+    /// <param name="connectionString">Explicit isolated test database connection string.</param>
+    /// <param name="legacy">Whether to model the earlier schema or history path.</param>
     private sealed class Fixture(string schema, string connectionString, bool legacy = false) : IAsyncDisposable
     {
         /// <summary>Seeded owner-account tenant identifiers.</summary>
@@ -243,7 +283,10 @@ public sealed class AnalysisBudgetPostgresTests
         /// <summary>Generated identifier shared by creation and strictly scoped cleanup.</summary>
         private string Schema => schema;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Removes the isolated PostgreSQL schema owned by the fixture.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async ValueTask DisposeAsync()
         {
             await using var connection = new NpgsqlConnection(connectionString);
@@ -252,7 +295,11 @@ public sealed class AnalysisBudgetPostgresTests
             await command.ExecuteNonQueryAsync();
         }
 
-        /// <summary>Creates an independent connection and production model with schema-scoped migration history.</summary>
+        /// <summary>
+        ///     Creates an independent connection and production model with schema-scoped migration history.
+        /// </summary>
+        /// <param name="fullModel">Whether to include the complete fixture model.</param>
+        /// <returns>An independent metadata context owned by the caller.</returns>
         public AutoMateDbContext Db(bool fullModel = false)
         {
             var builder = new NpgsqlConnectionStringBuilder(connectionString)
@@ -266,7 +313,11 @@ public sealed class AnalysisBudgetPostgresTests
                 : new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
         }
 
-        /// <summary>Uses the production metadata service and current-consent authorizer without any provider.</summary>
+        /// <summary>
+        ///     Uses the production metadata service and current-consent authorizer without any provider.
+        /// </summary>
+        /// <param name="db">Fixture metadata context.</param>
+        /// <returns>The configured deployment analysis service instance or response for this scenario.</returns>
         public DeploymentAnalysisService Service(AutoMateDbContext db)
         {
             return new DeploymentAnalysisService(db, Settings,
@@ -275,7 +326,11 @@ public sealed class AnalysisBudgetPostgresTests
                 NullLogger<DeploymentAnalysisService>.Instance);
         }
 
-        /// <summary>Starts concurrent reservations on independent production-provider contexts.</summary>
+        /// <summary>
+        ///     Starts concurrent reservations on independent production-provider contexts.
+        /// </summary>
+        /// <param name="work">Claimed fixture work or work-item selection.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public Task<AnalysisSkipReason?[]> ReserveConcurrentlyAsync(Work[] work)
         {
             return Task.WhenAll(work.Select(async item =>
@@ -285,7 +340,11 @@ public sealed class AnalysisBudgetPostgresTests
             }));
         }
 
-        /// <summary>Seeds live metadata leases only; no context or provider traffic is needed.</summary>
+        /// <summary>
+        ///     Seeds live metadata leases only; no context or provider traffic is needed.
+        /// </summary>
+        /// <param name="indexes">Positions of the work items to reserve.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public async Task<Work[]> WorkAsync(params int[] indexes)
         {
             await using var db = Db();
@@ -308,7 +367,11 @@ public sealed class AnalysisBudgetPostgresTests
             return work;
         }
 
-        /// <summary>Applies real migrations inside a generated schema and seeds consenting owner metadata.</summary>
+        /// <summary>
+        ///     Applies real migrations inside a generated schema and seeds consenting owner metadata.
+        /// </summary>
+        /// <param name="beforeBudget">Whether to observe the state before budget processing.</param>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync(bool beforeBudget = false)
         {
             var connectionString = Environment.GetEnvironmentVariable("AUTOMATE_AI_TEST_DB")!;

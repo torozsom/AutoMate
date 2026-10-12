@@ -6,11 +6,33 @@ using System.Text.Json;
 
 namespace Infrastructure.Azure;
 
-/// <summary>Queries Azure Monitor Logs through its resource-scoped data-plane API.</summary>
+/// <summary>
+///     Queries Azure Monitor Logs through its resource-scoped data-plane API.
+/// </summary>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
 internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactory)
 {
+    /// <summary>Official Log Analytics API base endpoint used for verified resource-scoped queries.</summary>
     private const string Endpoint = "https://api.loganalytics.azure.com/v1";
 
+    /// <summary>
+    ///     Queries bounded Container App observations using verified environment, app and revision
+    ///     scope.
+    /// </summary>
+    /// <param name="resourceId">Verified Azure resource identity used to scope provider reads.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="containerAppName">Verified Azure Container App name.</param>
+    /// <param name="fromUtc">Absolute UTC lower bound for provider observation reads.</param>
+    /// <param name="batchSize">Maximum number of records processed in one batch.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <param name="revision">Exact verified Azure revision identity.</param>
+    /// <param name="afterTimestamp">Last durably accepted ingestion timestamp.</param>
+    /// <param name="afterHash">Stable tie-breaker for records sharing the last ingestion timestamp.</param>
+    /// <param name="environmentName">Runtime environment name used for deployment assets.</param>
+    /// <param name="environmentResourceName">Verified managed-environment resource name.</param>
+    /// <param name="includeAppEvents">Whether the query includes Container App event observations.</param>
+    /// <returns>A task returning normalized records or fixed provider-availability guidance.</returns>
     public async Task<AzureMonitorLogQueryResult> QueryAsync(string resourceId, string accessToken,
         AzureContainerAppLogSource source, string containerAppName, DateTimeOffset fromUtc, int batchSize,
         CancellationToken cancellationToken, string? revision = null, DateTimeOffset? afterTimestamp = null,
@@ -22,7 +44,17 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         return await SendQueryAsync(resourceId, accessToken, query, cancellationToken);
     }
 
-    /// <summary>Reads managed database resource logs exported to the shared AzureDiagnostics table.</summary>
+    /// <summary>
+    ///     Reads managed database resource logs exported to the shared AzureDiagnostics table.
+    /// </summary>
+    /// <param name="resourceId">Verified Azure resource identity used to scope provider reads.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="fromUtc">Absolute UTC lower bound for provider observation reads.</param>
+    /// <param name="batchSize">Maximum number of records processed in one batch.</param>
+    /// <param name="afterTimestamp">Last durably accepted ingestion timestamp.</param>
+    /// <param name="afterHash">Stable tie-breaker for records sharing the last ingestion timestamp.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning normalized records or fixed provider-availability guidance.</returns>
     internal Task<AzureMonitorLogQueryResult> QueryDatabaseAsync(string resourceId, string accessToken,
         DateTimeOffset fromUtc, int batchSize, DateTimeOffset? afterTimestamp, string? afterHash,
         CancellationToken cancellationToken)
@@ -48,7 +80,15 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         return SendQueryAsync(resourceId, accessToken, query, cancellationToken);
     }
 
-    /// <summary>Uses a provider-controlled resource scope and returns safe failures without response bodies.</summary>
+    /// <summary>
+    ///     Uses a provider-controlled resource scope and returns safe failures without response
+    ///     bodies.
+    /// </summary>
+    /// <param name="resourceId">Verified Azure resource identity used to scope provider reads.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="query">Bounded provider query or immutable resource/source selection.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning normalized records or fixed provider-availability guidance.</returns>
     private async Task<AzureMonitorLogQueryResult> SendQueryAsync(string resourceId, string accessToken,
         string query, CancellationToken cancellationToken)
     {
@@ -75,6 +115,13 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         return AzureMonitorLogQueryResult.Succeeded(ParseRecords(document.RootElement));
     }
 
+    /// <summary>
+    ///     Normalizes supported Azure query table rows into bounded runtime log records.
+    /// </summary>
+    /// <param name="root">
+    ///     JSON value to validate or normalize without retaining arbitrary provider prose.
+    /// </param>
+    /// <returns>The records selection with its documented bounds and ordering.</returns>
     private static IReadOnlyList<AzureMonitorLogRecord> ParseRecords(JsonElement root)
     {
         if (!root.TryGetProperty("tables", out var tables) || tables.ValueKind != JsonValueKind.Array ||
@@ -106,6 +153,13 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         return records;
     }
 
+    /// <summary>
+    ///     Reads a named provider column without assuming its position is stable.
+    /// </summary>
+    /// <param name="values">The values to validate and copy.</param>
+    /// <param name="indexes">Column-name to position mapping from the provider result.</param>
+    /// <param name="name">The recorded display name or fixed metric identity.</param>
+    /// <returns>The value derived from the validated input.</returns>
     private static string GetValue(JsonElement[] values, IReadOnlyDictionary<string, int> indexes, string name)
     {
         return indexes.TryGetValue(name, out var index) && index < values.Length &&
@@ -114,6 +168,20 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
             : string.Empty;
     }
 
+    /// <summary>
+    ///     Builds a bounded Kusto query for the exact verified app, revision and ingestion cursor.
+    /// </summary>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="containerAppName">Verified Azure Container App name.</param>
+    /// <param name="fromUtc">Absolute UTC lower bound for provider observation reads.</param>
+    /// <param name="batchSize">Maximum number of records processed in one batch.</param>
+    /// <param name="revision">Exact verified Azure revision identity.</param>
+    /// <param name="afterTimestamp">Last durably accepted ingestion timestamp.</param>
+    /// <param name="afterHash">Stable tie-breaker for records sharing the last ingestion timestamp.</param>
+    /// <param name="environmentName">Runtime environment name used for deployment assets.</param>
+    /// <param name="environmentResourceName">Verified managed-environment resource name.</param>
+    /// <param name="includeAppEvents">Whether the query includes Container App event observations.</param>
+    /// <returns>The bounded provider query or filter for the verified scope.</returns>
     private static string CreateQuery(AzureContainerAppLogSource source, string containerAppName,
         DateTimeOffset fromUtc, int batchSize, string? revision, DateTimeOffset? afterTimestamp, string? afterHash,
         string? environmentName = null, string? environmentResourceName = null, bool includeAppEvents = false)
@@ -156,7 +224,12 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
                  """;
     }
 
-    /// <summary>Uses ingestion ordering so late events are not lost behind the event-time watermark.</summary>
+    /// <summary>
+    ///     Uses ingestion ordering so late events are not lost behind the event-time watermark.
+    /// </summary>
+    /// <param name="timestamp">The provider observation timestamp, if known.</param>
+    /// <param name="hash">Stable content hash used for confirmation or deduplication.</param>
+    /// <returns>The bounded provider query or filter for the verified scope.</returns>
     private static string CursorFilter(DateTimeOffset? timestamp, string? hash)
     {
         return timestamp is null
@@ -165,12 +238,33 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
     }
 }
 
+/// <summary>
+///     Distinguishes application console output from Azure platform/system output.
+/// </summary>
 internal enum AzureContainerAppLogSource
 {
+    /// <summary>Application container console output.</summary>
     Console,
+
+    /// <summary>Azure platform and revision lifecycle output.</summary>
     System
 }
 
+/// <summary>
+///     Normalized Azure observation with original event time and an independent ingestion
+///     cursor.
+/// </summary>
+/// <param name="TimestampUtc">The original UTC observation timestamp, if recorded.</param>
+/// <param name="Message">The message supplied to the operation.</param>
+/// <param name="ContainerName">
+///     Verified Azure container or Container App identity used to scope the query.
+/// </param>
+/// <param name="RevisionName">Exact verified Azure revision name.</param>
+/// <param name="Stream">The typed diagnostic output stream.</param>
+/// <param name="SourceTable">Recorded Azure diagnostic category or table.</param>
+/// <param name="CursorHash">Stable hash ordering records with equal ingestion times.</param>
+/// <param name="IngestionTimestampUtc">Azure ingestion time used to detect delayed records.</param>
+/// <param name="ReplicaName">Verified Container App replica name.</param>
 internal sealed record AzureMonitorLogRecord(
     DateTimeOffset TimestampUtc,
     string Message,
@@ -182,15 +276,34 @@ internal sealed record AzureMonitorLogRecord(
     DateTimeOffset? IngestionTimestampUtc = null,
     string ReplicaName = "");
 
+/// <summary>
+///     Bounded Azure query records or fixed source-availability guidance.
+/// </summary>
+/// <param name="Records">Bounded normalized Azure log observations.</param>
+/// <param name="FailureReason">A fixed, safe failure reason, if available.</param>
 internal sealed record AzureMonitorLogQueryResult(IReadOnlyList<AzureMonitorLogRecord> Records, string? FailureReason)
 {
+    /// <summary>Whether the query returned records without a fixed failure reason.</summary>
     public bool IsSuccess => FailureReason is null;
 
+    /// <summary>
+    ///     Creates a successful query result with its normalized observations.
+    /// </summary>
+    /// <param name="records">Bounded normalized Azure log observations.</param>
+    /// <returns>A successful query result containing the supplied normalized records.</returns>
     public static AzureMonitorLogQueryResult Succeeded(IReadOnlyList<AzureMonitorLogRecord> records)
     {
         return new AzureMonitorLogQueryResult(records, null);
     }
 
+    /// <summary>
+    ///     Creates fixed failure guidance without retaining arbitrary Azure response bodies.
+    /// </summary>
+    /// <param name="_">HTTP status deliberately excluded from the fixed failure response.</param>
+    /// <param name="reason">
+    ///     Fixed safe availability or failure guidance; never raw provider response text.
+    /// </param>
+    /// <returns>A query result with no records and the supplied fixed failure guidance.</returns>
     public static AzureMonitorLogQueryResult Failed(HttpStatusCode _, string reason)
     {
         return new AzureMonitorLogQueryResult([], reason);

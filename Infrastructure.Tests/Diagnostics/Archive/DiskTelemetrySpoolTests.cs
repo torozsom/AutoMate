@@ -13,9 +13,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
+/// <summary>
+///     Verifies disk-spool durability, bounds, redaction and restart behavior using temporary
+///     directories.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class DiskTelemetrySpoolTests
 {
-    /// <summary>Old checksummed backlog is masked for replay/delivery without altering its acknowledged disk bytes.</summary>
+    /// <summary>
+    ///     Old checksummed backlog is masked for replay/delivery without altering its acknowledged disk
+    ///     bytes.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Existing_segment_is_masked_on_read_without_rewriting_or_ignoring_checksum()
     {
@@ -50,7 +59,11 @@ public sealed class DiskTelemetrySpoolTests
         }
     }
 
-    /// <summary>Actual publisher measurements cannot turn arbitrary numeric enum inputs into unbounded metric dimensions.</summary>
+    /// <summary>
+    ///     Actual publisher measurements cannot turn arbitrary numeric enum inputs into unbounded
+    ///     metric dimensions.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Publisher_metric_labels_use_finite_values_for_malformed_external_enums()
     {
@@ -80,7 +93,11 @@ public sealed class DiskTelemetrySpoolTests
         Assert.Equal("password=[REDACTED]", queued.Message);
     }
 
-    /// <summary>Direct spool callers cannot queue mutable/raw secrets; receipts and restart replay retain safe identity.</summary>
+    /// <summary>
+    ///     Direct spool callers cannot queue mutable/raw secrets; receipts and restart replay retain
+    ///     safe identity.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Direct_queue_admission_masks_payload_and_channel_before_durable_write()
     {
@@ -118,6 +135,10 @@ public sealed class DiskTelemetrySpoolTests
         }
     }
 
+    /// <summary>
+    ///     Verifies that receipts survive restart and retry keeps identity and position.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Receipts_survive_restart_and_retry_keeps_identity_and_position()
     {
@@ -152,6 +173,10 @@ public sealed class DiskTelemetrySpoolTests
         }
     }
 
+    /// <summary>
+    ///     Verifies that corrupt acknowledged segment fails closed and preserves file.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Corrupt_acknowledged_segment_fails_closed_and_preserves_file()
     {
@@ -178,6 +203,10 @@ public sealed class DiskTelemetrySpoolTests
         }
     }
 
+    /// <summary>
+    ///     Verifies that buffer limit is durable and does not admit an unconfirmed payload.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Buffer_limit_is_durable_and_does_not_admit_an_unconfirmed_payload()
     {
@@ -202,6 +231,10 @@ public sealed class DiskTelemetrySpoolTests
         }
     }
 
+    /// <summary>
+    ///     Verifies that only one writer can open the volume.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Only_one_writer_can_open_the_volume()
     {
@@ -220,6 +253,9 @@ public sealed class DiskTelemetrySpoolTests
         }
     }
 
+    /// <summary>
+    ///     Verifies that v2 cursor is versioned and bound to project and deployment.
+    /// </summary>
     [Fact]
     public void V2_cursor_is_versioned_and_bound_to_project_and_deployment()
     {
@@ -231,6 +267,10 @@ public sealed class DiskTelemetrySpoolTests
         Assert.Throws<ArgumentException>(() => TelemetryHistoryCursor.Decode("garbage", p, d));
     }
 
+    /// <summary>
+    ///     Verifies that pilot load 300 deployments 100 logs per second with 1000 per second burst.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Pilot_load_300_deployments_100_logs_per_second_with_1000_per_second_burst()
     {
@@ -278,6 +318,12 @@ public sealed class DiskTelemetrySpoolTests
         }
     }
 
+    /// <summary>
+    ///     Creates the configured create instance over fixture-owned dependencies.
+    /// </summary>
+    /// <param name="directory">Temporary spool or archive directory owned by the fixture.</param>
+    /// <param name="limits">Optional telemetry limits overriding fixture defaults.</param>
+    /// <returns>The configured disk telemetry spool instance or response for this scenario.</returns>
     private static DiskTelemetrySpool Create(string directory, TelemetryStorageOptions? limits = null)
     {
         return new DiskTelemetrySpool(Options.Create(new DiskSpoolOptions { Directory = directory }),
@@ -285,6 +331,10 @@ public sealed class DiskTelemetrySpoolTests
             NullLogger<DiskTelemetrySpool>.Instance, new DiagnosticRedactor());
     }
 
+    /// <summary>
+    ///     Creates event data with the supplied identities and synthetic scenario values.
+    /// </summary>
+    /// <returns>The configured deployment diagnostic event instance or response for this scenario.</returns>
     private static DeploymentDiagnosticEvent Event()
     {
         return new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(), DeploymentDiagnosticSource.DockerContainer,

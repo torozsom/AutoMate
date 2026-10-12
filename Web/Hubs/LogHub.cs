@@ -11,6 +11,11 @@ namespace Web.Hubs;
 /// <summary>
 ///     Authorizes project log subscriptions and manages project-specific SignalR groups.
 /// </summary>
+/// <param name="applicationService">Reads owner-scoped project metadata.</param>
+/// <param name="diagnosticStore">Reads bounded persisted terminal history.</param>
+/// <param name="dataProtectionProvider">Verifies time-limited project subscription tokens.</param>
+/// <param name="logger">The logger used for fixed operational events without diagnostic payloads.</param>
+/// <param name="viewers">Tracks expiring authorized browser subscriptions.</param>
 [AllowAnonymous]
 public sealed class LogHub(
     IApplicationService applicationService,
@@ -19,22 +24,25 @@ public sealed class LogHub(
     ILogger<LogHub> logger,
     IDeploymentRuntimeViewers viewers) : Hub<ILogClient>
 {
-    /// <summary>
-    ///     Data Protection purpose shared with project details pages when generating log hub join tokens.
-    /// </summary>
+    /// <summary>Shared Data Protection purpose for short-lived owner/project subscription tokens.</summary>
     internal const string ProtectorPurpose = "LogHub";
 
     /// <summary>
-    ///     Allows a client to join a SignalR group associated with a specific project ID using a secure token.
-    ///     This enables the client to receive real-time log updates related to the specified project securely.
+    ///     Verifies the protected owner/project token, joins the project group and returns bounded
+    ///     deployment replay.
     /// </summary>
-    /// <param name="projectId">
-    ///     The unique identifier of the project whose group the client wishes to join.
-    /// </param>
+    /// <param name="projectId">The unique identifier of the project whose group the client wishes to join.</param>
+    /// <param name="deploymentId">Selected owned deployment for replay, or null to join without replay.</param>
     /// <param name="secureToken">
-    ///     An encrypted token containing verified identity and project mappings to authenticate the connection.
+    ///     An encrypted token containing verified identity and project mappings to authenticate the
+    ///     connection.
     /// </param>
-    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <param name="afterOrderId">Last acknowledged durable ordering position; zero requests recent output.</param>
+    /// <returns>A task returning bounded replay output, or empty non-advancing history if the connection is canceled.</returns>
+    /// <exception cref="HubException">
+    ///     The subscription token is invalid, expired or does not authorize this
+    ///     project/deployment.
+    /// </exception>
     public async Task<DeploymentTerminalHistory> JoinProjectGroup(Guid projectId, Guid? deploymentId,
         string secureToken, long afterOrderId = 0)
     {
@@ -116,6 +124,8 @@ public sealed class LogHub(
     /// <summary>
     ///     Allows a client to leave a SignalR group associated with a specific project ID.
     /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     public async Task LeaveProjectGroup(Guid projectId)
     {
         if (projectId == Guid.Empty)
@@ -127,7 +137,11 @@ public sealed class LogHub(
                 Context.ConnectionAborted));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Removes this connection viewing leases before framework disconnect handling.
+    /// </summary>
+    /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     public override Task OnDisconnectedAsync(Exception? exception)
     {
         viewers.Remove(Context.ConnectionId);
@@ -138,6 +152,8 @@ public sealed class LogHub(
     /// <summary>
     ///     Generates the SignalR group name used for one project's log stream.
     /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <returns>The stable project-prefixed SignalR group name.</returns>
     internal static string GetProjectGroupName(Guid projectId)
     {
         return $"project-{projectId}";

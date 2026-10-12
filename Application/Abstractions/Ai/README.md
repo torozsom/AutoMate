@@ -88,6 +88,7 @@ guidance. See [contracts and rollout](../../../docs/status-aware-assessments.md)
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
 - `Context/` — `Context/AssessmentDetails.cs`, `Context/IDeploymentAnalysisContextBuilder.cs`.
-- `Execution/` — `Execution/IDeploymentAnalysisQueue.cs`, `Execution/IDeploymentAnalysisReadiness.cs`, `Execution/IDeploymentAnalysisService.cs`.
+- `Execution/` — `Execution/IDeploymentAnalysisQueue.cs`, `Execution/IDeploymentAnalysisReadiness.cs`,
+  `Execution/IDeploymentAnalysisService.cs`.
 - `Policy/` — `Policy/IAnalysisBudgetGuard.cs`, `Policy/IAnalysisEgressAuthorizer.cs`.
 - `Results/` — `Results/IAnalysisResultValidator.cs`, `Results/ILlmAnalysisProvider.cs`.

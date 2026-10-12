@@ -28,10 +28,15 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Verifies profile-specific validation using the production Web composition root.</summary>
+/// <summary>
+///     Verifies profile-specific validation using the production Web composition root.
+/// </summary>
 public sealed class HostingProfileRegistrationTests
 {
-    /// <summary>Azure reconnect requests newly declared delegated permissions without tenant-wide consent.</summary>
+    /// <summary>
+    ///     Azure reconnect requests newly declared delegated permissions without tenant-wide consent.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Azure_reconnect_requests_explicit_static_consent()
     {
@@ -51,7 +56,11 @@ public sealed class HostingProfileRegistrationTests
         Assert.DoesNotContain("adminconsent", http.Response.Headers.Location.ToString());
     }
 
-    /// <summary>Production composition selects Azure in either profile and checks its own key without provider I/O.</summary>
+    /// <summary>
+    ///     Production composition selects Azure in either profile and checks its own key without
+    ///     provider I/O.
+    /// </summary>
+    /// <param name="profile">Selected hosting profile label.</param>
     [Theory]
     [InlineData("SelfHosted")]
     [InlineData("SaaS")]
@@ -107,7 +116,11 @@ public sealed class HostingProfileRegistrationTests
         }
     }
 
-    /// <summary>Shared quota/currency/precision limits fail startup even when AI is disabled.</summary>
+    /// <summary>
+    ///     Shared quota/currency/precision limits fail startup even when AI is disabled.
+    /// </summary>
+    /// <param name="setting">Option key overridden by the scenario.</param>
+    /// <param name="value">Synthetic input text.</param>
     [Theory]
     [InlineData("DailyTenantLimit", "-1")]
     [InlineData("DailyTenantLimit", "100001")]
@@ -132,7 +145,12 @@ public sealed class HostingProfileRegistrationTests
         Assert.DoesNotContain("private-secret", failure.Message);
     }
 
-    /// <summary>Numeric limits fail startup even with AI disabled, without silent clamps or provider activity.</summary>
+    /// <summary>
+    ///     Numeric limits fail startup even with AI disabled, without silent clamps or provider
+    ///     activity.
+    /// </summary>
+    /// <param name="setting">Option key overridden by the scenario.</param>
+    /// <param name="value">Synthetic input text.</param>
     [Theory]
     [InlineData("TimeoutSeconds", "4")]
     [InlineData("TimeoutSeconds", "301")]
@@ -156,7 +174,10 @@ public sealed class HostingProfileRegistrationTests
         Assert.Throws<OptionsValidationException>(() => services.GetRequiredService<IStartupValidator>().Validate());
     }
 
-    /// <summary>Supported limits remain exact, and staging automatic analysis does not enable AI or egress.</summary>
+    /// <summary>
+    ///     Supported limits remain exact, and staging automatic analysis does not enable AI or egress.
+    /// </summary>
+    /// <param name="maximum">Configured bound or maximum aggregation variant.</param>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -184,9 +205,10 @@ public sealed class HostingProfileRegistrationTests
     }
 
     /// <summary>
-    ///     Invalid collector settings fail startup with fixed guidance instead of silently disabling export or exposing
-    ///     credentials.
+    ///     Invalid collector settings fail startup with fixed guidance instead of silently disabling
+    ///     export or exposing credentials.
     /// </summary>
+    /// <param name="endpoint">Parsed HTTP(S) collector endpoint, or null when invalid or absent.</param>
     [Theory]
     [InlineData("not-a-url-private-secret")]
     [InlineData("file:///private-secret")]
@@ -209,7 +231,11 @@ public sealed class HostingProfileRegistrationTests
         Assert.DoesNotContain("private-secret", failure.ToString());
     }
 
-    /// <summary>Collector URLs permit HTTPS and trusted-network HTTP without requiring any connection during validation.</summary>
+    /// <summary>
+    ///     Collector URLs permit HTTPS and trusted-network HTTP without requiring any connection during
+    ///     validation.
+    /// </summary>
+    /// <param name="endpoint">Parsed HTTP(S) collector endpoint, or null when invalid or absent.</param>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -221,7 +247,11 @@ public sealed class HostingProfileRegistrationTests
         Assert.True(validator.Validate(null, new OpenTelemetryOptions { OtlpEndpoint = endpoint }).Succeeded);
     }
 
-    /// <summary>Resource-label validation never echoes invalid labels in startup failures.</summary>
+    /// <summary>
+    ///     Resource-label validation never echoes invalid labels in startup failures.
+    /// </summary>
+    /// <param name="service">Fixture service-registration flag or service resource label.</param>
+    /// <param name="oversized">Whether to exceed the bounded input size.</param>
     [Theory]
     [InlineData(true, false)]
     [InlineData(true, true)]
@@ -239,7 +269,10 @@ public sealed class HostingProfileRegistrationTests
         Assert.DoesNotContain("private-secret", string.Join(" ", result.Failures!));
     }
 
-    /// <summary>Both profiles keep the existing output/timeout defaults and disabled export settings.</summary>
+    /// <summary>
+    ///     Both profiles keep the existing output/timeout defaults and disabled export settings.
+    /// </summary>
+    /// <param name="services">Fixture dependency provider.</param>
     private static void AssertAnalysisDefaults(IServiceProvider services)
     {
         var options = services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value;
@@ -248,7 +281,9 @@ public sealed class HostingProfileRegistrationTests
         Assert.Null(services.GetRequiredService<IOptions<OpenTelemetryOptions>>().Value.OtlpEndpoint);
     }
 
-    /// <summary>The production option binding rejects requested egress without explicit policy approval.</summary>
+    /// <summary>
+    ///     The production option binding rejects requested egress without explicit policy approval.
+    /// </summary>
     [Fact]
     public void Ai_egress_configuration_fails_closed_when_approvals_are_missing()
     {
@@ -264,7 +299,11 @@ public sealed class HostingProfileRegistrationTests
             services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>().CurrentValue);
     }
 
-    /// <summary>Both profiles resolve validation and safe analysis reads while AI egress remains disabled by default.</summary>
+    /// <summary>
+    ///     Both profiles resolve validation and safe analysis reads while AI egress remains disabled by
+    ///     default.
+    /// </summary>
+    /// <param name="profile">Selected hosting profile label.</param>
     [Theory]
     [InlineData("SelfHosted")]
     [InlineData("SaaS")]
@@ -344,7 +383,11 @@ public sealed class HostingProfileRegistrationTests
         }
     }
 
-    /// <summary>Invalid diagnostic limits fail safely before hosted collectors or transport sends start.</summary>
+    /// <summary>
+    ///     Invalid diagnostic limits fail safely before hosted collectors or transport sends start.
+    /// </summary>
+    /// <param name="setting">Option key overridden by the scenario.</param>
+    /// <param name="value">Synthetic input text.</param>
     [Theory]
     [InlineData("BufferCapacity", "0")]
     [InlineData("PersistenceTimeoutSeconds", "0")]
@@ -361,7 +404,12 @@ public sealed class HostingProfileRegistrationTests
         Assert.Contains("DeploymentDiagnostics", failure.Message);
     }
 
-    /// <summary>Disabled AI still rejects unsafe retry configuration at startup without contacting providers.</summary>
+    /// <summary>
+    ///     Disabled AI still rejects unsafe retry configuration at startup without contacting
+    ///     providers.
+    /// </summary>
+    /// <param name="setting">Option key overridden by the scenario.</param>
+    /// <param name="value">Synthetic input text.</param>
     [Theory]
     [InlineData("MaximumProviderRetries", "6")]
     [InlineData("MaximumProviderRetries", "-1")]
@@ -382,7 +430,12 @@ public sealed class HostingProfileRegistrationTests
         Assert.Contains("AI retries", error.Message);
     }
 
-    /// <summary>Daily admission limits are bounded at startup even with AI disabled; zero is a valid deny-new-work setting.</summary>
+    /// <summary>
+    ///     Daily admission limits are bounded at startup even with AI disabled; zero is a valid deny-
+    ///     new-work setting.
+    /// </summary>
+    /// <param name="limit">Requested count or configured admission bound.</param>
+    /// <param name="valid">Whether the fixture input is intended to pass validation.</param>
     [Theory]
     [InlineData(-1, false)]
     [InlineData(1001, false)]
@@ -400,7 +453,11 @@ public sealed class HostingProfileRegistrationTests
                 services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value).Message);
     }
 
-    /// <summary>Worker slot bounds are validated even with AI disabled, including both supported boundaries.</summary>
+    /// <summary>
+    ///     Worker slot bounds are validated even with AI disabled, including both supported boundaries.
+    /// </summary>
+    /// <param name="concurrency">Configured parallel-operation limit.</param>
+    /// <param name="valid">Whether the fixture input is intended to pass validation.</param>
     [Theory]
     [InlineData(-1, false)]
     [InlineData(0, false)]
@@ -423,7 +480,9 @@ public sealed class HostingProfileRegistrationTests
                 services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value).Message);
     }
 
-    /// <summary>Dashboard dependencies resolve on self-hosted installations without SaaS credentials.</summary>
+    /// <summary>
+    ///     Dashboard dependencies resolve on self-hosted installations without SaaS credentials.
+    /// </summary>
     [Fact]
     public void SelfHosted_resolves_shared_cloud_services_without_GitHub_App_settings()
     {
@@ -441,7 +500,10 @@ public sealed class HostingProfileRegistrationTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>());
     }
 
-    /// <summary>A missing self-hosted gateway fails validation instead of enabling an implicit database fallback.</summary>
+    /// <summary>
+    ///     A missing self-hosted gateway fails validation instead of enabling an implicit database
+    ///     fallback.
+    /// </summary>
     [Fact]
     public void SelfHosted_requires_gateway_configuration()
     {
@@ -456,7 +518,11 @@ public sealed class HostingProfileRegistrationTests
         Assert.Contains("GatewayUrl", failure.Message);
     }
 
-    /// <summary>Self-hosted startup cannot silently restore raw PostgreSQL payload writes.</summary>
+    /// <summary>
+    ///     Self-hosted startup cannot silently restore raw PostgreSQL payload writes.
+    /// </summary>
+    /// <param name="backend">Telemetry backend selected by the scenario.</param>
+    /// <param name="deliveryMode">Telemetry delivery mode selected by the scenario.</param>
     [Theory]
     [InlineData("Postgres", "PostgresOutbox")]
     [InlineData("LokiMimir", "PostgresOutbox")]
@@ -475,7 +541,9 @@ public sealed class HostingProfileRegistrationTests
         Assert.Contains("both SelfHosted and SaaS", failure.Message);
     }
 
-    /// <summary>SaaS still rejects missing GitHub App secrets during startup validation.</summary>
+    /// <summary>
+    ///     SaaS still rejects missing GitHub App secrets during startup validation.
+    /// </summary>
     [Fact]
     public void SaaS_startup_requires_GitHub_App_settings()
     {
@@ -501,7 +569,11 @@ public sealed class HostingProfileRegistrationTests
         }
     }
 
-    /// <summary>Creates a disposable certificate for encrypted-key registration without touching production keys.</summary>
+    /// <summary>
+    ///     Creates a disposable certificate for encrypted-key registration without touching production
+    ///     keys.
+    /// </summary>
+    /// <returns>The synthetic text produced for this scenario.</returns>
     private static string CreateTestCertificate()
     {
         var path = Path.Combine(Path.GetTempPath(), $"automate-profile-{Guid.NewGuid():N}.pfx");
@@ -514,7 +586,11 @@ public sealed class HostingProfileRegistrationTests
         return path;
     }
 
-    /// <summary>Uses isolated configuration and fake connection settings without contacting providers.</summary>
+    /// <summary>
+    ///     Uses isolated configuration and fake connection settings without contacting providers.
+    /// </summary>
+    /// <param name="mode">Selected legacy, provider or fixture behavior mode.</param>
+    /// <returns>The configured web application builder instance or response for this scenario.</returns>
     private static WebApplicationBuilder CreateBuilder(string mode)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions

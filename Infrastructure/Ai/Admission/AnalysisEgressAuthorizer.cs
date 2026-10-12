@@ -8,7 +8,14 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Reads fresh metadata for each gate; never trusts cached consent or caller-supplied tenant identifiers.</summary>
+/// <summary>
+///     Reads fresh metadata for each gate; never trusts cached consent or caller-supplied
+///     tenant identifiers.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="catalog">Allowlisted provider registry used for adapter selection.</param>
 public sealed class AnalysisEgressAuthorizer(
     AutoMateDbContext db,
     IOptionsMonitor<AiAnalysisOptions> options,
@@ -16,7 +23,20 @@ public sealed class AnalysisEgressAuthorizer(
     AnalysisProviderCatalog? catalog = null)
     : IAnalysisEgressAuthorizer
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Returns false for missing deployments, unapproved tenants, revoked consent or disabled
+    ///     triggers.
+    /// </summary>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="trigger">
+    ///     The manual or automatic trigger; it does not grant provider egress permission.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning true only when current ownership, consent and operator policy permit
+    ///     egress.
+    /// </returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<bool> AuthorizeAsync(Guid deploymentId, AiAnalysisTrigger trigger,
         CancellationToken cancellationToken = default)
     {

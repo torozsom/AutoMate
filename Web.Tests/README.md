@@ -1,5 +1,17 @@
 # Web Tests
 
+## Source documentation
+
+Test types, scenarios, constructors and private helpers use multiline XML summaries with matching parameters,
+type parameters and return/completion descriptions. Document confirmed escaping fixture failures; fakes state their
+actual fixed responses, ignored inputs and deliberate rejection paths. Fields and properties may use single-line
+summaries. XML comments on local functions have narrowly scoped CS1587 suppression because C# does not emit them.
+Browser and JavaScript test classes, methods and callbacks use typed multiline JSDoc. These descriptions preserve
+assertions, synthetic fixtures, test selection and explicit external-service opt-in requirements.
+
+The complete source coverage and unchanged-code checks for both test projects are recorded in the ignored
+`.artifacts/tests-doc-audit/report.md` verification artifact.
+
 Terminal presentation tests keep operational database records (including request RU charge) visible while suppressing
 utilization summaries in mixed replay. Analysis panel tests cover actionable current/legacy rejection guidance and
 the absence of successful-answer framing on failed runs.
@@ -146,13 +158,27 @@ consent.
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Analysis/` — `AnalysisReadinessTests.cs`, `Analysis/AssessmentContextControlsTests.cs`, `Analysis/DeploymentAnalysisActionTests.cs`, `Analysis/DeploymentAnalysisEndpointTests.cs`, `Analysis/DeploymentAnalysisPanelTests.cs`, `Analysis/DeploymentAnalysisPollingTests.cs`, `Analysis/DeploymentAnalysisSectionTests.cs`.
-- `Diagnostics/` — `Diagnostics/ConsoleExceptionDiagnosticsTests.cs`, `Diagnostics/DeploymentTracingTests.cs`, `Diagnostics/LogHubCancellationTests.cs`, `Diagnostics/OperationalLoggingTests.cs`, `Diagnostics/RealTimeLogStreamerTests.cs`, `Diagnostics/RequestAuditTests.cs`.
-- `Hosting/` — `Hosting/HostingProfileRegistrationTests.cs`, `Hosting/MetricResourceSafetyTests.cs`, `Hosting/PlatformTelemetrySafetyTests.cs`, `Hosting/TelemetryHostSafetyTests.cs`.
-- `Metrics/` — `Metrics/DeploymentMetricDisplayTests.cs`, `Metrics/MetricExplorationInteractionTests.cs`, `Metrics/MetricExplorationRenderingTests.cs`, `Metrics/ProjectDetailsMetricRecoveryTests.cs`, `Metrics/ProjectTelemetrySummaryTests.cs`, `Metrics/TelemetryChartRenderingTests.cs`, `Metrics/TelemetryPageRenderingTests.cs`, `Metrics/TelemetryPresentationTests.cs`.
+- `Analysis/` — `AnalysisReadinessTests.cs`, `Analysis/AssessmentContextControlsTests.cs`,
+  `Analysis/DeploymentAnalysisActionTests.cs`, `Analysis/DeploymentAnalysisEndpointTests.cs`,
+  `Analysis/DeploymentAnalysisPanelTests.cs`, `Analysis/DeploymentAnalysisPollingTests.cs`,
+  `Analysis/DeploymentAnalysisSectionTests.cs`.
+- `Diagnostics/` — `Diagnostics/ConsoleExceptionDiagnosticsTests.cs`, `Diagnostics/DeploymentTracingTests.cs`,
+  `Diagnostics/LogHubCancellationTests.cs`, `Diagnostics/OperationalLoggingTests.cs`,
+  `Diagnostics/RealTimeLogStreamerTests.cs`, `Diagnostics/RequestAuditTests.cs`.
+- `Hosting/` — `Hosting/HostingProfileRegistrationTests.cs`, `Hosting/MetricResourceSafetyTests.cs`,
+  `Hosting/PlatformTelemetrySafetyTests.cs`, `Hosting/TelemetryHostSafetyTests.cs`.
+- `Metrics/` — `Metrics/DeploymentMetricDisplayTests.cs`, `Metrics/MetricExplorationInteractionTests.cs`,
+  `Metrics/MetricExplorationRenderingTests.cs`, `Metrics/ProjectDetailsMetricRecoveryTests.cs`,
+  `Metrics/ProjectTelemetrySummaryTests.cs`, `Metrics/TelemetryChartRenderingTests.cs`,
+  `Metrics/TelemetryPageRenderingTests.cs`, `Metrics/TelemetryPresentationTests.cs`.
 - `Presentation/` — `Presentation/ConsoleRenderingTests.cs`, `Presentation/DeploymentTerminalPresentationTests.cs`.
-- `Projects/` — `Projects/ConfigurationVariableLoadingTests.cs`, `Projects/DashboardStatusTests.cs`, `Projects/DeploymentFailurePrivacyTests.cs`, `Projects/DeploymentHistoryTests.cs`, `Projects/ProjectDetailsStopTests.cs`, `Projects/ProjectTerminalReplayTests.cs`, `Projects/WorkspaceOverviewLifecycleTests.cs`.
+- `Projects/` — `Projects/ConfigurationVariableLoadingTests.cs`, `Projects/DashboardStatusTests.cs`,
+  `Projects/DeploymentFailurePrivacyTests.cs`, `Projects/DeploymentHistoryTests.cs`,
+  `Projects/ProjectDetailsStopTests.cs`, `Projects/ProjectTerminalReplayTests.cs`,
+  `Projects/WorkspaceOverviewLifecycleTests.cs`.
 
 ## Source organization
 
-See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
+existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
+layouts.

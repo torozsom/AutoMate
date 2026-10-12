@@ -3,13 +3,12 @@ using Domain.DTO;
 namespace Application.Orchestration;
 
 /// <summary>
-///     Represents a queued deployment operation processed outside the Blazor component lifecycle.
+///     Represents a queued deployment operation processed outside the Blazor component
+///     lifecycle.
 /// </summary>
 public abstract record DeploymentJob
 {
-    /// <summary>
-    ///     Gets the AutoMate application/project ID affected by the job.
-    /// </summary>
+    /// <summary>Gets the AutoMate application/project ID affected by the job.</summary>
     public abstract Guid ProjectId { get; }
 }
 
@@ -19,7 +18,7 @@ public abstract record DeploymentJob
 /// <param name="Config">The deployment configuration selected by the user.</param>
 public sealed record LocalDeploymentJob(DeploymentConfigDto Config) : DeploymentJob
 {
-    /// <inheritdoc />
+    /// <summary>Project identity taken from the local deployment configuration.</summary>
     public override Guid ProjectId => Config.ProjectId;
 }
 
@@ -29,7 +28,7 @@ public sealed record LocalDeploymentJob(DeploymentConfigDto Config) : Deployment
 /// <param name="Request">The cloud deployment request selected by the user.</param>
 public sealed record CloudDeploymentJob(CloudDeploymentRequestDto Request) : DeploymentJob
 {
-    /// <inheritdoc />
+    /// <summary>Project identity taken from the cloud deployment request.</summary>
     public override Guid ProjectId => Request.Config.ProjectId;
 }
 
@@ -43,7 +42,9 @@ public sealed record StopLocalDeploymentJob : DeploymentJob
     /// </summary>
     /// <param name="projectId">The AutoMate project ID whose deployment should stop.</param>
     /// <param name="projectName">The project name used to resolve the Docker Compose project name.</param>
-    /// <param name="csProjectPath">The selected C# project path used to locate generated deployment files.</param>
+    /// <param name="csProjectPath">
+    ///     The selected C# project path used to locate generated deployment files.
+    /// </param>
     public StopLocalDeploymentJob(Guid projectId, string projectName, string csProjectPath)
     {
         ProjectId = projectId;
@@ -51,16 +52,12 @@ public sealed record StopLocalDeploymentJob : DeploymentJob
         CsProjectPath = csProjectPath;
     }
 
-    /// <inheritdoc />
+    /// <summary>Identity of the local project to stop.</summary>
     public override Guid ProjectId { get; }
 
-    /// <summary>
-    ///     The project name used to resolve the Docker Compose project name.
-    /// </summary>
+    /// <summary>The project name used to resolve the Docker Compose project name.</summary>
     public string ProjectName { get; }
 
-    /// <summary>
-    ///     The selected C# project path used to locate generated deployment files.
-    /// </summary>
+    /// <summary>The selected C# project path used to locate generated deployment files.</summary>
     public string CsProjectPath { get; }
 }

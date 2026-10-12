@@ -8,14 +8,24 @@ namespace Web.Configs;
 /// </summary>
 internal static class AzureSubscriptionResolver
 {
-    /// <summary>
-    ///     Azure subscriptions API version used by the account connection flow.
-    /// </summary>
+    /// <summary>Azure subscriptions API version used by the account connection flow.</summary>
     private const string AzureSubscriptionsApiVersion = "2022-12-01";
 
     /// <summary>
-    ///     Loads the first enabled Azure subscription ID, falling back to the first returned subscription.
+    ///     Loads the first enabled Azure subscription ID, falling back to the first returned
+    ///     subscription.
     /// </summary>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="httpClientFactory">Creates the scoped Azure HTTP client.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>
+    ///     A task returning the first enabled subscription or first available fallback, or null when no
+    ///     subscription can be selected.
+    /// </returns>
+    /// <exception cref="HttpRequestException">The Azure subscription endpoint cannot be reached.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The subscription response is malformed JSON.</exception>
+    /// <exception cref="OperationCanceledException">The request is canceled or reaches its HTTP timeout.</exception>
+    /// <exception cref="InvalidOperationException">Subscription fields have incompatible JSON kinds.</exception>
     public static async Task<string?> GetDefaultSubscriptionIdAsync(string? accessToken,
         IHttpClientFactory httpClientFactory, CancellationToken cancellationToken)
     {
@@ -44,6 +54,9 @@ internal static class AzureSubscriptionResolver
     /// <summary>
     ///     Selects the first enabled subscription or the first available subscription as a fallback.
     /// </summary>
+    /// <param name="subscriptionsElement">Azure subscriptions response array.</param>
+    /// <returns>The first enabled subscription ID, the first available fallback, or null when none is present.</returns>
+    /// <exception cref="InvalidOperationException">The subscription response has incompatible object or string field kinds.</exception>
     private static string? GetPreferredSubscriptionId(JsonElement subscriptionsElement)
     {
         string? firstFallback = null;

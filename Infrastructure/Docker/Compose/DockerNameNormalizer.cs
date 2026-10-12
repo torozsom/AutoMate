@@ -8,6 +8,8 @@ internal static class DockerNameNormalizer
     /// <summary>
     ///     Creates a safe and stable Docker Compose project name.
     /// </summary>
+    /// <param name="projectName">The project name used for deployment artifacts or Compose lookup.</param>
+    /// <returns>The normalized identity used for the documented routing or lookup.</returns>
     public static string NormalizeProjectName(string projectName)
     {
         var normalized = DockerRegexes.ProjectNameRegex().Replace(projectName.Trim().ToLowerInvariant(), "-");

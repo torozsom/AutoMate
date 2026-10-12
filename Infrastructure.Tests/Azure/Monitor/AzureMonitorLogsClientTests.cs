@@ -7,9 +7,16 @@ using Infrastructure.Tests.TestSupport;
 
 namespace Infrastructure.Tests.Azure;
 
+/// <summary>
+///     Verifies Azure diagnostic query scoping, parsing and ingestion-cursor behavior using
+///     synthetic HTTP responses.
+/// </summary>
 public sealed class AzureMonitorLogsClientTests
 {
-    /// <summary>Native event time remains distinct from the ordered ingestion cursor for delayed arrivals.</summary>
+    /// <summary>
+    ///     Native event time remains distinct from the ordered ingestion cursor for delayed arrivals.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Query_preserves_delayed_event_time_and_equal_ingestion_hash_cursor()
     {
@@ -40,6 +47,10 @@ public sealed class AzureMonitorLogsClientTests
         Assert.Equal("hash-b", record.CursorHash);
     }
 
+    /// <summary>
+    ///     Verifies that query normalizes records and uses resource scoped endpoint.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Query_normalizes_records_and_uses_resource_scoped_endpoint()
     {
@@ -74,6 +85,10 @@ public sealed class AzureMonitorLogsClientTests
             .And.Contain("ContainerAppName_s");
     }
 
+    /// <summary>
+    ///     Verifies that query surfaces a safe permission failure.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Query_surfaces_a_safe_permission_failure()
     {
@@ -87,7 +102,10 @@ public sealed class AzureMonitorLogsClientTests
         result.FailureReason.Should().Contain("Log Analytics Reader").And.NotContain("token");
     }
 
-    /// <summary>Partial Azure results cannot silently lose records by committing a cursor.</summary>
+    /// <summary>
+    ///     Partial Azure results cannot silently lose records by committing a cursor.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Query_rejects_partial_success_without_exposing_provider_details()
     {

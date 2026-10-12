@@ -16,10 +16,16 @@ using Xunit.Abstractions;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Real PostgreSQL/Loki/Mimir acceptance tests against the isolated Compose override.</summary>
+/// <summary>
+///     Real PostgreSQL/Loki/Mimir acceptance tests against the isolated Compose override.
+/// </summary>
+/// <param name="output">Test output sink supplied by xUnit.</param>
 public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
 {
-    /// <summary>Real LogQL applies typed source/container filters before its candidate limit.</summary>
+    /// <summary>
+    ///     Real LogQL applies typed source/container filters before its candidate limit.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [TelemetryIntegrationFact]
     public async Task Assessment_filters_selected_sources_before_backend_limits()
     {
@@ -92,6 +98,10 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             metricQuery with { Selection = new AssessmentSelection(IncludeMetrics: false) }, default));
     }
 
+    /// <summary>
+    ///     Verifies that disk receipts recover and reach real stores without database payloads.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [TelemetryIntegrationFact]
     public async Task Disk_receipts_recover_and_reach_real_stores_without_database_payloads()
     {
@@ -101,11 +111,17 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var seeded = await SeedAsync(services);
         var directory = Path.Combine(Path.GetTempPath(), "automate-integration-spool-" + Guid.NewGuid().ToString("N"));
 
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Creates the configured create instance over fixture-owned dependencies.
+        /// </summary>
+        /// <returns>The configured disk telemetry spool instance or response for this scenario.</returns>
         DiskTelemetrySpool Create()
         {
             return new DiskTelemetrySpool(Options.Create(new DiskSpoolOptions { Directory = directory }),
                 Options.Create(settings), NullLogger<DiskTelemetrySpool>.Instance, new DiagnosticRedactor());
         }
+#pragma warning restore CS1587
 
         try
         {
@@ -158,7 +174,10 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         }
     }
 
-    /// <summary>Applies the actual schema and verifies replay before and after query visibility.</summary>
+    /// <summary>
+    ///     Applies the actual schema and verifies replay before and after query visibility.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [TelemetryIntegrationFact]
     public async Task Real_stores_replay_redacted_logs_and_numeric_metrics_after_buffer_removal()
     {
@@ -213,7 +232,11 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             .Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
-    /// <summary>Legacy modes reject all new concurrent ingestion while leaving the historical database untouched.</summary>
+    /// <summary>
+    ///     Legacy modes reject all new concurrent ingestion while leaving the historical database
+    ///     untouched.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [TelemetryIntegrationFact]
     public async Task Concurrent_legacy_ingestion_is_rejected_without_database_payloads()
     {
@@ -233,7 +256,10 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         output.WriteLine("Concurrent legacy ingestion: 100 direct calls rejected without new PostgreSQL payloads.");
     }
 
-    /// <summary>Reclaims a dead worker lease and never drops a partially visible prefix.</summary>
+    /// <summary>
+    ///     Reclaims a dead worker lease and never drops a partially visible prefix.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [TelemetryIntegrationFact]
     public async Task Lease_recovery_waits_for_complete_visibility_and_records_buffer_expiry()
     {
@@ -274,7 +300,11 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             .Should().Be(1);
     }
 
-    /// <summary>Legacy rows remain pageable and expiring in both query modes; new PostgreSQL ingestion is denied.</summary>
+    /// <summary>
+    ///     Legacy rows remain pageable and expiring in both query modes; new PostgreSQL ingestion is
+    ///     denied.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [TelemetryIntegrationFact]
     public async Task Legacy_history_is_pageable_and_expired_rows_stay_hidden_in_both_modes()
     {
@@ -348,7 +378,11 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                 "web"));
     }
 
-    /// <summary>Legacy preference calls cannot disable authorized history or draining, and never enable PostgreSQL writes.</summary>
+    /// <summary>
+    ///     Legacy preference calls cannot disable authorized history or draining, and never enable
+    ///     PostgreSQL writes.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [TelemetryIntegrationFact]
     public async Task Legacy_preferences_preserve_history_and_delivery_without_new_database_ingestion()
     {
@@ -385,7 +419,15 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         Assert.Equal(2, await db.DeploymentDiagnosticRecords.CountAsync(row => row.ProjectId == seeded.Project));
     }
 
-    /// <summary>Seeds historical migration fixtures only; production ingestion never creates these records or outboxes.</summary>
+    /// <summary>
+    ///     Seeds historical migration fixtures only; production ingestion never creates these records
+    ///     or outboxes.
+    /// </summary>
+    /// <param name="services">Fixture dependency provider.</param>
+    /// <param name="diagnostic">Synthetic diagnostic event or terminal record.</param>
+    /// <param name="channel">Recorded log channel to select.</param>
+    /// <param name="buffered">Whether the synthetic event is represented in pending storage.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static async Task SeedLegacyBufferAsync(ServiceProvider services, DeploymentDiagnosticEvent diagnostic,
         string? channel, bool buffered = true)
     {
@@ -430,7 +472,12 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         await db.SaveChangesAsync();
     }
 
-    /// <summary>Builds independent scopes sharing an isolated real database.</summary>
+    /// <summary>
+    ///     Builds independent scopes sharing an isolated real database.
+    /// </summary>
+    /// <param name="settings">Synthetic provider or telemetry settings, optionally using fixture defaults.</param>
+    /// <param name="sinks">Optional controlled backend sinks.</param>
+    /// <returns>The configured fixture dependency provider, owned by the caller.</returns>
     private static ServiceProvider Services(TelemetryStorageOptions? settings = null, DelayedSinks? sinks = null)
     {
         var options = Options.Create(settings ?? TelemetryStorageTests.Specialized());
@@ -459,7 +506,11 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         return services.BuildServiceProvider();
     }
 
-    /// <summary>Seeds unique project identities and uses real migrations.</summary>
+    /// <summary>
+    ///     Seeds unique project identities and uses real migrations.
+    /// </summary>
+    /// <param name="services">Fixture dependency provider.</param>
+    /// <returns>A task returning the grouped synthetic identities or fixture observations.</returns>
     private static async Task<(Guid Owner, Guid Project, Guid Deployment)> SeedAsync(ServiceProvider services)
     {
         await using var scope = services.CreateAsyncScope();
@@ -481,7 +532,12 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         return (owner.Id, project.Id, deployment.Id);
     }
 
-    /// <summary>Constructs a provider observation without credentials.</summary>
+    /// <summary>
+    ///     Constructs a provider observation without credentials.
+    /// </summary>
+    /// <param name="seed">Seeded owner, project and deployment identities.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <returns>The configured deployment diagnostic event instance or response for this scenario.</returns>
     private static DeploymentDiagnosticEvent Event((Guid Owner, Guid Project, Guid Deployment) seed, string message)
     {
         return new DeploymentDiagnosticEvent(seed.Project, seed.Deployment, DeploymentDiagnosticSource.DockerCompose,
@@ -490,7 +546,9 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
     }
 
-    /// <summary>Simulates successful ingestion whose query visibility is delayed.</summary>
+    /// <summary>
+    ///     Simulates successful ingestion whose query visibility is delayed.
+    /// </summary>
     private sealed class DelayedSinks : IDeploymentLogWriter, IDeploymentLogQuery, IDeploymentMetricWriter,
         IDeploymentMetricQuery
     {
@@ -503,13 +561,33 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         /// <summary>Counts external query attempts for consent verification.</summary>
         public int Reads { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Reports the configured synthetic backend visibility condition.
+        /// </summary>
+        /// <param name="events">The bounded batch of redacted diagnostic envelopes.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
         public Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken token)
         {
             return Task.FromResult(Visible || events.Count == 0);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies configured synthetic records, observations or completion state for the fixture
+        ///     read.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="cursor">Opaque history position, or null to read the latest page; ignored by this fixture.</param>
+        /// <param name="backwards">
+        ///     Whether to read earlier records rather than records after the cursor; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start, or null when absent; ignored by this fixture.</param>
+        /// <returns>A task returning an empty synthetic result collection.</returns>
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
             long cursor, bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null)
         {
@@ -517,14 +595,31 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             return Task.FromResult<IReadOnlyList<DeploymentLogEnvelope>>([]);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Accepts fixture backend writes and records any configured write count without storing
+        ///     provider data.
+        /// </summary>
+        /// <param name="events">The bounded batch of redacted diagnostic envelopes; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         Task IDeploymentLogWriter.WriteAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken token)
         {
             Writes++;
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies configured synthetic records, observations or completion state for the fixture
+        ///     read.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start; ignored by this fixture.</param>
+        /// <param name="end">UTC observation-window end; ignored by this fixture.</param>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning an empty synthetic result collection.</returns>
         public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenant, Guid project, Guid deployment,
             DateTimeOffset start, DateTimeOffset end, int limit, CancellationToken token)
         {
@@ -532,7 +627,12 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             return Task.FromResult<IReadOnlyList<DeploymentMetricPoint>>([]);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live write work.
+        /// </summary>
+        /// <param name="events">The bounded batch of redacted diagnostic envelopes; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         Task IDeploymentMetricWriter.WriteAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken token)
         {
             return Task.CompletedTask;
@@ -540,10 +640,14 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     }
 }
 
-/// <summary>Requires explicit configuration of an isolated integration database.</summary>
+/// <summary>
+///     Requires explicit configuration of an isolated integration database.
+/// </summary>
 public sealed class TelemetryIntegrationFactAttribute : FactAttribute
 {
-    /// <summary>Default test runs never contact a user's application database.</summary>
+    /// <summary>
+    ///     Default test runs never contact a user's application database.
+    /// </summary>
     public TelemetryIntegrationFactAttribute()
     {
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AUTOMATE_TELEMETRY_TEST_DB")))

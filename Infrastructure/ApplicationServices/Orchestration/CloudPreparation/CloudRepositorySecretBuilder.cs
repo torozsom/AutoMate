@@ -5,13 +5,20 @@ using Infrastructure.Templating;
 namespace Application.Orchestration;
 
 /// <summary>
-///     Builds GitHub Actions repository secrets required by generated cloud deployment workflows.
+///     Builds GitHub Actions repository secrets required by generated cloud deployment
+///     workflows.
 /// </summary>
 internal static class CloudRepositorySecretBuilder
 {
     /// <summary>
-    ///     Creates the complete secret dictionary for Azure identity, registry, database, and custom env values.
+    ///     Creates the complete secret dictionary for Azure identity, registry, database, and
+    ///     custom env values.
     /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="oidcSetup">Verified managed-identity and federated-trust setup.</param>
+    /// <returns>The selection with its documented bounds and ordering.</returns>
     public static Dictionary<string, string> Build(CloudDeploymentRequestDto request,
         AzureOidcSetupResultDto oidcSetup)
     {
@@ -37,6 +44,8 @@ internal static class CloudRepositorySecretBuilder
     /// <summary>
     ///     Adds base64-encoded database login secrets for database types that require credentials.
     /// </summary>
+    /// <param name="secrets">The repository secret values to encrypt before submission; never log them.</param>
+    /// <param name="databases">Configured database components for this deployment.</param>
     private static void AddDatabaseSecrets(Dictionary<string, string> secrets, IEnumerable<DatabaseConfigDto> databases)
     {
         foreach (var (database, index) in databases.Select((database, index) => (database, index)))
@@ -54,6 +63,10 @@ internal static class CloudRepositorySecretBuilder
     /// <summary>
     ///     Adds base64-encoded custom environment value secrets in stable key order.
     /// </summary>
+    /// <param name="secrets">The repository secret values to encrypt before submission; never log them.</param>
+    /// <param name="environmentVariables">
+    ///     Runtime environment values; secrets must not enter diagnostics.
+    /// </param>
     private static void AddCustomEnvironmentSecrets(Dictionary<string, string> secrets,
         IReadOnlyDictionary<string, string> environmentVariables)
     {
@@ -68,6 +81,8 @@ internal static class CloudRepositorySecretBuilder
     /// <summary>
     ///     Encodes secret values because generated Bicep decodes them at deployment time.
     /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The base64encode derived from the validated input.</returns>
     private static string Base64Encode(string value)
     {
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(value));
@@ -76,6 +91,8 @@ internal static class CloudRepositorySecretBuilder
     /// <summary>
     ///     Indicates whether a database provider requires generated login credentials.
     /// </summary>
+    /// <param name="databaseType">Supported database provider kind.</param>
+    /// <returns>Whether the documented requires database login condition holds.</returns>
     private static bool RequiresDatabaseLogin(string databaseType)
     {
         return databaseType.Trim().ToLowerInvariant() is "postgresql" or "postgres" or "mysql" or "sqlserver"

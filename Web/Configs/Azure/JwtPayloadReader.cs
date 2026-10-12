@@ -10,6 +10,12 @@ internal static class JwtPayloadReader
     /// <summary>
     ///     Extracts a string claim value from a JWT payload.
     /// </summary>
+    /// <param name="jwt">JWT value to decode without signature or claim validation.</param>
+    /// <param name="propertyName">JSON property or JWT claim name.</param>
+    /// <returns>The string claim, or null for missing claims or malformed Base64/JSON; no JWT validation is performed.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The decoded payload is not an object or the selected claim is neither a string nor null.
+    /// </exception>
     public static string? GetStringValue(string? jwt, string propertyName)
     {
         var parts = jwt?.Split('.');

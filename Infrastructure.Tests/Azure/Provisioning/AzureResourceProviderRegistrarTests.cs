@@ -6,10 +6,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Azure;
 
-/// <summary>Ensures diagnostics provider readiness precedes deployment and safe failures do not leak response bodies.</summary>
+/// <summary>
+///     Ensures diagnostics provider readiness precedes deployment and safe failures do not leak
+///     response bodies.
+/// </summary>
 public sealed class AzureResourceProviderRegistrarTests
 {
-    /// <summary>The Insights provider is registered and polled before setup returns.</summary>
+    /// <summary>
+    ///     The Insights provider is registered and polled before setup returns.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Registers_missing_insights_and_waits_for_readiness()
     {
@@ -35,7 +41,10 @@ public sealed class AzureResourceProviderRegistrarTests
         Assert.Equal(2, reads);
     }
 
-    /// <summary>Subscription registration denial has fixed guidance without arbitrary provider details.</summary>
+    /// <summary>
+    ///     Subscription registration denial has fixed guidance without arbitrary provider details.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Denial_omits_provider_body_and_credentials()
     {
@@ -54,7 +63,10 @@ public sealed class AzureResourceProviderRegistrarTests
         Assert.DoesNotContain("private", error.Message);
     }
 
-    /// <summary>Cancellation bounds a provider stuck in Registering without dispatching a workflow.</summary>
+    /// <summary>
+    ///     Cancellation bounds a provider stuck in Registering without dispatching a workflow.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Stalled_registration_observes_deadline()
     {

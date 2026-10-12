@@ -12,7 +12,21 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Collects selected deployment evidence and freezes status/configuration provenance at collection time.</summary>
+/// <summary>
+///     Collects selected deployment evidence and freezes status/configuration provenance at
+///     collection time.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="diagnostics">
+///     Optional bounded redacted console exception sink, separate from exported telemetry.
+/// </param>
+/// <param name="metrics">Recorded numeric samples or aggregate points.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="storage">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="archive">Provides the deployment archive? boundary used by this operation.</param>
+/// <param name="retainedLogs">Provides the deployment log query? boundary used by this operation.</param>
 public sealed class DeploymentAnalysisContextBuilder(
     AutoMateDbContext db,
     IDeploymentDiagnosticStore diagnostics,
@@ -24,7 +38,16 @@ public sealed class DeploymentAnalysisContextBuilder(
     IDeploymentArchive? archive = null,
     IDeploymentLogQuery? retainedLogs = null) : IDeploymentAnalysisContextBuilder
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads a bounded deployment-scoped diagnostic window with explicit omission/availability
+    ///     metadata.
+    /// </summary>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning bounded redacted evidence text, permitted references and collection
+    ///     provenance.
+    /// </returns>
     public async Task<DeploymentAnalysisContext> BuildAsync(Guid deploymentId, CancellationToken token = default)
     {
         if (archive is not null) return await BuildAsync(deploymentId, new AssessmentSelection(), token);
@@ -66,7 +89,17 @@ public sealed class DeploymentAnalysisContextBuilder(
             unavailable, token);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Collects an explicitly selected context; default supports existing test/provider
+    ///     implementations.
+    /// </summary>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="selection">The immutable source, container, focus and time-range options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning bounded redacted evidence text, permitted references and collection
+    ///     provenance.
+    /// </returns>
     public async Task<DeploymentAnalysisContext> BuildAsync(Guid deploymentId, AssessmentSelection selection,
         CancellationToken token = default)
     {
@@ -152,7 +185,12 @@ public sealed class DeploymentAnalysisContextBuilder(
             };
     }
 
-    /// <summary>Keep recorded configuration small enough to retain status and range metadata in the input budget.</summary>
+    /// <summary>
+    ///     Keep recorded configuration small enough to retain status and range metadata in the
+    ///     input budget.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The bounded derived from the validated input, or null when no value is available.</returns>
     private static string? Bounded(string? value)
     {
         return value is { Length: > 128 } ? value[..128] : value;

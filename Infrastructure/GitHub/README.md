@@ -45,15 +45,20 @@ Workflow/job queries and completed log downloads have correlated child spans. To
 URLs and output are excluded. Existing retry, checkpoint and progress-then-completed-logs behavior remains unchanged.
 
 API/cache operational logs omit repository/branch/secret names and exception bodies. Cache failures retain API fallback;
-cancellation and return contracts stay unchanged. Real SDK export regressions in Web.Tests/Diagnostics/OperationalLoggingTests.cs
+cancellation and return contracts stay unchanged. Real SDK export regressions in
+Web.Tests/Diagnostics/OperationalLoggingTests.cs
 verify sensitive failure text never enters attributes or exception exports.
 
 ## Folder organization
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Api/` — `Api/GitHubApiRequestFactory.cs`, `Api/GitHubRateLimitException.cs`, `Api/GitHubRepositoryCache.cs`, `Api/GitHubService.cs`.
+- `Api/` — `Api/GitHubApiRequestFactory.cs`, `Api/GitHubRateLimitException.cs`, `Api/GitHubRepositoryCache.cs`,
+  `Api/GitHubService.cs`.
 - `Authentication/` — `Authentication/GitHubAppCredentials.cs`, `Authentication/GitHubAppOptions.cs`.
 - `Secrets/` — `Secrets/GitHubRepositorySecretModels.cs`, `Secrets/GitHubSecretEncryptor.cs`.
 - `Webhooks/` — `Webhooks/GitHubWebhookReceiver.cs`.
-- `Workflows/` — `Workflows/GitHubWorkflowCheckpointStore.cs`, `Workflows/GitHubWorkflowJobMapper.cs`, `Workflows/GitHubWorkflowJobModels.cs`, `Workflows/GitHubWorkflowLogNormalizer.cs`, `Workflows/GitHubWorkflowLogReader.cs`, `Workflows/GitHubWorkflowRunMapper.cs`, `Workflows/GitHubWorkflowRunModels.cs`.
+- `Workflows/` — `Workflows/GitHubWorkflowCheckpointStore.cs`, `Workflows/GitHubWorkflowJobMapper.cs`,
+  `Workflows/GitHubWorkflowJobModels.cs`, `Workflows/GitHubWorkflowLogNormalizer.cs`,
+  `Workflows/GitHubWorkflowLogReader.cs`, `Workflows/GitHubWorkflowRunMapper.cs`,
+  `Workflows/GitHubWorkflowRunModels.cs`.

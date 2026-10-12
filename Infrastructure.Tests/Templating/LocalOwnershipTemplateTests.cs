@@ -4,10 +4,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Templating;
 
-/// <summary>Guards generated ownership metadata and existing database/container behavior.</summary>
+/// <summary>
+///     Guards generated ownership metadata and existing database/container behavior.
+/// </summary>
 public sealed class LocalOwnershipTemplateTests
 {
-    /// <summary>Web ownership varies by process environment; shared databases retain project-scoped labels.</summary>
+    /// <summary>
+    ///     Web ownership varies by process environment; shared databases retain project-scoped labels.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Compose_labels_preserve_container_names_ports_and_database_lifetime()
     {

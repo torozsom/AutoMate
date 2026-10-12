@@ -14,7 +14,21 @@ using DeploymentAnalysisWorkItem = Domain.Entities.DeploymentAnalysisWorkItem;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Owner-authorized analysis admission and redacted readback, including legacy-result validation.</summary>
+/// <summary>
+///     Owner-authorized analysis admission and redacted readback, including legacy-result
+///     validation.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="validator">Rejects unsupported output and returns independent safe result copies.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="egress">Rechecks current ownership, consent and operator egress approval.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="archive">Provides the deployment archive? boundary used by this operation.</param>
 public sealed class DeploymentAnalysisService(
     AutoMateDbContext dbContext,
     IOptionsMonitor<AiAnalysisOptions> options,
@@ -25,17 +39,45 @@ public sealed class DeploymentAnalysisService(
     IDeploymentArchive? archive = null)
     : IDeploymentAnalysisService
 {
-    /// <summary>Bounds receipt aliases per UTC project day independently of the smaller admitted-analysis quota.</summary>
+    /// <summary>
+    ///     Bounds receipt aliases per UTC project day independently of the smaller admitted-
+    ///     analysis quota.
+    /// </summary>
     internal const int MaximumDailyRequestReceipts = 1_000;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Requests an immutable, status-aware selection with stable idempotency.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="requestId">The stable, scope-bound request identity used for idempotent admission.</param>
+    /// <param name="selection">The immutable source, container, focus and time-range options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the accepted or declined admission outcome, including any authorized
+    ///     existing or skipped result.
+    /// </returns>
+    /// <exception cref="T:System.ArgumentException">
+    ///     The selection is invalid or its custom UTC range ends in the future.
+    /// </exception>
     public Task<DeploymentAnalysisRequestResult> RequestManualAsync(Guid ownerId, Guid deploymentId, Guid requestId,
         AssessmentSelection selection, CancellationToken token = default)
     {
         return AdmitAsync(ownerId, deploymentId, requestId, AiAnalysisTrigger.Manual, token, selection);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Saves choices independently of running/saved analysis requests.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="selection">The immutable source, container, focus and time-range options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning true when choices were saved for the owned deployment; otherwise false.
+    /// </returns>
+    /// <exception cref="ArgumentException">Custom UTC range cannot end in the future.</exception>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
     public async Task<bool> SavePreferencesAsync(Guid ownerId, Guid deploymentId, AssessmentSelection selection,
         CancellationToken token = default)
     {
@@ -49,7 +91,16 @@ public sealed class DeploymentAnalysisService(
             .ExecuteUpdateAsync(update => update.SetProperty(d => d.AiAssessmentPreferencesJson, json), token) > 0;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads owner-authorized choices and recorded channels.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the owned saved selection and source catalog, or null for missing or
+    ///     unauthorized deployments.
+    /// </returns>
     public async Task<AssessmentPreferences?> GetPreferencesAsync(Guid ownerId, Guid deploymentId,
         CancellationToken token = default)
     {
@@ -87,21 +138,50 @@ public sealed class DeploymentAnalysisService(
             page.Availability, unsupported);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Coalesces current active work; callers needing replay after completion should supply a
+    ///     stable request ID.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the accepted or declined admission outcome, including any authorized
+    ///     existing or skipped result.
+    /// </returns>
     public Task<DeploymentAnalysisRequestResult> RequestManualAsync(Guid ownerId, Guid deploymentId,
         CancellationToken cancellationToken = default)
     {
         return AdmitAsync(ownerId, deploymentId, null, AiAnalysisTrigger.Manual, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Idempotent manual admission within a ninety-day receipt window; nonempty request IDs are
+    ///     owner/deployment scoped.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="requestId">The stable, scope-bound request identity used for idempotent admission.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the accepted or declined admission outcome, including any authorized
+    ///     existing or skipped result.
+    /// </returns>
     public Task<DeploymentAnalysisRequestResult> RequestManualAsync(Guid ownerId, Guid deploymentId, Guid requestId,
         CancellationToken cancellationToken = default)
     {
         return AdmitAsync(ownerId, deploymentId, requestId, AiAnalysisTrigger.Manual, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads the latest saved analysis for an owned deployment without invoking a provider.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the latest owned result, or null when none is available to the caller.
+    /// </returns>
     public async Task<DeploymentAnalysisView?> GetLatestAsync(Guid ownerId, Guid deploymentId,
         CancellationToken cancellationToken = default)
     {
@@ -114,7 +194,15 @@ public sealed class DeploymentAnalysisService(
         return analysis is null ? null : ToView(analysis);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads a bounded page of all saved runs for one owned deployment, newest first.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="offset">The zero-based offset of the selected page.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning a bounded page of owned saved analyses, newest first.</returns>
     public async Task<IReadOnlyList<DeploymentAnalysisView>> ListAsync(Guid ownerId, Guid deploymentId, int offset = 0,
         int limit = 20, CancellationToken cancellationToken = default)
     {
@@ -128,7 +216,14 @@ public sealed class DeploymentAnalysisService(
         return results.Select(ToView).ToArray();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Deletes terminal or expired analysis metadata; active work is preserved.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the fixed deletion outcome; active work is preserved.</returns>
     public async Task<DeploymentAnalysisDeletionResult> DeleteAsync(Guid ownerId, Guid deploymentId, Guid analysisId,
         CancellationToken cancellationToken = default)
     {
@@ -148,7 +243,18 @@ public sealed class DeploymentAnalysisService(
             : DeploymentAnalysisDeletionResult.NotFound;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Durably cancels unexpired queued/running work and revokes its lease; repeated
+    ///     cancellation is idempotent.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the fixed cancellation outcome without disclosing another owner's
+    ///     analysis.
+    /// </returns>
     public async Task<DeploymentAnalysisCancellationResult> CancelAsync(Guid ownerId, Guid deploymentId,
         Guid analysisId,
         CancellationToken cancellationToken = default)
@@ -190,7 +296,18 @@ public sealed class DeploymentAnalysisService(
         return DeploymentAnalysisCancellationResult.Cancelled;
     }
 
-    /// <summary>Consumes a persisted failure wakeup through the same project guard and quota ledger as manual requests.</summary>
+    /// <summary>
+    ///     Consumes a persisted failure wakeup through the same project guard and quota ledger as
+    ///     manual requests.
+    /// </summary>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the deployment analysis request result projection derived from the
+    ///     verified inputs.
+    /// </returns>
     public async Task<DeploymentAnalysisRequestResult> RequestAutomaticAsync(Guid deploymentId,
         CancellationToken token = default)
     {
@@ -201,7 +318,24 @@ public sealed class DeploymentAnalysisService(
             : new DeploymentAnalysisRequestResult(false, "Deployment not found.");
     }
 
-    /// <summary>Serializes short admission transactions per project; no context/provider call occurs while the guard is held.</summary>
+    /// <summary>
+    ///     Serializes short admission transactions per project; no context/provider call occurs
+    ///     while the guard is held.
+    /// </summary>
+    /// <param name="ownerId">The internal owner account identity used for authorization.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="requestId">The stable, scope-bound request identity used for idempotent admission.</param>
+    /// <param name="trigger">
+    ///     The manual or automatic trigger; it does not grant provider egress permission.
+    /// </param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <param name="requested">The immutable assessment options supplied at admission.</param>
+    /// <returns>
+    ///     A task returning the deployment analysis request result projection derived from the
+    ///     verified inputs.
+    /// </returns>
     private async Task<DeploymentAnalysisRequestResult> AdmitAsync(Guid ownerId, Guid deploymentId, Guid? requestId,
         AiAnalysisTrigger trigger, CancellationToken token, AssessmentSelection? requested = null)
     {
@@ -407,7 +541,12 @@ public sealed class DeploymentAnalysisService(
             : AnalysisSkipPolicy.Message(analysis.FailureCode), ToView(analysis));
     }
 
-    /// <summary>Returns authorized result provenance and optional usage without exposing provider payloads.</summary>
+    /// <summary>
+    ///     Returns authorized result provenance and optional usage without exposing provider
+    ///     payloads.
+    /// </summary>
+    /// <param name="item">Tracked analysis metadata to project or update.</param>
+    /// <returns>The owner-visible safe analysis projection.</returns>
     private DeploymentAnalysisView ToView(AiDeploymentAnalysis item)
     {
         var view = ToResultView(item);
@@ -425,7 +564,11 @@ public sealed class DeploymentAnalysisService(
         }
     }
 
-    /// <summary>Validates saved v1/v2 results before any UI receives provider-authored prose.</summary>
+    /// <summary>
+    ///     Validates saved v1/v2 results before any UI receives provider-authored prose.
+    /// </summary>
+    /// <param name="item">Tracked analysis metadata to project or update.</param>
+    /// <returns>The owner-visible safe analysis projection.</returns>
     private DeploymentAnalysisView ToResultView(AiDeploymentAnalysis item)
     {
         if (item.Status == AiAnalysisStatus.Cancelled)
@@ -476,7 +619,14 @@ public sealed class DeploymentAnalysisService(
         }
     }
 
-    /// <summary>Bounds legacy JSON before parsing; corrupt saved results become safe unavailable views.</summary>
+    /// <summary>
+    ///     Bounds legacy JSON before parsing; corrupt saved results become safe unavailable views.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The deserialize selection with its documented bounds and ordering.</returns>
+    /// <exception cref="InvalidAnalysisResultException">
+    ///     A saved result field exceeds its supported serialized size.
+    /// </exception>
     private static IReadOnlyList<string> Deserialize(string? value)
     {
         if (value?.Length > 131_072) throw new InvalidAnalysisResultException();

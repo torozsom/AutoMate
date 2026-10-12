@@ -1,19 +1,32 @@
 namespace Application.Ai;
 
-/// <summary>Fail-closed policy for the initially supported provider, processing geographies and context categories.</summary>
+/// <summary>
+///     Fail-closed policy for the initially supported provider, processing geographies and
+///     context categories.
+/// </summary>
 public static class AnalysisEgressPolicy
 {
     /// <summary>
-    ///     Requires every current context category and an exact HTTPS regional base URL; never approves global/proxy
-    ///     endpoints.
+    ///     Requires every current context category and an exact HTTPS regional base URL; never
+    ///     approves global/proxy endpoints.
     /// </summary>
+    /// <param name="options">The current validated options used by this operation.</param>
+    /// <returns>
+    ///     Whether approvals and the exact allowed OpenAI regional endpoint satisfy the egress
+    ///     policy.
+    /// </returns>
     public static bool IsConfigured(AiAnalysisOptions options)
     {
         return IsCommonConfigured(options) && options.Provider == "openai" &&
                options.Endpoint == $"https://{options.ProcessingRegion}.api.openai.com/v1/";
     }
 
-    /// <summary>Provider-independent approval/budget requirements; adapters must additionally approve their exact route.</summary>
+    /// <summary>
+    ///     Provider-independent approval/budget requirements; adapters must additionally approve
+    ///     their exact route.
+    /// </summary>
+    /// <param name="options">The current validated options used by this operation.</param>
+    /// <returns>Whether common egress enablement and execution bounds are valid.</returns>
     public static bool IsCommonConfigured(AiAnalysisOptions options)
     {
         if (!options.Enabled || !options.ProviderEgressEnabled ||

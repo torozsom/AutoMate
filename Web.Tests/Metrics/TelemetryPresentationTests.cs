@@ -4,10 +4,14 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Resource display must retain small values and actual sample weighting.</summary>
+/// <summary>
+///     Resource display must retain small values and actual sample weighting.
+/// </summary>
 public sealed class TelemetryPresentationTests
 {
-    /// <summary>Memory is expressed in binary units and sparse CPU values remain legible.</summary>
+    /// <summary>
+    ///     Memory is expressed in binary units and sparse CPU values remain legible.
+    /// </summary>
     [Fact]
     public void Formats_resource_units_without_exponents()
     {
@@ -19,18 +23,29 @@ public sealed class TelemetryPresentationTests
         Assert.Equal("—", TelemetryPresentation.Format(double.NaN, TelemetryPresentation.Cpu));
     }
 
-    /// <summary>Daily resource averages weight unequal sample counts and preserve absent days.</summary>
+    /// <summary>
+    ///     Daily resource averages weight unequal sample counts and preserve absent days.
+    /// </summary>
     [Fact]
     public void Daily_points_weight_observations_without_filling_gaps()
     {
         var date = new DateTimeOffset(2026, 10, 4, 0, 0, 0, TimeSpan.Zero);
 
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Creates row data with the supplied identities and synthetic scenario values.
+        /// </summary>
+        /// <param name="day">The UTC day represented by the activity bucket.</param>
+        /// <param name="count">Recorded deployment total used to size the bar.</param>
+        /// <param name="value">Synthetic numeric observation, or null when unavailable.</param>
+        /// <returns>The configured deployment analytics row instance or response for this scenario.</returns>
         DeploymentAnalyticsRow Row(DateTimeOffset day, long count, double? value)
         {
             return new DeploymentAnalyticsRow(Guid.NewGuid(), day, "web", TelemetryPresentation.Cpu, "cores", count,
                 value, value, value, 0,
                 true, day);
         }
+#pragma warning restore CS1587
 
         var rows = new[]
             { Row(date, 1, .01), Row(date, 9, .03), Row(date.AddDays(2), 1, 0), Row(date.AddDays(1), 0, null) };
@@ -42,7 +57,10 @@ public sealed class TelemetryPresentationTests
         Assert.Null(TelemetryPresentation.WeightedAverage(rows.Where(r => r.SampleCount == 0)));
     }
 
-    /// <summary>Zero, constant and isolated observations receive valid axes without forcing one core.</summary>
+    /// <summary>
+    ///     Zero, constant and isolated observations receive valid axes without forcing one core.
+    /// </summary>
+    /// <param name="value">Synthetic numeric observation.</param>
     [Theory]
     [InlineData(0)]
     [InlineData(.006)]

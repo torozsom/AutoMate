@@ -7,14 +7,17 @@ namespace Infrastructure.GitHub;
 /// </summary>
 internal static class GitHubApiRequestFactory
 {
-    /// <summary>
-    ///     GitHub REST API version sent with mutating and workflow requests.
-    /// </summary>
+    /// <summary>GitHub REST API version sent with mutating and workflow requests.</summary>
     private const string ApiVersion = "2022-11-28";
 
     /// <summary>
     ///     Creates a request for a GitHub API endpoint relative to the configured base address.
     /// </summary>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="method">HTTP method used for the bounded provider request.</param>
+    /// <param name="requestUri">Validated provider request URI.</param>
+    /// <returns>The configured request with bounded provider headers and protected authorization.</returns>
+    /// <exception cref="ArgumentException">GitHub access token is required.</exception>
     public static HttpRequestMessage Create(string accessToken, HttpMethod method, string requestUri)
     {
         if (string.IsNullOrWhiteSpace(accessToken))
@@ -28,8 +31,11 @@ internal static class GitHubApiRequestFactory
     }
 
     /// <summary>
-    ///     Escapes path segments while preserving query parameters that are already encoded by callers.
+    ///     Escapes path segments while preserving query parameters that are already encoded by
+    ///     callers.
     /// </summary>
+    /// <param name="requestUri">Validated provider request URI.</param>
+    /// <returns>The escape git hub request uri derived from the validated input.</returns>
     private static string EscapeGitHubRequestUri(string requestUri)
     {
         var queryStart = requestUri.IndexOf('?');

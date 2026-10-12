@@ -8,12 +8,22 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.ApplicationServices.Orchestration;
 
-/// <summary>Samples cluster-wide queue and monitor state for autoscaling and alerts.</summary>
+/// <summary>
+///     Samples cluster-wide queue and monitor state for autoscaling and alerts.
+/// </summary>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class CloudRunMetricsService(
     IServiceScopeFactory scopeFactory,
     ILogger<CloudRunMetricsService> logger) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Refreshes finite cloud control-plane observation counters without diagnostic payloads.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));

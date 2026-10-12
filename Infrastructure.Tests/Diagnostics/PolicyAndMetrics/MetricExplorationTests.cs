@@ -4,10 +4,14 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Exercises window limits and durable metric lookup recovery without cloud calls.</summary>
+/// <summary>
+///     Exercises window limits and durable metric lookup recovery without cloud calls.
+/// </summary>
 public sealed class MetricExplorationTests
 {
-    /// <summary>Presets and custom limits use UTC calendar years, including leap dates.</summary>
+    /// <summary>
+    ///     Presets and custom limits use UTC calendar years, including leap dates.
+    /// </summary>
     [Fact]
     public void Windows_validate_calendar_bounds_and_keep_charts_bounded()
     {
@@ -29,7 +33,11 @@ public sealed class MetricExplorationTests
             new MetricTimeRange(now.AddMinutes(-10), now.AddSeconds(1)).Validate(now));
     }
 
-    /// <summary>Numeric observations retain counts/container identities after duplicate delivery, restart and lookup loss.</summary>
+    /// <summary>
+    ///     Numeric observations retain counts/container identities after duplicate delivery, restart
+    ///     and lookup loss.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Indexed_metrics_preserve_samples_filtering_and_restart_recovery()
     {
@@ -82,7 +90,10 @@ public sealed class MetricExplorationTests
         }
     }
 
-    /// <summary>Derived lookup corruption is repairable without modifying acknowledged source segments.</summary>
+    /// <summary>
+    ///     Derived lookup corruption is repairable without modifying acknowledged source segments.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Damaged_lookup_is_unavailable_then_rebuilt_from_checksums()
     {
@@ -112,14 +123,27 @@ public sealed class MetricExplorationTests
         }
     }
 
-    /// <summary>Isolated checksummed volume using current redaction policy.</summary>
+    /// <summary>
+    ///     Isolated checksummed volume using current redaction policy.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
+    /// <returns>The configured disk deployment archive instance or response for this scenario.</returns>
     private static DiskDeploymentArchive Create(string path)
     {
         return new DiskDeploymentArchive(
             Options.Create(new DiskSpoolOptions { Directory = path }), new DiagnosticRedactor());
     }
 
-    /// <summary>Typed recorded container sample; diagnostic prose never belongs in the metric lookup.</summary>
+    /// <summary>
+    ///     Typed recorded container sample; diagnostic prose never belongs in the metric lookup.
+    /// </summary>
+    /// <param name="tenant">Synthetic owner identity.</param>
+    /// <param name="project">Synthetic project identity.</param>
+    /// <param name="deployment">Synthetic deployment identity.</param>
+    /// <param name="time">The observation timestamp to assign to a UTC bucket.</param>
+    /// <param name="container">Recorded container identity to select.</param>
+    /// <param name="value">Synthetic numeric observation.</param>
+    /// <returns>The configured deployment log envelope instance or response for this scenario.</returns>
     private static DeploymentLogEnvelope Entry(Guid tenant, Guid project, Guid deployment, DateTimeOffset time,
         string container, double value)
     {

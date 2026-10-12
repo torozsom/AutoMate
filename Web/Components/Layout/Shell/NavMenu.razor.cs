@@ -5,8 +5,12 @@ using Microsoft.JSInterop;
 
 namespace Web.Components.Layout;
 
+/// <summary>
+///     Renders responsive navigation and persists the selected browser theme.
+/// </summary>
 public partial class NavMenu : ComponentBase
 {
+    /// <summary>Whether the current browser theme is dark.</summary>
     private bool _isDarkMode = true;
 
     /// <summary>Mobile navigation visibility.</summary>
@@ -15,25 +19,43 @@ public partial class NavMenu : ComponentBase
     /// <summary>Mobile toggle receives focus after Escape.</summary>
     private ElementReference _menuToggle;
 
-    [Inject] private IJSRuntime JS { get; set; } = null!;
+    /// <summary>Browser interop for owned UI interactions.</summary>
+    [Inject]
+    private IJSRuntime JS { get; set; } = null!;
 
-    [Inject] private ILogger<NavMenu> Logger { get; set; } = null!;
+    /// <summary>Reviewed operational logger for the component.</summary>
+    [Inject]
+    private ILogger<NavMenu> Logger { get; set; } = null!;
 
-    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+    /// <summary>Server-enforced hosting-profile capability flags.</summary>
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
-    /// <summary>Toggles the mobile navigation disclosure.</summary>
+    /// <summary>
+    ///     Toggles the mobile navigation disclosure.
+    /// </summary>
     private void ToggleMenu()
     {
         _menuOpen = !_menuOpen;
     }
 
-    /// <summary>Closes navigation after selecting a destination.</summary>
+    /// <summary>
+    ///     Closes navigation after selecting a destination.
+    /// </summary>
     private void CloseMenu()
     {
         _menuOpen = false;
     }
 
-    /// <summary>Escape dismisses the mobile navigation.</summary>
+    /// <summary>
+    ///     Escape dismisses the mobile navigation.
+    /// </summary>
+    /// <param name="args">Browser event data for this interaction.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
+    /// <exception cref="Microsoft.JSInterop.JSException">
+    ///     The browser interaction fails or the interactive circuit is
+    ///     disconnected.
+    /// </exception>
     private async Task HandleMenuKey(KeyboardEventArgs args)
     {
         if (args.Key == "Escape")
@@ -46,6 +68,8 @@ public partial class NavMenu : ComponentBase
     /// <summary>
     ///     Restores the theme preference after the interactive connection is available.
     /// </summary>
+    /// <param name="firstRender">Whether this is the first interactive render.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -63,7 +87,10 @@ public partial class NavMenu : ComponentBase
         }
     }
 
-    /// <summary>Toggles and persists the selected colour theme.</summary>
+    /// <summary>
+    ///     Toggles and persists the selected colour theme.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ToggleTheme()
     {
         _isDarkMode = !_isDarkMode;

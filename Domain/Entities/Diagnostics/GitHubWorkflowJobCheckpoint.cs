@@ -2,7 +2,9 @@ using Domain.Enums;
 
 namespace Domain.Entities;
 
-/// <summary>Stores a redacted-log checkpoint and state fingerprint for one GitHub Actions job.</summary>
+/// <summary>
+///     Stores a redacted-log checkpoint and state fingerprint for one GitHub Actions job.
+/// </summary>
 public sealed class GitHubWorkflowJobCheckpoint : BaseEntity
 {
     /// <summary>Owning workflow checkpoint identifier.</summary>

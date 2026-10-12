@@ -3,10 +3,17 @@ using Application.Abstractions.Diagnostics;
 
 namespace Web.Components.Pages;
 
-/// <summary>Formats the most recent typed observations for the project page's existing metric cards.</summary>
+/// <summary>
+///     Formats the most recent typed observations for the project page's existing metric cards.
+/// </summary>
 public static class DeploymentMetricDisplay
 {
-    /// <summary>Preserves multi-core CPU percentages and byte-based memory, with missing values left unknown.</summary>
+    /// <summary>
+    ///     Preserves multi-core CPU percentages and byte-based memory, with missing values left unknown.
+    /// </summary>
+    /// <param name="points">Recorded metric observations to format; missing samples remain unavailable.</param>
+    /// <param name="showCpuCores">Whether CPU is displayed in native cores instead of compatibility percentages.</param>
+    /// <returns>CPU and memory display text from the latest supported samples; absent values remain unavailable.</returns>
     public static (string Cpu, string Memory) Latest(IEnumerable<DeploymentMetricPoint> points,
         bool showCpuCores = false)
     {

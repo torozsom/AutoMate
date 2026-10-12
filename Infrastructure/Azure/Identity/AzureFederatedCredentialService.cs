@@ -7,20 +7,29 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Azure;
 
 /// <summary>
-///     Creates and verifies Azure managed identity federated credentials for GitHub Actions OIDC.
+///     Creates and verifies Azure managed identity federated credentials for GitHub Actions
+///     OIDC.
 /// </summary>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 internal sealed class AzureFederatedCredentialService(
     IHttpClientFactory httpClientFactory,
     ILogger logger)
 {
-    /// <summary>
-    ///     Maximum number of read-back attempts after creating a federated credential.
-    /// </summary>
+    /// <summary>Maximum number of read-back attempts after creating a federated credential.</summary>
     private const int FederatedCredentialReadinessAttempts = 6;
 
     /// <summary>
     ///     Ensures the federated credential exists and performs a best-effort readiness check.
     /// </summary>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="credentialName">Managed federated credential name.</param>
+    /// <param name="subject">The email subject.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task EnsureAsync(UserAssignedIdentityResource identity, string credentialName, string subject,
         string accessToken, CancellationToken cancellationToken)
     {
@@ -29,8 +38,18 @@ internal sealed class AzureFederatedCredentialService(
     }
 
     /// <summary>
-    ///     Creates or updates the federated credential with GitHub's issuer, subject, and token audience.
+    ///     Creates or updates the federated credential with GitHub's issuer, subject, and token
+    ///     audience.
     /// </summary>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="credentialName">Managed federated credential name.</param>
+    /// <param name="subject">The email subject.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Azure rejects creation or update of the required federated trust.
+    /// </exception>
     private async Task CreateOrUpdateAsync(UserAssignedIdentityResource identity, string credentialName, string subject,
         string accessToken, CancellationToken cancellationToken)
     {
@@ -55,8 +74,15 @@ internal sealed class AzureFederatedCredentialService(
     }
 
     /// <summary>
-    ///     Polls ARM until the expected federated credential values can be read back or local retries expire.
+    ///     Polls ARM until the expected federated credential values can be read back or local
+    ///     retries expire.
     /// </summary>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="credentialName">Managed federated credential name.</param>
+    /// <param name="subject">The email subject.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task WaitForReadinessAsync(UserAssignedIdentityResource identity, string credentialName,
         string subject, string accessToken, CancellationToken cancellationToken)
     {
@@ -94,6 +120,14 @@ internal sealed class AzureFederatedCredentialService(
     /// <summary>
     ///     Reads federated credential properties from ARM for readiness verification.
     /// </summary>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="credentialName">Managed federated credential name.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the federated credential properties projection derived from the
+    ///     verified inputs.
+    /// </returns>
     private async Task<FederatedCredentialProperties> GetPropertiesAsync(
         UserAssignedIdentityResource identity, string credentialName, string accessToken,
         CancellationToken cancellationToken)
@@ -121,6 +155,11 @@ internal sealed class AzureFederatedCredentialService(
     /// <summary>
     ///     Builds an authenticated ARM request for one managed identity federated credential.
     /// </summary>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="credentialName">Managed federated credential name.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="method">HTTP method used for the bounded provider request.</param>
+    /// <returns>The configured request with bounded provider headers and protected authorization.</returns>
     private static HttpRequestMessage CreateRequest(UserAssignedIdentityResource identity,
         string credentialName, string accessToken, HttpMethod method)
     {
@@ -135,5 +174,8 @@ internal sealed class AzureFederatedCredentialService(
     /// <summary>
     ///     ARM federated credential properties needed for readiness checks.
     /// </summary>
+    /// <param name="Issuer">OIDC token issuer trusted by the configured identity.</param>
+    /// <param name="Subject">The email subject.</param>
+    /// <param name="Audiences">OIDC audiences accepted by the federated trust.</param>
     private sealed record FederatedCredentialProperties(string Issuer, string Subject, IReadOnlyList<string> Audiences);
 }

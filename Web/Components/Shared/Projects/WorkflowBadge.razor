@@ -1,5 +1,8 @@
-@namespace Web.Components.Shared
 @using Domain.Enums
+@*
+    Presents remote workflow progress with an optional GitHub Actions link.
+*@
+@namespace Web.Components.Shared
 <div class="workflow-banner @AlertClass">
     <div class="workflow-banner-copy">
         <i class="bi @IconClass fs-4 me-3"></i>
@@ -17,12 +20,20 @@
 </div>
 
 @code {
-    [Parameter] public DeploymentStatus? Status { get; set; }
 
-    [Parameter] public string? Message { get; set; }
+    /// <summary>Deployment status to present, if available.</summary>
+    [Parameter]
+    public DeploymentStatus? Status { get; set; }
 
-    [Parameter] public string? WorkflowUrl { get; set; }
+    /// <summary>Optional workflow progress message.</summary>
+    [Parameter]
+    public string? Message { get; set; }
 
+    /// <summary>Optional GitHub Actions workflow destination.</summary>
+    [Parameter]
+    public string? WorkflowUrl { get; set; }
+
+    /// <summary>Explicit workflow message or status-derived fallback.</summary>
     private string DisplayMessage => !string.IsNullOrWhiteSpace(Message)
         ? Message
         : Status switch
@@ -34,6 +45,7 @@
             _ => "No cloud workflow has been started yet."
         };
 
+    /// <summary>Status-dependent workflow alert class.</summary>
     private string AlertClass => Status switch
     {
         DeploymentStatus.Running => "workflow-banner-success",
@@ -43,6 +55,7 @@
         _ => "workflow-banner-neutral"
     };
 
+    /// <summary>Status-dependent icon CSS classes.</summary>
     private string IconClass => Status switch
     {
         DeploymentStatus.Running => "bi-check-circle-fill",

@@ -1,6 +1,8 @@
 namespace Application.Diagnostics;
 
-/// <summary>Controls the in-memory diagnostic delivery boundary.</summary>
+/// <summary>
+///     Controls the in-memory diagnostic delivery boundary.
+/// </summary>
 public sealed class DeploymentDiagnosticOptions
 {
     /// <summary>Configuration section name.</summary>

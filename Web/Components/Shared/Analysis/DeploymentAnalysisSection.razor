@@ -1,3 +1,6 @@
+@*
+    Coordinates owned analysis choices, consent, requests, cancellation and bounded result polling.
+*@
 @namespace Web.Components.Shared
 @using Application.Abstractions.Ai
 @using Application.Ai
@@ -120,14 +123,21 @@
     /// <summary>Prevents editing a submitted request or an unavailable deployment selection.</summary>
     private bool ControlsFrozen => OwnerId == Guid.Empty || DeploymentId is null || _busy || _requestId is not null || _latest?.Status is AiAnalysisStatus.Queued or AiAnalysisStatus.Running;
 
-    /// <summary>Updates only the editable draft while no request is pending.</summary>
+    /// <summary>
+    ///     Updates only the editable draft while no request is pending.
+    /// </summary>
+    /// <param name="selection">Immutable assessment context choices.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task SelectionChanged(AssessmentSelection selection)
     {
         if (!ControlsFrozen) _selectionDraft = selection;
         return Task.CompletedTask;
     }
 
-    /// <summary>Saves deployment preferences without rewriting earlier requested analyses.</summary>
+    /// <summary>
+    ///     Saves deployment preferences without rewriting earlier requested analyses.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task SavePreferencesAsync()
     {
         return ActAsync(async (service, token) =>
@@ -140,7 +150,11 @@
         });
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Resets saved choices and results for changed owner/deployment parameters and starts bounded
+    ///     result polling.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnParametersSetAsync()
     {
         var identity = (OwnerId, ProjectId, DeploymentId);
@@ -163,7 +177,10 @@
         _poll ??= PollAsync();
     }
 
-    /// <summary>Refreshes saved state every five seconds without overlapping owner actions.</summary>
+    /// <summary>
+    ///     Refreshes saved state every five seconds without overlapping owner actions.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task PollAsync()
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
@@ -181,7 +198,10 @@
         }
     }
 
-    /// <summary>Loads current and historical saved runs through a fresh service scope.</summary>
+    /// <summary>
+    ///     Loads current and historical saved runs through a fresh service scope.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task RefreshAsync()
     {
         return ActAsync(async (service, token) =>
@@ -206,7 +226,10 @@
         });
     }
 
-    /// <summary>Requests a new manual assessment; only uncertain responses retain the idempotency key.</summary>
+    /// <summary>
+    ///     Requests a new manual assessment; only uncertain responses retain the idempotency key.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task RequestAsync()
     {
         return ActAsync(async (service, token) =>
@@ -232,7 +255,10 @@
         });
     }
 
-    /// <summary>Cancels only the latest selected deployment's active analysis.</summary>
+    /// <summary>
+    ///     Cancels only the latest selected deployment's active analysis.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task CancelAsync()
     {
         return ActAsync(async (service, token) =>
@@ -255,7 +281,11 @@
         });
     }
 
-    /// <summary>Edits current consent for the exact project; snapshots never grant consent.</summary>
+    /// <summary>
+    ///     Edits current consent for the exact project; snapshots never grant consent.
+    /// </summary>
+    /// <param name="consented">Whether the owner permits diagnostic context to leave AutoMate.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task ConsentAsync(bool consented)
     {
         return ActAsync(async (_, token) =>
@@ -278,7 +308,10 @@
         });
     }
 
-    /// <summary>Moves one bounded result page.</summary>
+    /// <summary>
+    ///     Moves one bounded result page.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task PreviousAsync()
     {
         if (_busy) return;
@@ -286,7 +319,10 @@
         await RefreshAsync();
     }
 
-    /// <summary>Moves one bounded result page.</summary>
+    /// <summary>
+    ///     Moves one bounded result page.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task NextAsync()
     {
         if (_busy) return;
@@ -294,7 +330,11 @@
         await RefreshAsync();
     }
 
-    /// <summary>Isolates request scopes and prevents stale error feedback after navigation.</summary>
+    /// <summary>
+    ///     Isolates request scopes and prevents stale error feedback after navigation.
+    /// </summary>
+    /// <param name="action">Scoped analysis operation receiving its service and cancellation token.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ActAsync(Func<IDeploymentAnalysisService, CancellationToken, Task> action)
     {
         if (_busy || _lifetime.IsCancellationRequested || OwnerId == Guid.Empty || DeploymentId is null) return;
@@ -329,7 +369,11 @@
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Cancels component reads and polling and releases owned sources without canceling durable
+    ///     server analyses.
+    /// </summary>
+    /// <returns>A task representing completion of component cleanup.</returns>
     public async ValueTask DisposeAsync()
     {
         await _lifetime.CancelAsync();

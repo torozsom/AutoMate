@@ -11,9 +11,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Tests.Diagnostics;
 
+/// <summary>
+///     Verifies retained diagnostic replay and rejection of new legacy payload writes.
+/// </summary>
 public sealed class DeploymentDiagnosticReplayTests
 {
-    /// <summary>Even direct legacy-store calls cannot insert new diagnostic payloads.</summary>
+    /// <summary>
+    ///     Even direct legacy-store calls cannot insert new diagnostic payloads.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Legacy_store_rejects_new_payloads_before_database_access()
     {
@@ -26,7 +32,10 @@ public sealed class DeploymentDiagnosticReplayTests
         Assert.Empty(db.ChangeTracker.Entries());
     }
 
-    /// <summary>Legacy replay preserves bounded ordering, ownership and expiry.</summary>
+    /// <summary>
+    ///     Legacy replay preserves bounded ordering, ownership and expiry.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Recent_history_is_ordered_bounded_project_scoped_and_excludes_expired_rows()
     {
@@ -60,7 +69,10 @@ public sealed class DeploymentDiagnosticReplayTests
         db.DeploymentDiagnosticRecords.Count().Should().Be(2);
     }
 
-    /// <summary>Legacy replay and context mask supported secrets without rewriting stored rows.</summary>
+    /// <summary>
+    ///     Legacy replay and context mask supported secrets without rewriting stored rows.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Replay_reports_when_older_messages_are_omitted()
     {
@@ -91,7 +103,10 @@ public sealed class DeploymentDiagnosticReplayTests
         history.Events.Select(item => item.Message).Should().Equal("password=[REDACTED]", "third");
     }
 
-    /// <summary>Legacy uncorrelated output remains confined to its project and deployment lifetime.</summary>
+    /// <summary>
+    ///     Legacy uncorrelated output remains confined to its project and deployment lifetime.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Replay_recovers_legacy_uncorrelated_output_only_within_its_project_and_deployment_window()
     {
@@ -149,6 +164,13 @@ public sealed class DeploymentDiagnosticReplayTests
         (await store.ReadRecentAsync(Guid.NewGuid(), firstId, 10)).Events.Should().BeEmpty();
     }
 
+    /// <summary>
+    ///     Creates event data with the supplied identities and synthetic scenario values.
+    /// </summary>
+    /// <param name="projectId">Synthetic project identity.</param>
+    /// <param name="deploymentId">Synthetic deployment identity.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <returns>The configured deployment diagnostic event instance or response for this scenario.</returns>
     private static DeploymentDiagnosticEvent Event(Guid projectId, Guid deploymentId, string message)
     {
         return new DeploymentDiagnosticEvent(projectId, deploymentId, DeploymentDiagnosticSource.DockerCompose,
@@ -156,6 +178,15 @@ public sealed class DeploymentDiagnosticReplayTests
             DateTimeOffset.UtcNow, message, new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
     }
 
+    /// <summary>
+    ///     Creates record data with the supplied identities and synthetic scenario values.
+    /// </summary>
+    /// <param name="orderId">The durable ordering position; negative values represent unsaved live observations.</param>
+    /// <param name="projectId">Synthetic project identity.</param>
+    /// <param name="deploymentId">Synthetic deployment identity.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <param name="expiresAt">The expiry time of the token or stored envelope, if known.</param>
+    /// <returns>The configured deployment diagnostic record instance or response for this scenario.</returns>
     private static DeploymentDiagnosticRecord Record(long orderId, Guid projectId, Guid deploymentId,
         string message, DateTimeOffset? expiresAt = null)
     {
@@ -174,6 +205,12 @@ public sealed class DeploymentDiagnosticReplayTests
         };
     }
 
+    /// <summary>
+    ///     Creates create deployment data with the supplied identities and synthetic scenario values.
+    /// </summary>
+    /// <param name="projectId">Synthetic project identity.</param>
+    /// <param name="deploymentId">Synthetic deployment identity.</param>
+    /// <returns>The configured deployment instance or response for this scenario.</returns>
     private static Deployment CreateDeployment(Guid projectId, Guid deploymentId)
     {
         return new Deployment
@@ -195,11 +232,20 @@ public sealed class DeploymentDiagnosticReplayTests
         };
     }
 
+    /// <summary>
+    ///     Converts diagnostic timestamps for ordered SQLite fixture reads.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
+    /// <param name="dataProtectionProvider">Verifies time-limited project subscription tokens.</param>
     private sealed class SqliteReplayDbContext(
         DbContextOptions<AutoMateDbContext> options,
         IDataProtectionProvider dataProtectionProvider)
         : AutoMateDbContext(options, dataProtectionProvider)
     {
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="modelBuilder">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

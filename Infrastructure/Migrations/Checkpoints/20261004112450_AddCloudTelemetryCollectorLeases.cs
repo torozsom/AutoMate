@@ -1,39 +1,46 @@
-﻿using System;
+﻿#nullable disable
+
 using Microsoft.EntityFrameworkCore.Migrations;
 
-#nullable disable
+namespace Infrastructure.Migrations;
 
-namespace Infrastructure.Migrations
+/// <summary>
+///     EF schema migration and target-model metadata for Add Cloud Telemetry Collector Leases.
+/// </summary>
+public partial class AddCloudTelemetryCollectorLeases : Migration
 {
-    /// <inheritdoc />
-    public partial class AddCloudTelemetryCollectorLeases : Migration
+    /// <summary>
+    ///     Defines the forward schema and data operations for this migration.
+    /// </summary>
+    /// <param name="migrationBuilder">Collects operations executed by the EF migration runner.</param>
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.AddColumn<Guid>(
-                name: "runtime_collector_lease_owner",
-                table: "deployments",
-                type: "uuid",
-                nullable: true);
+        migrationBuilder.AddColumn<Guid>(
+            "runtime_collector_lease_owner",
+            "deployments",
+            "uuid",
+            nullable: true);
 
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "runtime_collector_lease_until",
-                table: "deployments",
-                type: "timestamp with time zone",
-                nullable: true);
-        }
+        migrationBuilder.AddColumn<DateTimeOffset>(
+            "runtime_collector_lease_until",
+            "deployments",
+            "timestamp with time zone",
+            nullable: true);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropColumn(
-                name: "runtime_collector_lease_owner",
-                table: "deployments");
+    /// <summary>
+    ///     Defines downgrade operations for this migration without promising restoration of removed
+    ///     data.
+    /// </summary>
+    /// <param name="migrationBuilder">Collects operations executed by the EF migration runner.</param>
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropColumn(
+            "runtime_collector_lease_owner",
+            "deployments");
 
-            migrationBuilder.DropColumn(
-                name: "runtime_collector_lease_until",
-                table: "deployments");
-        }
+        migrationBuilder.DropColumn(
+            "runtime_collector_lease_until",
+            "deployments");
     }
 }

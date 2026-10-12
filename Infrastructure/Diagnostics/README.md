@@ -190,10 +190,19 @@ validation accepts the same catalog; redaction, gateway durability, retention an
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Archive/` — `Archive/ArchiveMetricBatchReader.cs`, `Archive/DeploymentArchiveBackfillWorker.cs`, `Archive/DeploymentArchiveCleanupWorker.cs`, `Archive/DiskDeploymentArchive.cs`, `Archive/DiskDeploymentArchive.Metrics.cs`, `Archive/DeploymentHistoryService.cs`.
-- `Delivery/` — `Delivery/DeploymentDiagnosticPipeline.cs`, `Delivery/DiskTelemetryDeliveryWorker.cs`, `Delivery/TelemetryDeliveryWorker.cs`, `Delivery/TelemetryGatewayClient.cs`, `Delivery/TelemetryGatewayCompatibility.cs`, `Delivery/TelemetryHttpTransport.cs`.
-- `Metrics/` — `Metrics/DeploymentMetricNormalizer.cs`, `Metrics/MetricExplorationService.cs`, `Metrics/ProjectTelemetryAnalyticsService.cs`, `Metrics/TelemetryDailyAggregationWorker.cs`, `Metrics/TelemetryStorageMetrics.cs`.
-- `Policy/` — `Policy/TelemetryAdmissionPolicy.cs`, `Policy/TelemetryProjectPolicyCache.cs`, `Policy/TelemetryStorageOptions.cs`, `Policy/TelemetryStorageOptionsValidator.cs`.
+- `Archive/` — `Archive/ArchiveMetricBatchReader.cs`, `Archive/DeploymentArchiveBackfillWorker.cs`,
+  `Archive/DeploymentArchiveCleanupWorker.cs`, `Archive/DiskDeploymentArchive.cs`,
+  `Archive/DiskDeploymentArchive.Metrics.cs`, `Archive/DeploymentHistoryService.cs`.
+- `Delivery/` — `Delivery/DeploymentDiagnosticPipeline.cs`, `Delivery/DiskTelemetryDeliveryWorker.cs`,
+  `Delivery/TelemetryDeliveryWorker.cs`, `Delivery/TelemetryGatewayClient.cs`,
+  `Delivery/TelemetryGatewayCompatibility.cs`, `Delivery/TelemetryHttpTransport.cs`.
+- `Metrics/` — `Metrics/DeploymentMetricNormalizer.cs`, `Metrics/MetricExplorationService.cs`,
+  `Metrics/ProjectTelemetryAnalyticsService.cs`, `Metrics/TelemetryDailyAggregationWorker.cs`,
+  `Metrics/TelemetryStorageMetrics.cs`.
+- `Policy/` — `Policy/TelemetryAdmissionPolicy.cs`, `Policy/TelemetryProjectPolicyCache.cs`,
+  `Policy/TelemetryStorageOptions.cs`, `Policy/TelemetryStorageOptionsValidator.cs`.
 - `Redaction/` — `Redaction/DiagnosticRedactor.cs`.
 - `Runtime/` — `Runtime/DeploymentRuntimeViewers.cs`.
-- `Storage/` — `Storage/DeploymentDiagnosticRetentionService.cs`, `Storage/DeploymentDiagnosticStore.cs`, `Storage/DeploymentTelemetryStore.cs`, `Storage/DiskTelemetrySpool.cs`, `Storage/LokiDeploymentLogs.cs`, `Storage/MimirDeploymentMetrics.cs`, `Storage/TelemetryWriteBoundary.cs`.
+- `Storage/` — `Storage/DeploymentDiagnosticRetentionService.cs`, `Storage/DeploymentDiagnosticStore.cs`,
+  `Storage/DeploymentTelemetryStore.cs`, `Storage/DiskTelemetrySpool.cs`, `Storage/LokiDeploymentLogs.cs`,
+  `Storage/MimirDeploymentMetrics.cs`, `Storage/TelemetryWriteBoundary.cs`.

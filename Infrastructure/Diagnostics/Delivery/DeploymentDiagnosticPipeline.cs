@@ -11,7 +11,15 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Accepts redacted events into a bounded, non-blocking delivery queue.</summary>
+/// <summary>
+///     Accepts redacted events into a bounded, non-blocking delivery queue.
+/// </summary>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="scopes">Provides the service scope factory? boundary used by this operation.</param>
 public sealed class DeploymentDiagnosticPublisher(
     IDiagnosticRedactor redactor,
     IOptions<DeploymentDiagnosticOptions> options,
@@ -21,9 +29,13 @@ public sealed class DeploymentDiagnosticPublisher(
     /// <summary>Serializes admission of new overflow identities to enforce the bookkeeping limit.</summary>
     private readonly object _dropLock = new();
 
-    /// <summary>Bounded overflow bookkeeping; metric totals still include omissions beyond this capacity.</summary>
+    /// <summary>
+    ///     Bounded overflow bookkeeping; metric totals still include omissions beyond this
+    ///     capacity.
+    /// </summary>
     private readonly ConcurrentDictionary<Guid, int> _droppedProjects = new();
 
+    /// <summary>Bounded channel of normalized events awaiting redaction and durable delivery.</summary>
     private readonly Channel<DeploymentDiagnosticEvent> _events = Channel.CreateBounded<DeploymentDiagnosticEvent>(
         new BoundedChannelOptions(Math.Clamp(options.Value.BufferCapacity, 16, 16_384))
         {
@@ -41,7 +53,14 @@ public sealed class DeploymentDiagnosticPublisher(
     /// <summary>Configured transport deadline shared by live output and safe availability notices.</summary>
     internal TimeSpan DeliveryTimeout => TimeSpan.FromSeconds(options.Value.DeliveryTimeoutSeconds);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Publishes a diagnostic without allowing a slow downstream consumer to block deployment
+    ///     work.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after the operation finishes.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent,
         CancellationToken cancellationToken = default)
     {
@@ -69,7 +88,16 @@ public sealed class DeploymentDiagnosticPublisher(
         return ValueTask.CompletedTask;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     False means no durable receipt exists and the collector must retain its checkpoint.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning true only after durable acceptance; false requires retaining the
+    ///     provider checkpoint.
+    /// </returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<bool> PublishDurablyAsync(DeploymentDiagnosticEvent diagnosticEvent,
         CancellationToken cancellationToken)
     {
@@ -138,7 +166,11 @@ public sealed class DeploymentDiagnosticPublisher(
         return true;
     }
 
-    /// <summary>Enriches and redacts both ingestion paths before instrumentation or sink access.</summary>
+    /// <summary>
+    ///     Enriches and redacts both ingestion paths before instrumentation or sink access.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <returns>The normalized deployment-correlated observation.</returns>
     private DeploymentDiagnosticEvent PrepareEvent(DeploymentDiagnosticEvent diagnosticEvent)
     {
         var startedAt = Stopwatch.GetTimestamp();
@@ -171,13 +203,22 @@ public sealed class DeploymentDiagnosticPublisher(
         return safeEvent;
     }
 
-    /// <summary>Consumes a project's pending omission count when the dispatcher makes progress.</summary>
+    /// <summary>
+    ///     Consumes a project's pending omission count when the dispatcher makes progress.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <returns>The numeric position, count or status described by this operation.</returns>
     internal int DrainDropped(Guid projectId)
     {
         return _droppedProjects.TryRemove(projectId, out var count) ? count : 0;
     }
 
-    /// <summary>Records sink latency using only finite source/channel and operation labels.</summary>
+    /// <summary>
+    ///     Records sink latency using only finite source/channel and operation labels.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="sink">Finite diagnostic storage or transport sink identifier.</param>
+    /// <param name="startedAt">The recorded deployment start time.</param>
     internal static void RecordSinkDuration(DeploymentDiagnosticEvent diagnosticEvent, string sink, long startedAt)
     {
         var tags = TelemetryTags.Create(diagnosticEvent);
@@ -185,7 +226,13 @@ public sealed class DeploymentDiagnosticPublisher(
         AutoMateTelemetry.SinkDuration.Record(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds, tags);
     }
 
-    /// <summary>Creates a trace root when a collector has no ambient activity.</summary>
+    /// <summary>
+    ///     Creates a trace root when a collector has no ambient activity.
+    /// </summary>
+    /// <returns>
+    ///     The activity projection derived from the verified inputs, or null when no value is
+    ///     available.
+    /// </returns>
     private static Activity? EnsureTraceContext()
     {
         if (Activity.Current is not null) return null;
@@ -194,7 +241,12 @@ public sealed class DeploymentDiagnosticPublisher(
                ?? new Activity("deployment.diagnostic.ingest").Start();
     }
 
-    /// <summary>Rejects malformed observations before any sink receives their contents.</summary>
+    /// <summary>
+    ///     Rejects malformed observations before any sink receives their contents.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <exception cref="ArgumentException">A diagnostic event must identify its project.</exception>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
     private static void Validate(DeploymentDiagnosticEvent diagnosticEvent)
     {
         ArgumentNullException.ThrowIfNull(diagnosticEvent);
@@ -217,14 +269,29 @@ public sealed class DeploymentDiagnosticPublisher(
     }
 }
 
-/// <summary>Drains diagnostics independently from deployment work and forwards only redacted data to presentation.</summary>
+/// <summary>
+///     Drains diagnostics independently from deployment work and forwards only redacted data to
+///     presentation.
+/// </summary>
+/// <param name="publisher">
+///     Accepts normalized observations for bounded redaction and durable delivery.
+/// </param>
+/// <param name="logStreamer">Delivers redacted observations to authorized browser groups.</param>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class DeploymentDiagnosticDispatcher(
     DeploymentDiagnosticPublisher publisher,
     ILogStreamer logStreamer,
     IServiceScopeFactory scopeFactory,
     ILogger<DeploymentDiagnosticDispatcher> logger) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Redacts and durably persists queued observations before safe terminal delivery.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Deployment diagnostic dispatcher started.");
@@ -258,7 +325,13 @@ public sealed class DeploymentDiagnosticDispatcher(
         logger.LogInformation("Deployment diagnostic dispatcher stopped.");
     }
 
-    /// <summary>Persists before live delivery; local deadlines cannot terminate the host-managed dispatcher.</summary>
+    /// <summary>
+    ///     Persists before live delivery; local deadlines cannot terminate the host-managed
+    ///     dispatcher.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task ProcessAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken stoppingToken)
     {
         var channel = diagnosticEvent.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
@@ -338,7 +411,13 @@ public sealed class DeploymentDiagnosticDispatcher(
         }
     }
 
-    /// <summary>Bounds availability notices too, including when the original write already timed out.</summary>
+    /// <summary>
+    ///     Bounds availability notices too, including when the original write already timed out.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task TryNotifyAsync(Guid projectId, string message, CancellationToken stoppingToken)
     {
         try
@@ -354,7 +433,19 @@ public sealed class DeploymentDiagnosticDispatcher(
         }
     }
 
-    /// <summary>Routes safe data while propagating transport cancellation.</summary>
+    /// <summary>
+    ///     Routes safe data while propagating transport cancellation.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="channel">The stable terminal channel used for routing.</param>
+    /// <param name="orderId">
+    ///     The durable ordering position; negative values represent unsaved live observations.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     The diagnostic terminal-channel kind is unsupported.
+    /// </exception>
     private Task DeliverToTerminalAsync(DeploymentDiagnosticEvent diagnosticEvent, string? channel, long orderId,
         CancellationToken cancellationToken)
     {
@@ -376,7 +467,13 @@ public sealed class DeploymentDiagnosticDispatcher(
         };
     }
 
-    /// <summary>Delivers typed observations and preserves the original callback for older browser clients.</summary>
+    /// <summary>
+    ///     Delivers typed observations and preserves the original callback for older browser
+    ///     clients.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task DeliverMetricsAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken token)
     {
         if (diagnosticEvent.DeploymentId is { } deployment && diagnosticEvent.Metrics is { Count: > 0 } samples)
@@ -391,6 +488,14 @@ public sealed class DeploymentDiagnosticDispatcher(
             diagnosticEvent.Attributes?.GetValueOrDefault("memory") ?? "unknown", token);
     }
 
+    /// <summary>
+    ///     Maps typed provider-source metadata to the stable browser terminal channel.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <returns>The normalized identity used for the documented routing or lookup.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     The diagnostic terminal-channel kind is unsupported.
+    /// </exception>
     internal static string GetTerminalChannel(DeploymentDiagnosticEvent diagnosticEvent)
     {
         return diagnosticEvent.TerminalChannel.Kind switch
@@ -411,10 +516,16 @@ public sealed class DeploymentDiagnosticDispatcher(
     }
 }
 
-/// <summary>Finite diagnostic metric dimensions, excluding identity and external strings.</summary>
+/// <summary>
+///     Finite diagnostic metric dimensions, excluding identity and external strings.
+/// </summary>
 internal static class TelemetryTags
 {
-    /// <summary>Maps undefined numeric enum inputs to a fixed value before metrics observe them.</summary>
+    /// <summary>
+    ///     Maps undefined numeric enum inputs to a fixed value before metrics observe them.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <returns>The tag list projection derived from the verified inputs.</returns>
     public static TagList Create(DeploymentDiagnosticEvent diagnosticEvent)
     {
         return new TagList
@@ -426,7 +537,12 @@ internal static class TelemetryTags
         };
     }
 
-    /// <summary>Produces a named value or Unknown, never a numeric string from an untrusted enum cast.</summary>
+    /// <summary>
+    ///     Produces a named value or Unknown, never a numeric string from an untrusted enum cast.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <typeparam name="T">Type of the operation result.</typeparam>
+    /// <returns>The finite derived from the validated input.</returns>
     private static string Finite<T>(T value) where T : struct, Enum
     {
         return Enum.IsDefined(value) ? Enum.GetName(value)! : "Unknown";

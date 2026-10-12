@@ -9,14 +9,18 @@ namespace Infrastructure.Scanner;
 /// </summary>
 internal static class LocalCsProjectParser
 {
-    /// <summary>
-    ///     SDK marker used to classify ASP.NET Core web projects.
-    /// </summary>
+    /// <summary>SDK marker used to classify ASP.NET Core web projects.</summary>
     private const string WebSdkName = "Microsoft.NET.Sdk.Web";
 
     /// <summary>
     ///     Creates a C# project DTO from a .csproj file path and web SDK detection.
     /// </summary>
+    /// <param name="csprojPath">Local C# project-file path.</param>
+    /// <param name="logger">
+    ///     Receives reviewed operational events without diagnostic payloads or credentials.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the cs project dto projection derived from the verified inputs.</returns>
     public static async Task<CsProjectDto> ParseAsync(string csprojPath, ILogger logger,
         CancellationToken cancellationToken)
     {

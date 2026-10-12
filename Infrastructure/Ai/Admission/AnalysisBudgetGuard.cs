@@ -12,14 +12,32 @@ using Work = Application.Abstractions.Ai.DeploymentAnalysisWorkItem;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Serializes short metadata reservations; no database lock is held during context or provider execution.</summary>
+/// <summary>
+///     Serializes short metadata reservations; no database lock is held during context or
+///     provider execution.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class AnalysisBudgetGuard(
     AutoMateDbContext db,
     IOptionsMonitor<AiAnalysisOptions> options,
     TimeProvider clock,
     ILogger<AnalysisBudgetGuard>? logger = null) : IAnalysisBudgetGuard
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Returns a finite denial, or reserves this lease's maximum cost before one provider
+    ///     invocation.
+    /// </summary>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning null when the attempt reservation succeeds; otherwise a finite
+    ///     admission-denial reason.
+    /// </returns>
     public async Task<AnalysisSkipReason?> ReserveAttemptAsync(Work work, CancellationToken cancellationToken = default)
     {
         await using var transaction = db.Database.IsNpgsql()
@@ -100,7 +118,16 @@ public sealed class AnalysisBudgetGuard(
         return null;
     }
 
-    /// <summary>Reports finite denial and integer monetary units with deployment/analysis correlation only.</summary>
+    /// <summary>
+    ///     Reports finite denial and integer monetary units with deployment/analysis correlation
+    ///     only.
+    /// </summary>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="reason">The finite rejection or admission-denial category.</param>
+    /// <param name="daily">Recorded daily deployment/container telemetry rows.</param>
+    /// <param name="used">Current charged byte or sample count.</param>
+    /// <param name="attempt">The lease-acquisition count since the last scheduled provider retry.</param>
+    /// <returns>The analysis skip reason projection derived from the verified inputs.</returns>
     private AnalysisSkipReason Deny(Work work, AnalysisSkipReason reason, long daily = 0, long used = 0,
         long attempt = 0)
     {
@@ -115,7 +142,19 @@ public sealed class AnalysisBudgetGuard(
         return reason;
     }
 
-    /// <summary>Called while the owner-account admission lock is held; result/project deletion cannot refund these counts.</summary>
+    /// <summary>
+    ///     Called while the owner-account admission lock is held; result/project deletion cannot
+    ///     refund these counts.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="settings">The analysis options whose bounds are validated.</param>
+    /// <param name="now">The current time used for window validation or duration calculation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the analysis skip reason projection derived from the verified inputs,
+    ///     or null when no value is available.
+    /// </returns>
     internal static async Task<AnalysisSkipReason?> AdmissionReasonAsync(AutoMateDbContext db, Guid tenant,
         AiAnalysisOptions settings, DateTimeOffset now, CancellationToken token)
     {

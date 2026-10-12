@@ -18,7 +18,15 @@ public sealed class RealTimeLogStreamer(
     IOptions<DeploymentDiagnosticOptions> options,
     IDiagnosticRedactor redactor) : ILogStreamer
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Redacts resource identity and delivers bounded supported numeric samples to the project group.
+    /// </summary>
+    /// <param name="snapshot">Typed resource metrics with project, deployment and provider timestamp.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task completing after the bounded SignalR write; transport failures propagate to the caller.</returns>
+    /// <exception cref="ArgumentException">A required identity or setting is missing or invalid.</exception>
+    /// <exception cref="TimeoutException">The live delivery write exceeds the configured deadline.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token cancels the delivery.</exception>
     public Task StreamDeploymentMetricsAsync(DeploymentRuntimeMetricSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
@@ -34,7 +42,15 @@ public sealed class RealTimeLogStreamer(
         return SendAsync(snapshot.ProjectId, nameof(ILogClient.ReceiveDeploymentMetrics), [safe], cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Redacts source-aware terminal output before project-group delivery.
+    /// </summary>
+    /// <param name="terminalLog">Redacted deployment output with channel and replay identity.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task completing after the bounded SignalR write; transport failures propagate to the caller.</returns>
+    /// <exception cref="ArgumentException">The project identity is empty or the terminal channel is blank.</exception>
+    /// <exception cref="TimeoutException">The live delivery write exceeds the configured deadline.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token cancels the delivery.</exception>
     public Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog,
         CancellationToken cancellationToken = default)
     {
@@ -46,7 +62,16 @@ public sealed class RealTimeLogStreamer(
             cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Delivers redacted availability guidance separately from terminal output.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task completing after the bounded SignalR write; transport failures propagate to the caller.</returns>
+    /// <exception cref="ArgumentException">The project identity is empty.</exception>
+    /// <exception cref="TimeoutException">The live delivery write exceeds the configured deadline.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token cancels the delivery.</exception>
     public Task StreamTerminalNoticeAsync(Guid projectId, string message, CancellationToken cancellationToken = default)
     {
         ValidateProjectId(projectId);
@@ -54,7 +79,18 @@ public sealed class RealTimeLogStreamer(
             cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Delivers bounded redacted compatibility CPU and memory text to the project group.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="containerName">Recorded container or resource identity.</param>
+    /// <param name="cpuUsage">Compatibility CPU display text.</param>
+    /// <param name="memoryUsage">Observed used/limit memory text.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task completing after the bounded SignalR write; transport failures propagate to the caller.</returns>
+    /// <exception cref="ArgumentException">The project identity is empty or the resource name is blank.</exception>
+    /// <exception cref="TimeoutException">The live delivery write exceeds the configured deadline.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token cancels the delivery.</exception>
     public Task StreamContainerMetricsAsync(Guid projectId, string containerName, string cpuUsage,
         string memoryUsage, CancellationToken cancellationToken = default)
     {
@@ -68,7 +104,17 @@ public sealed class RealTimeLogStreamer(
         ], cancellationToken);
     }
 
-    /// <summary>Cancels the actual SignalR write when its deadline expires, without leaving detached send tasks.</summary>
+    /// <summary>
+    ///     Cancels the actual SignalR write when its deadline expires, without leaving detached send
+    ///     tasks.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="method">Allowlisted SignalR client method name.</param>
+    /// <param name="arguments">Redacted client callback arguments.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
+    /// <exception cref="TimeoutException">The live delivery write exceeds the configured deadline.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token cancels the delivery.</exception>
     private async Task SendAsync(Guid projectId, string method, object?[] arguments,
         CancellationToken cancellationToken)
     {

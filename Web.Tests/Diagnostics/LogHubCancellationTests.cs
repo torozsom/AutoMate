@@ -18,10 +18,16 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Distinguishes expected subscription disconnects from genuine provider cancellation.</summary>
+/// <summary>
+///     Distinguishes expected subscription disconnects from genuine provider cancellation.
+/// </summary>
+/// <exception cref="OperationCanceledException">The returned task faults when the fixture failure is selected.</exception>
 public sealed class LogHubCancellationTests
 {
-    /// <summary>Disconnecting during replay must not become a hub failure or confirm an empty cursor.</summary>
+    /// <summary>
+    ///     Disconnecting during replay must not become a hub failure or confirm an empty cursor.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Disconnect_during_replay_returns_unconfirmed_empty_history()
     {
@@ -32,7 +38,10 @@ public sealed class LogHubCancellationTests
         Assert.False(history.CanAdvanceCursor);
     }
 
-    /// <summary>A canceled provider request with an active connection must remain observable.</summary>
+    /// <summary>
+    ///     A canceled provider request with an active connection must remain observable.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Provider_cancellation_without_disconnect_is_not_swallowed()
     {
@@ -41,7 +50,10 @@ public sealed class LogHubCancellationTests
         await Assert.ThrowsAsync<OperationCanceledException>(() => hub.JoinProjectGroup(project, deployment, token));
     }
 
-    /// <summary>Cancellation handling does not weaken subscription token checks.</summary>
+    /// <summary>
+    ///     Cancellation handling does not weaken subscription token checks.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Invalid_token_is_still_rejected()
     {
@@ -51,7 +63,13 @@ public sealed class LogHubCancellationTests
         Assert.False(disconnected.IsCancellationRequested);
     }
 
-    /// <summary>Join/replay spans share one trace and separate expected disconnects from provider failure.</summary>
+    /// <summary>
+    ///     Join/replay spans share one trace and separate expected disconnects from provider failure.
+    /// </summary>
+    /// <param name="disconnect">Whether the fixture disconnects the live connection.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <param name="status">Expected or synthetic trace status.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true, "canceled", ActivityStatusCode.Unset)]
     [InlineData(false, "failed", ActivityStatusCode.Error)]
@@ -84,7 +102,16 @@ public sealed class LogHubCancellationTests
         Assert.DoesNotContain(token, JsonSerializer.Serialize(spans));
     }
 
-    /// <summary>Creates an authorized subscription whose storage read simulates cancellation.</summary>
+    /// <summary>
+    ///     Creates an authorized subscription whose storage read simulates cancellation.
+    /// </summary>
+    /// <param name="disconnected">Cancellation source or token representing connection loss.</param>
+    /// <param name="disconnectDuringReplay">Whether to cancel while saved output is being read.</param>
+    /// <returns>
+    ///     The grouped synthetic identities or fixture observations. A configured outage returns a
+    ///     faulted task instead.
+    /// </returns>
+    /// <exception cref="OperationCanceledException">The returned task faults when the fixture failure is selected.</exception>
     private static (LogHub Hub, Guid Project, Guid Deployment, string Token) CreateHub(
         CancellationTokenSource disconnected, bool disconnectDuringReplay)
     {
@@ -115,7 +142,12 @@ public sealed class LogHubCancellationTests
         return (hub, app.Id, deployment.Id, token);
     }
 
-    /// <summary>Provides minimal interface collaborators without external services or mocking packages.</summary>
+    /// <summary>
+    ///     Provides minimal interface collaborators without external services or mocking packages.
+    /// </summary>
+    /// <param name="invoke">Configured reflected port invocation callback.</param>
+    /// <typeparam name="T">Interface or result type created by the fixture.</typeparam>
+    /// <returns>The configured t instance or response for this scenario.</returns>
     private static T Stub<T>(Func<MethodInfo?, object?[]?, object?> invoke) where T : class
     {
         var proxy = DispatchProxy.Create<T, InterfaceStub>();
@@ -123,41 +155,56 @@ public sealed class LogHubCancellationTests
         return proxy;
     }
 
-    /// <summary>Routes interface calls to the scenario-specific test behavior.</summary>
+    /// <summary>
+    ///     Routes interface calls to the scenario-specific test behavior.
+    /// </summary>
     public class InterfaceStub : DispatchProxy
     {
         /// <summary>Scenario-specific response for an interface method.</summary>
         public Func<MethodInfo?, object?[]?, object?> Handler { get; set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="targetMethod">Reflected port member dispatched by the fake.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             return Handler(targetMethod, args);
         }
     }
 
-    /// <summary>A connection with a controllable disconnect token.</summary>
+    /// <summary>
+    ///     A connection with a controllable disconnect token.
+    /// </summary>
+    /// <param name="disconnected">Cancellation source or token representing connection loss.</param>
     private sealed class CallerContext(CancellationToken disconnected) : HubCallerContext
     {
-        /// <inheritdoc />
+        /// <summary>Fixed synthetic SignalR connection identity.</summary>
         public override string ConnectionId => "test-connection";
 
-        /// <inheritdoc />
+        /// <summary>No authenticated hub user identifier is supplied by this fixture.</summary>
         public override string? UserIdentifier => null;
 
-        /// <inheritdoc />
+        /// <summary>No authenticated principal is supplied by this synthetic hub context.</summary>
         public override ClaimsPrincipal? User => null;
 
-        /// <inheritdoc />
+        /// <summary>Mutable synthetic connection-local data.</summary>
         public override IDictionary<object, object?> Items { get; } = new Dictionary<object, object?>();
 
-        /// <inheritdoc />
+        /// <summary>Synthetic connection feature collection.</summary>
         public override IFeatureCollection Features { get; } = new FeatureCollection();
 
-        /// <inheritdoc />
+        /// <summary>Configured connection-loss cancellation token.</summary>
         public override CancellationToken ConnectionAborted => disconnected;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no abort work in this fixture.
+        /// </summary>
         public override void Abort()
         {
         }

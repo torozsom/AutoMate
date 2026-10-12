@@ -5,10 +5,16 @@ using Infrastructure.Diagnostics;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Verifies selection, serialized budget accounting and exact evidence grounding with synthetic diagnostics.</summary>
+/// <summary>
+///     Verifies selection, serialized budget accounting and exact evidence grounding with synthetic
+///     diagnostics.
+/// </summary>
 public sealed class AnalysisContextTests
 {
-    /// <summary>Old errors remain ahead of recent chatter; long messages shrink without excluding subsequent evidence.</summary>
+    /// <summary>
+    ///     Old errors remain ahead of recent chatter; long messages shrink without excluding subsequent
+    ///     evidence.
+    /// </summary>
     [Fact]
     public void Severity_and_relevance_take_priority_over_recent_chatter_and_oversized_lines()
     {
@@ -27,8 +33,8 @@ public sealed class AnalysisContextTests
     }
 
     /// <summary>
-    ///     Repeated redacted lines collapse with window counts while retaining a real representative event
-    ///     ID/time/sequence.
+    ///     Repeated redacted lines collapse with window counts while retaining a real representative
+    ///     event ID/time/sequence.
     /// </summary>
     [Fact]
     public void Duplicate_groups_have_stable_references_counts_and_chronological_rendering()
@@ -53,7 +59,11 @@ public sealed class AnalysisContextTests
         Assert.DoesNotContain("order:1", context.EvidenceReferences);
     }
 
-    /// <summary>Encoded Unicode and escaping are charged before selection; small limits cannot emit malformed partial JSON.</summary>
+    /// <summary>
+    ///     Encoded Unicode and escaping are charged before selection; small limits cannot emit
+    ///     malformed partial JSON.
+    /// </summary>
+    /// <param name="limit">Requested count or configured admission bound.</param>
     [Theory]
     [InlineData(1)]
     [InlineData(1000)]
@@ -77,8 +87,8 @@ public sealed class AnalysisContextTests
     }
 
     /// <summary>
-    ///     Summaries contain only actual numeric ranges and selected trace correlation, excluding metric labels and
-    ///     invalid points.
+    ///     Summaries contain only actual numeric ranges and selected trace correlation, excluding
+    ///     metric labels and invalid points.
     /// </summary>
     [Fact]
     public void Metric_and_trace_evidence_are_bounded_and_do_not_claim_missing_samples_or_spans()
@@ -107,7 +117,9 @@ public sealed class AnalysisContextTests
         Assert.True(document.RootElement.GetProperty("coverage").GetProperty("historyUnavailable").GetBoolean());
     }
 
-    /// <summary>Cancellation propagates before reading data or rendering a provider request.</summary>
+    /// <summary>
+    ///     Cancellation propagates before reading data or rendering a provider request.
+    /// </summary>
     [Fact]
     public void Cancelled_selection_does_not_produce_context()
     {
@@ -115,7 +127,12 @@ public sealed class AnalysisContextTests
             Budget(), false, new CancellationToken(true)));
     }
 
-    /// <summary>References must resolve exactly to selected evidence; case changes and excluded IDs are rejected.</summary>
+    /// <summary>
+    ///     References must resolve exactly to selected evidence; case changes and excluded IDs are
+    ///     rejected.
+    /// </summary>
+    /// <param name="reference">Supplied evidence reference used to validate provenance.</param>
+    /// <param name="valid">Whether the fixture input is intended to pass validation.</param>
     [Theory]
     [InlineData("order:1", true)]
     [InlineData("order:2", false)]
@@ -127,19 +144,31 @@ public sealed class AnalysisContextTests
         else Assert.Throws<InvalidAnalysisResultException>(() => AnalysisEvidence.Validate(response, ["order:1"]));
     }
 
-    /// <summary>Creates the shared selector with actual secret masking.</summary>
+    /// <summary>
+    ///     Creates the shared selector with actual secret masking.
+    /// </summary>
+    /// <returns>The configured analysis context selector instance or response for this scenario.</returns>
     private static AnalysisContextSelector Selector()
     {
         return new AnalysisContextSelector(new DiagnosticRedactor());
     }
 
-    /// <summary>Generous bounded test budget.</summary>
+    /// <summary>
+    ///     Generous bounded test budget.
+    /// </summary>
+    /// <returns>The configured analysis context budget instance or response for this scenario.</returns>
     private static AnalysisContextBudget Budget()
     {
         return new AnalysisContextBudget(24000, 48000, 12000);
     }
 
-    /// <summary>Creates a durable synthetic event with stable time ordering.</summary>
+    /// <summary>
+    ///     Creates a durable synthetic event with stable time ordering.
+    /// </summary>
+    /// <param name="order">Durable ordering position of the synthetic record.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
+    /// <returns>The configured deployment terminal log instance or response for this scenario.</returns>
     private static DeploymentTerminalLog Row(long order, string message,
         DeploymentDiagnosticSeverity severity = DeploymentDiagnosticSeverity.Information)
     {

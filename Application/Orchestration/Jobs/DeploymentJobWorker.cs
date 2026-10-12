@@ -10,7 +10,19 @@ using Microsoft.Extensions.Options;
 
 namespace Application.Orchestration;
 
-/// <summary>Admits independent deployment jobs into bounded local and cloud lanes.</summary>
+/// <summary>
+///     Admits independent deployment jobs into bounded local and cloud lanes.
+/// </summary>
+/// <param name="queue">The bounded deployment-operation queue consumed by the worker.</param>
+/// <param name="scopeFactory">
+///     Creates an independent dependency scope for each admitted deployment operation.
+/// </param>
+/// <param name="statusNotifier">Publishes deployment transitions to in-process subscribers.</param>
+/// <param name="capabilities">
+///     The hosting profile capabilities used to gate local and cloud operations.
+/// </param>
+/// <param name="options">The current validated options used by this operation.</param>
+/// <param name="logger">The logger used for fixed operational events without diagnostic payloads.</param>
 public sealed class DeploymentJobWorker(
     IDeploymentJobQueue queue,
     IServiceScopeFactory scopeFactory,
@@ -19,8 +31,10 @@ public sealed class DeploymentJobWorker(
     IOptions<DeploymentConcurrencyOptions> options,
     ILogger<DeploymentJobWorker> logger) : BackgroundService
 {
+    /// <summary>Clamped concurrent cloud-deployment lane capacity.</summary>
     private readonly int _cloudLimit = Math.Clamp(options.Value.MaxCloudDeployments, 1, 16);
 
+    /// <summary>Concurrent local-build capacity derived from the explicit or CPU-aware setting.</summary>
     private readonly int _localLimit = options.Value.MaxLocalBuilds switch
     {
         -1 => Math.Max(2, Environment.ProcessorCount / 2),
@@ -28,9 +42,18 @@ public sealed class DeploymentJobWorker(
         var configured => Math.Clamp(configured, 1, 1_024)
     };
 
+    /// <summary>Clamped scheduler waiting-list capacity.</summary>
     private readonly int _pendingLimit = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Consumes queued work, admits nonconflicting operations and awaits active jobs during
+    ///     shutdown.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown and stops admission of new deployment work.</param>
+    /// <returns>
+    ///     A task representing scheduler lifetime, including draining admitted jobs during
+    ///     shutdown.
+    /// </returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var pending = new List<QueuedDeploymentJob>();
@@ -98,6 +121,13 @@ public sealed class DeploymentJobWorker(
         }
     }
 
+    /// <summary>
+    ///     Starts eligible operations in available lanes while preserving project and resource
+    ///     ordering.
+    /// </summary>
+    /// <param name="pending">The scheduler-owned list of operations awaiting admission.</param>
+    /// <param name="running">The scheduler-owned list of active operations.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
     private void AdmitReadyJobs(List<QueuedDeploymentJob> pending, List<RunningJob> running,
         CancellationToken cancellationToken)
     {
@@ -124,6 +154,12 @@ public sealed class DeploymentJobWorker(
         }
     }
 
+    /// <summary>
+    ///     Checks the independent local-build, cloud-build or stop lane for remaining capacity.
+    /// </summary>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <param name="running">The scheduler-owned list of active operations.</param>
+    /// <returns>Whether the operation's lane has remaining capacity.</returns>
     private bool LaneAvailable(DeploymentJob job, List<RunningJob> running)
     {
         return job switch
@@ -135,6 +171,13 @@ public sealed class DeploymentJobWorker(
         };
     }
 
+    /// <summary>
+    ///     Detects conflicting repository branches, Compose names or local host ports among active
+    ///     jobs.
+    /// </summary>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <param name="running">The scheduler-owned list of active operations.</param>
+    /// <returns>Whether an active operation conflicts with this job's provider resource identity.</returns>
     private static bool ResourceInUse(DeploymentJob job, List<RunningJob> running)
     {
         if (job is CloudDeploymentJob cloud && running.Any(item =>
@@ -153,6 +196,11 @@ public sealed class DeploymentJobWorker(
             item.Queued.Job is LocalDeploymentJob other && other.Config.ExposedPort == local.Config.ExposedPort);
     }
 
+    /// <summary>
+    ///     Derives a normalized Compose identity for local build and stop operations.
+    /// </summary>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <returns>The normalized local Compose name, or null for cloud operations.</returns>
     private static string? ComposeName(DeploymentJob job)
     {
         var name = job switch
@@ -167,6 +215,11 @@ public sealed class DeploymentJobWorker(
         return string.IsNullOrEmpty(normalized) ? "automate-project" : normalized;
     }
 
+    /// <summary>
+    ///     Maps a supported operation to its fixed scheduler telemetry lane.
+    /// </summary>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <returns>The fixed local, cloud, stop or unknown lane label.</returns>
     private static string Lane(DeploymentJob job)
     {
         return job switch
@@ -178,6 +231,11 @@ public sealed class DeploymentJobWorker(
         };
     }
 
+    /// <summary>
+    ///     Awaits supervised completion and records queue state and finite outcome metrics.
+    /// </summary>
+    /// <param name="running">The supervised operation awaiting completion.</param>
+    /// <returns>A task that completes after the job result and queue accounting are recorded.</returns>
     private async Task FinishAsync(RunningJob running)
     {
         var succeeded = await running.Task;
@@ -194,7 +252,16 @@ public sealed class DeploymentJobWorker(
                 new KeyValuePair<string, object?>("lane", lane));
     }
 
-    /// <summary>Isolates job failures and passes exceptions to the host's redacted console diagnostics boundary.</summary>
+    /// <summary>
+    ///     Isolates job failures and passes exceptions to the host's redacted console diagnostics
+    ///     boundary.
+    /// </summary>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning true when execution succeeds; false after an isolated failure or
+    ///     cancellation.
+    /// </returns>
     private async Task<bool> ProcessJobSafelyAsync(DeploymentJob job, CancellationToken cancellationToken)
     {
         try
@@ -217,7 +284,10 @@ public sealed class DeploymentJobWorker(
         }
     }
 
-    /// <summary>Publishes safe status changes while isolating and diagnosing subscriber failures.</summary>
+    /// <summary>
+    ///     Publishes safe status changes while isolating and diagnosing subscriber failures.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
     private void NotifyFailureStatus(Guid projectId)
     {
         try
@@ -231,6 +301,19 @@ public sealed class DeploymentJobWorker(
         }
     }
 
+    /// <summary>
+    ///     Resolves the matching orchestrator in a fresh scope and executes an enabled operation.
+    /// </summary>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes when the selected orchestrator finishes execution.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The required deployment capability is disabled or an orchestrator cannot be resolved.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The deployment job type is unsupported.</exception>
+    /// <exception cref="OperationCanceledException">
+    ///     The selected orchestrator observes cancellation.
+    /// </exception>
     private async Task ProcessJobAsync(DeploymentJob job, CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -262,5 +345,10 @@ public sealed class DeploymentJobWorker(
         }
     }
 
+    /// <summary>
+    ///     Pairs an admitted deployment operation with its supervised completion task.
+    /// </summary>
+    /// <param name="Queued">The admitted operation and its enqueue timestamp.</param>
+    /// <param name="Task">The supervised operation task, returning whether execution succeeded.</param>
     private sealed record RunningJob(QueuedDeploymentJob Queued, Task<bool> Task);
 }

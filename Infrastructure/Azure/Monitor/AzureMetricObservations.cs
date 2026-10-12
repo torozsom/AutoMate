@@ -3,20 +3,42 @@ using Application.Abstractions.Diagnostics;
 
 namespace Infrastructure.Azure;
 
-/// <summary>A provider minute bucket with native timestamp and explicitly aggregated dimensions.</summary>
+/// <summary>
+///     A provider minute bucket with native timestamp and explicitly aggregated dimensions.
+/// </summary>
+/// <param name="Timestamp">The provider observation timestamp, if known.</param>
+/// <param name="Samples">
+///     Typed numeric resource samples preserving provider timestamps and native units.
+/// </param>
 internal sealed record AzureMetricObservation(DateTimeOffset Timestamp, IReadOnlyList<DeploymentMetricSample> Samples);
 
-/// <summary>Combines replicas by sum and percentage/capacity gauges by maximum without zero-filling gaps.</summary>
+/// <summary>
+///     Combines replicas by sum and percentage/capacity gauges by maximum without zero-filling
+///     gaps.
+/// </summary>
 internal static class AzureMetricObservations
 {
-    /// <summary>Uses completed UTC minute boundaries so overlapping polls identify the same provider buckets.</summary>
+    /// <summary>
+    ///     Uses completed UTC minute boundaries so overlapping polls identify the same provider
+    ///     buckets.
+    /// </summary>
+    /// <returns>The UTC boundary derived from recorded timestamps.</returns>
     internal static DateTimeOffset CompletedMinute()
     {
         var now = DateTimeOffset.UtcNow;
         return new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, TimeSpan.Zero);
     }
 
-    /// <summary>Parses every returned minute bucket, preserving provider timestamps and finite nonnegative values.</summary>
+    /// <summary>
+    ///     Parses every returned minute bucket, preserving provider timestamps and finite
+    ///     nonnegative values.
+    /// </summary>
+    /// <param name="root">
+    ///     JSON value to validate or normalize without retaining arbitrary provider prose.
+    /// </param>
+    /// <param name="aggregation">Supported Azure metric aggregation to request.</param>
+    /// <param name="sumReplicas">Whether to sum independently reported replica dimensions.</param>
+    /// <returns>The selection with its documented bounds and ordering.</returns>
     internal static IReadOnlyList<AzureMetricObservation> Parse(JsonElement root, string aggregation, bool sumReplicas)
     {
         var buckets = new Dictionary<DateTimeOffset, List<DeploymentMetricSample>>();

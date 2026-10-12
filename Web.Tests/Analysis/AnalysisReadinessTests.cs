@@ -10,10 +10,21 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Exercises real health middleware, HTTP status codes, liveness isolation and finite readiness JSON.</summary>
+/// <summary>
+///     Exercises real health middleware, HTTP status codes, liveness isolation and finite readiness
+///     JSON.
+/// </summary>
 public sealed class AnalysisReadinessTests
 {
-    /// <summary>Disabled AI remains healthy; enabled blocked/missing configuration and database failure are explicit.</summary>
+    /// <summary>
+    ///     Disabled AI remains healthy; enabled blocked/missing configuration and database failure are
+    ///     explicit.
+    /// </summary>
+    /// <param name="state">Synthetic readiness or structured logger state.</param>
+    /// <param name="available">Whether dependency readiness is available.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <param name="health">Expected safe health-response state.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(AnalysisConfigurationState.Disabled, true, 200, "Healthy")]
     [InlineData(AnalysisConfigurationState.Ready, true, 200, "Healthy")]
@@ -29,7 +40,12 @@ public sealed class AnalysisReadinessTests
         await VerifyHttpAsync(port, status, health, state.ToString(), available ? "Available" : "Unavailable");
     }
 
-    /// <summary>Unexpected failures and framework timeouts return safe JSON and pass cancellation to the running probe.</summary>
+    /// <summary>
+    ///     Unexpected failures and framework timeouts return safe JSON and pass cancellation to the
+    ///     running probe.
+    /// </summary>
+    /// <param name="timeout">Configured timeout or timeout-failure variant.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -40,7 +56,16 @@ public sealed class AnalysisReadinessTests
         if (timeout) Assert.True(port.CancellationObserved);
     }
 
-    /// <summary>Hosts the production health mapping with only a scoped application port and no external clients.</summary>
+    /// <summary>
+    ///     Hosts the production health mapping with only a scoped application port and no external
+    ///     clients.
+    /// </summary>
+    /// <param name="port">Controlled readiness dependency.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <param name="health">Expected safe health-response state.</param>
+    /// <param name="configuration">Deployment settings or host configuration used by this operation.</param>
+    /// <param name="queue">The bounded deployment-operation queue consumed by the worker.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static async Task VerifyHttpAsync(ReadinessPort port, int status, string health, string configuration,
         string queue)
     {
@@ -70,7 +95,9 @@ public sealed class AnalysisReadinessTests
         Assert.Contains("no-store", ready.Headers.CacheControl!.ToString());
     }
 
-    /// <summary>Strict application-port fake observes calls, cancellation and private dependency failures.</summary>
+    /// <summary>
+    ///     Strict application-port fake observes calls, cancellation and private dependency failures.
+    /// </summary>
     private sealed class ReadinessPort : IDeploymentAnalysisReadiness
     {
         /// <summary>Safe snapshot for successful probes.</summary>
@@ -88,7 +115,14 @@ public sealed class AnalysisReadinessTests
         /// <summary>Whether the running operation observed timeout cancellation.</summary>
         public bool CancellationObserved { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records readiness calls and optionally injects failure or a cancellation-observing wait.
+        /// </summary>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured deployment analysis readiness instance or response for this scenario.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public async Task<DeploymentAnalysisReadiness> CheckAsync(CancellationToken cancellationToken = default)
         {
             Calls++;

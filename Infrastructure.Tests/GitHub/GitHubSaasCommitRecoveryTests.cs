@@ -9,10 +9,15 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.GitHub;
 
-/// <summary>Checks safe remote-commit recovery and provider cooldown detection.</summary>
+/// <summary>
+///     Checks safe remote-commit recovery and provider cooldown detection.
+/// </summary>
 public sealed class GitHubSaasCommitRecoveryTests
 {
-    /// <summary>A retry finds a marked commit on the managed branch before attempting another push.</summary>
+    /// <summary>
+    ///     A retry finds a marked commit on the managed branch before attempting another push.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task FindDeploymentCommitAsync_returns_the_prior_marked_sha()
     {
@@ -36,7 +41,10 @@ public sealed class GitHubSaasCommitRecoveryTests
         sha.Should().Be("abc123");
     }
 
-    /// <summary>A GitHub reset header becomes a bounded installation cooldown.</summary>
+    /// <summary>
+    ///     A GitHub reset header becomes a bounded installation cooldown.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task FindDeploymentCommitAsync_respects_GitHub_rate_limit_reset()
     {

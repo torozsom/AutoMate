@@ -4,50 +4,47 @@ using Microsoft.AspNetCore.Components;
 namespace Web.Components.Pages;
 
 /// <summary>
-///     This component handles the email verification process for users.
-///     It either prompts the user to check their email or validates a provided token.
+///     This component handles the email verification process for users. It either prompts the user to
+///     check their email or validates a provided token.
 /// </summary>
 public partial class VerifyEmail : ComponentBase
 {
-    /// A page title that can be dynamically set based on the context.
+    /// <summary>Current verification-page heading.</summary>
     private string _pageTitle = "Email Confirmation";
 
 
-    /// The authentication service used to verify the email token.
+    /// <summary>Local registration and email-verification contract.</summary>
     [Inject]
     private IAuthService AuthService { get; set; } = null!;
 
-    /// The navigation manager used to redirect users after successful verification.
+    /// <summary>Application navigation and absolute-link generation.</summary>
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
 
-    /// The logger instance for logging verification-related events.
+    /// <summary>Reviewed operational logger for the component.</summary>
     [Inject]
     private ILogger<VerifyEmail> Logger { get; set; } = null!;
 
 
-    /// <summary>
-    ///     The verification token provided in the URL query string.
-    /// </summary>
+    /// <summary>The verification token provided in the URL query string.</summary>
     [SupplyParameterFromQuery(Name = "token")]
     public string? Token { get; set; }
 
-    /// <summary>
-    ///     A flag indicating whether the component should simply prompt the user to check their email.
-    /// </summary>
+    /// <summary>A flag indicating whether the component should simply prompt the user to check their email.</summary>
     [SupplyParameterFromQuery(Name = "checkemail")]
     public bool CheckEmail { get; set; }
 
 
-    /// An error message to display if verification fails.
+    /// <summary>Current safe form or verification error.</summary>
     private string? ErrorMessage { get; set; }
 
 
     /// <summary>
-    ///     Handles the email verification process when the component is initialized.
-    ///     It checks for the presence of a token, validates it against the database,
-    ///     and updates the user's email verification status accordingly.
+    ///     Handles the email verification process when the component is initialized. It checks for the
+    ///     presence of a token, validates it against the database, and updates the user's email
+    ///     verification status accordingly.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnInitializedAsync()
     {
         if (CheckEmail)
@@ -63,6 +60,7 @@ public partial class VerifyEmail : ComponentBase
     /// <summary>
     ///     Executes the actual verification logic using the token provided in the URL.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ProcessEmailVerificationAsync()
     {
         if (string.IsNullOrWhiteSpace(Token))

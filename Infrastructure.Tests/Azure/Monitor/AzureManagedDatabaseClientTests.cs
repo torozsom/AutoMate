@@ -5,10 +5,15 @@ using Infrastructure.Tests.TestSupport;
 
 namespace Infrastructure.Tests.Azure;
 
-/// <summary>Guards database discovery against collecting unrelated resources in a shared group.</summary>
+/// <summary>
+///     Guards database discovery against collecting unrelated resources in a shared group.
+/// </summary>
 public sealed class AzureManagedDatabaseClientTests
 {
-    /// <summary>SQL child databases require explicit enumeration and their own matching ownership tags.</summary>
+    /// <summary>
+    ///     SQL child databases require explicit enumeration and their own matching ownership tags.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Discovery_pages_inventory_and_lists_owned_sql_child_databases()
     {
@@ -36,7 +41,11 @@ public sealed class AzureManagedDatabaseClientTests
         Assert.Equal(3, reads.Count);
     }
 
-    /// <summary>Continuation URLs never forward bearer tokens to another authority or resource group.</summary>
+    /// <summary>
+    ///     Continuation URLs never forward bearer tokens to another authority or resource group.
+    /// </summary>
+    /// <param name="continuation">Continuation cursor used by the bounded read.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("https://evil.example/subscriptions/sub/resourceGroups/rg/resources")]
     [InlineData("https://management.azure.com/subscriptions/sub/resourceGroups/other/resources")]
@@ -56,7 +65,10 @@ public sealed class AzureManagedDatabaseClientTests
         Assert.Equal(1, reads);
     }
 
-    /// <summary>Both owner tags and the verified resource-group prefix are required.</summary>
+    /// <summary>
+    ///     Both owner tags and the verified resource-group prefix are required.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Discovery_excludes_other_projects_apps_groups_and_unsupported_resources()
     {
@@ -107,7 +119,10 @@ public sealed class AzureManagedDatabaseClientTests
         result.Should().ContainSingle().Which.Name.Should().Be("owned");
     }
 
-    /// <summary>Redis gauges support Maximum; querying Average would silently suppress its observations.</summary>
+    /// <summary>
+    ///     Redis gauges support Maximum; querying Average would silently suppress its observations.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Redis_uses_supported_maximum_aggregation_and_preserves_bytes()
     {

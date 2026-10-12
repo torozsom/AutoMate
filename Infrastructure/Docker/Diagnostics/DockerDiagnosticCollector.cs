@@ -16,7 +16,17 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Docker;
 
-/// <summary>Owns cancellable Docker subscriptions, bounded parsing and durable overlap confirmation.</summary>
+/// <summary>
+///     Owns cancellable Docker subscriptions, bounded parsing and durable overlap confirmation.
+/// </summary>
+/// <param name="client">Docker API client used only with verified owned resources.</param>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="scopes">Provides the service scope factory? boundary used by this operation.</param>
 internal sealed class DockerDiagnosticCollector(
     IDockerClient client,
     IDeploymentDiagnosticPublisher diagnostics,
@@ -25,7 +35,17 @@ internal sealed class DockerDiagnosticCollector(
     ILogger logger,
     IServiceScopeFactory? scopes = null)
 {
-    /// <summary>Verifies metrics ownership before starting a CLI stream bound to an immutable container ID.</summary>
+    /// <summary>
+    ///     Verifies metrics ownership before starting a CLI stream bound to an immutable container
+    ///     ID.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="container">Verified owned Docker container and terminal identity.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the verify container async derived from the validated input, or null
+    ///     when no value is available.
+    /// </returns>
     internal async Task<string?> VerifyContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
         CancellationToken token)
     {
@@ -52,7 +72,14 @@ internal sealed class DockerDiagnosticCollector(
         return null;
     }
 
-    /// <summary>Subscribes before Compose runs and reconnects with a bounded, label-filtered event overlap.</summary>
+    /// <summary>
+    ///     Subscribes before Compose runs and reconnects with a bounded, label-filtered event
+    ///     overlap.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="subscribed">Called after the diagnostic source has established its subscription.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task MonitorDaemonAsync(DockerDeploymentTarget target, Action subscribed, CancellationToken token)
     {
         var lastSecond = target.RegisteredAt.ToUnixTimeSeconds() - 1;
@@ -112,7 +139,11 @@ internal sealed class DockerDiagnosticCollector(
                 }
 
                 // The SDK owns JSON framing. Only normalized, redacted events enter the bounded queue.
-                /// <summary>Normalizes synchronous SDK observations and awaits the cancellable receiver.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+                /// <summary>
+                ///     Normalizes synchronous SDK observations and awaits the cancellable receiver.
+                /// </summary>
+                /// <returns>A task representing completion of the asynchronous operation.</returns>
                 async Task ReceiveAsync()
                 {
                     try
@@ -150,6 +181,7 @@ internal sealed class DockerDiagnosticCollector(
                         throw;
                     }
                 }
+#pragma warning restore CS1587
 
                 DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
                 await NoticeAsync(target, null, DeploymentDiagnosticSource.DockerDaemon,
@@ -178,7 +210,13 @@ internal sealed class DockerDiagnosticCollector(
 
             await Task.Delay(Backoff(++attempt), clock, token);
 
-            /// <summary>Confirms owned lifecycle ingestion before advancing the overlap checkpoint.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+            /// <summary>
+            ///     Confirms owned lifecycle ingestion before advancing the overlap checkpoint.
+            /// </summary>
+            /// <param name="e">Normalized diagnostic to redact before persistence or presentation.</param>
+            /// <returns>A task representing completion of the asynchronous operation.</returns>
+            /// <exception cref="IOException">Diagnostic admission was not confirmed.</exception>
             async Task EmitAsync(DeploymentDiagnosticEvent e)
             {
                 if (delivered.Contains(e.EventId!.Value))
@@ -206,10 +244,18 @@ internal sealed class DockerDiagnosticCollector(
                 order.Enqueue(e.EventId.Value);
                 lastSecond = Math.Max(lastSecond, e.TimestampUtc.ToUnixTimeSeconds() - 1);
             }
+#pragma warning restore CS1587
         }
     }
 
-    /// <summary>Verifies container ownership, decodes separate streams and retries using confirmed timestamp overlap.</summary>
+    /// <summary>
+    ///     Verifies container ownership, decodes separate streams and retries using confirmed
+    ///     timestamp overlap.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="container">Verified owned Docker container and terminal identity.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task MonitorContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
         CancellationToken token)
     {
@@ -317,7 +363,13 @@ internal sealed class DockerDiagnosticCollector(
                     "Container output stream ended; waiting for the container to run again.", token,
                     DeploymentDiagnosticKind.Lifecycle);
 
-                /// <summary>Redacts before deriving replay identity and confirms each source occurrence durably.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+                /// <summary>
+                ///     Redacts before deriving replay identity and confirms each source occurrence durably.
+                /// </summary>
+                /// <param name="line">Decoded bounded Docker output with its timestamp and omission metadata.</param>
+                /// <param name="output">Output stream classification or normalized process output.</param>
+                /// <returns>A task representing completion of the asynchronous operation.</returns>
                 async Task EmitAsync(DockerLogLine line, DeploymentDiagnosticStream output)
                 {
                     var e = redactor.Redact(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
@@ -357,6 +409,7 @@ internal sealed class DockerDiagnosticCollector(
                             token);
                     }
                 }
+#pragma warning restore CS1587
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -390,7 +443,14 @@ internal sealed class DockerDiagnosticCollector(
         }
     }
 
-    /// <summary>Records verified local artifacts without copying environment values from Docker inspect.</summary>
+    /// <summary>
+    ///     Records verified local artifacts without copying environment values from Docker inspect.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="container">Verified owned Docker container and terminal identity.</param>
+    /// <param name="inspect">Docker inspection metadata used to verify resource ownership.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RecordContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
         ContainerInspectResponse inspect, CancellationToken token)
     {
@@ -422,7 +482,15 @@ internal sealed class DockerDiagnosticCollector(
         }
     }
 
-    /// <summary>Restores only bounded redacted history; failures never select a database log payload fallback.</summary>
+    /// <summary>
+    ///     Restores only bounded redacted history; failures never select a database log payload
+    ///     fallback.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="containerId">Verified Docker container identity.</param>
+    /// <param name="window">The frozen evidence time window and truncation metadata.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RestoreAsync(DockerDeploymentTarget target, string containerId, DockerLogReplayWindow window,
         CancellationToken token)
     {
@@ -446,7 +514,12 @@ internal sealed class DockerDiagnosticCollector(
         }
     }
 
-    /// <summary>Requires durable ingestion before updating source cursors.</summary>
+    /// <summary>
+    ///     Requires durable ingestion before updating source cursors.
+    /// </summary>
+    /// <param name="e">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning whether the documented confirm async condition holds.</returns>
     private Task<bool> ConfirmAsync(DeploymentDiagnosticEvent e, CancellationToken token)
     {
         return diagnostics is IDurableDeploymentDiagnosticPublisher durable
@@ -454,7 +527,16 @@ internal sealed class DockerDiagnosticCollector(
             : Task.FromResult(false);
     }
 
-    /// <summary>Emits a safe, source-aware annotation or end-of-stream event through central redaction.</summary>
+    /// <summary>
+    ///     Emits a safe, source-aware annotation or end-of-stream event through central redaction.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="container">Verified owned container identity used for observation routing.</param>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <param name="kind">Finite observation or assessment category used by this operation.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private ValueTask NoticeAsync(DockerDeploymentTarget target, DockerContainerTarget? container,
         DeploymentDiagnosticSource source,
         string message, CancellationToken token, DeploymentDiagnosticKind kind = DeploymentDiagnosticKind.Annotation)
@@ -471,7 +553,11 @@ internal sealed class DockerDiagnosticCollector(
             new Dictionary<string, string> { ["phase"] = "subscription" }), token);
     }
 
-    /// <summary>Reports only source and failure type, never raw Docker error bodies.</summary>
+    /// <summary>
+    ///     Reports only source and failure type, never raw Docker error bodies.
+    /// </summary>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="exception">Optional original exception reviewed before safe platform logging.</param>
     private void Failed(DeploymentDiagnosticSource source, Exception exception)
     {
         AutoMateTelemetry.CollectorErrors.Add(1,
@@ -480,30 +566,46 @@ internal sealed class DockerDiagnosticCollector(
             exception.GetType().Name);
     }
 
-    /// <summary>Counts successful reconnects without container/project identifiers as labels.</summary>
+    /// <summary>
+    ///     Counts successful reconnects without container/project identifiers as labels.
+    /// </summary>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
     private static void Recovered(DeploymentDiagnosticSource source)
     {
         AutoMateTelemetry.CollectorReconnects.Add(1,
             new KeyValuePair<string, object?>("deployment.source", source.ToString()));
     }
 
-    /// <summary>Counts checkpoint suppression without recording message content.</summary>
+    /// <summary>
+    ///     Counts checkpoint suppression without recording message content.
+    /// </summary>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
     private static void Duplicate(DeploymentDiagnosticSource source)
     {
         AutoMateTelemetry.DiagnosticDuplicates.Add(1,
             new KeyValuePair<string, object?>("deployment.source", source.ToString()));
     }
 
-    /// <summary>Caps reconnect delays at thirty seconds.</summary>
+    /// <summary>
+    ///     Caps reconnect delays at thirty seconds.
+    /// </summary>
+    /// <param name="attempt">The lease-acquisition count since the last scheduled provider retry.</param>
+    /// <returns>The bounded delay derived from the configured cadence.</returns>
     private static TimeSpan Backoff(int attempt)
     {
         return TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, Math.Min(5, attempt - 1))));
     }
 
-    /// <summary>Runs Docker event callbacks synchronously so parsing and admission remain ordered.</summary>
+    /// <summary>
+    ///     Runs Docker event callbacks synchronously so parsing and admission remain ordered.
+    /// </summary>
+    /// <param name="report">Callback handling normalized Docker build progress.</param>
     private sealed class DaemonProgress(Action<Message> report) : IProgress<Message>
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Normalizes and publishes the bounded Docker daemon progress observation.
+        /// </summary>
+        /// <param name="value">The value to normalize, redact or validate.</param>
         public void Report(Message value)
         {
             report(value);

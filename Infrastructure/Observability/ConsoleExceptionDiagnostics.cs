@@ -10,7 +10,14 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Observability;
 
-/// <summary>Writes bounded, redacted exception snapshots only to the operator console, never to ILogger providers.</summary>
+/// <summary>
+///     Writes bounded, redacted exception snapshots only to the operator console, never to
+///     ILogger providers.
+/// </summary>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="configuration">The finite local AI configuration readiness state.</param>
+/// <param name="writer">The JSON writer receiving normalized context data.</param>
+/// <param name="filters">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class ConsoleExceptionDiagnostics(
     IDiagnosticRedactor redactor,
     IConfiguration? configuration = null,
@@ -20,10 +27,22 @@ public sealed class ConsoleExceptionDiagnostics(
     /// <summary>Maximum UTF-8 bytes in one diagnostic record, including its final newline.</summary>
     public const int MaximumBytes = 16 * 1024;
 
-    /// <summary>Serializes complete records from concurrent worker slots without owning the console writer.</summary>
+    /// <summary>
+    ///     Serializes complete records from concurrent worker slots without owning the console
+    ///     writer.
+    /// </summary>
     private readonly object gate = new();
 
-    /// <summary>Snapshots approved correlation and exception details; any formatting or console failure is isolated.</summary>
+    /// <summary>
+    ///     Snapshots approved correlation and exception details; any formatting or console failure
+    ///     is isolated.
+    /// </summary>
+    /// <param name="category">Reviewed logger category or provider diagnostic category.</param>
+    /// <param name="level">Reviewed log severity used to select safe output.</param>
+    /// <param name="eventId">The stable event identity used to deduplicate retries.</param>
+    /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+    /// <param name="scopes">Provides logger scopes reviewed before export.</param>
+    /// <param name="exception">Optional original exception reviewed before safe platform logging.</param>
     public void Write(string category, LogLevel level, int eventId, SafePlatformLog state,
         IExternalScopeProvider scopes, Exception exception)
     {
@@ -107,7 +126,13 @@ public sealed class ConsoleExceptionDiagnostics(
         }
     }
 
-    /// <summary>Applies standard console provider/category filter precedence independently of other enabled providers.</summary>
+    /// <summary>
+    ///     Applies standard console provider/category filter precedence independently of other
+    ///     enabled providers.
+    /// </summary>
+    /// <param name="category">Reviewed logger category or provider diagnostic category.</param>
+    /// <param name="level">Reviewed log severity used to select safe output.</param>
+    /// <returns>Whether the documented console enabled condition holds.</returns>
     private bool ConsoleEnabled(string category, LogLevel level)
     {
         if (filters is null) return true;
@@ -135,7 +160,12 @@ public sealed class ConsoleExceptionDiagnostics(
         return (minimum is null || level >= minimum) && (selected?.Filter?.Invoke(provider, category, level) ?? true);
     }
 
-    /// <summary>Provider and database SDK messages may embed whole response/SQL payloads, so retain their type only.</summary>
+    /// <summary>
+    ///     Provider and database SDK messages may embed whole response/SQL payloads, so retain
+    ///     their type only.
+    /// </summary>
+    /// <param name="error">Original failure to classify without persisting arbitrary exception text.</param>
+    /// <returns>The exception message derived from the validated input.</returns>
     private static string ExceptionMessage(Exception error)
     {
         var type = error.GetType().FullName ?? "";
@@ -148,7 +178,14 @@ public sealed class ConsoleExceptionDiagnostics(
             : error.Message;
     }
 
-    /// <summary>Masks configured credentials before central normalization, URL/body suppression and truncation.</summary>
+    /// <summary>
+    ///     Masks configured credentials before central normalization, URL/body suppression and
+    ///     truncation.
+    /// </summary>
+    /// <param name="text">The diagnostic context or text being processed.</param>
+    /// <param name="credentials">The connected Azure credentials used for resource preparation.</param>
+    /// <param name="maximum">The supported upper bound.</param>
+    /// <returns>The bounded normalized text with supported unsafe values removed.</returns>
     private string Mask(string text, string[] credentials, int maximum)
     {
         if (text.Length > 131072) return "[REDACTED]";
@@ -157,7 +194,11 @@ public sealed class ConsoleExceptionDiagnostics(
         return ConsoleDiagnosticText.Redact(redactor.RedactText(text, 131072), maximum);
     }
 
-    /// <summary>Recognizes credential configuration sections and common protected option names.</summary>
+    /// <summary>
+    ///     Recognizes credential configuration sections and common protected option names.
+    /// </summary>
+    /// <param name="key">Stable lookup or configuration key.</param>
+    /// <returns>Whether the documented sensitive key condition holds.</returns>
     private static bool SensitiveKey(string key)
     {
         var normalized = string.Concat(key.Where(char.IsLetterOrDigit)).ToLowerInvariant();
@@ -169,7 +210,12 @@ public sealed class ConsoleExceptionDiagnostics(
             .Any(normalized.Contains);
     }
 
-    /// <summary>Bounds UTF-8 bytes without splitting a surrogate pair; leaves space for the console newline.</summary>
+    /// <summary>
+    ///     Bounds UTF-8 bytes without splitting a surrogate pair; leaves space for the console
+    ///     newline.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The bound derived from the validated input.</returns>
     private static string Bound(string value)
     {
         var maximum = MaximumBytes - Encoding.UTF8.GetByteCount(Environment.NewLine);
@@ -189,10 +235,18 @@ public sealed class ConsoleExceptionDiagnostics(
     }
 }
 
-/// <summary>Additional console-only masking for provider URLs, body/header dumps and source paths in messages.</summary>
+/// <summary>
+///     Additional console-only masking for provider URLs, body/header dumps and source paths in
+///     messages.
+/// </summary>
 internal static partial class ConsoleDiagnosticText
 {
-    /// <summary>Suppresses common payload fields and paths before applying the output character bound.</summary>
+    /// <summary>
+    ///     Suppresses common payload fields and paths before applying the output character bound.
+    /// </summary>
+    /// <param name="text">The diagnostic context or text being processed.</param>
+    /// <param name="maximum">The supported upper bound.</param>
+    /// <returns>The bounded normalized text with supported unsafe values removed.</returns>
     internal static string Redact(string text, int maximum)
     {
         try
@@ -207,13 +261,20 @@ internal static partial class ConsoleDiagnosticText
         }
     }
 
-    /// <summary>Provider body and header dumps are excluded rather than credential-masked as arbitrary prose.</summary>
+    /// <summary>
+    ///     Provider body and header dumps are excluded rather than credential-masked as arbitrary
+    ///     prose.
+    /// </summary>
+    /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
     [GeneratedRegex(
         @"(?is)(?<prefix>\b(?:response\s*body|request\s*body|headers|body|content)\s*[:=]).*",
         RegexOptions.CultureInvariant, 100)]
     private static partial Regex Payload();
 
-    /// <summary>Addresses and absolute Windows/Unix paths are not useful console exception context.</summary>
+    /// <summary>
+    ///     Addresses and absolute Windows/Unix paths are not useful console exception context.
+    /// </summary>
+    /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
     [GeneratedRegex(
         @"(?i)\bhttps?://[^\s""'<>]+|\b[A-Z]:[\\/][^\r\n""']*|(?<![\w:])/(?:[^\s/]+/)*[^\s]+",
         RegexOptions.CultureInvariant, 100)]

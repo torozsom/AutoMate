@@ -14,12 +14,15 @@ using Xunit;
 namespace Web.Tests;
 
 /// <summary>
-///     Renders actual analysis markup to verify state guidance, safe text, stale-result exclusion and owner-action
-///     eligibility.
+///     Renders actual analysis markup to verify state guidance, safe text, stale-result exclusion
+///     and owner-action eligibility.
 /// </summary>
 public sealed class DeploymentAnalysisPanelTests
 {
-    /// <summary>A provider denial explains the external correction without exposing arbitrary provider text.</summary>
+    /// <summary>
+    ///     A provider denial explains the external correction without exposing arbitrary provider text.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Provider_denial_has_actionable_fixed_guidance()
     {
@@ -33,7 +36,12 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.DoesNotContain("private", html);
     }
 
-    /// <summary>Every durable state has an accessible textual label; nonterminal payloads are omitted.</summary>
+    /// <summary>
+    ///     Every durable state has an accessible textual label; nonterminal payloads are omitted.
+    /// </summary>
+    /// <param name="status">Analysis state under test.</param>
+    /// <param name="label">Accessible label or presentation text under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(AiAnalysisStatus.Queued, "Queued")]
     [InlineData(AiAnalysisStatus.Running, "Processing")]
@@ -77,7 +85,15 @@ public sealed class DeploymentAnalysisPanelTests
             Path.Combine(preview, "bootstrap.css"), true);
     }
 
-    /// <summary>Missing consent, operator disablement or nonfailed deployment disables manual requests with an explanation.</summary>
+    /// <summary>
+    ///     Missing consent, operator disablement or nonfailed deployment disables manual requests with
+    ///     an explanation.
+    /// </summary>
+    /// <param name="enabled">Whether to include the option.</param>
+    /// <param name="consent">Legacy preference value used to verify automatic collection behavior.</param>
+    /// <param name="failed">The recorded failed-outcome count.</param>
+    /// <param name="explanation">Fixed explanation expected in the rendered view.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, true, true, "disabled by the operator")]
     [InlineData(true, false, true, "consent is not enabled")]
@@ -90,7 +106,10 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.Contains("No analysis yet", html);
     }
 
-    /// <summary>A result for another deployment cannot appear under the current selection.</summary>
+    /// <summary>
+    ///     A result for another deployment cannot appear under the current selection.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Stale_result_is_omitted()
     {
@@ -100,7 +119,13 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.DoesNotContain("Cancel analysis", html);
     }
 
-    /// <summary>Cancellation remains available for active work when new requests are disabled or consent revoked.</summary>
+    /// <summary>
+    ///     Cancellation remains available for active work when new requests are disabled or consent
+    ///     revoked.
+    /// </summary>
+    /// <param name="status">Analysis state under test.</param>
+    /// <param name="visible">Whether the element or result should be rendered.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(AiAnalysisStatus.Queued, true)]
     [InlineData(AiAnalysisStatus.Running, true)]
@@ -117,7 +142,13 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.Contains("aria-describedby", html);
     }
 
-    /// <summary>Quota, missing context and unavailable configuration use fixed guidance, including hostile legacy codes.</summary>
+    /// <summary>
+    ///     Quota, missing context and unavailable configuration use fixed guidance, including hostile
+    ///     legacy codes.
+    /// </summary>
+    /// <param name="code">Synthetic fixed provider code or HTTP status representation.</param>
+    /// <param name="guidance">Expected fixed customer-facing failure guidance.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("quota_exceeded", "daily analysis allowance")]
     [InlineData("unsupported_data", "no supported diagnostic data")]
@@ -137,7 +168,12 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.DoesNotContain("private-secret", html);
     }
 
-    /// <summary>Current and legacy failures show fixed guidance without framing them as successful answers.</summary>
+    /// <summary>
+    ///     Current and legacy failures show fixed guidance without framing them as successful answers.
+    /// </summary>
+    /// <param name="code">Synthetic fixed provider code or HTTP status representation.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("invalid_response", "supported result format")]
     [InlineData("invalid_response_limits", "supported result limits")]
@@ -150,7 +186,11 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.DoesNotContain("analysis-answer", html);
     }
 
-    /// <summary>Known synthetic safe view, with hostile HTML text to prove normal Razor encoding.</summary>
+    /// <summary>
+    ///     Known synthetic safe view, with hostile HTML text to prove normal Razor encoding.
+    /// </summary>
+    /// <param name="status">Analysis state under test.</param>
+    /// <returns>The configured deployment analysis view instance or response for this scenario.</returns>
     private static DeploymentAnalysisView Result(AiAnalysisStatus status)
     {
         return new DeploymentAnalysisView(Guid.NewGuid(), Guid.NewGuid(), status,
@@ -160,7 +200,15 @@ public sealed class DeploymentAnalysisPanelTests
             "openai", "gpt-5-mini", PromptVersion: "deployment-diagnostics-v2", ResultSchemaVersion: 1);
     }
 
-    /// <summary>Uses the real Razor rendering pipeline without backend or provider services.</summary>
+    /// <summary>
+    ///     Uses the real Razor rendering pipeline without backend or provider services.
+    /// </summary>
+    /// <param name="result">Configured saved analysis result, or null when absent.</param>
+    /// <param name="enabled">Whether to include the option.</param>
+    /// <param name="consent">Legacy preference value used to verify automatic collection behavior.</param>
+    /// <param name="failed">The recorded failed-outcome count.</param>
+    /// <param name="deploymentId">Synthetic deployment identity, or null when absent.</param>
+    /// <returns>A task returning the synthetic text produced for this scenario.</returns>
     private static async Task<string> RenderAsync(DeploymentAnalysisView? result, bool enabled = true,
         bool consent = true,
         bool failed = true, Guid? deploymentId = null)
@@ -180,7 +228,13 @@ public sealed class DeploymentAnalysisPanelTests
                 }))).ToHtmlString());
     }
 
-    /// <summary>Locates preview output under the actual repository.</summary>
+    /// <summary>
+    ///     Locates preview output under the actual repository.
+    /// </summary>
+    /// <returns>The synthetic text produced for this scenario.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The fixture injects a configured failure or detects an unexpected operation.
+    /// </exception>
     private static string FindRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -189,7 +243,10 @@ public sealed class DeploymentAnalysisPanelTests
         return directory?.FullName ?? throw new InvalidOperationException("Repository root unavailable.");
     }
 
-    /// <summary>Records exact consent identities and supplies newly persisted configuration through the application port.</summary>
+    /// <summary>
+    ///     Records exact consent identities and supplies newly persisted configuration through the
+    ///     application port.
+    /// </summary>
     public class ConsentPort : DispatchProxy
     {
         /// <summary>Configuration returned by authorized readback.</summary>
@@ -198,7 +255,16 @@ public sealed class DeploymentAnalysisPanelTests
         /// <summary>Exact application, owner, project and consent passed by the page.</summary>
         public (Guid App, Guid Owner, Guid Project, bool Consent) Target { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             if (method?.Name == "SetAiDiagnosticEgressConsentAsync" && args?.Length == 5)
@@ -212,26 +278,39 @@ public sealed class DeploymentAnalysisPanelTests
         }
     }
 
-    /// <summary>Enabled UI options do not imply approved egress; the fake port never transmits anything.</summary>
+    /// <summary>
+    ///     Enabled UI options do not imply approved egress; the fake port never transmits anything.
+    /// </summary>
     private sealed class EnabledOptions : IOptionsMonitor<AiAnalysisOptions>
     {
-        /// <inheritdoc />
+        /// <summary>Current synthetic analysis options.</summary>
         public AiAnalysisOptions CurrentValue { get; } = new() { Enabled = true };
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns current synthetic options without selecting by option name.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller; ignored by this fixture.</param>
+        /// <returns>The current synthetic options instance.</returns>
         public AiAnalysisOptions Get(string? name)
         {
             return CurrentValue;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns no change subscription because this options fixture does not notify listeners.
+        /// </summary>
+        /// <param name="listener">Options-change callback supplied by the caller; ignored by this fixture.</param>
+        /// <returns>Null; this fixture does not subscribe to options changes.</returns>
         public IDisposable? OnChange(Action<AiAnalysisOptions, string?> listener)
         {
             return null;
         }
     }
 
-    /// <summary>Captures actual owner/deployment/stable-ID arguments and simulates one uncertain admission response.</summary>
+    /// <summary>
+    ///     Captures actual owner/deployment/stable-ID arguments and simulates one uncertain admission
+    ///     response.
+    /// </summary>
     public class RequestPort : DispatchProxy
     {
         /// <summary>Stable identities observed by the Application port.</summary>
@@ -243,7 +322,16 @@ public sealed class DeploymentAnalysisPanelTests
         /// <summary>Actual deployment metadata supplied by the page.</summary>
         public Guid Deployment { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             if (method?.Name != "RequestManualAsync" || args![2] is not Guid id) throw new NotSupportedException();

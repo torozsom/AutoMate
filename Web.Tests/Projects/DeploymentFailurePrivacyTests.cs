@@ -9,10 +9,17 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Checks deployment preparation failures at the real component boundary.</summary>
+/// <summary>
+///     Checks deployment preparation failures at the real component boundary.
+/// </summary>
+/// <exception cref="IOException">The returned task faults when the fixture failure is selected.</exception>
 public sealed class DeploymentFailurePrivacyTests
 {
-    /// <summary>Scanner errors leave configuration closed and show authored guidance without private filesystem text.</summary>
+    /// <summary>
+    ///     Scanner errors leave configuration closed and show authored guidance without private
+    ///     filesystem text.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Scanner_failure_does_not_render_exception_text()
     {

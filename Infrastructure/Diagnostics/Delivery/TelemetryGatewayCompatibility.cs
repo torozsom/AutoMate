@@ -7,7 +7,9 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Finite private host failures, distinct from an authorized empty history response.</summary>
+/// <summary>
+///     Finite private host failures, distinct from an authorized empty history response.
+/// </summary>
 public enum TelemetryCompatibilityFailure
 {
     /// <summary>The destination does not expose the required archive protocol.</summary>
@@ -20,7 +22,11 @@ public enum TelemetryCompatibilityFailure
     AccessDenied
 }
 
-/// <summary>Safe authored availability guidance; never retains provider URLs, bodies or inner exceptions.</summary>
+/// <summary>
+///     Safe authored availability guidance; never retains provider URLs, bodies or inner
+///     exceptions.
+/// </summary>
+/// <param name="failure">Finite private-host compatibility failure classification.</param>
 public sealed class TelemetryCompatibilityException(TelemetryCompatibilityFailure failure) : InvalidOperationException(
     failure switch
     {
@@ -35,7 +41,16 @@ public sealed class TelemetryCompatibilityException(TelemetryCompatibilityFailur
     public TelemetryCompatibilityFailure Failure { get; } = failure;
 }
 
-/// <summary>Shares bounded authenticated compatibility checks across Web scopes, with short recovery caching.</summary>
+/// <summary>
+///     Shares bounded authenticated compatibility checks across Web scopes, with short recovery
+///     caching.
+/// </summary>
+/// <param name="clients">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
 public sealed class TelemetryGatewayCompatibility(
     IHttpClientFactory clients,
     IOptions<TelemetryStorageOptions> options,
@@ -51,13 +66,22 @@ public sealed class TelemetryGatewayCompatibility(
     /// <summary>Next bounded recheck, including failures to avoid per-project probe storms.</summary>
     private DateTimeOffset _nextCheck;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Releases owned resources and completes the documented service lifetime.
+    /// </summary>
     public void Dispose()
     {
         _gate.Dispose();
     }
 
-    /// <summary>Requires the current private protocol before any archive operation.</summary>
+    /// <summary>
+    ///     Requires the current private protocol before any archive operation.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="TelemetryCompatibilityException">
+    ///     The host capability protocol or required archive operations are incompatible.
+    /// </exception>
     public async Task EnsureAsync(CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -84,7 +108,14 @@ public sealed class TelemetryGatewayCompatibility(
         }
     }
 
-    /// <summary>Bounds headers and JSON body to five seconds and 8 KiB without reading tenant evidence.</summary>
+    /// <summary>
+    ///     Bounds headers and JSON body to five seconds and 8 KiB without reading tenant evidence.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the telemetry compatibility failure projection derived from the
+    ///     verified inputs, or null when no value is available.
+    /// </returns>
     private async Task<TelemetryCompatibilityFailure?> ProbeAsync(CancellationToken token)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);

@@ -8,8 +8,19 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Docker;
 
 /// <summary>
-///     Executes Docker CLI commands needed for Compose, metrics, port discovery, and project listing.
+///     Executes Docker CLI commands needed for Compose, metrics, port discovery, and project
+///     listing.
 /// </summary>
+/// <param name="options">The current validated options used by this operation.</param>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="sampleSeconds">Minimum interval between persisted history samples.</param>
+/// <param name="live">Delivers redacted observations to authorized browser groups.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="viewers">Provides the deployment runtime viewers boundary used by this operation.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
 internal sealed class DockerCli(
     DockerOptions options,
     IDeploymentDiagnosticPublisher diagnostics,
@@ -20,19 +31,24 @@ internal sealed class DockerCli(
     IDeploymentRuntimeViewers viewers,
     TimeProvider clock)
 {
-    /// <summary>
-    ///     Timeout used while listing running Docker Compose projects.
-    /// </summary>
+    /// <summary>Timeout used while listing running Docker Compose projects.</summary>
     private static readonly TimeSpan ComposeListTimeout = TimeSpan.FromSeconds(30);
 
-    /// <summary>
-    ///     Timeout used while resolving a container's mapped host port.
-    /// </summary>
+    /// <summary>Timeout used while resolving a container's mapped host port.</summary>
     private static readonly TimeSpan PortLookupTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
     ///     Executes a Docker Compose command and streams stdout/stderr to the build log channel.
     /// </summary>
+    /// <param name="workingDir">The local directory containing the Compose deployment.</param>
+    /// <param name="safeProjectName">Normalized non-secret artifact project name.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <param name="composeArguments">Bounded argument list passed to the Docker Compose process.</param>
+    /// <returns>A task returning whether the documented run compose async condition holds.</returns>
     public async Task<bool> RunComposeAsync(string workingDir, string safeProjectName, Guid projectId,
         Guid? deploymentId,
         CancellationToken cancellationToken, params string[] composeArguments)
@@ -45,6 +61,11 @@ internal sealed class DockerCli(
     /// <summary>
     ///     Returns the names of currently running Docker Compose projects.
     /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the running project names async selection with its documented bounds
+    ///     and ordering.
+    /// </returns>
     public async Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken)
     {
         var startInfo = DockerProcessStartInfoFactory.CreateDocker();
@@ -97,6 +118,14 @@ internal sealed class DockerCli(
     /// <summary>
     ///     Streams Docker CLI stats output for one container through the metrics channel.
     /// </summary>
+    /// <param name="containerName">The exact Docker container name.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="containerSuffixOrTabId">The stable container terminal suffix used by the browser.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task StreamContainerMetricsAsync(string containerName, Guid projectId, Guid deploymentId,
         string containerSuffixOrTabId,
         CancellationToken cancellationToken)
@@ -161,6 +190,9 @@ internal sealed class DockerCli(
     /// <summary>
     ///     Resolves the host port mapped to the supplied container by parsing Docker CLI output.
     /// </summary>
+    /// <param name="containerName">The exact Docker container name.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the numeric position, count or status described by this operation.</returns>
     public async Task<int> GetContainerHostPortAsync(string containerName, CancellationToken cancellationToken)
     {
         try
@@ -197,6 +229,16 @@ internal sealed class DockerCli(
     /// <summary>
     ///     Executes a process and forwards all emitted output to the deployment build log.
     /// </summary>
+    /// <param name="startInfo">Process arguments and stream settings for the owned Docker command.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning whether the documented execute process streaming logs async condition
+    ///     holds.
+    /// </returns>
     private async Task<bool> ExecuteProcessStreamingLogsAsync(ProcessStartInfo startInfo, Guid projectId,
         Guid? deploymentId, CancellationToken cancellationToken)
     {
@@ -264,7 +306,15 @@ internal sealed class DockerCli(
                 }
         }
 
-        /// <summary>Decodes and awaits one redirected stream without asynchronous event handlers.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Decodes and awaits one redirected stream without asynchronous event handlers.
+        /// </summary>
+        /// <param name="stream">
+        ///     Owned input stream read within the documented payload and cancellation bounds.
+        /// </param>
+        /// <param name="output">Output stream classification or normalized process output.</param>
+        /// <returns>A task representing completion of the asynchronous operation.</returns>
         async Task ReadOutputAsync(Stream stream, DeploymentDiagnosticStream output)
         {
             var decoder = new DockerLogDecoder(false, clock);
@@ -275,8 +325,15 @@ internal sealed class DockerCli(
                     await PublishLineAsync(line, output);
             foreach (var line in decoder.Feed([], true)) await PublishLineAsync(line, output);
         }
+#pragma warning restore CS1587
 
-        /// <summary>Serializes event admission and observes asynchronous publisher completion.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Serializes event admission and observes asynchronous publisher completion.
+        /// </summary>
+        /// <param name="line">Decoded bounded Docker output with its timestamp and omission metadata.</param>
+        /// <param name="output">Output stream classification or normalized process output.</param>
+        /// <returns>A task representing completion of the asynchronous operation.</returns>
         async Task PublishLineAsync(DockerLogLine line, DeploymentDiagnosticStream output)
         {
             try
@@ -302,8 +359,15 @@ internal sealed class DockerCli(
                 logger.LogWarning("Compose output diagnostic unavailable: {FailureType}.", exception.GetType().Name);
             }
         }
+#pragma warning restore CS1587
 
-        /// <summary>Reports a finite command outcome without persisting process error bodies.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Reports a finite command outcome without persisting process error bodies.
+        /// </summary>
+        /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+        /// <param name="exitCode">Process exit code, if the process exited.</param>
+        /// <returns>A task representing completion of the asynchronous operation.</returns>
         async Task OutcomeAsync(string state, int? exitCode)
         {
             logger.LogInformation("Docker Compose command outcome for project {ProjectId}: {ComposeOutcome}.",
@@ -329,11 +393,13 @@ internal sealed class DockerCli(
                 logger.LogWarning("Compose outcome diagnostic unavailable: {FailureType}.", exception.GetType().Name);
             }
         }
+#pragma warning restore CS1587
     }
 
     /// <summary>
     ///     Kills a process tree when the process was started and is still running.
     /// </summary>
+    /// <param name="process">Owned Docker process whose lifetime is supervised.</param>
     private static void KillProcessTree(Process process)
     {
         try

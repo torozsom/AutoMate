@@ -2,7 +2,9 @@ using System.Diagnostics.Metrics;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Low-cardinality operational measurements for specialized storage.</summary>
+/// <summary>
+///     Low-cardinality operational measurements for specialized storage.
+/// </summary>
 internal static class TelemetryStorageMetrics
 {
     /// <summary>Meter exported by the existing OpenTelemetry configuration.</summary>

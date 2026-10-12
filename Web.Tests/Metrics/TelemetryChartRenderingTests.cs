@@ -8,10 +8,15 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Checks the rendered chart for sparse and missing observations, not just its calculations.</summary>
+/// <summary>
+///     Checks the rendered chart for sparse and missing observations, not just its calculations.
+/// </summary>
 public sealed class TelemetryChartRenderingTests
 {
-    /// <summary>A single observation remains visible and has a meaningful accessible explanation.</summary>
+    /// <summary>
+    ///     A single observation remains visible and has a meaningful accessible explanation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Single_point_has_marker_and_keyboard_details()
     {
@@ -24,7 +29,10 @@ public sealed class TelemetryChartRenderingTests
         Assert.DoesNotContain("class=\"telemetry-series-line\"", html);
     }
 
-    /// <summary>Missing intervals break the plotted line; contiguous constant observations still connect.</summary>
+    /// <summary>
+    ///     Missing intervals break the plotted line; contiguous constant observations still connect.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Gaps_are_not_connected_and_constant_points_are_visible()
     {
@@ -38,7 +46,10 @@ public sealed class TelemetryChartRenderingTests
         Assert.Equal(3, html.Split("<circle").Length - 1);
     }
 
-    /// <summary>Writes a dependency-free preview of the actual chart component for browser inspection.</summary>
+    /// <summary>
+    ///     Writes a dependency-free preview of the actual chart component for browser inspection.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Render_representative_browser_preview()
     {
@@ -66,7 +77,12 @@ public sealed class TelemetryChartRenderingTests
         Assert.Contains("telemetry-chart", html);
     }
 
-    /// <summary>Renders the real component without running browser interop or external providers.</summary>
+    /// <summary>
+    ///     Renders the real component without running browser interop or external providers.
+    /// </summary>
+    /// <param name="points">Recorded metric observations to format; missing samples remain unavailable.</param>
+    /// <param name="end">UTC observation-window end.</param>
+    /// <returns>A task returning the synthetic text produced for this scenario.</returns>
     private static async Task<string> RenderAsync(IReadOnlyList<TelemetryChartPoint> points, DateTimeOffset end)
     {
         using var services = new ServiceCollection().AddLogging().AddSingleton<IJSRuntime, NoBrowserJs>()
@@ -77,14 +93,21 @@ public sealed class TelemetryChartRenderingTests
             var component = await renderer.RenderComponentAsync<TelemetryChart>(ParameterView.FromDictionary(
                 new Dictionary<string, object?>
                 {
-                    ["Title"] = "CPU usage", ["Metric"] = TelemetryPresentation.Cpu,
-                    ["Points"] = points, ["Start"] = end.AddDays(-7), ["End"] = end, ["Gap"] = TimeSpan.FromDays(1)
+                    ["Title"] = "CPU usage",
+                    ["Metric"] = TelemetryPresentation.Cpu,
+                    ["Points"] = points,
+                    ["Start"] = end.AddDays(-7),
+                    ["End"] = end,
+                    ["Gap"] = TimeSpan.FromDays(1)
                 }));
             return component.ToHtmlString();
         });
     }
 
-    /// <summary>Finds the solution regardless of the chosen test output directory.</summary>
+    /// <summary>
+    ///     Finds the solution regardless of the chosen test output directory.
+    /// </summary>
+    /// <returns>The synthetic text produced for this scenario.</returns>
     private static string FindRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -93,14 +116,37 @@ public sealed class TelemetryChartRenderingTests
         return directory!.FullName;
     }
 
-    /// <summary>Static HTML rendering never invokes JavaScript.</summary>
+    /// <summary>
+    ///     Static HTML rendering never invokes JavaScript.
+    /// </summary>
     private sealed class NoBrowserJs : IJSRuntime
     {
+        /// <summary>
+        ///     Rejects invoke because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="identifier">Provider or user identity to resolve; ignored by this fixture.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <typeparam name="T">Type of the requested interop result.</typeparam>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public ValueTask<T> InvokeAsync<T>(string identifier, object?[]? args)
         {
             throw new InvalidOperationException("Unexpected prerender interop");
         }
 
+        /// <summary>
+        ///     Delegates to the fixture interop overload using the same identifier and arguments.
+        /// </summary>
+        /// <param name="identifier">Provider or user identity to resolve.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <typeparam name="T">Type of the requested interop result.</typeparam>
+        /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<T> InvokeAsync<T>(string identifier, CancellationToken token, object?[]? args)
         {
             return InvokeAsync<T>(identifier, args);

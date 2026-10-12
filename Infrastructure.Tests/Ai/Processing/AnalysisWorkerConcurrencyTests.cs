@@ -18,15 +18,18 @@ using DeploymentAnalysisWorkItem = Domain.Entities.DeploymentAnalysisWorkItem;
 namespace Infrastructure.Tests.Ai;
 
 /// <summary>
-///     Exercises hosted processing slots with production leases and independent relational scopes; no live provider
-///     calls.
+///     Exercises hosted processing slots with production leases and independent relational scopes;
+///     no live provider calls.
 /// </summary>
 public sealed class AnalysisWorkerConcurrencyTests
 {
     /// <summary>
-    ///     Slots fill exactly to the limit, do not preclaim, refill independently and isolate failed results/scoped
-    ///     contexts.
+    ///     Slots fill exactly to the limit, do not preclaim, refill independently and isolate failed
+    ///     results/scoped contexts.
     /// </summary>
+    /// <param name="concurrency">Configured parallel-operation limit.</param>
+    /// <param name="failFirst">Whether to fail the first admitted provider operation.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(1, false)]
     [InlineData(3, false)]
@@ -75,7 +78,11 @@ public sealed class AnalysisWorkerConcurrencyTests
         Assert.Equal(0, fixture.Gate.Active);
     }
 
-    /// <summary>Stopping cancels all occupied slots, awaits their releases and leaves unclaimed work untouched.</summary>
+    /// <summary>
+    ///     Stopping cancels all occupied slots, awaits their releases and leaves unclaimed work
+    ///     untouched.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Shutdown_releases_all_slots_without_preclaiming_waiting_work()
     {
@@ -100,7 +107,11 @@ public sealed class AnalysisWorkerConcurrencyTests
         Assert.NotNull(await recovery.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync());
     }
 
-    /// <summary>Independent instances each honor their own bound while production queue fencing prevents duplicate claims.</summary>
+    /// <summary>
+    ///     Independent instances each honor their own bound while production queue fencing prevents
+    ///     duplicate claims.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Two_instances_claim_distinct_work_with_per_instance_limits()
     {
@@ -126,14 +137,22 @@ public sealed class AnalysisWorkerConcurrencyTests
         Assert.Equal(0, fixture.Gate.Active);
     }
 
-    /// <summary>Waits for observable progress with a bounded failure deadline instead of assuming scheduler timing.</summary>
+    /// <summary>
+    ///     Waits for observable progress with a bounded failure deadline instead of assuming scheduler
+    ///     timing.
+    /// </summary>
+    /// <param name="condition">Asynchronous condition polled until it holds or the fixture deadline expires.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static async Task WaitUntilAsync(Func<Task<bool>> condition)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         while (!await condition()) await Task.Delay(20, deadline.Token);
     }
 
-    /// <summary>Cross-scope provider barrier and concurrency measurements.</summary>
+    /// <summary>
+    ///     Cross-scope provider barrier and concurrency measurements.
+    /// </summary>
+    /// <param name="failFirst">Whether to fail the first admitted provider operation.</param>
     private sealed class Gate(bool failFirst)
     {
         /// <summary>Current number of blocked/executing provider calls.</summary>
@@ -157,7 +176,18 @@ public sealed class AnalysisWorkerConcurrencyTests
         /// <summary>Peak provider count, read atomically.</summary>
         public int Peak => Volatile.Read(ref _peak);
 
-        /// <summary>Records admission, waits for a completion permit or shutdown and always releases the active count.</summary>
+        /// <summary>
+        ///     Records admission, waits for a completion permit or shutdown and always releases the active
+        ///     count.
+        /// </summary>
+        /// <param name="scope">Fixture scope identity.</param>
+        /// <param name="deployment">Synthetic deployment identity.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured llm analysis response instance or response for this scenario.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
+        /// <exception cref="OperationCanceledException">The caller cancellation or fixture deadline ends the pending operation.</exception>
         public async Task<LlmAnalysisResponse> RespondAsync(Guid scope, Guid deployment, CancellationToken token)
         {
             var active = Interlocked.Increment(ref _active);
@@ -182,10 +212,19 @@ public sealed class AnalysisWorkerConcurrencyTests
         }
     }
 
-    /// <summary>Uses the actual processing scope's DbContext identity and an in-memory context only.</summary>
+    /// <summary>
+    ///     Uses the actual processing scope's DbContext identity and an in-memory context only.
+    /// </summary>
+    /// <param name="db">Fixture metadata context.</param>
+    /// <param name="gate">Shared completion gates and scope observations for the concurrency fixture.</param>
     private sealed class Context(AutoMateDbContext db, Gate gate) : IDeploymentAnalysisContextBuilder
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records the metadata scope and supplies fixed safe context for the worker.
+        /// </summary>
+        /// <param name="deploymentId">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured deployment analysis context instance or response for this scenario.</returns>
         public Task<DeploymentAnalysisContext> BuildAsync(Guid deploymentId,
             CancellationToken cancellationToken = default)
         {
@@ -194,10 +233,22 @@ public sealed class AnalysisWorkerConcurrencyTests
         }
     }
 
-    /// <summary>Scoped synthetic provider; verifies scope independence without HTTP or credentials.</summary>
+    /// <summary>
+    ///     Scoped synthetic provider; verifies scope independence without HTTP or credentials.
+    /// </summary>
+    /// <param name="db">Fixture metadata context.</param>
+    /// <param name="gate">Shared completion gates and scope observations for the concurrency fixture.</param>
     private sealed class Provider(AutoMateDbContext db, Gate gate) : ILlmAnalysisProvider
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Passes the current scope and required deployment identity to the controlled provider gate.
+        /// </summary>
+        /// <param name="request">Analysis request supplied to the synthetic provider.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured llm analysis response instance or response for this scenario.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public Task<LlmAnalysisResponse> AnalyzeAsync(LlmAnalysisRequest request,
             CancellationToken cancellationToken = default)
         {
@@ -207,7 +258,10 @@ public sealed class AnalysisWorkerConcurrencyTests
         }
     }
 
-    /// <summary>Independent file-backed connections with production queue/worker registrations.</summary>
+    /// <summary>
+    ///     Independent file-backed connections with production queue/worker registrations.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
     private sealed class Fixture(string path) : IAsyncDisposable
     {
         /// <summary>Worker/processing scope dependency container.</summary>
@@ -216,7 +270,10 @@ public sealed class AnalysisWorkerConcurrencyTests
         /// <summary>Provider progress barrier.</summary>
         public Gate Gate { get; private set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture resources and removes its temporary database files.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async ValueTask DisposeAsync()
         {
             await Services.DisposeAsync();
@@ -226,7 +283,10 @@ public sealed class AnalysisWorkerConcurrencyTests
             File.Delete(path + "-shm");
         }
 
-        /// <summary>Independent context for verification and worker scopes.</summary>
+        /// <summary>
+        ///     Independent context for verification and worker scopes.
+        /// </summary>
+        /// <returns>An independent metadata context owned by the caller.</returns>
         public AutoMateDbContext NewDb()
         {
             return new WorkerContext(new DbContextOptionsBuilder<AutoMateDbContext>()
@@ -235,9 +295,13 @@ public sealed class AnalysisWorkerConcurrencyTests
         }
 
         /// <summary>
-        ///     Seeds distinct deployments with one eligible analysis each; approved policy is synthetic and never sent
-        ///     remotely.
+        ///     Seeds distinct deployments with one eligible analysis each; approved policy is synthetic and
+        ///     never sent remotely.
         /// </summary>
+        /// <param name="concurrency">Configured parallel-operation limit.</param>
+        /// <param name="count">Recorded deployment total used to size the bar.</param>
+        /// <param name="failFirst">Whether to fail the first admitted provider operation.</param>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync(int concurrency, int count, bool failFirst = false)
         {
             var fixture = new Fixture(Path.Combine(Path.GetTempPath(),
@@ -286,11 +350,17 @@ public sealed class AnalysisWorkerConcurrencyTests
         }
     }
 
-    /// <summary>SQLite timestamp representation matching production UTC ordering.</summary>
+    /// <summary>
+    ///     SQLite timestamp representation matching production UTC ordering.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
     private sealed class WorkerContext(DbContextOptions<AutoMateDbContext> options)
         : AutoMateDbContext(options, new EphemeralDataProtectionProvider())
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="builder">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);

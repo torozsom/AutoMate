@@ -128,6 +128,8 @@ reservations and the midnight UTC reset. These are AutoMate reservations, not Az
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Context/` — `Context/AnalysisContextBudget.cs`, `Context/AnalysisContextSelector.cs`, `Context/AnalysisEvidence.cs`, `Context/AssessmentSelection.cs`.
-- `Policy/` — `Policy/AiAnalysisOptions.cs`, `Policy/AnalysisBudgetPolicy.cs`, `Policy/AnalysisEgressPolicy.cs`, `Policy/AnalysisRetryPolicy.cs`, `Policy/AnalysisSkipPolicy.cs`.
+- `Context/` — `Context/AnalysisContextBudget.cs`, `Context/AnalysisContextSelector.cs`, `Context/AnalysisEvidence.cs`,
+  `Context/AssessmentSelection.cs`.
+- `Policy/` — `Policy/AiAnalysisOptions.cs`, `Policy/AnalysisBudgetPolicy.cs`, `Policy/AnalysisEgressPolicy.cs`,
+  `Policy/AnalysisRetryPolicy.cs`, `Policy/AnalysisSkipPolicy.cs`.
 - `Results/` — `Results/AnalysisProviderAccessDeniedException.cs`, `Results/AnalysisResultValidator.cs`.

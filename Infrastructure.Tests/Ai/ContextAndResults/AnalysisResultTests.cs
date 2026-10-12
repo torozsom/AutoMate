@@ -4,10 +4,15 @@ using Infrastructure.Diagnostics;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Checks the provider-neutral safe-result boundary independently of transport and persistence.</summary>
+/// <summary>
+///     Checks the provider-neutral safe-result boundary independently of transport and persistence.
+/// </summary>
 public sealed class AnalysisResultTests
 {
-    /// <summary>Every text field is redacted before serialization; valid provenance, usage and optional costs survive.</summary>
+    /// <summary>
+    ///     Every text field is redacted before serialization; valid provenance, usage and optional
+    ///     costs survive.
+    /// </summary>
     [Fact]
     public void Validation_returns_an_independent_redacted_copy()
     {
@@ -34,7 +39,10 @@ public sealed class AnalysisResultTests
         Assert.Equal("2026-01-01", safe.ModelVersion);
     }
 
-    /// <summary>Unknown usage, revision and cost remain unknown; an alias is never turned into an invented version.</summary>
+    /// <summary>
+    ///     Unknown usage, revision and cost remain unknown; an alias is never turned into an invented
+    ///     version.
+    /// </summary>
     [Fact]
     public void Missing_metadata_is_preserved_as_null()
     {
@@ -46,7 +54,11 @@ public sealed class AnalysisResultTests
         Assert.Null(safe.CostCurrency);
     }
 
-    /// <summary>Rejects malformed output entirely rather than storing truncated or partially validated results.</summary>
+    /// <summary>
+    ///     Rejects malformed output entirely rather than storing truncated or partially validated
+    ///     results.
+    /// </summary>
+    /// <param name="kind">Synthetic operation or response kind.</param>
     [Theory]
     [InlineData("empty-summary")]
     [InlineData("oversized-summary")]
@@ -90,13 +102,19 @@ public sealed class AnalysisResultTests
         Assert.DoesNotContain("private-value", error.ToString());
     }
 
-    /// <summary>Creates the production validator with central redaction.</summary>
+    /// <summary>
+    ///     Creates the production validator with central redaction.
+    /// </summary>
+    /// <returns>The configured analysis result validator instance or response for this scenario.</returns>
     internal static AnalysisResultValidator Validator()
     {
         return new AnalysisResultValidator(new DiagnosticRedactor());
     }
 
-    /// <summary>Creates a minimal conforming provider result.</summary>
+    /// <summary>
+    ///     Creates a minimal conforming provider result.
+    /// </summary>
+    /// <returns>The configured llm analysis response instance or response for this scenario.</returns>
     internal static LlmAnalysisResponse Valid()
     {
         return new LlmAnalysisResponse("openai", "gpt-5-mini-2025-08-07", "A dependency could not start.",

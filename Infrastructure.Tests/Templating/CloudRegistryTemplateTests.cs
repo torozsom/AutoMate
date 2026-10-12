@@ -5,10 +5,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Templating;
 
-/// <summary>Guards the SaaS ACR path against reintroducing long-lived GHCR pull credentials.</summary>
+/// <summary>
+///     Guards the SaaS ACR path against reintroducing long-lived GHCR pull credentials.
+/// </summary>
 public sealed class CloudRegistryTemplateTests
 {
-    /// <summary>Both registry paths resume the resource-level state left by a previous stop.</summary>
+    /// <summary>
+    ///     Both registry paths resume the resource-level state left by a previous stop.
+    /// </summary>
+    /// <param name="registry">Selected container registry server.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("")]
     [InlineData("customer.azurecr.io")]
@@ -25,7 +31,10 @@ public sealed class CloudRegistryTemplateTests
             workflow.IndexOf("Deploy infrastructure", StringComparison.Ordinal));
     }
 
-    /// <summary>Generated SaaS assets use OIDC push and pull-only managed identity.</summary>
+    /// <summary>
+    ///     Generated SaaS assets use OIDC push and pull-only managed identity.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Azure_registry_templates_do_not_reference_ghcr_pat()
     {
@@ -50,7 +59,12 @@ public sealed class CloudRegistryTemplateTests
         bicep.Should().NotContain("containerRegistryPassword");
     }
 
-    /// <summary>Every generated managed DB receives owner tags and workspace diagnostic export.</summary>
+    /// <summary>
+    ///     Every generated managed DB receives owner tags and workspace diagnostic export.
+    /// </summary>
+    /// <param name="type">Fixture type or behavior variant.</param>
+    /// <param name="scope">Synthetic logger scope text.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("PostgreSQL", "postgres0")]
     [InlineData("MySQL", "mysql0")]
@@ -63,7 +77,9 @@ public sealed class CloudRegistryTemplateTests
         var files = await new TemplatingService(NullLogger<TemplatingService>.Instance).GenerateAllTemplatesAsync(
             new DeploymentConfigDto
             {
-                ProjectId = project, IsCloudDeployment = true, ProjectName = "app",
+                ProjectId = project,
+                IsCloudDeployment = true,
+                ProjectName = "app",
                 Databases = [new DatabaseConfigDto { DbType = type }]
             },
             new ProjectMetadataDto { DotNetVersion = "10.0", IsWebProject = true }, "app", ".");

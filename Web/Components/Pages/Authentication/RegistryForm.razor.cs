@@ -5,41 +5,39 @@ using Microsoft.AspNetCore.Components;
 namespace Web.Components.Pages;
 
 /// <summary>
-///     The RegistryForm component is responsible for handling the registration process
-///     for new users. It displays a form for user input, validates the input, and handles
-///     the registration logic.
+///     The RegistryForm component is responsible for handling the registration process for new users.
+///     It displays a form for user input, validates the input, and handles the registration logic.
 /// </summary>
 public partial class RegistryForm : ComponentBase
 {
-    /// Navigation manager to handle URL navigation after registration.
+    /// <summary>Application navigation and absolute-link generation.</summary>
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
 
-    /// Authentication service for user registration and verification.
+    /// <summary>Local registration and email-verification contract.</summary>
     [Inject]
     private IAuthService AuthService { get; set; } = null!;
 
-    /// Logger for logging registration-related events.
+    /// <summary>Reviewed operational logger for the component.</summary>
     [Inject]
     private ILogger<RegistryForm> Logger { get; set; } = null!;
 
 
-    /// <summary>
-    ///     The model bound to the registration form. Auto-initialized to avoid null references.
-    /// </summary>
+    /// <summary>The model bound to the registration form. Auto-initialized to avoid null references.</summary>
     [SupplyParameterFromForm]
     public RegisterModel? Model { get; set; }
 
 
-    /// An optional error message to display if the registration fails.
+    /// <summary>Current safe form or verification error.</summary>
     private string? ErrorMessage { get; set; }
 
-    /// Indicates whether the registration form is currently being submitted.
+    /// <summary>Prevents duplicate registration submissions.</summary>
     private bool IsSubmitting { get; set; }
 
 
     /// <summary>
-    ///     Initializes the component and ensures that the Model is not null to prevent issues with form binding.
+    ///     Initializes the component and ensures that the Model is not null to prevent issues with form
+    ///     binding.
     /// </summary>
     protected override void OnInitialized()
     {
@@ -48,9 +46,10 @@ public partial class RegistryForm : ComponentBase
 
 
     /// <summary>
-    ///     Handles the registration process when the form is submitted and passes validation.
-    ///     It calls the authentication service to register the user and sends a verification email.
+    ///     Handles the registration process when the form is submitted and passes validation. It calls
+    ///     the authentication service to register the user and sends a verification email.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task HandleRegistration()
     {
         if (Model is null || IsSubmitting) return;
@@ -107,30 +106,22 @@ public partial class RegistryForm : ComponentBase
     /// </summary>
     public class RegisterModel
     {
-        /// <summary>
-        ///     The user's email address used for login and email verification.
-        /// </summary>
+        /// <summary>The user's email address used for login and email verification.</summary>
         [Required(ErrorMessage = "Email address required.")]
         [EmailAddress(ErrorMessage = "Invalid email format.")]
         public string Email { get; set; } = string.Empty;
 
-        /// <summary>
-        ///     The display username associated with the local account.
-        /// </summary>
+        /// <summary>The display username associated with the local account.</summary>
         [Required(ErrorMessage = "Username required.")]
         [StringLength(50, MinimumLength = 3, ErrorMessage = "Username must be between 3-50 characters.")]
         public string Username { get; set; } = string.Empty;
 
-        /// <summary>
-        ///     The password submitted for the new local account.
-        /// </summary>
+        /// <summary>The password submitted for the new local account.</summary>
         [Required(ErrorMessage = "Password required.")]
         [MinLength(6, ErrorMessage = "Password must be at least 6 characters.")]
         public string Password { get; set; } = string.Empty;
 
-        /// <summary>
-        ///     The repeated password value used to confirm the submitted password.
-        /// </summary>
+        /// <summary>The repeated password value used to confirm the submitted password.</summary>
         [Required(ErrorMessage = "Password confirmation required.")]
         [Compare(nameof(Password), ErrorMessage = "Passwords do not match.")]
         public string ConfirmPassword { get; set; } = string.Empty;

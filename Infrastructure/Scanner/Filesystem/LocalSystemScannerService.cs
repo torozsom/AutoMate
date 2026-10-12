@@ -5,11 +5,20 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Scanner;
 
 /// <summary>
-///     Scans local directories for Git repositories that contain .NET solution or project files.
+///     Scans local directories for Git repositories that contain .NET solution or project
+///     files.
 /// </summary>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class LocalSystemScannerService(ILogger<LocalSystemScannerService> logger) : ILocalSystemScannerService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Scans the specified root directory and its subdirectories for Git repositories.
+    /// </summary>
+    /// <param name="rootPath">The root directory path where scanning begins.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning a list of LocalProjectDto objects representing the found projects.</returns>
     public async Task<List<LocalProjectDto>> ScanForProjectsAsync(string rootPath,
         CancellationToken cancellationToken = default)
     {
@@ -33,7 +42,20 @@ public sealed class LocalSystemScannerService(ILogger<LocalSystemScannerService>
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Finds the root directory of a solution by traversing up the directory tree looking for
+    ///     .git, .sln, or .slnx files.
+    /// </summary>
+    /// <param name="projectFilePath">The full path to the project file.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>
+    ///     A task returning the full path to the solution root directory, or the project directory
+    ///     as a fallback.
+    /// </returns>
+    /// <exception cref="FileNotFoundException">
+    ///     The selected project file does not exist.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public Task<string> FindSolutionRootAsync(string projectFilePath, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(projectFilePath) || !File.Exists(projectFilePath))
@@ -68,12 +90,14 @@ public sealed class LocalSystemScannerService(ILogger<LocalSystemScannerService>
 
 
     /// <summary>
-    ///     Recursively scans the directory for Git repositories and identifies .NET projects.
-    ///     Skips common build and dependency folders, as well as hidden directories.
+    ///     Recursively scans the directory for Git repositories and identifies .NET projects. Skips
+    ///     common build and dependency folders, as well as hidden directories.
     /// </summary>
     /// <param name="currentPath">The current directory path being scanned.</param>
     /// <param name="result">The list to accumulate found local projects.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     private async Task ScanDirectorySafeAsync(string currentPath, List<LocalProjectDto> result,
         CancellationToken cancellationToken)
     {
@@ -117,12 +141,15 @@ public sealed class LocalSystemScannerService(ILogger<LocalSystemScannerService>
 
 
     /// <summary>
-    ///     Processes a Git repository directory to determine if it contains .NET project files (.sln or .csproj).
-    ///     If .NET project files are found, it creates a LocalProjectDto object and adds it to the result list.
+    ///     Processes a Git repository directory to determine if it contains .NET project files
+    ///     (.sln or .csproj). If .NET project files are found, it creates a LocalProjectDto object
+    ///     and adds it to the result list.
     /// </summary>
     /// <param name="repoPath">The root path to the repository to be processed.</param>
     /// <param name="dirName">The directory name of the repository.</param>
     /// <param name="result">The result list to be appended.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task ProcessGitRepositoryAsync(string repoPath, string dirName, List<LocalProjectDto> result,
         CancellationToken cancellationToken)
     {
@@ -158,13 +185,14 @@ public sealed class LocalSystemScannerService(ILogger<LocalSystemScannerService>
 
 
     /// <summary>
-    ///     Safely searches for .csproj files within the specified root directory
-    ///     and all its subdirectories, excluding certain directories like "bin",
-    ///     "obj", "node_modules", and hidden directories.
+    ///     Safely searches for .csproj files within the specified root directory and all its
+    ///     subdirectories, excluding certain directories like "bin", "obj", "node_modules", and
+    ///     hidden directories.
     /// </summary>
     /// <param name="rootDir">The root directory to start searching for .csproj files.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A list of file paths to the .csproj files found.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     private List<string> FindCsprojFilesSafe(string rootDir, CancellationToken cancellationToken)
     {
         var result = new List<string>();

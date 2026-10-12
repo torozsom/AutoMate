@@ -11,11 +11,17 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Infrastructure.Migrations
 {
+    /// <summary>
+    ///     EF schema migration and target-model metadata for Add Git Hub Workflow Checkpoints.
+    /// </summary>
     [DbContext(typeof(AutoMateDbContext))]
     [Migration("20260928200050_AddGitHubWorkflowCheckpoints")]
     partial class AddGitHubWorkflowCheckpoints
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Defines the historical EF model produced by this migration.
+        /// </summary>
+        /// <param name="modelBuilder">Builds the documented EF entity mappings or historical model.</param>
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

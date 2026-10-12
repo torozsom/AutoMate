@@ -8,26 +8,36 @@ using Microsoft.Extensions.Logging;
 namespace Application.Data.Apps;
 
 /// <summary>
-///     Service class responsible for managing projects within the application.
-///     It handles operations such as adding local and GitHub projects,
-///     and interacting with the database to persist project information.
+///     Service class responsible for managing projects within the application. It handles
+///     operations such as adding local and GitHub projects, and interacting with the database
+///     to persist project information.
 /// </summary>
 /// <param name="context">The database context.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class ApplicationService(AutoMateDbContext context, ILogger<ApplicationService> logger)
     : IApplicationService
 {
-    /// <summary>
-    ///     Default .NET version assigned to newly discovered C# projects.
-    /// </summary>
+    /// <summary>Default .NET version assigned to newly discovered C# projects.</summary>
     private const string DefaultDotNetVersion = "10.0";
 
-    /// <summary>
-    ///     Default local port assigned to newly discovered C# web projects.
-    /// </summary>
+    /// <summary>Default local port assigned to newly discovered C# web projects.</summary>
     private const int DefaultExposedPort = 8080;
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Adds a local project to the database for a specific user. Checks if a project with the
+    ///     same source path already exists for the user before adding.
+    /// </summary>
+    /// <param name="userId">The user ID of the project's owner.</param>
+    /// <param name="project">The project information to be saved.</param>
+    /// <param name="csproject">The C# project file information.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>
+    ///     A task that returns true if the project was added successfully, or false if it already
+    ///     exists.
+    /// </returns>
     public async Task<bool> AddLocalAppAsync(Guid userId, LocalProjectDto project, CsProjectDto csproject,
         CancellationToken cancellationToken = default)
     {
@@ -78,7 +88,18 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Adds a GitHub project to the database for a specific user. Checks if a project with the
+    ///     same source URL already exists for the user before adding.
+    /// </summary>
+    /// <param name="userId">The user ID of the project's owner.</param>
+    /// <param name="appName">The name of the project to be saved.</param>
+    /// <param name="gitUrl">The git URL of the remote repository.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>
+    ///     A task that returns true if the project was added successfully, or false if it already
+    ///     exists.
+    /// </returns>
     public async Task<bool> AddGitHubAppAsync(Guid userId, string appName, string gitUrl,
         CancellationToken cancellationToken = default)
     {
@@ -120,7 +141,13 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Retrieves a list of projects associated with a specific user. The method queries the
+    ///     database for projects that match the provided user ID and returns them as a list.
+    /// </summary>
+    /// <param name="userId">The unique identifier of the user.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning a list of projects belonging to the user.</returns>
     public async Task<List<Domain.Entities.Application>> GetUserAppsAsync(Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -130,7 +157,17 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Deletes a project associated with a specific user from the database. Checks if the
+    ///     project exists before attempting to delete it.
+    /// </summary>
+    /// <param name="appId">The unique identifier of the project to be deleted.</param>
+    /// <param name="userId">The unique identifier of the user who owns the project.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>
+    ///     A task that returns true if the project was deleted successfully, or false if the
+    ///     project does not exist.
+    /// </returns>
     public async Task<bool> DeleteAppAsync(Guid appId, Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -170,7 +207,14 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Retrieves a specific project by its ID for a given user. If the project is found, it
+    ///     includes the associated C# projects in the result.
+    /// </summary>
+    /// <param name="appId">The unique identifier of the project to retrieve.</param>
+    /// <param name="userId">The unique identifier of the user who owns the project.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task that returns the project if found, or null if not found.</returns>
     public async Task<Domain.Entities.Application?> GetAppByIdAsync(Guid appId, Guid userId,
         CancellationToken cancellationToken = default)
     {
@@ -178,7 +222,16 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
             .FirstOrDefaultAsync(a => a.Id == appId && a.UserId == userId, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Updates the first configured project for legacy application-level callers.
+    /// </summary>
+    /// <param name="appId">The project identity used for authorization or correlation.</param>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="consented">
+    ///     Whether the owner permits bounded diagnostic data egress to the configured AI provider.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning whether consent was updated for the specified owned project.</returns>
     public async Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, bool consented,
         CancellationToken cancellationToken = default)
     {
@@ -200,7 +253,18 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
         return true;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Updates exact owned project consent, creating missing remote configuration with default
+    ///     settings.
+    /// </summary>
+    /// <param name="appId">The owned application identity.</param>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="csProjectId">The exact C# project identity within the owned application.</param>
+    /// <param name="consented">
+    ///     Whether the owner permits bounded diagnostic data egress to the configured AI provider.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning whether consent was updated for the specified owned project.</returns>
     public async Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, Guid csProjectId, bool consented,
         CancellationToken cancellationToken = default)
     {
@@ -235,6 +299,10 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Builds the reusable read query for applications with projects and deployment history.
     /// </summary>
+    /// <returns>
+    ///     The query applications with project deployments selection with its documented bounds and
+    ///     ordering.
+    /// </returns>
     private IQueryable<Domain.Entities.Application> QueryApplicationsWithProjectDeployments()
     {
         return context.Applications
@@ -247,8 +315,15 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     }
 
     /// <summary>
-    ///     Finds an existing local application and eagerly loads its C# projects for duplicate checks.
+    ///     Finds an existing local application and eagerly loads its C# projects for duplicate
+    ///     checks.
     /// </summary>
+    /// <param name="input">Normalized registration or project-import input.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the domain.entities.application projection derived from the verified
+    ///     inputs, or null when no value is available.
+    /// </returns>
     private async Task<Domain.Entities.Application?> GetLocalAppWithProjectsAsync(LocalAppInput input,
         CancellationToken cancellationToken)
     {
@@ -260,8 +335,12 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     }
 
     /// <summary>
-    ///     Checks whether a remote GitHub application already exists for the user and repository URL.
+    ///     Checks whether a remote GitHub application already exists for the user and repository
+    ///     URL.
     /// </summary>
+    /// <param name="input">Normalized registration or project-import input.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning whether the documented remote app exists async condition holds.</returns>
     private async Task<bool> RemoteAppExistsAsync(RemoteAppInput input, CancellationToken cancellationToken)
     {
         return await context.Applications
@@ -273,6 +352,8 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Creates a local application aggregate for a folder-based source.
     /// </summary>
+    /// <param name="input">Normalized registration or project-import input.</param>
+    /// <returns>The domain.entities.application projection derived from the verified inputs.</returns>
     private static Domain.Entities.Application CreateLocalApplication(LocalAppInput input)
     {
         return new Domain.Entities.Application
@@ -288,6 +369,8 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Creates a remote application aggregate for a GitHub repository source.
     /// </summary>
+    /// <param name="input">Normalized registration or project-import input.</param>
+    /// <returns>The domain.entities.application projection derived from the verified inputs.</returns>
     private static Domain.Entities.Application CreateRemoteApplication(RemoteAppInput input)
     {
         return new Domain.Entities.Application
@@ -302,6 +385,11 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Creates a C# project with the default deployment configuration expected by the UI.
     /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="name">The recorded display name or fixed metric identity.</param>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="isWebProject">Whether the scanned C# project is a web application.</param>
+    /// <returns>The cs project projection derived from the verified inputs.</returns>
     private static CsProject CreateDefaultCsProject(Guid projectId, string name, string path, bool isWebProject)
     {
         return new CsProject
@@ -323,6 +411,9 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Checks for an already tracked C# project by exact project-file path.
     /// </summary>
+    /// <param name="app">The application whose project dependencies are being analyzed.</param>
+    /// <param name="csProjectPath">The local C# project path used to locate Compose resources.</param>
+    /// <returns>Whether the documented cs project condition holds.</returns>
     private static bool ContainsCsProject(Domain.Entities.Application app, string csProjectPath)
     {
         return app.CsProjects.Any(csp => csp.Path == csProjectPath);
@@ -331,6 +422,11 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Validates and normalizes local application input from discovery DTOs.
     /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="csProject">The selected C# project and its recorded metadata.</param>
+    /// <param name="input">Normalized registration or project-import input.</param>
+    /// <returns>True when validation or acquisition succeeds; otherwise false.</returns>
     private static bool TryCreateLocalAppInput(Guid userId, LocalProjectDto project, CsProjectDto csProject,
         out LocalAppInput input)
     {
@@ -353,6 +449,11 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Validates and normalizes remote application input from the GitHub repository form.
     /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="appName">Application name used for deployment artifacts.</param>
+    /// <param name="gitUrl">The remote Git repository URL.</param>
+    /// <param name="input">Normalized registration or project-import input.</param>
+    /// <returns>True when validation or acquisition succeeds; otherwise false.</returns>
     private static bool TryCreateRemoteAppInput(Guid userId, string appName, string gitUrl, out RemoteAppInput input)
     {
         input = default;
@@ -370,6 +471,12 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Normalized values required to create or extend a local application aggregate.
     /// </summary>
+    /// <param name="UserId">The internal AutoMate user identity.</param>
+    /// <param name="ProjectName">The project name used for deployment artifacts or Compose lookup.</param>
+    /// <param name="SourcePath">The Docker build-context directory.</param>
+    /// <param name="CsProjectName">The selected C# project name used for generated artifacts.</param>
+    /// <param name="CsProjectPath">The local C# project path used to locate Compose resources.</param>
+    /// <param name="IsWebProject">Whether the scanned C# project is a web application.</param>
     private readonly record struct LocalAppInput(
         Guid UserId,
         string ProjectName,
@@ -381,5 +488,8 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <summary>
     ///     Normalized values required to create a remote GitHub application aggregate.
     /// </summary>
+    /// <param name="UserId">The internal AutoMate user identity.</param>
+    /// <param name="AppName">Application name used for deployment artifacts.</param>
+    /// <param name="GitUrl">The remote Git repository URL.</param>
     private readonly record struct RemoteAppInput(Guid UserId, string AppName, string GitUrl);
 }

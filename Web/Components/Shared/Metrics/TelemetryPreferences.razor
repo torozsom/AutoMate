@@ -1,7 +1,10 @@
-@namespace Web.Components.Shared
 @using Application.Abstractions.Diagnostics
 @using Application.Data.Users
 @using Web.Components.Pages
+@*
+    Presents authorized automatic-collection, retention and sampling information.
+*@
+@namespace Web.Components.Shared
 @inject AuthenticationStateProvider Authentication
 @inject IUserService Users
 @inject IDeploymentHistoryService History
@@ -47,7 +50,10 @@ else if (_error is not null)
     /// <summary>Avoids repeated database reads for unchanged parent parameters.</summary>
     private Guid _loadedProject;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Loads owner-authorized retention and sampling metadata for a changed project.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedProject == ProjectId) return;

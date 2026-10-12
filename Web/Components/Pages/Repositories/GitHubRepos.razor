@@ -1,3 +1,6 @@
+@*
+    Presents supported repositories from the authenticated owner GitHub connection.
+*@
 @namespace Web.Components.Pages
 @page "/github-repos"
 @using Domain.DTO
@@ -225,6 +228,11 @@
 
 @code {
 
+    /// <summary>
+    ///     Checks whether the repository language is supported by the deployment flow.
+    /// </summary>
+    /// <param name="repo">Selected GitHub repository metadata.</param>
+    /// <returns>Whether the repository language is supported by the deployment flow.</returns>
     private static bool IsSupportedRepository(GitHubRepositoryDto repo)
     {
         return repo.Language is "C#" or "JavaScript" or "TypeScript";

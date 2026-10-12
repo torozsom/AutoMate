@@ -8,10 +8,17 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Verifies safe request audit boundaries for successful, rejected and failed operations.</summary>
+/// <summary>
+///     Verifies safe request audit boundaries for successful, rejected and failed operations.
+/// </summary>
 public sealed class RequestAuditTests
 {
-    /// <summary>Every response preserves method, status, duration, actor and module without request payloads.</summary>
+    /// <summary>
+    ///     Every response preserves method, status, duration, actor and module without request
+    ///     payloads.
+    /// </summary>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(200)]
     [InlineData(401)]
@@ -52,7 +59,10 @@ public sealed class RequestAuditTests
         Assert.DoesNotContain("private", text);
     }
 
-    /// <summary>Failures retain exception identity and class while withholding the exception body.</summary>
+    /// <summary>
+    ///     Failures retain exception identity and class while withholding the exception body.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Request_audit_rethrows_failure_without_logging_provider_body()
     {
@@ -68,7 +78,10 @@ public sealed class RequestAuditTests
         Assert.DoesNotContain("private", string.Join('\n', capture.Messages));
     }
 
-    /// <summary>Captures the same safe message, category and printable scopes consumed by ordinary console providers.</summary>
+    /// <summary>
+    ///     Captures the same safe message, category and printable scopes consumed by ordinary console
+    ///     providers.
+    /// </summary>
     private sealed class Capture : ILoggerProvider, ISupportExternalScope
     {
         /// <summary>Factory-owned scope stack.</summary>
@@ -77,39 +90,69 @@ public sealed class RequestAuditTests
         /// <summary>Captured audit records.</summary>
         public List<string> Messages { get; } = [];
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Creates a logger writing to the fixture capture provider.
+        /// </summary>
+        /// <param name="categoryName">Logger category reviewed before platform output.</param>
+        /// <returns>A logger attached to the fixture capture provider.</returns>
         public ILogger CreateLogger(string categoryName)
         {
             return new Logger(this, categoryName);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no dispose work in this fixture.
+        /// </summary>
         public void Dispose()
         {
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Stores the external scope provider used by subsequent fixture logging.
+        /// </summary>
+        /// <param name="scopeProvider">Scope provider used to capture logger correlation.</param>
         public void SetScopeProvider(IExternalScopeProvider scopeProvider)
         {
             _scopes = scopeProvider;
         }
 
-        /// <summary>Observes provider-facing state without invoking raw application formatters.</summary>
+        /// <summary>
+        ///     Observes provider-facing state without invoking raw application formatters.
+        /// </summary>
+        /// <param name="owner">Capture provider or owner name used by the fixture.</param>
+        /// <param name="category">Reviewed logger category or provider diagnostic category.</param>
         private sealed class Logger(Capture owner, string category) : ILogger
         {
-            /// <inheritdoc />
+            /// <summary>
+            ///     Pushes the supplied state into the fixture scope provider.
+            /// </summary>
+            /// <param name="state">Synthetic readiness or structured logger state.</param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
+            /// <returns>A disposable scope from the fixture external scope provider.</returns>
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull
             {
                 return owner._scopes.Push(state);
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Enables every log level so the fixture can observe all emitted records.
+            /// </summary>
+            /// <param name="logLevel">Log severity used by the underlying logger filter; ignored by this fixture.</param>
+            /// <returns>True for every call in this fixture.</returns>
             public bool IsEnabled(LogLevel logLevel)
             {
                 return true;
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Captures or checks the logger call using the fixture assertions and supplied formatter.
+            /// </summary>
+            /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+            /// <param name="eventId">The stable event identity used to deduplicate retries; ignored by this fixture.</param>
+            /// <param name="state">Synthetic readiness or structured logger state.</param>
+            /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
+            /// <param name="formatter">Provider log formatter; untrusted rendered text is not exported.</param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
             public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception,
                 Func<TState, Exception?, string> formatter)
             {

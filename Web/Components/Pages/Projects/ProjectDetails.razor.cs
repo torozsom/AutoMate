@@ -18,9 +18,10 @@ using Web.Hubs;
 namespace Web.Components.Pages;
 
 /// <summary>
-///     A Blazor component that displays the details of a specific project, including its name, description,
-///     and other relevant information. This component retrieves the project details based on the provided
-///     ProjectId parameter and ensures that the user is authenticated before displaying the information.
+///     A Blazor component that displays the details of a specific project, including its name,
+///     description, and other relevant information. This component retrieves the project details
+///     based on the provided ProjectId parameter and ensures that the user is authenticated before
+///     displaying the information.
 /// </summary>
 public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 {
@@ -30,16 +31,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Prevents overlapping status refreshes in one Blazor circuit.</summary>
     private readonly SemaphoreSlim _cloudPollGate = new(1, 1);
 
-    /// A dictionary to store the latest CPU and memory usage metrics for each container.
+    /// <summary>Latest compatibility CPU and memory display text by resource.</summary>
     private readonly Dictionary<string, (string Cpu, string Memory)> _containerMetrics = new();
 
-    /// A dictionary to store the terminal instances for each database container.
+    /// <summary>Initialized database terminals keyed by tab identity.</summary>
     private readonly Dictionary<string, Terminal> _dbTerminals = new();
 
 
-    /// A list of container names for which metrics are currently being displayed.
+    /// <summary>Recorded resource names available for metric-card navigation.</summary>
     private readonly List<string> _metricContainerNames = [];
 
+    /// <summary>Bounded output waiting for its terminal to initialize.</summary>
     private readonly List<DeploymentTerminalLog> _pendingTerminalLogs = [];
 
     /// <summary>Bounded identities rendered ahead of the confirmed replay cursor.</summary>
@@ -51,28 +53,28 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Native per-series observations fence out stale live and saved samples.</summary>
     private readonly Dictionary<string, Dictionary<string, DeploymentMetricPoint>> _typedMetrics = new();
 
-    /// A string to track the currently active tab in the UI, defaulting to "build".
+    /// <summary>Selected terminal channel key.</summary>
     private string _activeTab = "build";
 
     /// <summary>Prevents late page reads from publishing after disposal.</summary>
     private bool _analysisDisposed;
 
-    /// A nullable variable to hold the app details fetched from the database.
+    /// <summary>Current owned project, or null before loading.</summary>
     private Domain.Entities.Application? _app;
 
     /// <summary>Displays redacted managed Azure database resource logs.</summary>
     private Terminal? _azureDatabaseTerminal;
 
-    /// A terminal instance for Azure Container Apps system and revision output.
+    /// <summary>Initialized azure system terminal component, or null before rendering.</summary>
     private Terminal? _azureSystemTerminal;
 
-    /// A terminal instance for Azure Container Apps console output.
+    /// <summary>Initialized azure web terminal component, or null before rendering.</summary>
     private Terminal? _azureWebTerminal;
 
     /// <summary>Project bound to this component's current subscription.</summary>
     private Guid _boundProjectId;
 
-    /// A terminal instance for displaying build logs.
+    /// <summary>Initialized build terminal component, or null before rendering.</summary>
     private Terminal? _buildTerminal;
 
     /// <summary>Background refresh task for multi-instance SaaS deployments.</summary>
@@ -81,39 +83,41 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Newest durable SaaS run displayed by this page.</summary>
     private CloudDeploymentReceipt? _cloudRunReceipt;
 
-    /// A nullable variable to hold the current deployment configuration when the user initiates a deployment.
+    /// <summary>User-editable deployment configuration for the open form.</summary>
     private DeploymentConfigDto? _currentDeployConfig;
 
-    /// The index of the currently displayed container's metrics in the list of container names.
+    /// <summary>Selected resource position in the metric-card carousel.</summary>
     private int _currentMetricIndex;
 
-    /// The internal AutoMate user ID resolved once during component initialization.
+    /// <summary>Resolved internal owner identity.</summary>
     private Guid _currentUserId;
 
-    /// A list of database tabs to be displayed in the UI, initialized as an empty list.
+    /// <summary>Database channels discovered from project configuration.</summary>
     private IEnumerable<DatabaseTab> _databaseTabs = [];
 
-    /// A terminal instance for GitHub Actions output from a cloud deployment.
+    /// <summary>Initialized github actions terminal component, or null before rendering.</summary>
     private Terminal? _githubActionsTerminal;
 
-    /// A nullable variable to hold the SignalR hub connection for receiving real-time logs and metrics.
+    /// <summary>Owned SignalR connection for project diagnostics.</summary>
     private HubConnection? _hubConnection;
 
+    /// <summary>Prevents duplicate SignalR initialization during rendering.</summary>
     private bool _hubInitializationStarted;
 
 
-    /// A boolean flag to indicate whether the project is currently being deployed.
+    /// <summary>Whether deployment admission is in progress.</summary>
     private bool _isDeploying;
 
-    /// A boolean flag to indicate whether the component is currently loading data.
+    /// <summary>Whether initial owned data is being loaded.</summary>
     private bool _isLoading = true;
 
-    /// A boolean flag to indicate whether the deployment process is currently being stopped.
+    /// <summary>Whether a stop request is in progress.</summary>
     private bool _isStopping;
 
     /// <summary>Suppresses unchanged storage-status notices during periodic catch-up.</summary>
     private string? _lastHistoryAvailability;
 
+    /// <summary>Latest acknowledged history ordering position for deduplicated replay.</summary>
     private long _lastTerminalOrderId;
 
     /// <summary>Bounds saved metric recovery while waiting for the first live sample.</summary>
@@ -128,47 +132,52 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Rejoins the authorized stream after the replacement route has rendered terminals.</summary>
     private bool _rejoinPending;
 
-    /// A nullable variable to hold the path of the selected C# project when initiating a deployment.
+    /// <summary>Local project directory supplied to variable discovery.</summary>
     private string? _selectedProjectPath;
 
     /// <summary>Shows the deployment-scoped assessment dialog.</summary>
     private bool _showAnalysisDialog;
 
-    /// A boolean flag to control the visibility of the deployment configuration modal.
+    /// <summary>Whether deployment settings are visible.</summary>
     private bool _showConfigModal;
 
     /// <summary>Distinguishes recovered observations from fresh live samples.</summary>
     private bool _showSavedMetricNotice;
 
+    /// <summary>Whether pre-initialization buffering omitted output.</summary>
     private bool _terminalBufferOverflow;
+
+    /// <summary>Deployment identity to which current terminal state belongs.</summary>
     private Guid? _terminalDeploymentId;
+
+    /// <summary>Whether active deployment history still needs restoring.</summary>
     private bool _terminalReplayPending = true;
 
-    /// The actual host port currently bound to the web container.
+    /// <summary>Discovered local web port; zero means unavailable.</summary>
     private int _webHostPort;
 
-    /// A nullable variable to hold the terminal instance for displaying web container logs.
+    /// <summary>Initialized web terminal component, or null before rendering.</summary>
     private Terminal? _webTerminal;
 
-    /// A short workflow status message displayed for remote cloud deployments.
+    /// <summary>Safe workflow admission or progress guidance.</summary>
     private string? _workflowStatusMessage;
 
-    /// The GitHub Actions workflow URL for the latest cloud deployment, when available.
+    /// <summary>GitHub Actions workflow URL for the remote project.</summary>
     private string? _workflowUrl;
 
-    /// The ID of the project to be displayed, passed as a parameter to the component.
+    /// <summary>Route identity of the owner-scoped project.</summary>
     [Parameter]
     public Guid ProjectId { get; set; }
 
-    /// The project service used to fetch project details and manage project-related operations.
+    /// <summary>Owner-scoped saved-project operations.</summary>
     [Inject]
     private IApplicationService ApplicationService { get; set; } = null!;
 
-    /// The authentication state provider used to retrieve the current user's authentication state and claims.
+    /// <summary>Current circuit authentication state.</summary>
     [Inject]
     private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    /// Queue that hands deployment work to the hosted background worker.
+    /// <summary>Admits bounded deployment jobs.</summary>
     [Inject]
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
@@ -180,40 +189,43 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject]
     private IServiceScopeFactory ScopeFactory { get; set; } = null!;
 
-    /// The user service used to retrieve user details and manage user-related operations.
+    /// <summary>Resolves owner accounts and protected provider connections.</summary>
     [Inject]
     private IUserService UserService { get; set; } = null!;
 
-    /// The navigation manager used to navigate between pages and handle URL changes.
+    /// <summary>Application navigation and absolute-link generation.</summary>
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
 
-    /// The data protection provider used to protect sensitive data.
+    /// <summary>Protects short-lived project log subscription tokens.</summary>
     [Inject]
     private IDataProtectionProvider DataProtectionProvider { get; set; } = null!;
 
-    /// The project scanner service used to analyze project dependencies and prepare deployment configurations.
+    /// <summary>Discovers deployment metadata and configuration variables.</summary>
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
 
-    /// The deployment orchestrator service used to manage Docker deployments.
+    /// <summary>Subscribes to project deployment status changes.</summary>
     [Inject]
     private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
-    /// The Docker service used to interact with the Docker daemon and manage Docker containers.
+    /// <summary>Local Docker operations permitted by the hosting profile.</summary>
     [Inject]
     private IDockerService DockerService { get; set; } = null!;
 
-    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+    /// <summary>Server-enforced hosting-profile capability flags.</summary>
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
-    /// The logger used to log information and errors related to the project details component.
+    /// <summary>Reviewed operational logger for the component.</summary>
     [Inject]
     private ILogger<ProjectDetails> Logger { get; set; } = null!;
 
     /// <summary>
-    ///     Disposes of the component by leaving the SignalR group
-    ///     associated with the project and disposing of the hub connection.
+    ///     Disposes of the component by leaving the SignalR group associated with the project and
+    ///     disposing of the hub connection.
     /// </summary>
+    /// <returns>A task representing completion of component cleanup.</returns>
     public async ValueTask DisposeAsync()
     {
         _analysisDisposed = true;
@@ -259,6 +271,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                queueState.QueuedDeployments > 0 || queueState.ActiveDeployments > 0;
     }
 
+    /// <summary>
+    ///     Schedules a renderer update when this project queue changes.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
     private void OnQueueStateChanged(Guid projectId)
     {
         if (projectId == ProjectId) _ = InvokeAsync(StateHasChanged);
@@ -266,9 +282,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Initiates the deployment process for the project by analyzing
-    ///     its dependencies and preparing the deployment configuration.
+    ///     Initiates the deployment process for the project by analyzing its dependencies and preparing
+    ///     the deployment configuration.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task DeployProjectAsync()
     {
         if (_app == null) return;
@@ -301,6 +318,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Stops the current deployment asynchronously.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task StopDeploymentAsync()
     {
         if (_app == null) return;
@@ -339,7 +357,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Hides the deployment configuration modal and resets the related state variables to their default values.
+    ///     Hides the deployment configuration modal and resets the related state variables to their
+    ///     default values.
     /// </summary>
     private void HideConfigModal()
     {
@@ -352,6 +371,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Renders the deployment configuration modal when enough state is available.
     /// </summary>
+    /// <returns>A fragment rendering the current configuration form, or no content until its inputs are ready.</returns>
     private RenderFragment RenderConfigurationForm()
     {
         return builder =>
@@ -376,11 +396,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Executes the deployment process asynchronously by hiding the configuration modal,
-    ///     setting the deploying state, and invoking the deployment orchestrator to deploy
-    ///     the project with the specified configuration.
+    ///     Executes the deployment process asynchronously by hiding the configuration modal, setting the
+    ///     deploying state, and invoking the deployment orchestrator to deploy the project with the
+    ///     specified configuration.
     /// </summary>
     /// <param name="finalConfig">The deployment configuration to be used for the project deployment.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
         HideConfigModal();
@@ -413,6 +434,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
     }
 
+    /// <summary>
+    ///     Queues the confirmed remote deployment through the hosting-profile admission path and reports
+    ///     safe failures.
+    /// </summary>
+    /// <param name="finalConfig">Confirmed deployment configuration, including secret values that must not enter logs.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ExecuteCloudDeploymentAsync(DeploymentConfigDto finalConfig)
     {
         if (_app == null)
@@ -484,10 +511,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Asynchronously initializes the component by retrieving the current user's ID and fetching the project details
-    ///     based on the provided ProjectId. If the project is found, it analyzes the project's dependencies to determine
-    ///     the databases used and prepares the database tabs for display.
+    ///     Asynchronously initializes the component by retrieving the current user's ID and fetching the
+    ///     project details based on the provided ProjectId. If the project is found, it analyzes the
+    ///     project's dependencies to determine the databases used and prepares the database tabs for
+    ///     display.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnInitializedAsync()
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
@@ -498,7 +527,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_app is not null) _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Leaves the old project subscription and resets dialogs and replay state before loading a
+    ///     changed route.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnParametersSetAsync()
     {
         if (_boundProjectId == Guid.Empty)
@@ -523,7 +556,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _rejoinPending = true;
     }
 
-    /// <summary>Loads route-specific data while fencing old route responses at every I/O boundary.</summary>
+    /// <summary>
+    ///     Loads route-specific data while fencing old route responses at every I/O boundary.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task LoadCurrentProjectAsync()
     {
         var project = ProjectId;
@@ -564,7 +600,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (project == ProjectId && generation == _pageGeneration && !token.IsCancellationRequested) _isLoading = false;
     }
 
-    /// <summary>Refreshes the current route through independent scopes and confirms active terminal replay progress.</summary>
+    /// <summary>
+    ///     Refreshes the current route through independent scopes and confirms active terminal replay
+    ///     progress.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task PollTerminalHistoryAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
@@ -609,7 +650,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Shows durable queue age and workflow phase after reloads and cross-instance updates.</summary>
+    /// <summary>
+    ///     Shows durable queue age and workflow phase after reloads and cross-instance updates.
+    /// </summary>
     private void UpdateCloudRunMessage()
     {
         _workflowStatusMessage = _cloudRunReceipt?.Phase switch
@@ -628,9 +671,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Event handler that is called when the deployment status changes. It checks if
-    ///     the status change is related to the current project, and if so, it updates the
-    ///     latest deployment status in the project details and triggers a UI refresh.
+    ///     Event handler that is called when the deployment status changes. It checks if the status
+    ///     change is related to the current project, and if so, it updates the latest deployment status
+    ///     in the project details and triggers a UI refresh.
     /// </summary>
     /// <param name="projectId">The ID of the project for which the status has changed.</param>
     /// <param name="status">The new deployment status.</param>
@@ -641,11 +684,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Handles the deployment status change by checking if the status change is relevant to the current
-    ///     project, updating the latest deployment status, and refreshing the project details if necessary.
+    ///     Handles the deployment status change by checking if the status change is relevant to the
+    ///     current project, updating the latest deployment status, and refreshing the project details if
+    ///     necessary.
     /// </summary>
     /// <param name="projectId">The ID of the project for which the status has changed.</param>
     /// <param name="status">The new deployment status.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task HandleDeploymentStatusChangedAsync(Guid projectId, DeploymentStatus status)
     {
         if (_app != null && _app.Id == projectId)
@@ -660,9 +705,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Updates the exposed port for the web container by checking the latest deployment status and retrieving
-    ///     the host port mapped to the web container from the Docker service if the deployment is running.
+    ///     Updates the exposed port for the web container by checking the latest deployment status and
+    ///     retrieving the host port mapped to the web container from the Docker service if the deployment
+    ///     is running.
     /// </summary>
+    /// <param name="maxAttempts">Maximum port-discovery attempts.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task UpdateWebHostPortAsync(int maxAttempts = 1)
     {
         var project = ProjectId;
@@ -705,6 +753,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Refreshes the project details by re-fetching the project from the database.
     /// </summary>
+    /// <param name="resolveWebPortWithRetry">Whether to retry Docker port discovery while startup is in progress.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RefreshProjectAsync(bool resolveWebPortWithRetry = false)
     {
         if (_currentUserId == Guid.Empty || _analysisDisposed || _isLoading) return;
@@ -738,7 +788,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         await InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Resets replay and metric state for a replacement deployment or route.</summary>
+    /// <summary>
+    ///     Resets replay and metric state for a replacement deployment or route.
+    /// </summary>
     private void ResetTerminalState()
     {
         _containerMetrics.Clear();
@@ -755,25 +807,38 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _terminalReplayPending = true;
     }
 
-    /// <summary>Opens context configuration and saved results for the current deployment.</summary>
+    /// <summary>
+    ///     Opens context configuration and saved results for the current deployment.
+    /// </summary>
     private void OpenAnalysisDialog()
     {
         if (!_analysisDisposed && GetLatestDeployment() is not null) _showAnalysisDialog = true;
     }
 
-    /// <summary>Closes presentation without canceling durable analysis work.</summary>
+    /// <summary>
+    ///     Closes presentation without canceling durable analysis work.
+    /// </summary>
     private void CloseAnalysisDialog()
     {
         _showAnalysisDialog = false;
     }
 
-    /// <summary>Only the currently active deployment can replay output on the live project page.</summary>
+    /// <summary>
+    ///     Only the currently active deployment can replay output on the live project page.
+    /// </summary>
+    /// <returns>True only when the newest deployment is Starting or Running.</returns>
     private bool CanReplayTerminalHistory()
     {
         return GetLatestStatus() is DeploymentStatus.Starting or DeploymentStatus.Running;
     }
 
-    /// <summary>Rejects replies after disposal, navigation, deployment replacement or an inactive status.</summary>
+    /// <summary>
+    ///     Rejects replies after disposal, navigation, deployment replacement or an inactive status.
+    /// </summary>
+    /// <param name="project">Project identity associated with this operation.</param>
+    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
+    /// <param name="generation">Page generation captured before the asynchronous read.</param>
+    /// <returns>True only when the component, page generation, project and active deployment still match.</returns>
     private bool IsCurrentTerminalRead(Guid project, Guid? deployment, long generation)
     {
         return !_analysisDisposed && generation == _pageGeneration && project == ProjectId &&
@@ -781,8 +846,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
     /// <summary>
-    ///     Retrieves the latest deployment status for the project by
-    ///     looking at the most recent deployment across all C# projects.
+    ///     Retrieves the latest deployment status for the project by looking at the most recent
+    ///     deployment across all C# projects.
     /// </summary>
     /// <returns></returns>
     private DeploymentStatus? GetLatestStatus()
@@ -796,6 +861,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Creates a cloud deployment configuration for a saved remote repository.
     /// </summary>
+    /// <param name="app">Saved project metadata used for this deployment.</param>
+    /// <returns>Default deployment settings for the saved remote repository.</returns>
     private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
@@ -805,6 +872,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Mirrors the Docker Compose template's web container name convention.
     /// </summary>
+    /// <param name="csProjectName">Recorded C# web-project name.</param>
+    /// <returns>Distinct web-container name candidates matching the Compose naming convention.</returns>
     private static IReadOnlyList<string> GetWebContainerNameCandidates(string csProjectName)
     {
         var normalizedName = $"{NormalizeContainerName(csProjectName)}-web";
@@ -837,14 +906,21 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
-    /// Sets the active tab in the UI based on the provided tab ID.
+    /// <summary>
+    ///     Selects the visible terminal channel.
+    /// </summary>
+    /// <param name="tabId">Stable terminal tab identity.</param>
     private void SetActiveTab(string tabId)
     {
         _activeTab = tabId;
     }
 
 
-    /// Retrieves the CSS class for a tab based on whether it is the active tab or not.
+    /// <summary>
+    ///     Chooses the terminal tab class for the current selection.
+    /// </summary>
+    /// <param name="tabId">Stable terminal tab identity.</param>
+    /// <returns>The CSS classes for the selected state.</returns>
     private string GetTabClass(string tabId)
     {
         return _activeTab == tabId
@@ -853,19 +929,31 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// <summary>
+    ///     Builds the build-tab navigation class.
+    /// </summary>
+    /// <returns>The CSS classes for the selected state.</returns>
     private string GetBuildTabClass()
     {
         return $"nav-link {GetTabClass("build")}";
     }
 
 
+    /// <summary>
+    ///     Builds the web-tab navigation class.
+    /// </summary>
+    /// <returns>The CSS classes for the selected state.</returns>
     private string GetWebTabClass()
     {
         return $"nav-link {GetTabClass("web")}";
     }
 
 
-    /// Retrieves the inline style for a terminal based on whether its corresponding tab is active or not.
+    /// <summary>
+    ///     Shows the selected terminal while retaining hidden terminal instances.
+    /// </summary>
+    /// <param name="tabId">Stable terminal tab identity.</param>
+    /// <returns>CSS positioning or size text derived from the current display state.</returns>
     private string GetTerminalStyle(string tabId)
     {
         return _activeTab == tabId
@@ -874,28 +962,41 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
-    /// Retrieves the inline style for the build terminal.
+    /// <summary>
+    ///     Resolves visibility styling for the build terminal.
+    /// </summary>
+    /// <returns>CSS positioning or size text derived from the current display state.</returns>
     private string GetBuildTerminalStyle()
     {
         return GetTerminalStyle("build");
     }
 
 
-    /// Retrieves the inline style for the web terminal.
+    /// <summary>
+    ///     Resolves visibility styling for the web terminal.
+    /// </summary>
+    /// <returns>CSS positioning or size text derived from the current display state.</returns>
     private string GetWebTerminalStyle()
     {
         return GetTerminalStyle("web");
     }
 
 
-    /// Retrieves the inline style for a database terminal based on its corresponding tab ID.
+    /// <summary>
+    ///     Resolves visibility styling for a database terminal.
+    /// </summary>
+    /// <param name="tabId">Stable terminal tab identity.</param>
+    /// <returns>CSS positioning or size text derived from the current display state.</returns>
     private string GetDatabaseTerminalStyle(string tabId)
     {
         return GetTerminalStyle(tabId);
     }
 
 
-    /// Retrieves the list of database tabs to be displayed in the UI.
+    /// <summary>
+    ///     Returns the current recorded database terminal tabs.
+    /// </summary>
+    /// <returns>The current database tab sequence, which may be empty.</returns>
     private IEnumerable<DatabaseTab> GetDatabaseTabs()
     {
         return _databaseTabs;
@@ -905,6 +1006,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Gets a compact label for the selected container in the metrics panel.
     /// </summary>
+    /// <param name="containerName">Recorded container or resource identity.</param>
+    /// <returns>An uppercase initial for a known resource, or the fallback label for missing input.</returns>
     private static string GetContainerInitial(string containerName)
     {
         return string.IsNullOrWhiteSpace(containerName)
@@ -916,6 +1019,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Converts metric text into a CSS width value for the lightweight utilization bar.
     /// </summary>
+    /// <param name="metricValue">Formatted observed metric text.</param>
+    /// <param name="isMemoryMetric">Whether the value contains used and limit memory quantities.</param>
+    /// <returns>A bounded CSS width derived from a parsed metric, or a fixed unavailable-value width.</returns>
     private static string GetMetricTrackStyle(string metricValue, bool isMemoryMetric)
     {
         var percent = isMemoryMetric
@@ -933,6 +1039,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// <summary>
+    ///     Parses invariant numeric text before an optional percent sign.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>The parsed percentage, or null when the text cannot be parsed.</returns>
     private static decimal? TryParsePercentage(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -947,6 +1058,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// <summary>
+    ///     Calculates utilization only when both used and positive limit values can be parsed.
+    /// </summary>
+    /// <param name="memoryUsage">Observed used/limit memory text.</param>
+    /// <returns>Used memory as a percentage of the positive limit, or null when either quantity is unavailable.</returns>
     private static decimal? TryCalculateMemoryUsagePercent(string memoryUsage)
     {
         var parts = memoryUsage.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -963,6 +1079,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
+    /// <summary>
+    ///     Parses supported byte quantities with decimal or binary unit multipliers.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>The byte quantity, or null when its number or unit is unsupported.</returns>
     private static decimal? TryParseDataSize(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1000,12 +1121,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Executes logic after the component has been rendered. On the first render, establishes a SignalR connection
-    ///     to the server for real-time updates and joins a project-specific group using a secure token. Registers handlers
-    ///     for receiving build and container logs. This method is only executed during the first render to set up necessary
-    ///     resources for the project details page.
+    ///     Connects live diagnostics when the project view is ready and rejoins after route changes.
     /// </summary>
     /// <param name="firstRender">Indicates whether this is the first time the component is being rendered.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         // OnInitializedAsync may yield while the loading view is rendered. The first render
@@ -1130,7 +1249,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Joins the live stream and restores only the current active deployment's bounded output.</summary>
+    /// <summary>
+    ///     Joins the live stream and restores only the current active deployment's bounded output.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task JoinLogHubGroupAsync()
     {
         if (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested || _hubConnection is null ||
@@ -1204,7 +1326,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         await RestoreMetricSnapshotAsync();
     }
 
-    /// <summary>Restores the latest saved numeric samples after reload, without replacing newer live values.</summary>
+    /// <summary>
+    ///     Restores the latest saved numeric samples after reload, without replacing newer live values.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RestoreMetricSnapshotAsync()
     {
         if (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested ||
@@ -1248,7 +1373,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>Merges native samples by resource and series; delayed deliveries never replace newer observations.</summary>
+    /// <summary>
+    ///     Merges native samples by resource and series; delayed deliveries never replace newer
+    ///     observations.
+    /// </summary>
+    /// <param name="resource">Recorded resource name for these metric samples.</param>
+    /// <param name="points">Recorded metric observations to format; missing samples remain unavailable.</param>
     private void ApplyTypedMetrics(string resource, IEnumerable<DeploymentMetricPoint> points)
     {
         if (!_typedMetrics.TryGetValue(resource, out var samples))
@@ -1263,6 +1393,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (!_metricContainerNames.Contains(resource)) _metricContainerNames.Add(resource);
     }
 
+    /// <summary>
+    ///     Clears all initialized source terminals without replacing their component instances.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
+    /// <exception cref="Microsoft.JSInterop.JSException">
+    ///     The browser interaction fails or the interactive circuit is
+    ///     disconnected.
+    /// </exception>
     private async Task ClearTerminalsAsync()
     {
         foreach (var terminal in new[]
@@ -1274,6 +1412,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 await terminal.ClearAsync();
     }
 
+    /// <summary>
+    ///     Routes current deployment output to its channel with bounded buffering and replay
+    ///     deduplication.
+    /// </summary>
+    /// <param name="terminalLog">Redacted deployment output with channel and replay identity.</param>
+    /// <param name="isReplay">Whether the record comes from saved history.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task WriteTerminalLogAsync(DeploymentTerminalLog terminalLog, bool isReplay = false)
     {
         if (terminalLog.IsAvailabilityNotice)
@@ -1306,7 +1451,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (terminal is not null) await terminal.WriteAsync(DeploymentTerminalPresentation.Format(terminalLog));
     }
 
-    /// <summary>Shows operational guidance outside the terminal's deployment output.</summary>
+    /// <summary>
+    ///     Shows operational guidance outside the terminal's deployment output.
+    /// </summary>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task WriteTerminalNoticeAsync(string message)
     {
         if (!_analysisDisposed)
@@ -1320,9 +1469,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     This method is called when the terminal component is ready. It writes an initial message to the terminal
-    ///     indicating that the AutoMate Terminal has been initialized and is waiting for deployment logs.
+    ///     This method is called when the terminal component is ready. It writes an initial message to
+    ///     the terminal indicating that the AutoMate Terminal has been initialized and is waiting for
+    ///     deployment logs.
     /// </summary>
+    /// <param name="terminal">Initialized terminal component, or null when it is not rendered.</param>
+    /// <param name="componentName">Display name of the terminal channel.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task OnTerminalReady(Terminal? terminal, string componentName)
     {
         if (terminal != null && _lastTerminalOrderId == 0)
@@ -1335,11 +1488,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     This method is called when the build terminal component is ready. It calls the
-    ///     OnTerminalReady method with the build terminal instance and the component name "Build".
+    ///     Initializes the selected database terminal and restores buffered output for that channel.
     /// </summary>
     /// <param name="tabId"></param>
     /// <param name="dbType"></param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task OnDbTerminalReady(string tabId, string dbType)
     {
         if (_dbTerminals.TryGetValue(tabId, out var terminal))
@@ -1347,7 +1500,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
-    /// Switches to the previous container's metrics.
+    /// <summary>
+    ///     Selects the preceding resource metric card with wraparound.
+    /// </summary>
     private void PreviousMetric()
     {
         if (_metricContainerNames.Count == 0) return;
@@ -1355,7 +1510,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
-    /// Switches to the next container's metrics.
+    /// <summary>
+    ///     Selects the next resource metric card with wraparound.
+    /// </summary>
     private void NextMetric()
     {
         if (_metricContainerNames.Count == 0) return;
@@ -1364,8 +1521,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Retrieves the current authenticated user's ID from the authentication state.
-    ///     If the user is not authenticated, it returns Guid.Empty.
+    ///     Retrieves the current authenticated user's ID from the authentication state. If the user is
+    ///     not authenticated, it returns Guid.Empty.
     /// </summary>
     /// <returns>The user ID if authenticated, otherwise Guid.Empty.</returns>
     private async Task<Guid> GetCurrentUserIdAsync()
@@ -1377,6 +1534,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>
     ///     Gets the current user details, including the GitHub token for remote deployments.
     /// </summary>
+    /// <returns>A task returning owner identity, optional GitHub token and account kind; unresolved identities use Guid.Empty.</returns>
     private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
     {
         var details = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(AuthStateProvider, UserService);
@@ -1384,6 +1542,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
 
-    /// A record type representing a database tab in the UI.
+    /// <summary>
+    ///     Identifies one database terminal by provider, stable tab key and display label.
+    /// </summary>
+    /// <param name="Provider">Recorded database provider.</param>
+    /// <param name="TabId">Stable terminal tab identity.</param>
+    /// <param name="DisplayName">Human-readable database tab label.</param>
     private record DatabaseTab(string Provider, string TabId, string DisplayName);
 }

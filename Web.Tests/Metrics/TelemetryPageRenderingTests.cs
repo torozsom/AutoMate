@@ -25,10 +25,16 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Renders both actual telemetry surfaces with explicit provider fixtures and no external authentication.</summary>
+/// <summary>
+///     Renders both actual telemetry surfaces with explicit provider fixtures and no external
+///     authentication.
+/// </summary>
 public sealed class TelemetryPageRenderingTests
 {
-    /// <summary>Produces browser-reviewable HTML using the actual page and summary components.</summary>
+    /// <summary>
+    ///     Produces browser-reviewable HTML using the actual page and summary components.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Summary_and_history_render_compact_cards_and_collapsed_details()
     {
@@ -113,7 +119,13 @@ public sealed class TelemetryPageRenderingTests
             await File.WriteAllTextAsync(Path.Combine(directory, page.Name + ".html"), Wrap(page.Html));
     }
 
-    /// <summary>Renders a real component through its normal parameter lifecycle.</summary>
+    /// <summary>
+    ///     Renders a real component through its normal parameter lifecycle.
+    /// </summary>
+    /// <param name="renderer">Fixture HTML renderer.</param>
+    /// <param name="parameters">Component parameters supplied by the rendering fixture.</param>
+    /// <typeparam name="T">Interface or result type created by the fixture.</typeparam>
+    /// <returns>A task returning the synthetic text produced for this scenario.</returns>
     private static Task<string> Render<T>(HtmlRenderer renderer, Dictionary<string, object?> parameters)
         where T : IComponent
     {
@@ -121,7 +133,12 @@ public sealed class TelemetryPageRenderingTests
             (await renderer.RenderComponentAsync<T>(ParameterView.FromDictionary(parameters))).ToHtmlString());
     }
 
-    /// <summary>Adds local theme styles and client inspection to a clearly identified provider-fixture preview.</summary>
+    /// <summary>
+    ///     Adds local theme styles and client inspection to a clearly identified provider-fixture
+    ///     preview.
+    /// </summary>
+    /// <param name="content">Provider response or source text to read within bounds.</param>
+    /// <returns>The synthetic text produced for this scenario.</returns>
     private static string Wrap(string content)
     {
         return
@@ -131,7 +148,10 @@ public sealed class TelemetryPageRenderingTests
             "import {attachDialog} from '/js/console-ui.js';const shortcut=document.querySelector('button.terminal-ai-shortcut');if(shortcut)shortcut.addEventListener('click',async()=>{const html=await fetch('/details-analysis.html').then(r=>r.text());const fragment=new DOMParser().parseFromString(html,'text/html').querySelector('.console-dialog-backdrop');document.body.append(fragment);const root=fragment.querySelector('[role=dialog]');let registration;const close=()=>{fragment.remove();registration.dispose();};registration=attachDialog(root,{invokeMethodAsync(){close();return Promise.resolve();}});root.querySelector('header button').addEventListener('click',close);});</script></body></html>";
     }
 
-    /// <summary>Finds the repository independently of test-output configuration.</summary>
+    /// <summary>
+    ///     Finds the repository independently of test-output configuration.
+    /// </summary>
+    /// <returns>The synthetic text produced for this scenario.</returns>
     private static string FindRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -140,14 +160,20 @@ public sealed class TelemetryPageRenderingTests
         return directory!.FullName;
     }
 
-    /// <summary>Renders the real project markup without authentication/provider lifecycle side effects.</summary>
+    /// <summary>
+    ///     Renders the real project markup without authentication/provider lifecycle side effects.
+    /// </summary>
     public sealed class FixtureProject : ProjectDetails
     {
         /// <summary>Renders the real analysis dialog for provider-free browser verification.</summary>
         [Parameter]
         public bool AnalysisOpen { get; set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Seeds project and deployment presentation state without executing the live page
+        ///     initialization.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         protected override Task OnInitializedAsync()
         {
             var project = new CsProject
@@ -184,17 +210,30 @@ public sealed class TelemetryPageRenderingTests
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live on after render work.
+        /// </summary>
+        /// <param name="firstRender">Whether this is the first interactive render; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         protected override Task OnAfterRenderAsync(bool firstRender)
         {
             return Task.CompletedTask;
         }
     }
 
-    /// <summary>Provider-free metadata for the selected historical route.</summary>
+    /// <summary>
+    ///     Provider-free metadata for the selected historical route.
+    /// </summary>
     private sealed class FixtureDetails : IDeploymentDetailsService
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies a stopped deployment with recorded timing for the history preview.
+        /// </summary>
+        /// <param name="owner">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured deployment result, or null when the fixture supplies no value.</returns>
         public Task<Deployment?> GetAsync(Guid owner, Guid project, Guid deployment, CancellationToken token = default)
         {
             return Task.FromResult<Deployment?>(new Deployment
@@ -215,10 +254,23 @@ public sealed class TelemetryPageRenderingTests
         }
     }
 
-    /// <summary>Unused injected operations return bounded empty fixture data, never perform provider work.</summary>
+    /// <summary>
+    ///     Unused injected operations return bounded empty fixture data, never perform provider work.
+    /// </summary>
     public class EmptyPort : DispatchProxy
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             var type = method!.ReturnType;
@@ -237,22 +289,41 @@ public sealed class TelemetryPageRenderingTests
         }
     }
 
-    /// <summary>Only local URLs are needed by the static project fixture.</summary>
+    /// <summary>
+    ///     Only local URLs are needed by the static project fixture.
+    /// </summary>
     private sealed class FixtureNavigation : NavigationManager
     {
+        /// <summary>
+        ///     Initializes the fixture navigation fixture and its required test dependencies.
+        /// </summary>
         public FixtureNavigation()
         {
             Initialize("http://localhost/", "http://localhost/project/fixture");
         }
 
+        /// <summary>
+        ///     Performs no navigate to core work in this fixture.
+        /// </summary>
+        /// <param name="uri">Validated provider endpoint URI; ignored by this fixture.</param>
+        /// <param name="forceLoad">
+        ///     Whether navigation requested a full load; the preview does not navigate; ignored by this
+        ///     fixture.
+        /// </param>
         protected override void NavigateToCore(string uri, bool forceLoad)
         {
         }
     }
 
-    /// <summary>Guid claims exercise normal owner resolution without invoking any remote identity provider.</summary>
+    /// <summary>
+    ///     Guid claims exercise normal owner resolution without invoking any remote identity provider.
+    /// </summary>
     private sealed class FixtureAuthentication : AuthenticationStateProvider
     {
+        /// <summary>
+        ///     Supplies the synthetic principal selected by the fixture authentication state.
+        /// </summary>
+        /// <returns>A task returning the configured authentication state instance or response for this scenario.</returns>
         public override Task<AuthenticationState> GetAuthenticationStateAsync()
         {
             return Task.FromResult(new AuthenticationState(
@@ -261,18 +332,45 @@ public sealed class TelemetryPageRenderingTests
         }
     }
 
-    /// <summary>Any unexpected user lookup fails this credential-free fixture.</summary>
+    /// <summary>
+    ///     Any unexpected user lookup fails this credential-free fixture.
+    /// </summary>
     public class UnusedUserService : DispatchProxy
     {
+        /// <summary>
+        ///     Rejects invoke because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation; ignored by this fixture.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             throw new InvalidOperationException("Unexpected user lookup");
         }
     }
 
-    /// <summary>Recorded channels and a v2 historical result make both provider-free page previews representative.</summary>
+    /// <summary>
+    ///     Recorded channels and a v2 historical result make both provider-free page previews
+    ///     representative.
+    /// </summary>
     public class FixtureAssessments : DispatchProxy
     {
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             var now = DateTimeOffset.UtcNow;
@@ -303,23 +401,63 @@ public sealed class TelemetryPageRenderingTests
         }
     }
 
-    /// <summary>Static rendering must not try to execute JavaScript.</summary>
+    /// <summary>
+    ///     Static rendering must not try to execute JavaScript.
+    /// </summary>
     private sealed class StaticJs : IJSRuntime
     {
+        /// <summary>
+        ///     Rejects invoke because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="identifier">Provider or user identity to resolve; ignored by this fixture.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <typeparam name="T">Type of the requested interop result.</typeparam>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public ValueTask<T> InvokeAsync<T>(string identifier, object?[]? args)
         {
             throw new InvalidOperationException("Unexpected interop");
         }
 
+        /// <summary>
+        ///     Delegates to the fixture interop overload using the same identifier and arguments.
+        /// </summary>
+        /// <param name="identifier">Provider or user identity to resolve.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <typeparam name="T">Type of the requested interop result.</typeparam>
+        /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<T> InvokeAsync<T>(string identifier, CancellationToken token, object?[]? args)
         {
             return InvokeAsync<T>(identifier, args);
         }
     }
 
-    /// <summary>Representative sparse history, with the same resource magnitudes as the reported screenshots.</summary>
+    /// <summary>
+    ///     Representative sparse history, with the same resource magnitudes as the reported
+    ///     screenshots.
+    /// </summary>
     private sealed class FixtureHistory : IDeploymentHistoryService
     {
+        /// <summary>
+        ///     Supplies configured saved terminal history and records any fixture read count.
+        /// </summary>
+        /// <param name="user">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity.</param>
+        /// <param name="deployment">Synthetic deployment identity.</param>
+        /// <param name="cursor">Opaque history position, or null to read the latest page; ignored by this fixture.</param>
+        /// <param name="backwards">
+        ///     Whether to read earlier records rather than records after the cursor; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured deployment terminal history instance or response for this scenario.</returns>
         public Task<DeploymentTerminalHistory> ReadLogsAsync(Guid user, Guid project, Guid deployment, long cursor,
             bool backwards, int limit, CancellationToken token = default)
         {
@@ -327,6 +465,17 @@ public sealed class TelemetryPageRenderingTests
                 [new DeploymentTerminalLog(1, project, deployment, "build", "Build completed")], false));
         }
 
+        /// <summary>
+        ///     Supplies configured saved metric history for component assertions.
+        /// </summary>
+        /// <param name="user">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start; ignored by this fixture.</param>
+        /// <param name="end">UTC observation-window end.</param>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured deployment metric history instance or response for this scenario.</returns>
         public Task<DeploymentMetricHistory> ReadMetricsAsync(Guid user, Guid project, Guid deployment,
             DateTimeOffset start, DateTimeOffset end, int limit, CancellationToken token = default)
         {
@@ -340,26 +489,64 @@ public sealed class TelemetryPageRenderingTests
             ], "Some intervals contain missing observations."));
         }
 
+        /// <summary>
+        ///     Supplies fixed legacy telemetry preferences for the rendering fixture.
+        /// </summary>
+        /// <param name="user">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured deployment telemetry preferences instance or response for this scenario.</returns>
         public Task<DeploymentTelemetryPreferences> GetPreferencesAsync(Guid user, Guid project,
             CancellationToken token = default)
         {
             return Task.FromResult(new DeploymentTelemetryPreferences(false, false, false, "local"));
         }
 
+        /// <summary>
+        ///     Rejects set managed consent because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="user">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="enabled">Whether to include the option; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         public Task SetManagedConsentAsync(Guid user, Guid project, bool enabled, CancellationToken token = default)
         {
             throw new NotSupportedException();
         }
 
+        /// <summary>
+        ///     Rejects set runtime collection because this member is deliberately unavailable in the
+        ///     fixture.
+        /// </summary>
+        /// <param name="user">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="enabled">Whether to include the option; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         public Task SetRuntimeCollectionAsync(Guid user, Guid project, bool enabled, CancellationToken token = default)
         {
             throw new NotSupportedException();
         }
     }
 
-    /// <summary>Representative daily aggregate response preserves supplied sample counts and quality flags.</summary>
+    /// <summary>
+    ///     Representative daily aggregate response preserves supplied sample counts and quality flags.
+    /// </summary>
     private sealed class FixtureAnalytics : IProjectTelemetryAnalytics
     {
+        /// <summary>
+        ///     Supplies configured synthetic records, observations or completion state for the fixture
+        ///     read.
+        /// </summary>
+        /// <param name="user">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start; ignored by this fixture.</param>
+        /// <param name="end">UTC observation-window end.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured project telemetry analytics instance or response for this scenario.</returns>
         public Task<ProjectTelemetryAnalytics> ReadAsync(Guid user, Guid project, DateTimeOffset start,
             DateTimeOffset end, CancellationToken token = default)
         {

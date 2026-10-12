@@ -130,9 +130,13 @@ These are code observations, not a confirmed diagnosis of the deployed app:
 - The generated app has `minReplicas: 0`. Verify whether a replica exists at observation time. Missing CPU/output is not
   necessarily a collector failure for an idle scaled-to-zero app.
 
-Relevant files: `Infrastructure/Azure/ContainerApps/AzureContainerAppRuntimeStreamer.cs`, `../Infrastructure/Azure/Monitor/AzureMonitorLogsClient.cs`,
-`../Infrastructure/Azure/ContainerApps/AzureContainerAppClient.cs`, `../Infrastructure/Azure/Monitor/AzureMonitorLogsTokenProvider.cs`, `../Infrastructure/Azure/Monitor/AzureMonitorLogsOptions.cs`,
-`Infrastructure/Diagnostics/Delivery/DeploymentDiagnosticPipeline.cs`, and `Web/Components/Pages/Projects/ProjectDetails.razor.cs`.
+Relevant files: `Infrastructure/Azure/ContainerApps/AzureContainerAppRuntimeStreamer.cs`,
+`../Infrastructure/Azure/Monitor/AzureMonitorLogsClient.cs`,
+`../Infrastructure/Azure/ContainerApps/AzureContainerAppClient.cs`,
+`../Infrastructure/Azure/Monitor/AzureMonitorLogsTokenProvider.cs`,
+`../Infrastructure/Azure/Monitor/AzureMonitorLogsOptions.cs`,
+`Infrastructure/Diagnostics/Delivery/DeploymentDiagnosticPipeline.cs`, and
+`Web/Components/Pages/Projects/ProjectDetails.razor.cs`.
 
 ## Database distinction
 

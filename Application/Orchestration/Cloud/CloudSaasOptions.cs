@@ -1,6 +1,8 @@
 namespace Application.Orchestration;
 
-/// <summary>Cluster-wide SaaS cloud admission limits.</summary>
+/// <summary>
+///     Cluster-wide SaaS cloud admission limits.
+/// </summary>
 public sealed class CloudSaasOptions
 {
     /// <summary>Configuration section name.</summary>

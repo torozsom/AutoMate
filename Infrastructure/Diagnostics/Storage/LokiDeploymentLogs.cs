@@ -8,13 +8,29 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Loki JSON ingestion and bounded structured-metadata queries.</summary>
+/// <summary>
+///     Loki JSON ingestion and bounded structured-metadata queries.
+/// </summary>
+/// <param name="transport">Bounded authenticated HTTP transport for the private telemetry backends.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
 public sealed class LokiDeploymentLogs(
     TelemetryHttpTransport transport,
     IOptions<TelemetryStorageOptions> options,
     IDiagnosticRedactor redactor)
     : IDeploymentLogWriter, IDeploymentLogQuery, IDeploymentLogSearch, IDeploymentErrorCountQuery
 {
+    /// <summary>
+    ///     Counts recorded deployment error observations in the selected window.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="deployment">The exact deployment identity used to scope the operation.</param>
+    /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the number of observed error records in the selected window.</returns>
+    /// <exception cref="InvalidOperationException">Log error count query failed.</exception>
     public async Task<long> CountErrorsAsync(Guid tenant, Guid project, Guid deployment, DateTimeOffset start,
         DateTimeOffset end, CancellationToken token)
     {
@@ -33,7 +49,13 @@ public sealed class LokiDeploymentLogs(
                 : 0);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Backend filtering occurs before its result limit; unsupported older adapters fail
+    ///     explicitly.
+    /// </summary>
+    /// <param name="request">The frozen resource scope, selection and bounded read options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the selected bounded redacted log envelopes.</returns>
     public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAssessmentAsync(ArchiveAssessmentQuery request,
         CancellationToken token)
     {
@@ -68,7 +90,18 @@ public sealed class LokiDeploymentLogs(
         return entries.Where(e => AssessmentClassification.Matches(e, selection, request.Window)).ToArray();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads one cursor page in forward or reverse order within the retention window.
+    /// </summary>
+    /// <param name="tenantId">The internal owner-account telemetry identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="cursor">The previous read position; an absent cursor selects the initial page.</param>
+    /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <returns>A task returning a bounded ordered page of redacted log envelopes.</returns>
     public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenantId, Guid projectId,
         Guid deploymentId, long cursor, bool backwards, int limit, CancellationToken cancellationToken,
         DateTimeOffset? start = null)
@@ -78,7 +111,12 @@ public sealed class LokiDeploymentLogs(
         return await QueryAsync(tenantId, filter, backwards, Math.Clamp(limit, 1, 2001), cancellationToken, start);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Confirms exact event identities are queryable before removing their durable buffer.
+    /// </summary>
+    /// <param name="events">The bounded batch of redacted diagnostic envelopes.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning whether every event identity is queryable in the specialized store.</returns>
     public async Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events,
         CancellationToken cancellationToken)
     {
@@ -90,6 +128,19 @@ public sealed class LokiDeploymentLogs(
         return events.All(e => ids.Contains(e.EventId));
     }
 
+    /// <summary>
+    ///     Reads a bounded ordered log page matching plain-text search within one resource scope.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="deployment">The exact deployment identity used to scope the operation.</param>
+    /// <param name="cursor">The previous read position; an absent cursor selects the initial page.</param>
+    /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="search">The optional plain-text search term.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning a bounded resource-scoped page of matching log envelopes.</returns>
+    /// <exception cref="ArgumentException">Log search is limited to 256 characters.</exception>
     public Task<IReadOnlyList<DeploymentLogEnvelope>> SearchAsync(Guid tenant, Guid project, Guid deployment,
         long cursor, bool backwards, int limit, string search, CancellationToken token)
     {
@@ -100,7 +151,12 @@ public sealed class LokiDeploymentLogs(
         return QueryAsync(tenant, filter, backwards, Math.Clamp(limit, 1, 2001), token);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Accepts an at-least-once batch; event identities remain unchanged on retry.
+    /// </summary>
+    /// <param name="events">The bounded batch of redacted diagnostic envelopes.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after the redacted batch is written.</returns>
     public async Task WriteAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken cancellationToken)
     {
         events = TelemetryWriteBoundary.Snapshot(events, redactor, cancellationToken);
@@ -131,7 +187,18 @@ public sealed class LokiDeploymentLogs(
             new { streams }, cancellationToken);
     }
 
-    /// <summary>Bounds time and results, and rejects unsuccessful query responses.</summary>
+    /// <summary>
+    ///     Bounds time and results, and rejects unsuccessful query responses.
+    /// </summary>
+    /// <param name="tenantId">The internal owner-account telemetry identity.</param>
+    /// <param name="filter">Bounded provider query filter or search selection.</param>
+    /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <param name="start">Absolute observation-window start or owner-authorized cloud launch request.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <returns>A task returning the query async selection with its documented bounds and ordering.</returns>
+    /// <exception cref="InvalidOperationException">Telemetry log query failed.</exception>
     private async Task<IReadOnlyList<DeploymentLogEnvelope>> QueryAsync(Guid tenantId, string filter,
         bool backwards, int limit, CancellationToken cancellationToken, DateTimeOffset? start = null,
         DateTimeOffset? end = null)
@@ -164,13 +231,21 @@ public sealed class LokiDeploymentLogs(
         return result.DistinctBy(e => e.EventId).OrderBy(e => e.OrderId).ToArray();
     }
 
-    /// <summary>Preserves optional reverse-proxy base paths.</summary>
+    /// <summary>
+    ///     Preserves optional reverse-proxy base paths.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <returns>The url derived from the validated input.</returns>
     private string Url(string path)
     {
         return options.Value.LokiUrl.TrimEnd('/') + "/" + path;
     }
 
-    /// <summary>Formats UTC ingestion time as Loki nanoseconds without losing precision.</summary>
+    /// <summary>
+    ///     Formats UTC ingestion time as Loki nanoseconds without losing precision.
+    /// </summary>
+    /// <param name="time">The observation timestamp to assign to a UTC bucket.</param>
+    /// <returns>The nanoseconds derived from the validated input.</returns>
     private static string Nanoseconds(DateTimeOffset time)
     {
         return ((time.UtcTicks - DateTimeOffset.UnixEpoch.Ticks) * 100).ToString(CultureInfo.InvariantCulture);

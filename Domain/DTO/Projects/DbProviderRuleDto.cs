@@ -5,13 +5,9 @@ namespace Domain.DTO;
 /// </summary>
 public record DbProviderRuleDto
 {
-    /// <summary>
-    ///     The database provider type to apply when a matching package is detected.
-    /// </summary>
+    /// <summary>The database provider type to apply when a matching package is detected.</summary>
     public string DbType { get; init; } = string.Empty;
 
-    /// <summary>
-    ///     The package-name fragments that identify this provider.
-    /// </summary>
+    /// <summary>The package-name fragments that identify this provider.</summary>
     public List<string> Packages { get; init; } = [];
 }

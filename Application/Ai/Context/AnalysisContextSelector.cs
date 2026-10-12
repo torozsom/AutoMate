@@ -8,14 +8,30 @@ using Application.Abstractions.Diagnostics;
 namespace Application.Ai;
 
 /// <summary>
-///     Selects bounded diagnostic evidence using assessment focus, source representation, severity and recency.
+///     Selects bounded diagnostic evidence using assessment focus, source representation,
+///     severity and recency.
 /// </summary>
+/// <param name="redactor">The shared redaction boundary used before persistence or presentation.</param>
 public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
 {
     /// <summary>Caps CPU/memory work independently of provider text limits.</summary>
     public const int MaximumCandidates = 1000;
 
-    /// <summary>Serializes a bounded structured data document with stable IDs and explicit partial coverage.</summary>
+    /// <summary>
+    ///     Serializes a bounded structured data document with stable IDs and explicit partial
+    ///     coverage.
+    /// </summary>
+    /// <param name="history">The bounded terminal history and its coverage metadata.</param>
+    /// <param name="metrics">Recorded numeric samples or aggregate points.</param>
+    /// <param name="budget">The character, UTF-8 byte and conservative token limits.</param>
+    /// <param name="metricsUnavailable">Whether metric collection reported an availability failure.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="kind">The assessment focus requested or resolved for the deployment.</param>
+    /// <param name="metadata">
+    ///     The non-secret project metadata supplied to evidence or artifact generation.
+    /// </param>
+    /// <returns>Bounded redacted context with an exact permitted-evidence reference catalog.</returns>
+    /// <exception cref="OperationCanceledException">Evidence selection is canceled.</exception>
     public DeploymentAnalysisContext Select(DeploymentTerminalHistory history,
         IReadOnlyList<DeploymentMetricPoint> metrics,
         AnalysisContextBudget budget, bool metricsUnavailable, CancellationToken token = default,
@@ -61,6 +77,11 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
             : budget;
 
         // Rebuild the complete document so coverage and escaping are charged before accepting any evidence.
+#pragma warning disable CS1587 // C# does not emit XML documentation for local functions.
+        /// <summary>
+        ///     Serializes the current bounded evidence selection, metadata and coverage notices.
+        /// </summary>
+        /// <returns>JSON for the current evidence selection and its coverage metadata.</returns>
         string Render()
         {
             return JsonSerializer.Serialize(new
@@ -85,6 +106,7 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                 traceSignals = traces
             });
         }
+#pragma warning restore CS1587
 
         foreach (var group in groups)
         {
@@ -140,7 +162,12 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
             .Concat(traces.Select(trace => trace.reference)).ToArray()));
     }
 
-    /// <summary>Uses only stable durable event/order identities, never a provider cursor or user supplied label.</summary>
+    /// <summary>
+    ///     Uses only stable durable event/order identities, never a provider cursor or user
+    ///     supplied label.
+    /// </summary>
+    /// <param name="row">The terminal observation being normalized or ranked.</param>
+    /// <returns>The event identity or durable ordering reference used to ground the observation.</returns>
     private static string Reference(DeploymentTerminalLog row)
     {
         return row.EventId is { } id && id != Guid.Empty
@@ -148,7 +175,11 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
             : $"order:{row.OrderId.ToString(CultureInfo.InvariantCulture)}";
     }
 
-    /// <summary>Ranks defined severities; stderr without severity ranks as a warning.</summary>
+    /// <summary>
+    ///     Ranks defined severities; stderr without severity ranks as a warning.
+    /// </summary>
+    /// <param name="row">The terminal observation being normalized or ranked.</param>
+    /// <returns>The finite severity rank used to prioritize evidence.</returns>
     private static int Severity(DeploymentTerminalLog row)
     {
         return row.Severity is { } severity && Enum.IsDefined(severity)
@@ -158,14 +189,22 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                 : 2;
     }
 
-    /// <summary>Simple bounded relevance heuristic; log content never becomes instructions.</summary>
+    /// <summary>
+    ///     Simple bounded relevance heuristic; log content never becomes instructions.
+    /// </summary>
+    /// <param name="text">The diagnostic context or text being processed.</param>
+    /// <returns>Whether the text contains a reviewed operational-failure keyword.</returns>
     private static bool Relevant(string text)
     {
         return new[] { "error", "fail", "exception", "timeout", "denied", "unable" }
             .Any(word => text.Contains(word, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Only finite, nonnegative known numeric series may enter the summarized context.</summary>
+    /// <summary>
+    ///     Only finite, nonnegative known numeric series may enter the summarized context.
+    /// </summary>
+    /// <param name="point">The numeric aggregate to validate before adding it to context.</param>
+    /// <returns>Whether the point has a supported metric/unit pair and finite nonnegative values.</returns>
     private static bool SafeMetric(DeploymentMetricPoint point)
     {
         return (point.Name, point.Unit) is
@@ -175,13 +214,26 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                point.Minimum >= 0 && point.Minimum <= point.Average && point.Average <= point.Maximum;
     }
 
-    /// <summary>Accepts canonical nonzero trace IDs without arbitrary provider metadata.</summary>
+    /// <summary>
+    ///     Accepts canonical nonzero trace IDs without arbitrary provider metadata.
+    /// </summary>
+    /// <param name="trace">The recorded hexadecimal trace identity, if known.</param>
+    /// <returns>Whether the supplied value is a canonical nonzero hexadecimal trace identity.</returns>
     private static bool ValidTrace(string? trace)
     {
         return trace is { Length: 32 } && trace.Any(character => character != '0') && trace.All(Uri.IsHexDigit);
     }
 
-    /// <summary>Bounds configuration metadata and masks it without truncating a JSON document.</summary>
+    /// <summary>
+    ///     Bounds configuration metadata and masks it without truncating a JSON document.
+    /// </summary>
+    /// <param name="metadata">
+    ///     The non-secret project metadata supplied to evidence or artifact generation.
+    /// </param>
+    /// <returns>
+    ///     Redacted JSON metadata, an omission marker when oversized, or null when no metadata was
+    ///     supplied.
+    /// </returns>
     private JsonElement? SafeMetadata(object? metadata)
     {
         if (metadata is null) return null;
@@ -197,7 +249,12 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         return JsonSerializer.Deserialize<JsonElement>(buffer.ToArray());
     }
 
-    /// <summary>Masks values before JSON encoding so header-like prose cannot corrupt the surrounding document.</summary>
+    /// <summary>
+    ///     Masks values before JSON encoding so header-like prose cannot corrupt the surrounding
+    ///     document.
+    /// </summary>
+    /// <param name="writer">The JSON writer receiving normalized context data.</param>
+    /// <param name="value">The value to normalize, redact or validate.</param>
     private void WriteMetadata(Utf8JsonWriter writer, JsonElement value)
     {
         switch (value.ValueKind)
@@ -224,7 +281,19 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         }
     }
 
-    /// <summary>Bounded evidence group retaining the representative actual event and window timestamps.</summary>
+    /// <summary>
+    ///     Bounded evidence group retaining the representative actual event and window timestamps.
+    /// </summary>
+    /// <param name="reference">The exact evidence identifier being validated.</param>
+    /// <param name="order">The durable log position encoded in the cursor.</param>
+    /// <param name="timestamp">The provider observation timestamp, if known.</param>
+    /// <param name="sequence">The optional provider-local sequence number.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="occurrences">The number of repeated observations represented by the group.</param>
+    /// <param name="firstTimestamp">The first observation time in the returned selection, if known.</param>
+    /// <param name="lastTimestamp">The last observation time in the returned selection, if known.</param>
+    /// <param name="channel">The stable terminal channel used for routing.</param>
     private sealed record Line(
         string reference,
         long order,
@@ -237,7 +306,25 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         DateTimeOffset? lastTimestamp,
         string channel);
 
-    /// <summary>Range over returned aggregate points; does not fabricate individual samples or causal conclusions.</summary>
+    /// <summary>
+    ///     Range over returned aggregate points; does not fabricate individual samples or causal
+    ///     conclusions.
+    /// </summary>
+    /// <param name="reference">The exact evidence identifier being validated.</param>
+    /// <param name="name">The recorded display name or fixed metric identity.</param>
+    /// <param name="unit">The native metric unit associated with the sample.</param>
+    /// <param name="firstTimestamp">The first observation time in the returned selection, if known.</param>
+    /// <param name="lastTimestamp">The last observation time in the returned selection, if known.</param>
+    /// <param name="returnedPoints">The number of points included in the bounded selection.</param>
+    /// <param name="minimum">The observed minimum in the recorded native unit.</param>
+    /// <param name="maximum">The observed maximum in the recorded native unit.</param>
+    /// <param name="container">
+    ///     The recorded container identity; null selects all containers where supported.
+    /// </param>
+    /// <param name="average">The observed arithmetic mean; absent values remain unknown.</param>
+    /// <param name="changeAcrossReturnedIntervals">
+    ///     The observed change across returned intervals, if known.
+    /// </param>
     private sealed record MetricSignal(
         string reference,
         string name,
@@ -251,6 +338,10 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
         double average,
         double? changeAcrossReturnedIntervals);
 
-    /// <summary>Correlation observed in selected diagnostics, not a fetched span or error-status claim.</summary>
+    /// <summary>
+    ///     Correlation observed in selected diagnostics, not a fetched span or error-status claim.
+    /// </summary>
+    /// <param name="reference">The exact evidence identifier being validated.</param>
+    /// <param name="selectedEvents">The number of diagnostic observations included in context.</param>
     private sealed record TraceSignal(string reference, int selectedEvents);
 }

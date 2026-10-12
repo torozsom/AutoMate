@@ -1,3 +1,6 @@
+@*
+    Hosts accessible dialog content with keyboard focus trapping and disposal-time focus restoration.
+*@
 @namespace Web.Components.Shared
 @implements IAsyncDisposable
 @inject IJSRuntime JS
@@ -63,13 +66,20 @@
     /// <summary>Explicit keyboard-helper availability guidance.</summary>
     private bool _helpersUnavailable;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Initializes the browser focus trap after the dialog first renders.
+    /// </summary>
+    /// <param name="firstRender">Whether this is the first interactive render.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override Task OnAfterRenderAsync(bool firstRender)
     {
         return firstRender ? _initialization = InitializeAsync() : Task.CompletedTask;
     }
 
-    /// <summary>Attaches browser interactions only for the current dialog lifetime.</summary>
+    /// <summary>
+    ///     Attaches browser interactions only for the current dialog lifetime.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task InitializeAsync()
     {
         try
@@ -97,14 +107,20 @@
         }
     }
 
-    /// <summary>Handles Escape from the browser focus trap.</summary>
+    /// <summary>
+    ///     Handles Escape from the browser focus trap.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     [JSInvokable]
     public Task CloseDialog()
     {
         return _lifetime.IsCancellationRequested ? Task.CompletedTask : OnClose.InvokeAsync();
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Detaches browser focus handling and releases JS references without canceling server work.
+    /// </summary>
+    /// <returns>A task representing completion of component cleanup.</returns>
     public async ValueTask DisposeAsync()
     {
         if (_lifetime.IsCancellationRequested) return;

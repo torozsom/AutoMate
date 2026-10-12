@@ -10,6 +10,11 @@ internal static class JsonConfigurationFlattener
     /// <summary>
     ///     Recursively flattens objects and arrays into the provided result dictionary.
     /// </summary>
+    /// <param name="element">
+    ///     JSON value to validate or normalize without retaining arbitrary provider prose.
+    /// </param>
+    /// <param name="prefix">Bounded namespace, path or emitted-log prefix.</param>
+    /// <param name="result">Accumulator or provider response being normalized.</param>
     public static void Flatten(JsonElement element, string prefix, Dictionary<string, string> result)
     {
         switch (element.ValueKind)

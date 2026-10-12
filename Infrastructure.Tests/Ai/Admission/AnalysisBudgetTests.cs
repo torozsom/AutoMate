@@ -15,10 +15,17 @@ using Work = Application.Abstractions.Ai.DeploymentAnalysisWorkItem;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Independent relational connections exercise cross-project quotas, rolling rate and reserved spend/capacity.</summary>
+/// <summary>
+///     Independent relational connections exercise cross-project quotas, rolling rate and reserved
+///     spend/capacity.
+/// </summary>
 public sealed class AnalysisBudgetTests
 {
-    /// <summary>A failed reservation insert rolls back accounting and detaches only the failed charge for safe retry.</summary>
+    /// <summary>
+    ///     A failed reservation insert rolls back accounting and detaches only the failed charge for
+    ///     safe retry.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Reservation_failure_rolls_back_and_reused_context_can_retry()
     {
@@ -36,7 +43,11 @@ public sealed class AnalysisBudgetTests
         Assert.Single(await db.AiAnalysisBudgetEntries.ToListAsync());
     }
 
-    /// <summary>Concurrent projects share a tenant quota; deleting its project cannot refund the admitted allowance.</summary>
+    /// <summary>
+    ///     Concurrent projects share a tenant quota; deleting its project cannot refund the admitted
+    ///     allowance.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Concurrent_cross_project_admission_and_deletion_preserve_tenant_allowance()
     {
@@ -61,9 +72,10 @@ public sealed class AnalysisBudgetTests
     }
 
     /// <summary>
-    ///     Replay/coalescing does not consume new usage; a sixty-second boundary and UTC rollover reset only their
-    ///     window.
+    ///     Replay/coalescing does not consume new usage; a sixty-second boundary and UTC rollover reset
+    ///     only their window.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Rolling_rate_replay_and_day_boundaries_use_durable_accounting_clock()
     {
@@ -90,7 +102,11 @@ public sealed class AnalysisBudgetTests
         Assert.Equal(2, await db.AiAnalysisBudgetEntries.CountAsync());
     }
 
-    /// <summary>Concurrent reservations cannot overspend; canceling/deleting work does not refund uncertain provider cost.</summary>
+    /// <summary>
+    ///     Concurrent reservations cannot overspend; canceling/deleting work does not refund uncertain
+    ///     provider cost.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Shared_spend_reservations_are_atomic_and_survive_result_and_project_deletion()
     {
@@ -120,7 +136,12 @@ public sealed class AnalysisBudgetTests
             await new AnalysisBudgetGuard(check, fixture.Settings, fixture.Clock).ReserveAttemptAsync(remaining));
     }
 
-    /// <summary>Tenant and global limits count only live charged attempts; another tenant and expired leases are isolated.</summary>
+    /// <summary>
+    ///     Tenant and global limits count only live charged attempts; another tenant and expired leases
+    ///     are isolated.
+    /// </summary>
+    /// <param name="global">Whether the limit applies across all fixture tenants.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -142,7 +163,11 @@ public sealed class AnalysisBudgetTests
         Assert.Equal(2, await db.AiAnalysisBudgetEntries.CountAsync(item => item.TenantId == fixture.Owner));
     }
 
-    /// <summary>Default-zero spending and precision/currency changes deny attempts; a recovered lease requires a new charge.</summary>
+    /// <summary>
+    ///     Default-zero spending and precision/currency changes deny attempts; a recovered lease
+    ///     requires a new charge.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Retries_currency_changes_and_disabled_budgets_fail_closed()
     {
@@ -168,7 +193,11 @@ public sealed class AnalysisBudgetTests
         Assert.Equal(AnalysisSkipReason.Unavailable, await guard.ReserveAttemptAsync(work));
     }
 
-    /// <summary>Local and cloud deployments use the same owner allowance and preserve existing charges across reloads.</summary>
+    /// <summary>
+    ///     Local and cloud deployments use the same owner allowance and preserve existing charges
+    ///     across reloads.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Sequential_local_and_cloud_attempts_share_allowance_and_reset_at_midnight_utc()
     {
@@ -195,7 +224,11 @@ public sealed class AnalysisBudgetTests
         Assert.Equal(3, await db.AiAnalysisBudgetEntries.CountAsync());
     }
 
-    /// <summary>Missing and malformed amounts have separate authored guidance and never insert a reservation.</summary>
+    /// <summary>
+    ///     Missing and malformed amounts have separate authored guidance and never insert a
+    ///     reservation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Invalid_and_missing_configuration_have_distinct_codes_without_charging()
     {
@@ -216,7 +249,10 @@ public sealed class AnalysisBudgetTests
         Assert.Contains("Restore", AnalysisSkipPolicy.Message("budget_currency_mismatch"));
     }
 
-    /// <summary>A configuration reload during accounting denies transmission without inserting a charge.</summary>
+    /// <summary>
+    ///     A configuration reload during accounting denies transmission without inserting a charge.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Reload_during_reservation_is_unavailable_instead_of_exhausted_spending()
     {
@@ -231,13 +267,23 @@ public sealed class AnalysisBudgetTests
         Assert.Empty(await db.AiAnalysisBudgetEntries.ToListAsync());
     }
 
-    /// <summary>Reloads one valid snapshot during the relational charge total query.</summary>
+    /// <summary>
+    ///     Reloads one valid snapshot during the relational charge total query.
+    /// </summary>
+    /// <param name="reload">Callback that reloads options at the observed query boundary.</param>
     private sealed class ReloadDuringSum(Action reload) : DbCommandInterceptor
     {
         /// <summary>Whether the accounting read triggered a reload.</summary>
         public bool Reloaded { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Reloads options once when a budget-sum query is observed, then preserves command execution.
+        /// </summary>
+        /// <param name="command">Database command intercepted by the fixture.</param>
+        /// <param name="eventData">EF command interception metadata.</param>
+        /// <param name="result">Current EF reader-interception result.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the unchanged EF interception result after fixture checks or failure injection.</returns>
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
@@ -252,7 +298,11 @@ public sealed class AnalysisBudgetTests
         }
     }
 
-    /// <summary>Isolated file-backed relational store with two tenants and projects that can be deleted independently.</summary>
+    /// <summary>
+    ///     Isolated file-backed relational store with two tenants and projects that can be deleted
+    ///     independently.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
     private sealed class Fixture(string path) : IAsyncDisposable
     {
         /// <summary>Primary owner-account tenant.</summary>
@@ -267,14 +317,21 @@ public sealed class AnalysisBudgetTests
         /// <summary>Accounting clock independent of audit timestamps.</summary>
         public TestClock Clock { get; } = new();
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture resources and removes its temporary database files.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask DisposeAsync()
         {
             File.Delete(path);
             return ValueTask.CompletedTask;
         }
 
-        /// <summary>Returns a new connection/context for actual cross-instance serialization.</summary>
+        /// <summary>
+        ///     Returns a new connection/context for actual cross-instance serialization.
+        /// </summary>
+        /// <param name="interceptor">Optional EF interceptor used to observe or inject fixture database failures.</param>
+        /// <returns>An independent metadata context owned by the caller.</returns>
         public AutoMateDbContext Db(DbCommandInterceptor? interceptor = null)
         {
             var options = new DbContextOptionsBuilder<AutoMateDbContext>()
@@ -283,7 +340,11 @@ public sealed class AnalysisBudgetTests
             return new BudgetContext(options.Options);
         }
 
-        /// <summary>Production admission and egress policy for the primary owner.</summary>
+        /// <summary>
+        ///     Production admission and egress policy for the primary owner.
+        /// </summary>
+        /// <param name="db">Fixture metadata context.</param>
+        /// <returns>The configured deployment analysis service instance or response for this scenario.</returns>
         public DeploymentAnalysisService Service(AutoMateDbContext db)
         {
             return new DeploymentAnalysisService(db, Settings,
@@ -292,7 +353,11 @@ public sealed class AnalysisBudgetTests
                 NullLogger<DeploymentAnalysisService>.Instance);
         }
 
-        /// <summary>Seeds live processing leases without provider traffic.</summary>
+        /// <summary>
+        ///     Seeds live processing leases without provider traffic.
+        /// </summary>
+        /// <param name="indexes">Positions of the work items to reserve.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public async Task<Work[]> WorkAsync(params int[] indexes)
         {
             await using var db = Db();
@@ -319,7 +384,10 @@ public sealed class AnalysisBudgetTests
             return results.ToArray();
         }
 
-        /// <summary>Seeds consenting metadata only in a uniquely named disposable database.</summary>
+        /// <summary>
+        ///     Seeds consenting metadata only in a uniquely named disposable database.
+        /// </summary>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync()
         {
             var fixture = new Fixture(Path.Combine(Path.GetTempPath(),
@@ -353,26 +421,43 @@ public sealed class AnalysisBudgetTests
         }
     }
 
-    /// <summary>Mutable UTC clock enables exact rolling-window/day boundaries without sleeps.</summary>
+    /// <summary>
+    ///     Mutable UTC clock enables exact rolling-window/day boundaries without sleeps.
+    /// </summary>
     private sealed class TestClock : TimeProvider
     {
         /// <summary>Current accounting time.</summary>
         public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns the controlled UTC clock value.
+        /// </summary>
+        /// <returns>The fixture-controlled UTC time.</returns>
         public override DateTimeOffset GetUtcNow()
         {
             return Now;
         }
     }
 
-    /// <summary>Injects a bounded accounting-write failure without altering queue metadata.</summary>
+    /// <summary>
+    ///     Injects a bounded accounting-write failure without altering queue metadata.
+    /// </summary>
     private sealed class ChargeFailure : DbCommandInterceptor
     {
         /// <summary>Whether charge writes should fail.</summary>
         public bool Fail { get; set; } = true;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Injects a configured failure when EF inserts a budget charge.
+        /// </summary>
+        /// <param name="command">Database command intercepted by the fixture.</param>
+        /// <param name="eventData">EF command interception metadata.</param>
+        /// <param name="result">Current EF reader-interception result.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the unchanged EF interception result after fixture checks or failure injection.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
@@ -384,11 +469,17 @@ public sealed class AnalysisBudgetTests
         }
     }
 
-    /// <summary>SQLite UTC ordering equivalent to the production timestamp columns.</summary>
+    /// <summary>
+    ///     SQLite UTC ordering equivalent to the production timestamp columns.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
     private sealed class BudgetContext(DbContextOptions<AutoMateDbContext> options)
         : AutoMateDbContext(options, new EphemeralDataProtectionProvider())
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="builder">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);

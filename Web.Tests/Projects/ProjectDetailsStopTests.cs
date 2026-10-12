@@ -5,10 +5,16 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Cloud projects must never enter the local filesystem/Docker stop path.</summary>
+/// <summary>
+///     Cloud projects must never enter the local filesystem/Docker stop path.
+/// </summary>
 public sealed class ProjectDetailsStopTests
 {
-    /// <summary>A remote project with its relative provider path is rejected before local services are consulted.</summary>
+    /// <summary>
+    ///     A remote project with its relative provider path is rejected before local services are
+    ///     consulted.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Remote_project_stop_does_not_enqueue_a_local_job()
     {
@@ -17,7 +23,9 @@ public sealed class ProjectDetailsStopTests
         type.GetField("_app", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(component,
             new Domain.Entities.Application
             {
-                Name = "Cloud app", SourceType = SourceType.Remote, SourcePathOrUrl = "https://github.com/example/app"
+                Name = "Cloud app",
+                SourceType = SourceType.Remote,
+                SourcePathOrUrl = "https://github.com/example/app"
             });
         // No local services are injected: entering that path would fail this test.
         var stop = type.GetMethod("StopDeploymentAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;

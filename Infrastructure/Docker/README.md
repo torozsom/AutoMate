@@ -108,6 +108,10 @@ Folders group related files while retaining the module's existing .NET namespace
 
 - `Build/` — `Build/DockerBuildContextArchive.cs`, `Build/DockerBuildProgress.cs`.
 - `Cli/` — `Cli/DockerCli.cs`, `Cli/DockerProcessStartInfoFactory.cs`, `Cli/DockerRegexes.cs`.
-- `Compose/` — `Compose/DockerComposeProjectParser.cs`, `Compose/DockerNameNormalizer.cs`, `Compose/DockerPortParser.cs`.
-- `Diagnostics/` — `Diagnostics/DockerDiagnosticCollector.cs`, `Diagnostics/DockerDiagnosticNormalizer.cs`, `Diagnostics/DockerLogDecoder.cs`, `Diagnostics/DockerLogReplayWindow.cs`, `Diagnostics/DockerMetricDelivery.cs`, `Diagnostics/DockerMetricsLine.cs`.
-- `Runtime/` — `Runtime/DisabledDockerService.cs`, `Runtime/DockerService.cs`, `Runtime/DockerContainerParameters.cs`, `Runtime/DockerOptions.cs`.
+- `Compose/` — `Compose/DockerComposeProjectParser.cs`, `Compose/DockerNameNormalizer.cs`,
+  `Compose/DockerPortParser.cs`.
+- `Diagnostics/` — `Diagnostics/DockerDiagnosticCollector.cs`, `Diagnostics/DockerDiagnosticNormalizer.cs`,
+  `Diagnostics/DockerLogDecoder.cs`, `Diagnostics/DockerLogReplayWindow.cs`, `Diagnostics/DockerMetricDelivery.cs`,
+  `Diagnostics/DockerMetricsLine.cs`.
+- `Runtime/` — `Runtime/DisabledDockerService.cs`, `Runtime/DockerService.cs`, `Runtime/DockerContainerParameters.cs`,
+  `Runtime/DockerOptions.cs`.

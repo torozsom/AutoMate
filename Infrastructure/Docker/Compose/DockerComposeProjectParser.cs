@@ -10,6 +10,8 @@ internal static class DockerComposeProjectParser
     /// <summary>
     ///     Extracts Compose project names from Docker CLI JSON output.
     /// </summary>
+    /// <param name="output">Output stream classification or normalized process output.</param>
+    /// <returns>The running project names selection with its documented bounds and ordering.</returns>
     public static List<string> ParseRunningProjectNames(string output)
     {
         if (string.IsNullOrWhiteSpace(output))

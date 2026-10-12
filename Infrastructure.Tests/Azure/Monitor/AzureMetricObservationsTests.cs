@@ -3,10 +3,14 @@ using Infrastructure.Azure;
 
 namespace Infrastructure.Tests.Azure;
 
-/// <summary>Verifies native timestamps, dimension aggregation, gaps and Cosmos units.</summary>
+/// <summary>
+///     Verifies native timestamps, dimension aggregation, gaps and Cosmos units.
+/// </summary>
 public sealed class AzureMetricObservationsTests
 {
-    /// <summary>Replicas sum at the same minute, never across time or missing observations.</summary>
+    /// <summary>
+    ///     Replicas sum at the same minute, never across time or missing observations.
+    /// </summary>
     [Fact]
     public void Web_replicas_sum_per_provider_minute()
     {
@@ -20,7 +24,9 @@ public sealed class AzureMetricObservationsTests
         Assert.Equal(1.5, Assert.Single(sample.Samples).Value);
     }
 
-    /// <summary>Cosmos partition utilization takes the maximum and never becomes a CPU observation.</summary>
+    /// <summary>
+    ///     Cosmos partition utilization takes the maximum and never becomes a CPU observation.
+    /// </summary>
     [Fact]
     public void Cosmos_uses_maximum_native_ru_percentage()
     {

@@ -1,3 +1,6 @@
+@*
+    Loads and presents owner-scoped project aggregates for the selected metric window.
+*@
 @namespace Web.Components.Shared
 @using Application.Abstractions.Diagnostics
 @implements IDisposable
@@ -70,7 +73,11 @@
     /// <summary>Frozen range selected by the shared UTC controls.</summary>
     private MetricTimeRange _range = MetricTimeRange.Preset("30d", DateTimeOffset.UtcNow);
 
-    /// <summary>Changes the range without rewriting saved analysis preferences.</summary>
+    /// <summary>
+    ///     Changes the range without rewriting saved analysis preferences.
+    /// </summary>
+    /// <param name="range">Validated UTC metric window selected by the user.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RangeChangedAsync(MetricTimeRange range)
     {
         _range = range;
@@ -107,7 +114,11 @@
     /// <summary>Bounds shared summary and chart time ranges.</summary>
     private DateTimeOffset _start, _end;
 
-    /// <summary>Formats a sample-weighted project resource average.</summary>
+    /// <summary>
+    ///     Formats a sample-weighted project resource average.
+    /// </summary>
+    /// <param name="metric">Stored metric series name.</param>
+    /// <returns>The formatted average, including the documented fallback when data is absent.</returns>
     private string Average(string metric)
     {
         var points = Observations.Where(p => p.Metric == metric).ToArray();
@@ -119,7 +130,10 @@
               Math.Max(1, values.Sum(p => p.Samples > 0 ? p.Samples : p.ImportedIntervals)), metric);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reloads analytics when the supplied owner or project identity changes.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnParametersSetAsync()
     {
         if (_loaded == ProjectId && _loadedOwner == UserId) return;
@@ -129,7 +143,10 @@
         await LoadAsync();
     }
 
-    /// <summary>Loads an independently scoped period and discards cancelled or obsolete responses.</summary>
+    /// <summary>
+    ///     Loads an independently scoped period and discards cancelled or obsolete responses.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task LoadAsync()
     {
         _load?.Cancel();
@@ -172,6 +189,9 @@
         }
     }
 
+    /// <summary>
+    ///     Cancels pending analytic reads and releases owned cancellation sources.
+    /// </summary>
     public void Dispose()
     {
         _lifetime.Cancel();

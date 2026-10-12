@@ -544,7 +544,11 @@ consent, operator approvals and spending reservations.
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Admission/` — `Admission/AnalysisBudgetGuard.cs`, `Admission/AnalysisEgressAuthorizer.cs`, `Admission/DeploymentAnalysisReadinessService.cs`.
+- `Admission/` — `Admission/AnalysisBudgetGuard.cs`, `Admission/AnalysisEgressAuthorizer.cs`,
+  `Admission/DeploymentAnalysisReadinessService.cs`.
 - `Context/` — `Context/AssessmentEvidenceReader.cs`, `Context/DeploymentAnalysisContextBuilder.cs`.
-- `Processing/` — `Processing/DeploymentAnalysisQueue.cs`, `Processing/DeploymentAnalysisRetentionService.cs`, `Processing/DeploymentAnalysisService.cs`, `Processing/DeploymentAnalysisWorker.cs`, `Processing/FailedDeploymentAnalysisDispatcher.cs`.
-- `Providers/` — `Providers/AnalysisProviderCatalog.cs`, `Providers/AzureOpenAiAnalysisProvider.cs`, `Providers/AzureOpenAiOptions.cs`, `Providers/OpenAiAnalysisProvider.cs`, `Providers/ResponsesAnalysisTransport.cs`.
+- `Processing/` — `Processing/DeploymentAnalysisQueue.cs`, `Processing/DeploymentAnalysisRetentionService.cs`,
+  `Processing/DeploymentAnalysisService.cs`, `Processing/DeploymentAnalysisWorker.cs`,
+  `Processing/FailedDeploymentAnalysisDispatcher.cs`.
+- `Providers/` — `Providers/AnalysisProviderCatalog.cs`, `Providers/AzureOpenAiAnalysisProvider.cs`,
+  `Providers/AzureOpenAiOptions.cs`, `Providers/OpenAiAnalysisProvider.cs`, `Providers/ResponsesAnalysisTransport.cs`.

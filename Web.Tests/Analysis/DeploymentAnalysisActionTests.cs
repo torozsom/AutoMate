@@ -10,10 +10,15 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Exercises real owner consent/cancel handlers with controlled Application ports.</summary>
+/// <summary>
+///     Exercises real owner consent/cancel handlers with controlled Application ports.
+/// </summary>
 public sealed class DeploymentAnalysisActionTests
 {
-    /// <summary>Consent uses the selected deployment's exact project and updates no sibling project.</summary>
+    /// <summary>
+    ///     Consent uses the selected deployment's exact project and updates no sibling project.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Consent_updates_exact_project_in_fresh_scope()
     {
@@ -35,7 +40,12 @@ public sealed class DeploymentAnalysisActionTests
         Assert.Contains("consent saved", fixture.Message);
     }
 
-    /// <summary>A rejection or uncertain response does not optimistically change consent or reveal exceptions.</summary>
+    /// <summary>
+    ///     A rejection or uncertain response does not optimistically change consent or reveal
+    ///     exceptions.
+    /// </summary>
+    /// <param name="uncertain">Whether the fixture leaves request admission uncertain.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -51,7 +61,14 @@ public sealed class DeploymentAnalysisActionTests
         Assert.False((bool)fixture.Get("_busy")!);
     }
 
-    /// <summary>All cancellation outcomes read authoritative saved state without requiring AI enablement or consent.</summary>
+    /// <summary>
+    ///     All cancellation outcomes read authoritative saved state without requiring AI enablement or
+    ///     consent.
+    /// </summary>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <param name="status">Optional analysis state under test.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(DeploymentAnalysisCancellationResult.Cancelled, AiAnalysisStatus.Cancelled, "canceled")]
     [InlineData(DeploymentAnalysisCancellationResult.AlreadyFinished, AiAnalysisStatus.Completed, "already finished")]
@@ -81,7 +98,11 @@ public sealed class DeploymentAnalysisActionTests
         Assert.Contains(message, fixture.Message);
     }
 
-    /// <summary>Uncertain cancellation can be retried for the same identity and cannot expose provider details.</summary>
+    /// <summary>
+    ///     Uncertain cancellation can be retried for the same identity and cannot expose provider
+    ///     details.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Uncertain_cancel_retries_same_identity()
     {
@@ -105,9 +126,11 @@ public sealed class DeploymentAnalysisActionTests
     }
 
     /// <summary>
-    ///     Consent and cancellation ignore late responses after selection changes, suppressing duplicate actions
-    ///     meanwhile.
+    ///     Consent and cancellation ignore late responses after selection changes, suppressing
+    ///     duplicate actions meanwhile.
     /// </summary>
+    /// <param name="consent">Legacy preference value used to verify automatic collection behavior.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -143,7 +166,9 @@ public sealed class DeploymentAnalysisActionTests
         Assert.Equal(false, fixture.Get("_consented"));
     }
 
-    /// <summary>Page state and isolated DI ports without provider, renderer or database activity.</summary>
+    /// <summary>
+    ///     Page state and isolated DI ports without provider, renderer or database activity.
+    /// </summary>
     private sealed class Fixture : IDisposable
     {
         /// <summary>Page reflection scope.</summary>
@@ -155,7 +180,9 @@ public sealed class DeploymentAnalysisActionTests
         /// <summary>Independent service scope provider.</summary>
         private readonly ServiceProvider _services;
 
-        /// <summary>Seeds selection and fresh-scope dependencies.</summary>
+        /// <summary>
+        ///     Seeds selection and fresh-scope dependencies.
+        /// </summary>
         public Fixture()
         {
             Deployment = new Deployment { CsProjectId = Selected.Id, Status = DeploymentStatus.Failed };
@@ -206,38 +233,64 @@ public sealed class DeploymentAnalysisActionTests
         /// <summary>Safe page feedback.</summary>
         public string Message => (string)Get("_message")!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture services, connections and background resources.
+        /// </summary>
         public void Dispose()
         {
             _services.Dispose();
         }
 
-        /// <summary>Invokes the real handler.</summary>
+        /// <summary>
+        ///     Invokes the real handler.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         public Task Invoke(string method, params object?[] args)
         {
             return (Task)typeof(DeploymentAnalysisSection).GetMethod(method, Flags)!.Invoke(_component, args)!;
         }
 
-        /// <summary>Supplies the shared component's deployment parameters or injected port.</summary>
+        /// <summary>
+        ///     Supplies the shared component's deployment parameters or injected port.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        /// <param name="value">Fixture member value to assign.</param>
         public void Parameter(string name, object value)
         {
             typeof(DeploymentAnalysisSection).GetProperty(name, Flags | BindingFlags.Public)!.SetValue(_component,
                 value);
         }
 
-        /// <summary>Seeds presentation state.</summary>
+        /// <summary>
+        ///     Seeds presentation state.
+        /// </summary>
+        /// <param name="field">Private field name accessed by the fixture.</param>
+        /// <param name="value">Fixture member value to assign.</param>
         public void Set(string field, object value)
         {
             typeof(DeploymentAnalysisSection).GetField(field, Flags)!.SetValue(_component, value);
         }
 
-        /// <summary>Reads presentation state.</summary>
+        /// <summary>
+        ///     Reads presentation state.
+        /// </summary>
+        /// <param name="field">Private field name accessed by the fixture.</param>
+        /// <returns>The selected private field value, which may be null.</returns>
         public object? Get(string field)
         {
             return typeof(DeploymentAnalysisSection).GetField(field, Flags)!.GetValue(_component);
         }
 
-        /// <summary>Creates safe synthetic persisted state.</summary>
+        /// <summary>
+        ///     Creates safe synthetic persisted state.
+        /// </summary>
+        /// <param name="status">Analysis state under test.</param>
+        /// <returns>The configured deployment analysis view instance or response for this scenario.</returns>
         public DeploymentAnalysisView View(AiAnalysisStatus status)
         {
             return new DeploymentAnalysisView(Guid.NewGuid(), Deployment.Id, status, AiAnalysisTrigger.Manual, null, [],

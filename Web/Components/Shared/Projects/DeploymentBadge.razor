@@ -1,14 +1,23 @@
-@namespace Web.Components.Shared
 @using Domain.Enums
+@*
+    Presents deployment state using a consistent text, icon and badge style.
+*@
+@namespace Web.Components.Shared
 <span class="badge deployment-badge @BadgeClass @AdditionalClasses">
     <i class="bi @IconClass small me-1"></i> @StatusText
 </span>
 
 @code {
-    [Parameter] public DeploymentStatus? Status { get; set; }
 
-    [Parameter] public string AdditionalClasses { get; set; } = "";
+    /// <summary>Deployment status to present, if available.</summary>
+    [Parameter]
+    public DeploymentStatus? Status { get; set; }
 
+    /// <summary>Additional CSS classes supplied by the parent.</summary>
+    [Parameter]
+    public string AdditionalClasses { get; set; } = "";
+
+    /// <summary>Status-dependent badge CSS classes.</summary>
     private string BadgeClass => Status switch
     {
         DeploymentStatus.Starting => "deployment-badge-info",
@@ -18,6 +27,7 @@
         _ => "deployment-badge-neutral"
     };
 
+    /// <summary>Status-dependent icon CSS classes.</summary>
     private string IconClass => Status switch
     {
         DeploymentStatus.Starting => "bi-hourglass-split",
@@ -27,6 +37,7 @@
         _ => "bi-circle-fill text-secondary"
     };
 
+    /// <summary>Human-readable deployment state.</summary>
     private string StatusText => Status switch
     {
         DeploymentStatus.Starting => "Starting",

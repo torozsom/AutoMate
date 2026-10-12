@@ -9,8 +9,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Tests.Azure;
 
+/// <summary>
+///     Verifies durable Azure log cursor identity and checkpoint persistence.
+/// </summary>
 public sealed class AzureContainerAppLogCheckpointStoreTests
 {
+    /// <summary>
+    ///     Verifies that get or create persists one cursor per deployment and source.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task GetOrCreate_persists_one_cursor_per_deployment_and_source()
     {

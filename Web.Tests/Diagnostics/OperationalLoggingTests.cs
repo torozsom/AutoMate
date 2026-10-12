@@ -33,10 +33,18 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Checks real SDK exports and framework authorization responses without contacting a collector.</summary>
+/// <summary>
+///     Checks real SDK exports and framework authorization responses without contacting a
+///     collector.
+/// </summary>
+/// <exception cref="InvalidOperationException">The returned task faults when the fixture failure is selected.</exception>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class OperationalLoggingTests
 {
-    /// <summary>Fixed events retain GUID scopes and ambient trace correlation; exporter failure does not escape.</summary>
+    /// <summary>
+    ///     Fixed events retain GUID scopes and ambient trace correlation; exporter failure does not
+    ///     escape.
+    /// </summary>
     [Fact]
     public void Audit_export_captures_scopes_trace_and_finite_event_properties()
     {
@@ -70,7 +78,14 @@ public sealed class OperationalLoggingTests
         Assert.Empty(exporter.Records.Last().Scopes);
     }
 
-    /// <summary>Challenges/forbids retain the default framework response and never export principal credentials.</summary>
+    /// <summary>
+    ///     Challenges/forbids retain the default framework response and never export principal
+    ///     credentials.
+    /// </summary>
+    /// <param name="result">Expected safe result text.</param>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("challenge", 401, "Challenged")]
     [InlineData("forbid", 403, "Denied")]
@@ -120,7 +135,11 @@ public sealed class OperationalLoggingTests
         }
     }
 
-    /// <summary>A real dispatcher failure exports only safe correlation, never storage exception or terminal payload.</summary>
+    /// <summary>
+    ///     A real dispatcher failure exports only safe correlation, never storage exception or terminal
+    ///     payload.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Diagnostic_failure_export_omits_raw_exception_and_payload()
     {
@@ -169,7 +188,12 @@ public sealed class OperationalLoggingTests
         }
     }
 
-    /// <summary>Successful storage/delivery never copies terminal payloads into platform logs, even in legacy modes.</summary>
+    /// <summary>
+    ///     Successful storage/delivery never copies terminal payloads into platform logs, even in
+    ///     legacy modes.
+    /// </summary>
+    /// <param name="deliveryMode">Telemetry delivery mode selected by the scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("DiskGateway")]
     [InlineData("PostgresOutbox")]
@@ -238,7 +262,12 @@ public sealed class OperationalLoggingTests
         Assert.Contains(exporter.Records, record => record.Message == "Deployment diagnostic dispatcher started.");
     }
 
-    /// <summary>Real form login keeps redirects/cookie sign-in while audit records omit credential and error fields.</summary>
+    /// <summary>
+    ///     Real form login keeps redirects/cookie sign-in while audit records omit credential and error
+    ///     fields.
+    /// </summary>
+    /// <param name="accepted">Expected admission or operation success.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -300,7 +329,9 @@ public sealed class OperationalLoggingTests
         Assert.DoesNotContain("private", JsonSerializer.Serialize(record.Attributes));
     }
 
-    /// <summary>A failing UI subscriber neither stops status delivery nor exports circuit exception text.</summary>
+    /// <summary>
+    ///     A failing UI subscriber neither stops status delivery nor exports circuit exception text.
+    /// </summary>
     [Fact]
     public void Status_subscriber_failure_retains_delivery_without_exception_payload()
     {
@@ -326,7 +357,13 @@ public sealed class OperationalLoggingTests
         Assert.DoesNotContain("private", JsonSerializer.Serialize(warning.Attributes));
     }
 
-    /// <summary>Cache outages retain API fallback and cancellation behavior without exporting sensitive failures.</summary>
+    /// <summary>
+    ///     Cache outages retain API fallback and cancellation behavior without exporting sensitive
+    ///     failures.
+    /// </summary>
+    /// <param name="write">Whether to exercise provider writes rather than reads.</param>
+    /// <param name="canceled">Whether to supply an already canceled token.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
@@ -377,7 +414,11 @@ public sealed class OperationalLoggingTests
         });
     }
 
-    /// <summary>Network errors retain the empty-result contract without exporting request credentials or inner errors.</summary>
+    /// <summary>
+    ///     Network errors retain the empty-result contract without exporting request credentials or
+    ///     inner errors.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Repository_network_failure_does_not_export_exception_payload()
     {
@@ -403,7 +444,9 @@ public sealed class OperationalLoggingTests
         Assert.DoesNotContain("private", JsonSerializer.Serialize(error.Attributes));
     }
 
-    /// <summary>Supplies repository responses or synthetic failures without external requests.</summary>
+    /// <summary>
+    ///     Supplies repository responses or synthetic failures without external requests.
+    /// </summary>
     private sealed class RepositoryHandler : HttpMessageHandler
     {
         /// <summary>Number of API requests.</summary>
@@ -412,7 +455,12 @@ public sealed class OperationalLoggingTests
         /// <summary>Optional synthetic network failure.</summary>
         public Exception? Failure { get; init; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies the configured synthetic HTTP response and propagates fixture callback failures.
+        /// </summary>
+        /// <param name="request">Synthetic HTTP request observed by the handler; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured HTTP response message instance or response for this scenario.</returns>
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
@@ -426,13 +474,23 @@ public sealed class OperationalLoggingTests
         }
     }
 
-    /// <summary>Fake application/framework ports with test-specific async responses.</summary>
+    /// <summary>
+    ///     Fake application/framework ports with test-specific async responses.
+    /// </summary>
     public class PortProxy : DispatchProxy
     {
         /// <summary>Response callback.</summary>
         public Func<MethodInfo?, object?[]?, object?> Call { get; set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             return Call(method, args);
@@ -440,7 +498,10 @@ public sealed class OperationalLoggingTests
     }
 }
 
-/// <summary>Copies pooled SDK records during synchronous export and simulates collector rejection safely.</summary>
+/// <summary>
+///     Copies pooled SDK records during synchronous export and simulates collector rejection
+///     safely.
+/// </summary>
 internal sealed class SnapshotExporter : BaseExporter<LogRecord>
 {
     /// <summary>Detached records captured at the actual export boundary.</summary>
@@ -455,7 +516,12 @@ internal sealed class SnapshotExporter : BaseExporter<LogRecord>
     /// <summary>Resource configured for the actual provider.</summary>
     internal IReadOnlyDictionary<string, object>? ResourceAttributes { get; private set; }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Captures detached log, resource and scope metadata for assertions and reports successful
+    ///     export.
+    /// </summary>
+    /// <param name="batch">Exported SDK record batch or batch-export variant.</param>
+    /// <returns>The export outcome after the fixture captures its SDK records.</returns>
     public override ExportResult Export(in Batch<LogRecord> batch)
     {
         ResourceAttributes = ParentProvider.GetResource().Attributes.ToDictionary(pair => pair.Key, pair => pair.Value);
@@ -476,7 +542,16 @@ internal sealed class SnapshotExporter : BaseExporter<LogRecord>
     }
 }
 
-/// <summary>Immutable copy of an SDK export, avoiding access after pooled record reuse.</summary>
+/// <summary>
+///     Immutable copy of an SDK export, avoiding access after pooled record reuse.
+/// </summary>
+/// <param name="EventId">The stable event identity used to deduplicate retries.</param>
+/// <param name="Level">Reviewed log severity used to select safe output.</param>
+/// <param name="Message">Display message; secret-bearing provider text must not be supplied.</param>
+/// <param name="Attributes">Optional bounded, non-secret diagnostic attributes.</param>
+/// <param name="Scopes">Detached captured logger scopes.</param>
+/// <param name="TraceId">Captured trace identity.</param>
+/// <param name="Exception">Connection failure, or null for a normal disconnect.</param>
 internal sealed record ExportedLog(
     EventId EventId,
     LogLevel Level,

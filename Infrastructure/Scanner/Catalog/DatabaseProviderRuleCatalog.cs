@@ -7,6 +7,9 @@ namespace Infrastructure.Scanner;
 /// <summary>
 ///     Loads and caches database provider package matching rules from scanner configuration.
 /// </summary>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 internal sealed class DatabaseProviderRuleCatalog(ILogger logger)
 {
     /// <summary>
@@ -15,19 +18,17 @@ internal sealed class DatabaseProviderRuleCatalog(ILogger logger)
     private static readonly string DbProvidersJsonPath
         = Path.Combine(AppContext.BaseDirectory, "Scanner", "database-providers.json");
 
-    /// <summary>
-    ///     Synchronizes first-load access to the static provider rule cache.
-    /// </summary>
+    /// <summary>Synchronizes first-load access to the static provider rule cache.</summary>
     private static readonly SemaphoreSlim DbProvidersSemaphore = new(1, 1);
 
-    /// <summary>
-    ///     Process-wide cache of database provider rules.
-    /// </summary>
+    /// <summary>Process-wide cache of database provider rules.</summary>
     private static List<DbProviderRuleDto>? _cachedDbProviders;
 
     /// <summary>
     ///     Gets cached database provider rules or loads them from disk on first use.
     /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the async selection with its documented bounds and ordering.</returns>
     public async Task<IReadOnlyList<DbProviderRuleDto>> GetAsync(CancellationToken cancellationToken)
     {
         if (_cachedDbProviders != null)

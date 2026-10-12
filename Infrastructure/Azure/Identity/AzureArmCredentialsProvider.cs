@@ -7,13 +7,26 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Azure;
 
-/// <summary>Refreshes Azure Resource Manager credentials when a cloud launch starts.</summary>
+/// <summary>
+///     Refreshes Azure Resource Manager credentials when a cloud launch starts.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class AzureArmCredentialsProvider(
     AutoMateDbContext dbContext,
     IHttpClientFactory httpClientFactory,
     IOptions<AzureMonitorLogsOptions> options)
 {
-    /// <summary>Returns a current ARM token while keeping refresh tokens in the protected user row.</summary>
+    /// <summary>
+    ///     Returns a current ARM token while keeping refresh tokens in the protected user row.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning current scoped ARM authorization metadata.</returns>
+    /// <exception cref="InvalidOperationException">Reconnect Azure before deploying.</exception>
     public async Task<AzureCloudCredentialsDto> GetAsync(Guid userId, CancellationToken cancellationToken)
     {
         var user = await dbContext.Users.OfType<RemoteUser>()

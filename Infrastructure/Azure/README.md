@@ -167,8 +167,15 @@ the restarted Web host remain deployment validation steps. See the research docu
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `ContainerApps/` — `ContainerApps/AzureContainerAppClient.cs`, `ContainerApps/AzureContainerAppLiveLogs.cs`, `ContainerApps/AzureContainerAppLogCheckpointStore.cs`, `ContainerApps/AzureContainerAppMetrics.cs`, `ContainerApps/AzureContainerAppRuntimeStreamer.cs`, `ContainerApps/AzureContainerAppState.cs`.
+- `ContainerApps/` — `ContainerApps/AzureContainerAppClient.cs`, `ContainerApps/AzureContainerAppLiveLogs.cs`,
+  `ContainerApps/AzureContainerAppLogCheckpointStore.cs`, `ContainerApps/AzureContainerAppMetrics.cs`,
+  `ContainerApps/AzureContainerAppRuntimeStreamer.cs`, `ContainerApps/AzureContainerAppState.cs`.
 - `Databases/` — `Databases/AzureManagedDatabaseClient.cs`.
-- `Identity/` — `Identity/AzureArmCredentialsProvider.cs`, `Identity/AzureFederatedCredentialService.cs`, `Identity/AzureManagedIdentityProvisioner.cs`, `Identity/AzureOidcSetupContext.cs`, `Identity/AzureOidcSetupPlanner.cs`, `Identity/AzureRoleAssignmentService.cs`, `Identity/StaticAccessTokenCredential.cs`.
-- `Monitor/` — `Monitor/AzureMetricObservations.cs`, `Monitor/AzureMonitorLogsClient.cs`, `Monitor/AzureMonitorLogsOptions.cs`, `Monitor/AzureMonitorLogsTokenProvider.cs`.
-- `Provisioning/` — `Provisioning/AzureContainerRegistryProvisioner.cs`, `Provisioning/AzureDeploymentOrchestrator.cs`, `Provisioning/AzureResourceProviderRegistrar.cs`.
+- `Identity/` — `Identity/AzureArmCredentialsProvider.cs`, `Identity/AzureFederatedCredentialService.cs`,
+  `Identity/AzureManagedIdentityProvisioner.cs`, `Identity/AzureOidcSetupContext.cs`,
+  `Identity/AzureOidcSetupPlanner.cs`, `Identity/AzureRoleAssignmentService.cs`,
+  `Identity/StaticAccessTokenCredential.cs`.
+- `Monitor/` — `Monitor/AzureMetricObservations.cs`, `Monitor/AzureMonitorLogsClient.cs`,
+  `Monitor/AzureMonitorLogsOptions.cs`, `Monitor/AzureMonitorLogsTokenProvider.cs`.
+- `Provisioning/` — `Provisioning/AzureContainerRegistryProvisioner.cs`, `Provisioning/AzureDeploymentOrchestrator.cs`,
+  `Provisioning/AzureResourceProviderRegistrar.cs`.

@@ -10,6 +10,9 @@ internal readonly record struct DockerMetricsLine(string Cpu, string Memory)
     /// <summary>
     ///     Parses a Docker stats line formatted as <c>CPU|Memory</c>.
     /// </summary>
+    /// <param name="line">One bounded source-output line to normalize and redact.</param>
+    /// <param name="metrics">Recorded numeric samples or aggregate points.</param>
+    /// <returns>True when validation or acquisition succeeds; otherwise false.</returns>
     public static bool TryParse(string line, out DockerMetricsLine metrics)
     {
         metrics = default;

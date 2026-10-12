@@ -1,3 +1,6 @@
+@*
+    Loads owner-scoped overview data through independent scopes and visibility-aware polling.
+*@
 @namespace Web.Components.Shared
 @using Application.Abstractions.Diagnostics
 @using Application.Data.Apps
@@ -59,7 +62,11 @@
     /// <summary>Cancellation of obsolete range reads.</summary>
     private CancellationTokenSource? _request;
 
-    /// <summary>Starts the new range immediately and cancels the older read.</summary>
+    /// <summary>
+    ///     Starts the new range immediately and cancels the older read.
+    /// </summary>
+    /// <param name="range">Validated UTC metric window selected by the user.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RangeChangedAsync(MetricTimeRange range)
     {
         _request?.Cancel();
@@ -89,7 +96,10 @@
     /// <summary>Local visibility helpers.</summary>
     private IJSObjectReference? _module;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Subscribes to deployment and identity notifications and loads the initial owned overview.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnInitializedAsync()
     {
         Authentication.AuthenticationStateChanged += AuthenticationChanged;
@@ -99,7 +109,10 @@
         await LoadAsync();
     }
 
-    /// <summary>Reads in an independent database scope and fences replies against disposal/window changes.</summary>
+    /// <summary>
+    ///     Reads in an independent database scope and fences replies against disposal/window changes.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task LoadAsync()
     {
         if (_owner == Guid.Empty || _lifetime.IsCancellationRequested || _busy) return;
@@ -140,7 +153,11 @@
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Starts visibility-aware overview polling after the first interactive render.
+    /// </summary>
+    /// <param name="firstRender">Whether this is the first interactive render.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
@@ -166,7 +183,10 @@
         }
     }
 
-    /// <summary>Refreshes every thirty seconds only while the browser page is visible.</summary>
+    /// <summary>
+    ///     Refreshes every thirty seconds only while the browser page is visible.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task PollAsync()
     {
         try
@@ -192,19 +212,30 @@
         }
     }
 
-    /// <summary>Refreshes saved workspace state following deployment notifications.</summary>
+    /// <summary>
+    ///     Refreshes saved workspace state following deployment notifications.
+    /// </summary>
+    /// <param name="project">Project identity associated with this operation.</param>
+    /// <param name="status">New deployment status.</param>
     private void StatusChanged(Guid project, DeploymentStatus status)
     {
         _ = RefreshNotificationAsync(false);
     }
 
-    /// <summary>Clears the read model when the authenticated identity changes.</summary>
+    /// <summary>
+    ///     Clears the read model when the authenticated identity changes.
+    /// </summary>
+    /// <param name="state">Pending authentication state used to detect an owner change.</param>
     private void AuthenticationChanged(Task<AuthenticationState> state)
     {
         _ = RefreshNotificationAsync(true);
     }
 
-    /// <summary>Marshals background events and observes disposal without leaking stale owner data.</summary>
+    /// <summary>
+    ///     Marshals background events and observes disposal without leaking stale owner data.
+    /// </summary>
+    /// <param name="identityChanged">Whether to discard data from the previous authenticated owner.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RefreshNotificationAsync(bool identityChanged)
     {
         if (_lifetime.IsCancellationRequested) return;
@@ -244,7 +275,10 @@
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Unsubscribes notifications, cancels polling and pending reads, and releases owned resources.
+    /// </summary>
+    /// <returns>A task representing completion of component cleanup.</returns>
     public async ValueTask DisposeAsync()
     {
         if (_lifetime.IsCancellationRequested) return;

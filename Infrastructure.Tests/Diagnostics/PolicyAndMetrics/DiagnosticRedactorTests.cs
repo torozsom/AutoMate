@@ -8,9 +8,15 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
+/// <summary>
+///     Verifies credential masking, terminal-control removal and bounded diagnostic metadata.
+/// </summary>
 public sealed class DiagnosticRedactorTests
 {
-    /// <summary>Supported secret formats are masked without erasing surrounding progress output.</summary>
+    /// <summary>
+    ///     Supported secret formats are masked without erasing surrounding progress output.
+    /// </summary>
+    /// <param name="sensitive">Injected sensitive text that must be masked.</param>
     [Theory]
     [InlineData("{\"password\":\"private-value\"}")]
     [InlineData("{\"api-key\": \"private-value\"}")]
@@ -48,7 +54,10 @@ public sealed class DiagnosticRedactorTests
         Assert.Equal(safe, redactor.RedactText(safe));
     }
 
-    /// <summary>Every string field is sanitized; GUIDs, numeric samples, ordering and legal routing remain intact.</summary>
+    /// <summary>
+    ///     Every string field is sanitized; GUIDs, numeric samples, ordering and legal routing remain
+    ///     intact.
+    /// </summary>
     [Fact]
     public void Event_metadata_keys_and_metrics_cannot_bypass_masking()
     {
@@ -85,7 +94,10 @@ public sealed class DiagnosticRedactorTests
         Assert.Equal(0, new DiagnosticRedactor().Redact(result.Event).RedactedValueCount);
     }
 
-    /// <summary>Input caps fail closed, while ordinary long output stays bounded with a stable omission marker.</summary>
+    /// <summary>
+    ///     Input caps fail closed, while ordinary long output stays bounded with a stable omission
+    ///     marker.
+    /// </summary>
     [Fact]
     public void Text_bounds_do_not_leak_or_change_on_repeated_redaction()
     {
@@ -98,6 +110,10 @@ public sealed class DiagnosticRedactorTests
         Assert.Equal("blank\r\n\rprogress\n", redactor.RedactText("blank\r\n\rprogress\n"));
     }
 
+    /// <summary>
+    ///     Verifies that publisher redacts before placing an event on the delivery queue.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Publisher_redacts_before_placing_an_event_on_the_delivery_queue()
     {
@@ -117,6 +133,10 @@ public sealed class DiagnosticRedactorTests
         queued.SpanId.Should().NotBeNullOrWhiteSpace();
     }
 
+    /// <summary>
+    ///     Verifies that publisher accepts a blank git hub log line.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Publisher_accepts_a_blank_GitHub_log_line()
     {
@@ -133,6 +153,10 @@ public sealed class DiagnosticRedactorTests
         (await publisher.Reader.ReadAsync()).Message.Should().Be("\r\n");
     }
 
+    /// <summary>
+    ///     Verifies that publisher reports bounded queue overflow for a durable gap marker.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Publisher_reports_bounded_queue_overflow_for_a_durable_gap_marker()
     {
@@ -150,6 +174,10 @@ public sealed class DiagnosticRedactorTests
         publisher.DrainDropped(projectId).Should().Be(0);
     }
 
+    /// <summary>
+    ///     Verifies that publisher bounds long redacted output with an explicit marker.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Publisher_bounds_long_redacted_output_with_an_explicit_marker()
     {
@@ -167,6 +195,9 @@ public sealed class DiagnosticRedactorTests
         queued.Message.Length.Should().BeLessThan(4_200);
     }
 
+    /// <summary>
+    ///     Verifies that redact masks secrets in messages and attributes before delivery.
+    /// </summary>
     [Fact]
     public void Redact_masks_secrets_in_messages_and_attributes_before_delivery()
     {
@@ -186,6 +217,10 @@ public sealed class DiagnosticRedactorTests
         result.RedactedValueCount.Should().Be(2);
     }
 
+    /// <summary>
+    ///     Verifies that redact removes untrusted terminal controls but keeps progress carriage
+    ///     returns.
+    /// </summary>
     [Fact]
     public void Redact_removes_untrusted_terminal_controls_but_keeps_progress_carriage_returns()
     {
@@ -198,6 +233,9 @@ public sealed class DiagnosticRedactorTests
         new DiagnosticRedactor().Redact(diagnosticEvent).Event.Message.Should().Be("progress\rnextdone\n");
     }
 
+    /// <summary>
+    ///     Verifies that event contract supports typed non secret source identity.
+    /// </summary>
     [Fact]
     public void Event_contract_supports_typed_non_secret_source_identity()
     {

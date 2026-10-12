@@ -2,7 +2,9 @@ using Domain.Enums;
 
 namespace Domain.Entities;
 
-/// <summary>A durable SaaS control record without provider access tokens.</summary>
+/// <summary>
+///     Durable SaaS run metadata with a protected launch snapshot and fenced worker lease.
+/// </summary>
 public sealed class CloudDeploymentRun : BaseEntity
 {
     /// <summary>AutoMate account charged for admission.</summary>

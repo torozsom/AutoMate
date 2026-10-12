@@ -19,9 +19,19 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
+/// <summary>
+///     Verifies private-gateway history, aggregation, authorization and cleanup using controlled
+///     metadata and provider fixtures.
+/// </summary>
+/// <exception cref="IOException">The returned task faults when the fixture failure is selected.</exception>
 public sealed class SaaSTelemetryTests
 {
-    /// <summary>History applies current masking to old/provider records while retaining durable ordering and authorization.</summary>
+    /// <summary>
+    ///     History applies current masking to old/provider records while retaining durable ordering and
+    ///     authorization.
+    /// </summary>
+    /// <param name="source">Synthetic diagnostic or project source selected by the scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("legacy-recent")]
     [InlineData("legacy-forward")]
@@ -91,7 +101,11 @@ public sealed class SaaSTelemetryTests
             Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
     }
 
-    /// <summary>Imported legacy identities merge once and the archive can page during an operational-store outage.</summary>
+    /// <summary>
+    ///     Imported legacy identities merge once and the archive can page during an operational-store
+    ///     outage.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Archived_legacy_output_deduplicates_and_survives_backend_failure()
     {
@@ -138,7 +152,11 @@ public sealed class SaaSTelemetryTests
         }
     }
 
-    /// <summary>Metrics-only historical analysis uses the selected deployment activity window beyond operational retention.</summary>
+    /// <summary>
+    ///     Metrics-only historical analysis uses the selected deployment activity window beyond
+    ///     operational retention.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Historical_ai_context_uses_archived_metrics_from_its_own_activity_window()
     {
@@ -176,7 +194,11 @@ public sealed class SaaSTelemetryTests
         }
     }
 
-    /// <summary>Metadata denial is immediate; a failed archive deletion keeps the outbox until a later successful retry.</summary>
+    /// <summary>
+    ///     Metadata denial is immediate; a failed archive deletion keeps the outbox until a later
+    ///     successful retry.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Archive_cleanup_retries_after_project_deletion()
     {
@@ -217,7 +239,11 @@ public sealed class SaaSTelemetryTests
         }
     }
 
-    /// <summary>Backfill checkpoints resume bounded legacy pages after restart and an unavailable log backend.</summary>
+    /// <summary>
+    ///     Backfill checkpoints resume bounded legacy pages after restart and an unavailable log
+    ///     backend.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Backfill_resumes_without_rewriting_or_duplicating_legacy_records()
     {
@@ -247,6 +273,11 @@ public sealed class SaaSTelemetryTests
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
                 new DiagnosticRedactor());
 
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+            /// <summary>
+            ///     Creates the configured worker instance over fixture-owned dependencies.
+            /// </summary>
+            /// <returns>The configured deployment archive backfill worker instance or response for this scenario.</returns>
             DeploymentArchiveBackfillWorker Worker()
             {
                 return new DeploymentArchiveBackfillWorker(services.GetRequiredService<IServiceScopeFactory>(), archive,
@@ -254,6 +285,7 @@ public sealed class SaaSTelemetryTests
                     Options.Create(new TelemetryStorageOptions()),
                     new BackfillTestLogger());
             }
+#pragma warning restore CS1587
 
             using (var first = Worker())
             {
@@ -283,7 +315,11 @@ public sealed class SaaSTelemetryTests
         }
     }
 
-    /// <summary>Neither legacy backend nor outbox mode allows new payload rows when called directly.</summary>
+    /// <summary>
+    ///     Neither legacy backend nor outbox mode allows new payload rows when called directly.
+    /// </summary>
+    /// <param name="specialized">Whether to select the specialized storage mode.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -302,7 +338,10 @@ public sealed class SaaSTelemetryTests
         Assert.Empty(await fixture.Db.TelemetryTenantStates.ToListAsync());
     }
 
-    /// <summary>Disk receipt success/failure never creates a PostgreSQL diagnostic fallback.</summary>
+    /// <summary>
+    ///     Disk receipt success/failure never creates a PostgreSQL diagnostic fallback.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Disk_gateway_persistence_never_inserts_diagnostic_rows_and_failure_never_falls_back()
     {
@@ -334,7 +373,10 @@ public sealed class SaaSTelemetryTests
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
     }
 
-    /// <summary>Foreign ownership is denied before provider history or analytics queries.</summary>
+    /// <summary>
+    ///     Foreign ownership is denied before provider history or analytics queries.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Cross_owner_history_and_analytics_are_denied_before_provider_queries()
     {
@@ -355,7 +397,10 @@ public sealed class SaaSTelemetryTests
         Assert.Equal(0, logs.Reads);
     }
 
-    /// <summary>Daily calculations and expiry survive label masking and safe legacy readback.</summary>
+    /// <summary>
+    ///     Daily calculations and expiry survive label masking and safe legacy readback.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Aggregation_replaces_daily_rows_keeps_counts_and_removes_expired_summaries()
     {
@@ -400,16 +445,36 @@ public sealed class SaaSTelemetryTests
         Assert.True(analytics.Daily.Single(d => d.Metric == "observed_log_errors" && d.DayUtc == day).Incomplete);
     }
 
+    /// <summary>
+    ///     Owns an in-memory SQLite database and scoped service provider for telemetry scenarios.
+    /// </summary>
     private sealed class Fixture : IAsyncDisposable
     {
+        /// <summary>Owned SQLite connection retaining the in-memory fixture database.</summary>
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
+
+        /// <summary>Ephemeral data-protection provider for fixture metadata.</summary>
         private readonly IDataProtectionProvider _protector = new EphemeralDataProtectionProvider();
+
+        /// <summary>Fixture metadata context.</summary>
         public AutoMateDbContext Db { get; private set; } = null!;
+
+        /// <summary>Owned fixture dependency provider.</summary>
         public ServiceProvider Services { get; set; } = null!;
+
+        /// <summary>Seeded owner identity.</summary>
         public Guid User { get; private set; }
+
+        /// <summary>Seeded project identity.</summary>
         public Guid Project { get; private set; }
+
+        /// <summary>Seeded deployment identity.</summary>
         public Guid Deployment { get; private set; }
 
+        /// <summary>
+        ///     Releases owned fixture services, connections and background resources.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async ValueTask DisposeAsync()
         {
             await Services.DisposeAsync();
@@ -417,12 +482,20 @@ public sealed class SaaSTelemetryTests
             await _connection.DisposeAsync();
         }
 
+        /// <summary>
+        ///     Creates an independent metadata context over the fixture database.
+        /// </summary>
+        /// <returns>An independent metadata context owned by the caller.</returns>
         public AutoMateDbContext NewDb()
         {
             return new OrderedSqliteContext(
                 new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(_connection).Options, _protector);
         }
 
+        /// <summary>
+        ///     Creates and seeds the owned metadata and service fixture.
+        /// </summary>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync()
         {
             var f = new Fixture();
@@ -452,6 +525,10 @@ public sealed class SaaSTelemetryTests
             return f;
         }
 
+        /// <summary>
+        ///     Creates event data with the supplied identities and synthetic scenario values.
+        /// </summary>
+        /// <returns>The configured deployment diagnostic event instance or response for this scenario.</returns>
         public DeploymentDiagnosticEvent Event()
         {
             return new DeploymentDiagnosticEvent(Project, Deployment, DeploymentDiagnosticSource.DockerContainer,
@@ -461,11 +538,20 @@ public sealed class SaaSTelemetryTests
         }
     }
 
+    /// <summary>
+    ///     Represents UTC timestamps as ordered ticks in the SQLite fixture model.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
+    /// <param name="protector">Ephemeral fixture data-protection provider.</param>
     private sealed class OrderedSqliteContext(
         DbContextOptions<AutoMateDbContext> options,
         IDataProtectionProvider protector)
         : AutoMateDbContext(options, protector)
     {
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="model">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder model)
         {
             base.OnModelCreating(model);
@@ -480,11 +566,26 @@ public sealed class SaaSTelemetryTests
         }
     }
 
+    /// <summary>
+    ///     Records accepted synthetic events and optionally injects gateway failure.
+    /// </summary>
     private sealed class RecordingGateway : ITelemetryGateway
     {
+        /// <summary>Synthetic events captured or supplied by this fixture.</summary>
         public List<DeploymentDiagnosticEvent> Events { get; } = [];
+
+        /// <summary>Whether to inject the fixture failure.</summary>
         public bool Fail { get; set; }
 
+        /// <summary>
+        ///     Records or acknowledges the synthetic event and optionally injects the configured gateway
+        ///     failure.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="channel">Recorded log channel to select.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured deployment log envelope instance or response for this scenario.</returns>
+        /// <exception cref="IOException">The fixture injects the configured storage or output failure.</exception>
         public Task<DeploymentLogEnvelope> AcceptAsync(DeploymentDiagnosticEvent e, string? channel,
             CancellationToken token)
         {
@@ -495,6 +596,14 @@ public sealed class SaaSTelemetryTests
                 DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, channel));
         }
 
+        /// <summary>
+        ///     Supplies an empty pending history snapshot.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning empty pending history with no recorded losses.</returns>
         public Task<TelemetryPendingHistory> ReadPendingAsync(Guid tenant, Guid project, Guid deployment,
             CancellationToken token)
         {
@@ -502,12 +611,29 @@ public sealed class SaaSTelemetryTests
         }
     }
 
-    /// <summary>Injects a transient storage failure without changing production cleanup semantics.</summary>
+    /// <summary>
+    ///     Injects a transient storage failure without changing production cleanup semantics.
+    /// </summary>
+    /// <exception cref="IOException">The returned task faults when the fixture failure is selected.</exception>
     public class CleanupArchiveProxy : DispatchProxy
     {
+        /// <summary>Underlying archive wrapped by the controlled cleanup proxy.</summary>
         public IDeploymentArchive Archive { get; set; } = null!;
+
+        /// <summary>Whether to inject the fixture failure.</summary>
         public bool Fail { get; set; } = true;
 
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="arguments">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
+        /// <exception cref="IOException">The returned task faults when the fixture failure is selected.</exception>
         protected override object? Invoke(MethodInfo? method, object?[]? arguments)
         {
             if (method?.Name != nameof(IDeploymentArchive.DeleteProjectAsync)) throw new NotSupportedException();
@@ -518,19 +644,47 @@ public sealed class SaaSTelemetryTests
         }
     }
 
-    /// <summary>Fails a fixture on unexpected backfill errors while permitting its deliberate backend outage.</summary>
+    /// <summary>
+    ///     Fails a fixture on unexpected backfill errors while permitting its deliberate backend
+    ///     outage.
+    /// </summary>
     private sealed class BackfillTestLogger : ILogger<DeploymentArchiveBackfillWorker>
     {
+        /// <summary>
+        ///     Returns no scope handle because this fixture does not retain scopes.
+        /// </summary>
+        /// <param name="state">Synthetic readiness or structured logger state; ignored by this fixture.</param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
+        /// <returns>Null; this fixture retains no scopes.</returns>
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull
         {
             return null;
         }
 
+        /// <summary>
+        ///     Enables every log level so the fixture can observe all emitted records.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+        /// <returns>True for every call in this fixture.</returns>
         public bool IsEnabled(LogLevel level)
         {
             return true;
         }
 
+        /// <summary>
+        ///     Allows the expected injected I/O failure and rejects other backfill errors.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+        /// <param name="id">Selected project identity; ignored by this fixture.</param>
+        /// <param name="state">Synthetic readiness or structured logger state; ignored by this fixture.</param>
+        /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
+        /// <param name="formatter">
+        ///     Provider log formatter; untrusted rendered text is not exported; ignored by this fixture.
+        /// </param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
@@ -538,15 +692,37 @@ public sealed class SaaSTelemetryTests
         }
     }
 
+    /// <summary>
+    ///     Returns configured synthetic log records and optionally injects backend failure.
+    /// </summary>
     private sealed class EmptyLogs : IDeploymentLogQuery
     {
+        /// <summary>Whether to inject the fixture failure.</summary>
         public bool Fail { get; set; }
 
         /// <summary>Synthetic provider records returned by history privacy scenarios.</summary>
         public IReadOnlyList<DeploymentLogEnvelope> Events { get; set; } = [];
 
+        /// <summary>Number of recorded fixture reads.</summary>
         public int Reads { get; private set; }
 
+        /// <summary>
+        ///     Supplies configured synthetic records, observations or completion state for the fixture
+        ///     read.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="cursor">Opaque history position, or null to read the latest page; ignored by this fixture.</param>
+        /// <param name="backwards">
+        ///     Whether to read earlier records rather than records after the cursor; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start, or null when absent; ignored by this fixture.</param>
+        /// <returns>A task returning the configured synthetic log records.</returns>
+        /// <exception cref="IOException">The fixture injects the configured storage or output failure.</exception>
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
             long cursor,
             bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null)
@@ -556,30 +732,71 @@ public sealed class SaaSTelemetryTests
             return Task.FromResult(Events);
         }
 
+        /// <summary>
+        ///     Reports the configured synthetic backend visibility condition.
+        /// </summary>
+        /// <param name="events">The bounded batch of redacted diagnostic envelopes; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning true for every fixture call.</returns>
         public Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken token)
         {
             return Task.FromResult(true);
         }
     }
 
+    /// <summary>
+    ///     Supplies empty metric reads and confirms synthetic delivery visibility.
+    /// </summary>
     private sealed class EmptyMetrics : IDeploymentMetricQuery
     {
+        /// <summary>
+        ///     Supplies configured synthetic records, observations or completion state for the fixture
+        ///     read.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start; ignored by this fixture.</param>
+        /// <param name="end">UTC observation-window end; ignored by this fixture.</param>
+        /// <param name="maximumPoints">The maximum number of returned aggregate points; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning an empty synthetic result collection.</returns>
         public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenant, Guid project, Guid deployment,
             DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken token)
         {
             return Task.FromResult<IReadOnlyList<DeploymentMetricPoint>>([]);
         }
 
+        /// <summary>
+        ///     Reports the configured synthetic backend visibility condition.
+        /// </summary>
+        /// <param name="events">The bounded batch of redacted diagnostic envelopes; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning true for every fixture call.</returns>
         public Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken token)
         {
             return Task.FromResult(true);
         }
     }
 
+    /// <summary>
+    ///     Supplies fixed daily metrics and error counts for aggregation assertions.
+    /// </summary>
     private sealed class DailyQuery : IDailyDeploymentMetricQuery, IDeploymentErrorCountQuery
     {
+        /// <summary>Synthetic daily metric sum.</summary>
         public double Sum { get; set; } = 20;
 
+        /// <summary>
+        ///     Supplies fixed daily metric aggregates for the fixture.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start; ignored by this fixture.</param>
+        /// <param name="end">UTC observation-window end; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public Task<IReadOnlyList<DailyMetricStatistics>> ReadDailyAsync(Guid tenant, Guid project, Guid deployment,
             DateTimeOffset start, DateTimeOffset end, CancellationToken token)
         {
@@ -589,6 +806,16 @@ public sealed class SaaSTelemetryTests
             ]);
         }
 
+        /// <summary>
+        ///     Supplies the fixed synthetic error count for daily aggregation.
+        /// </summary>
+        /// <param name="tenant">Synthetic owner identity; ignored by this fixture.</param>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deployment">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="start">UTC observation-window start; ignored by this fixture.</param>
+        /// <param name="end">UTC observation-window end; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the fixed synthetic error count of four.</returns>
         public Task<long> CountErrorsAsync(Guid tenant, Guid project, Guid deployment, DateTimeOffset start,
             DateTimeOffset end, CancellationToken token)
         {

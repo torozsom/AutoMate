@@ -8,8 +8,12 @@ namespace Infrastructure.Templating;
 internal static class TemplateRuleMatcher
 {
     /// <summary>
-    ///     Determines whether a manifest rule should render for the active deployment configuration.
+    ///     Determines whether a manifest rule should render for the active deployment
+    ///     configuration.
     /// </summary>
+    /// <param name="rule">Provider detection or template selection rule.</param>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <returns>Whether the documented render condition holds.</returns>
     public static bool ShouldRender(TemplateManifestRuleDto rule, DeploymentConfigDto config)
     {
         if (!rule.IsActive)

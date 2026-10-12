@@ -32,8 +32,11 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Azure/` — `Azure/AzureCloudCredentialsDto.cs`, `Azure/AzureContainerAppRuntimeStreamRequest.cs`, `Azure/AzureOidcSetupResultDto.cs`.
-- `Deployment/` — `Deployment/CloudDeploymentRequestDto.cs`, `Deployment/DatabaseConfigDto.cs`, `Deployment/DeploymentConfigDto.cs`.
+- `Azure/` — `Azure/AzureCloudCredentialsDto.cs`, `Azure/AzureContainerAppRuntimeStreamRequest.cs`,
+  `Azure/AzureOidcSetupResultDto.cs`.
+- `Deployment/` — `Deployment/CloudDeploymentRequestDto.cs`, `Deployment/DatabaseConfigDto.cs`,
+  `Deployment/DeploymentConfigDto.cs`.
 - `GitHub/` — `GitHub/GitHubRepositoryDto.cs`, `GitHub/GitHubWorkflowJobDto.cs`, `GitHub/GitHubWorkflowRunDto.cs`.
-- `Projects/` — `Projects/CsProjectDto.cs`, `Projects/LocalProjectDto.cs`, `Projects/ProjectMetadataDto.cs`, `Projects/DbProviderRuleDto.cs`.
+- `Projects/` — `Projects/CsProjectDto.cs`, `Projects/LocalProjectDto.cs`, `Projects/ProjectMetadataDto.cs`,
+  `Projects/DbProviderRuleDto.cs`.
 - `Templating/` — `Templating/TemplateFile.cs`, `Templating/TemplateManifestRuleDto.cs`.

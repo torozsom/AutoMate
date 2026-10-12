@@ -1,6 +1,9 @@
 namespace Domain.Entities;
 
-/// <summary>Durable admission or conservative attempt charge independent of project, deployment and result deletion.</summary>
+/// <summary>
+///     Durable admission or conservative attempt charge independent of project, deployment and
+///     result deletion.
+/// </summary>
 public sealed class AiAnalysisBudgetEntry : BaseEntity
 {
     /// <summary>Owner-account tenant whose quota or budget is charged.</summary>
@@ -21,10 +24,16 @@ public sealed class AiAnalysisBudgetEntry : BaseEntity
     /// <summary>UTC accounting day, independent of result timestamps and retry history.</summary>
     public DateOnly AccountingDay { get; set; }
 
-    /// <summary>Explicit accounting-clock UTC timestamp for rolling limits and retention; audit timestamps are independent.</summary>
+    /// <summary>
+    ///     Explicit accounting-clock UTC timestamp for rolling limits and retention; audit
+    ///     timestamps are independent.
+    /// </summary>
     public DateTimeOffset OccurredAt { get; set; }
 
-    /// <summary>Conservative non-refundable amount in units of 1/100,000,000 currency; zero for admission.</summary>
+    /// <summary>
+    ///     Conservative non-refundable amount in units of 1/100,000,000 currency; zero for
+    ///     admission.
+    /// </summary>
     public long ReservedCostUnits { get; set; }
 
     /// <summary>Three-letter reservation currency, not a provider billing assertion.</summary>

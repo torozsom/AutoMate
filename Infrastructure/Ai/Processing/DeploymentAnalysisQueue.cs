@@ -8,13 +8,26 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Uses conditional database updates for multi-instance ownership and renewable crash-recovery leases.</summary>
+/// <summary>
+///     Uses conditional database updates for multi-instance ownership and renewable crash-
+///     recovery leases.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class DeploymentAnalysisQueue(
     AutoMateDbContext dbContext,
     TimeProvider clock,
     IOptionsMonitor<AiAnalysisOptions> options) : IDeploymentAnalysisQueue
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Claims one eligible queued/recoverable analysis atomically; excludes expired and
+    ///     terminal results.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the owned claim, or null when no eligible work is available.</returns>
     public async Task<DeploymentAnalysisWorkItem?> ClaimNextAsync(CancellationToken cancellationToken = default)
     {
         // Collisions retry a bounded selection window; no database lock spans context/provider work.
@@ -64,7 +77,12 @@ public sealed class DeploymentAnalysisQueue(
         return null;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Extends only a current unexpired owned lease; false means this worker must stop.
+    /// </summary>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning true only when this worker still owns the renewed, unexpired lease.</returns>
     public async Task<bool> RenewAsync(DeploymentAnalysisWorkItem work, CancellationToken cancellationToken = default)
     {
         var now = clock.GetUtcNow();
@@ -83,7 +101,13 @@ public sealed class DeploymentAnalysisQueue(
                     item => item.LeaseUntil > until ? item.LeaseUntil : until), cancellationToken) == 1;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Releases only a current unexpired owned lease after interruption; completed/replaced
+    ///     leases are untouched.
+    /// </summary>
+    /// <param name="work">The detached analysis claim and its lease ownership token.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning true only when the current owned lease was released.</returns>
     public async Task<bool> ReleaseAsync(DeploymentAnalysisWorkItem work, CancellationToken cancellationToken = default)
     {
         var now = clock.GetUtcNow();

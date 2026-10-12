@@ -1,51 +1,58 @@
-using System;
+#nullable disable
+
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore.Migrations;
 
-#nullable disable
+namespace Infrastructure.Migrations;
 
-namespace Infrastructure.Migrations
+/// <summary>
+///     EF schema migration and target-model metadata for Add Failed Deployment Analysis Events.
+/// </summary>
+public partial class AddFailedDeploymentAnalysisEvents : Migration
 {
-    /// <inheritdoc />
-    public partial class AddFailedDeploymentAnalysisEvents : Migration
+    /// <summary>
+    ///     Defines the forward schema and data operations for this migration.
+    /// </summary>
+    /// <param name="migrationBuilder">Collects operations executed by the EF migration runner.</param>
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.CreateTable(
-                name: "failed_deployment_analysis_events",
-                columns: table => new
-                {
-                    deployment_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    completed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_failed_deployment_analysis_events", x => x.deployment_id);
-                    table.ForeignKey(
-                        name: "fk_failed_deployment_analysis_events_deployments_deployment_id",
-                        column: x => x.deployment_id,
-                        principalTable: "deployments",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+        migrationBuilder.CreateTable(
+            "failed_deployment_analysis_events",
+            table => new
+            {
+                deployment_id = table.Column<Guid>("uuid", nullable: false),
+                created_at = table.Column<DateTimeOffset>("timestamp with time zone", nullable: false),
+                completed_at = table.Column<DateTimeOffset>("timestamp with time zone", nullable: true)
+            },
+            constraints: table =>
+            {
+                table.PrimaryKey("pk_failed_deployment_analysis_events", x => x.deployment_id);
+                table.ForeignKey(
+                    "fk_failed_deployment_analysis_events_deployments_deployment_id",
+                    x => x.deployment_id,
+                    "deployments",
+                    "id",
+                    onDelete: ReferentialAction.Cascade);
+            });
 
-            migrationBuilder.CreateIndex(
-                name: "ix_failed_deployment_analysis_events_completed_at_created_at",
-                table: "failed_deployment_analysis_events",
-                columns: new[] { "completed_at", "created_at" });
+        migrationBuilder.CreateIndex(
+            "ix_failed_deployment_analysis_events_completed_at_created_at",
+            "failed_deployment_analysis_events",
+            new[] { "completed_at", "created_at" });
 
-            migrationBuilder.Sql(FailedDeploymentAnalysisTrigger.CreateSql);
-        }
+        migrationBuilder.Sql(FailedDeploymentAnalysisTrigger.CreateSql);
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.Sql(FailedDeploymentAnalysisTrigger.DropSql);
+    /// <summary>
+    ///     Defines downgrade operations for this migration without promising restoration of removed
+    ///     data.
+    /// </summary>
+    /// <param name="migrationBuilder">Collects operations executed by the EF migration runner.</param>
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.Sql(FailedDeploymentAnalysisTrigger.DropSql);
 
-            migrationBuilder.DropTable(
-                name: "failed_deployment_analysis_events");
-        }
+        migrationBuilder.DropTable(
+            "failed_deployment_analysis_events");
     }
 }

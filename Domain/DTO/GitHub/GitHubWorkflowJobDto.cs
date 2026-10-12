@@ -2,7 +2,9 @@ using Domain.Enums;
 
 namespace Domain.DTO;
 
-/// <summary>Provider-neutral projection of a GitHub Actions workflow job.</summary>
+/// <summary>
+///     Provider-neutral projection of a GitHub Actions workflow job.
+/// </summary>
 public sealed record GitHubWorkflowJobDto
 {
     /// <summary>GitHub's stable job identifier within a workflow run.</summary>
@@ -30,7 +32,9 @@ public sealed record GitHubWorkflowJobDto
     public IReadOnlyList<GitHubWorkflowStepDto> Steps { get; init; } = [];
 }
 
-/// <summary>Provider-neutral projection of a GitHub Actions job step.</summary>
+/// <summary>
+///     Provider-neutral projection of a GitHub Actions job step.
+/// </summary>
 public sealed record GitHubWorkflowStepDto
 {
     /// <summary>Step number within its job.</summary>
@@ -46,14 +50,19 @@ public sealed record GitHubWorkflowStepDto
     public string? Conclusion { get; init; }
 }
 
-/// <summary>Represents one safe-to-handle result from a GitHub job-log request.</summary>
-/// <param name="Availability">Whether GitHub made the log available to the caller.</param>
-/// <param name="Content">Downloaded text, when available.</param>
+/// <summary>
+///     Job-log retrieval outcome with optional untrusted provider output.
+/// </summary>
+/// <param name="Availability">The finite result of attempting to retrieve the job log.</param>
+/// <param name="Content">Untrusted provider log content, or null when no content was retrieved.</param>
 public sealed record GitHubWorkflowJobLogDownload(
     GitHubWorkflowLogAvailability Availability,
     string? Content = null);
 
-/// <summary>One entry from GitHub's final workflow log archive.</summary>
-/// <param name="Path">Archive entry path used to associate text with a job.</param>
-/// <param name="Content">Log text contained in that entry.</param>
+/// <summary>
+///     One entry from the final workflow archive; its content requires normalization and
+///     redaction.
+/// </summary>
+/// <param name="Path">The workflow archive entry path used to match job output.</param>
+/// <param name="Content">Untrusted text read from the completed workflow archive entry.</param>
 public sealed record GitHubWorkflowLogArchiveEntryDto(string Path, string Content);

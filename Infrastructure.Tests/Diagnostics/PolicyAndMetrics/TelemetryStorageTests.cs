@@ -9,10 +9,16 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Credential-free storage protocol, quota configuration, and numeric-unit regression tests.</summary>
+/// <summary>
+///     Credential-free storage protocol, quota configuration, and numeric-unit regression tests.
+/// </summary>
 public sealed class TelemetryStorageTests
 {
-    /// <summary>Direct adapter callers are masked independently of spool/publisher safeguards.</summary>
+    /// <summary>
+    ///     Direct adapter callers are masked independently of spool/publisher safeguards.
+    /// </summary>
+    /// <param name="metric">Whether the synthetic envelope carries numeric observations.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -70,7 +76,11 @@ public sealed class TelemetryStorageTests
         Assert.Equal("Bearer private-value", attributes["Authorization"]);
     }
 
-    /// <summary>Adapters cannot route a mixed-tenant batch under its first tenant's credentials.</summary>
+    /// <summary>
+    ///     Adapters cannot route a mixed-tenant batch under its first tenant's credentials.
+    /// </summary>
+    /// <param name="metric">Whether the synthetic envelope carries numeric observations.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -96,7 +106,14 @@ public sealed class TelemetryStorageTests
         Assert.Equal(0, calls);
     }
 
-    /// <summary>Unsupported names/units and nonfinite or negative values cannot become numeric store payloads.</summary>
+    /// <summary>
+    ///     Unsupported names/units and nonfinite or negative values cannot become numeric store
+    ///     payloads.
+    /// </summary>
+    /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+    /// <param name="value">Synthetic numeric observation.</param>
+    /// <param name="unit">The native metric unit associated with the sample.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("private-name", 1, "cores")]
     [InlineData("automate_cpu_usage_cores", 1, "private-unit")]
@@ -124,7 +141,9 @@ public sealed class TelemetryStorageTests
         Assert.Equal(0, calls);
     }
 
-    /// <summary>Docker CPU usage preserves multiple cores and binary memory units.</summary>
+    /// <summary>
+    ///     Docker CPU usage preserves multiple cores and binary memory units.
+    /// </summary>
     [Fact]
     public void Docker_numeric_samples_preserve_units_and_missing_values()
     {
@@ -135,7 +154,9 @@ public sealed class TelemetryStorageTests
         DeploymentMetricNormalizer.Docker("unknown", "unknown").Should().BeEmpty();
     }
 
-    /// <summary>Plaintext managed egress and unapproved providers are rejected.</summary>
+    /// <summary>
+    ///     Plaintext managed egress and unapproved providers are rejected.
+    /// </summary>
     [Fact]
     public void Configuration_requires_finite_limits_and_approved_managed_transport()
     {
@@ -149,7 +170,10 @@ public sealed class TelemetryStorageTests
         options.IsValid().Should().BeFalse();
     }
 
-    /// <summary>A backend-only configuration names missing endpoints and never echoes credential-bearing URLs.</summary>
+    /// <summary>
+    ///     A backend-only configuration names missing endpoints and never echoes credential-bearing
+    ///     URLs.
+    /// </summary>
     [Fact]
     public void Startup_validation_identifies_missing_settings_without_exposing_values()
     {
@@ -164,7 +188,10 @@ public sealed class TelemetryStorageTests
         validator.Validate(null, new TelemetryStorageOptions()).Succeeded.Should().BeTrue();
     }
 
-    /// <summary>Envelope identities belong in structured metadata rather than stream labels.</summary>
+    /// <summary>
+    ///     Envelope identities belong in structured metadata rather than stream labels.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Loki_push_uses_stable_ids_tenant_headers_and_structured_metadata()
     {
@@ -186,7 +213,10 @@ public sealed class TelemetryStorageTests
         await adapter.WriteAsync([envelope], CancellationToken.None);
     }
 
-    /// <summary>Backend copies are deduplicated and cursor/time filtering stays server-owned.</summary>
+    /// <summary>
+    ///     Backend copies are deduplicated and cursor/time filtering stays server-owned.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Loki_query_deduplicates_retry_copies_and_scopes_project_and_cursor()
     {
@@ -226,7 +256,10 @@ public sealed class TelemetryStorageTests
         Assert.Equal("password=[REDACTED]", result[0].Event.Message);
     }
 
-    /// <summary>Metric requests use numeric OTLP fields and report partial rejection.</summary>
+    /// <summary>
+    ///     Metric requests use numeric OTLP fields and report partial rejection.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Mimir_partial_success_does_not_acknowledge_lost_samples()
     {
@@ -252,7 +285,10 @@ public sealed class TelemetryStorageTests
             .ThrowAsync<InvalidOperationException>();
     }
 
-    /// <summary>Throttling retains safe retry guidance without returning provider bodies.</summary>
+    /// <summary>
+    ///     Throttling retains safe retry guidance without returning provider bodies.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Provider_throttling_preserves_retry_after()
     {
@@ -270,7 +306,10 @@ public sealed class TelemetryStorageTests
         error.Which.RetryAfter.Should().Be(TimeSpan.FromMinutes(2));
     }
 
-    /// <summary>Constructs private-test endpoints.</summary>
+    /// <summary>
+    ///     Constructs private-test endpoints.
+    /// </summary>
+    /// <returns>The configured telemetry storage options instance or response for this scenario.</returns>
     internal static TelemetryStorageOptions Specialized()
     {
         return new TelemetryStorageOptions
@@ -283,7 +322,10 @@ public sealed class TelemetryStorageTests
         };
     }
 
-    /// <summary>Constructs a safe immutable envelope.</summary>
+    /// <summary>
+    ///     Constructs a safe immutable envelope.
+    /// </summary>
+    /// <returns>The configured deployment log envelope instance or response for this scenario.</returns>
     internal static DeploymentLogEnvelope Envelope()
     {
         return new DeploymentLogEnvelope(Guid.NewGuid(), Guid.NewGuid(), 11,

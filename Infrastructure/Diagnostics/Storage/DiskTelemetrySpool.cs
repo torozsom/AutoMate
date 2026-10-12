@@ -9,40 +9,94 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
+/// <summary>
+///     Configures the private single-writer spool volume and bounded write-batch size.
+/// </summary>
 public sealed class DiskSpoolOptions
 {
+    /// <summary>Absolute persistent-volume path for the private spool; one writer owns the volume.</summary>
     public string Directory { get; set; } = "";
+
+    /// <summary>Maximum pending events flushed together before durable acknowledgement.</summary>
     public int BatchSize { get; set; } = 100;
 }
 
-/// <summary>Single-writer, checksummed immutable segments; receipts follow a flush to durable storage.</summary>
+/// <summary>
+///     Single-writer, checksummed immutable segments; receipts follow a flush to durable
+///     storage.
+/// </summary>
 public sealed class DiskTelemetrySpool : BackgroundService
 {
-    /// <summary>Permanent history is required by the production telemetry composition before issuing receipts.</summary>
+    /// <summary>
+    ///     Permanent history is required by the production telemetry composition before issuing
+    ///     receipts.
+    /// </summary>
     private readonly IDeploymentArchive? _archive;
 
+    /// <summary>Clamped maximum pending events per write batch.</summary>
     private readonly int _batchSize;
+
+    /// <summary>Absolute verified persistent spool directory.</summary>
     private readonly string _directory;
+
+    /// <summary>Conservative persisted lost-event totals by owner account.</summary>
     private readonly Dictionary<Guid, long> _drops = [];
+
+    /// <summary>Serializes spool indexes, volume budgets and persistent metadata updates.</summary>
     private readonly SemaphoreSlim _gate = new(1);
+
+    /// <summary>Configured validated storage and ingestion bounds.</summary>
     private readonly TelemetryStorageOptions _limits;
+
+    /// <summary>Reviewed operational logger without diagnostic payloads.</summary>
     private readonly ILogger<DiskTelemetrySpool> _logger;
+
+    /// <summary>Memory-only event indexes; payloads remain in immutable checksummed segments.</summary>
     private readonly Dictionary<Guid, PendingIndex> _pending = [];
+
+    /// <summary>Bounded pending-event channel awaiting durable write acknowledgement.</summary>
     private readonly Channel<PendingWrite> _queue = Channel.CreateBounded<PendingWrite>(8192);
+
+    /// <summary>Per-tenant ingestion-window byte accounting.</summary>
     private readonly Dictionary<Guid, (DateTimeOffset Start, long Bytes)> _rates = [];
 
     /// <summary>Shared masking policy applied before diagnostic payloads enter the spool queue.</summary>
     private readonly IDiagnosticRedactor _redactor;
 
+    /// <summary>Known immutable segment paths and retention deadlines.</summary>
     private readonly Dictionary<string, DateTimeOffset> _segments = [];
+
+    /// <summary>Bounded per-tenant metric identity expiry metadata.</summary>
     private readonly Dictionary<Guid, Dictionary<string, DateTimeOffset>> _series = [];
+
+    /// <summary>Buffered-byte budget charged to each tenant.</summary>
     private readonly Dictionary<Guid, long> _tenantBytes = [];
+
+    /// <summary>Total buffered encoded bytes charged against the global volume budget.</summary>
     private long _bytes;
+
+    /// <summary>Round-robin position for bounded segment selection.</summary>
     private int _deliveryPosition;
+
+    /// <summary>Latest assigned durable spool ordering position.</summary>
     private long _lastOrder;
+
+    /// <summary>Exclusive volume lock preventing multiple spool writers.</summary>
     private FileStream? _writerLock;
 
-    /// <summary>Creates the single writer with mandatory queue-admission redaction.</summary>
+    /// <summary>
+    ///     Creates the single writer with mandatory queue-admission redaction.
+    /// </summary>
+    /// <param name="spool">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="limits">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="logger">
+    ///     Receives reviewed operational events without diagnostic payloads or credentials.
+    /// </param>
+    /// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+    /// <param name="archive">Provides the deployment archive? boundary used by this operation.</param>
+    /// <exception cref="InvalidOperationException">
+    ///     DiskSpool:Directory must be an absolute persistent-volume path.
+    /// </exception>
     public DiskTelemetrySpool(IOptions<DiskSpoolOptions> spool, IOptions<TelemetryStorageOptions> limits,
         ILogger<DiskTelemetrySpool> logger, IDiagnosticRedactor redactor, IDeploymentArchive? archive = null)
     {
@@ -56,6 +110,14 @@ public sealed class DiskTelemetrySpool : BackgroundService
         _archive = archive;
     }
 
+    /// <summary>
+    ///     Acquires exclusive spool ownership and restores verified pending segment metadata.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="InvalidDataException">
+    ///     Duplicate event identity in durable telemetry segments.
+    /// </exception>
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_directory);
@@ -101,7 +163,15 @@ public sealed class DiskTelemetrySpool : BackgroundService
         await base.StartAsync(cancellationToken);
     }
 
-    /// <summary>Snapshots and redacts payloads before admission, preserving identity and durable receipt semantics.</summary>
+    /// <summary>
+    ///     Snapshots and redacts payloads before admission, preserving identity and durable receipt
+    ///     semantics.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="channel">The stable terminal channel used for routing.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the immutable redacted delivery envelope with its stable identity.</returns>
     public async Task<DeploymentLogEnvelope> AppendAsync(Guid tenant, DeploymentDiagnosticEvent diagnosticEvent,
         string? channel, CancellationToken token)
     {
@@ -116,6 +186,11 @@ public sealed class DiskTelemetrySpool : BackgroundService
         return await completion.Task.WaitAsync(token);
     }
 
+    /// <summary>
+    ///     Supervises bounded single-writer batches and durable acknowledgement completion.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
@@ -135,6 +210,13 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }
     }
 
+    /// <summary>
+    ///     Writes immutable checksummed segments and fulfils receipts only after durable
+    ///     acknowledgement.
+    /// </summary>
+    /// <param name="batch">Bounded pending writes to flush before acknowledging receipts.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task WriteBatchAsync(List<PendingWrite> batch, CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -244,6 +326,14 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }
     }
 
+    /// <summary>
+    ///     Returns a bounded selection of pending segment paths for delivery.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the segment paths async selection with its documented bounds and
+    ///     ordering.
+    /// </returns>
     public async Task<IReadOnlyList<string>> SegmentPathsAsync(CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -262,9 +352,13 @@ public sealed class DiskTelemetrySpool : BackgroundService
     }
 
     /// <summary>
-    ///     Verifies immutable disk bytes, then applies current masking to backlog delivery/replay without rewriting
-    ///     files.
+    ///     Verifies immutable disk bytes, then applies current masking to backlog delivery/replay
+    ///     without rewriting files.
     /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <returns>The segment selection with its documented bounds and ordering.</returns>
+    /// <exception cref="InvalidOperationException">Telemetry segment escaped the spool directory.</exception>
+    /// <exception cref="InvalidDataException">Empty segment.</exception>
     public IReadOnlyList<DeploymentLogEnvelope> ReadSegment(string path)
     {
         if (!string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), _directory,
@@ -285,6 +379,12 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }).ToArray();
     }
 
+    /// <summary>
+    ///     Removes expired segments while preserving loss accounting and pending-budget
+    ///     consistency.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task PurgeExpiredAsync(CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -306,6 +406,14 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }
     }
 
+    /// <summary>
+    ///     Reads bounded queue, volume and loss metadata without exposing diagnostic payloads.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning queue counts, buffered bytes, segment count, oldest age and
+    ///     conservative loss totals.
+    /// </returns>
     public async Task<object> StatusAsync(CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -329,6 +437,13 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }
     }
 
+    /// <summary>
+    ///     Removes a confirmed or expired segment and updates byte and loss accounting.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="lost">Acknowledged envelopes counted as lost when their segments are removed.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task RemoveAsync(string path, IEnumerable<DeploymentLogEnvelope> lost, CancellationToken token)
     {
         await _gate.WaitAsync(token);
@@ -349,6 +464,14 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }
     }
 
+    /// <summary>
+    ///     Reads bounded redacted pending events for an exact tenant/project/deployment scope.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning bounded redacted pending events and explicit omission/loss metadata.</returns>
     public async Task<TelemetryPendingHistory> PendingAsync(Guid tenant, Guid project, Guid deployment,
         CancellationToken token)
     {
@@ -375,12 +498,24 @@ public sealed class DiskTelemetrySpool : BackgroundService
         }
     }
 
+    /// <summary>
+    ///     Adds dropped-event counts to durable conservative tenant loss accounting.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="count">The maximum allowed collection size.</param>
     private void RecordLoss(Guid tenant, long count)
     {
         _drops[tenant] = _drops.GetValueOrDefault(tenant) + count;
         WriteState("losses.json", _drops);
     }
 
+    /// <summary>
+    ///     Writes versioned spool metadata atomically without changing acknowledged segment
+    ///     payloads.
+    /// </summary>
+    /// <param name="name">The recorded display name or fixed metric identity.</param>
+    /// <param name="state">Versioned spool metadata to serialize atomically.</param>
+    /// <typeparam name="T">Type of the operation result.</typeparam>
     private void WriteState<T>(string name, T state)
     {
         var path = Path.Combine(_directory, name);
@@ -393,24 +528,43 @@ public sealed class DiskTelemetrySpool : BackgroundService
         File.Move(path + ".new", path, true);
     }
 
+    /// <summary>
+    ///     Measures the encoded envelope bytes charged against the spool budget.
+    /// </summary>
+    /// <param name="e">The normalized deployment observation.</param>
+    /// <returns>The encoded envelope byte count charged against the spool budget.</returns>
     private static int Size(DeploymentLogEnvelope e)
     {
         return JsonSerializer.SerializeToUtf8Bytes(
             JsonSerializer.Serialize(e, TelemetryHttpTransport.Json)).Length + 128;
     }
 
+    /// <summary>
+    ///     Creates memory-only lookup metadata for one immutable stored envelope.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="e">The normalized deployment observation.</param>
+    /// <returns>Non-payload lookup metadata for the immutable stored event.</returns>
     private static PendingIndex Index(string path, DeploymentLogEnvelope e)
     {
         return new PendingIndex(path, e.EventId, e.TenantId,
             e.Event.ProjectId, e.Event.DeploymentId, e.OrderId, e.StoredAt);
     }
 
+    /// <summary>
+    ///     Updates tenant and global buffered-byte counters under spool synchronization.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="bytes">The maximum encoded UTF-8 size of provider input.</param>
     private void AddBytes(Guid tenant, long bytes)
     {
         _bytes += bytes;
         _tenantBytes[tenant] = _tenantBytes.GetValueOrDefault(tenant) + bytes;
     }
 
+    /// <summary>
+    ///     Releases owned resources and completes the documented service lifetime.
+    /// </summary>
     public override void Dispose()
     {
         base.Dispose();
@@ -418,14 +572,41 @@ public sealed class DiskTelemetrySpool : BackgroundService
         _gate.Dispose();
     }
 
+    /// <summary>
+    ///     Queued redacted event and completion source awaiting durable acknowledgement.
+    /// </summary>
+    /// <param name="Tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="Event">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="Channel">The stable terminal channel used for routing.</param>
+    /// <param name="Completion">Completion source fulfilled only after durable storage acknowledgement.</param>
     private sealed record PendingWrite(
         Guid Tenant,
         DeploymentDiagnosticEvent Event,
         string? Channel,
         TaskCompletionSource<DeploymentLogEnvelope> Completion);
 
+    /// <summary>
+    ///     Versioned immutable payload with its integrity checksum.
+    /// </summary>
+    /// <param name="Version">The private telemetry capability protocol version.</param>
+    /// <param name="Payload">Serialized payload subject to bounded validation and redaction.</param>
+    /// <param name="Checksum">Checksum used to verify persisted segment integrity.</param>
     private sealed record Segment(int Version, string Payload, string Checksum);
 
+    /// <summary>
+    ///     Non-payload metadata locating a stored event within the verified spool.
+    /// </summary>
+    /// <param name="Path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="EventId">The stable event identity used to deduplicate retries.</param>
+    /// <param name="TenantId">The internal owner-account telemetry identity.</param>
+    /// <param name="ProjectId">The project identity used for authorization or correlation.</param>
+    /// <param name="DeploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="OrderId">
+    ///     The durable ordering position; negative values represent unsaved live observations.
+    /// </param>
+    /// <param name="StoredAt">The UTC time at which the immutable envelope was durably stored.</param>
     private sealed record PendingIndex(
         string Path,
         Guid EventId,

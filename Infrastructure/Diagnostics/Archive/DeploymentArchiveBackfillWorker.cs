@@ -12,7 +12,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Imports bounded pages of still-retained diagnostics, with crash-safe per-deployment progress.</summary>
+/// <summary>
+///     Imports bounded pages of still-retained diagnostics, with crash-safe per-deployment
+///     progress.
+/// </summary>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="archive">Provides permanent owner-scoped redacted deployment history.</param>
+/// <param name="spool">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="settings">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="pending">The scheduler-owned list of operations awaiting admission.</param>
 public sealed class DeploymentArchiveBackfillWorker(
     IServiceScopeFactory scopes,
     IDeploymentArchive archive,
@@ -24,7 +35,12 @@ public sealed class DeploymentArchiveBackfillWorker(
     /// <summary>Discovery position; a restart safely revisits completed durable checkpoints.</summary>
     private int _offset;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Imports still-available legacy history into permanent private archives in bounded
+    ///     batches.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
@@ -45,7 +61,12 @@ public sealed class DeploymentArchiveBackfillWorker(
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Bounds each discovery pass and each backend query independently of deployment age.</summary>
+    /// <summary>
+    ///     Bounds each discovery pass and each backend query independently of deployment age.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="InvalidOperationException">Managed telemetry processing is not approved.</exception>
     public async Task ImportBatchAsync(CancellationToken token)
     {
         if (settings.Value.ManagedService && !settings.Value.ManagedDataProcessingApproved)
@@ -146,7 +167,13 @@ public sealed class DeploymentArchiveBackfillWorker(
             }
     }
 
-    /// <summary>Preserves legacy event identity, order, channel and trace correlation.</summary>
+    /// <summary>
+    ///     Preserves legacy event identity, order, channel and trace correlation.
+    /// </summary>
+    /// <param name="row">The terminal observation being normalized or ranked.</param>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <returns>The immutable redacted delivery envelope with its stable identity.</returns>
     private static DeploymentLogEnvelope Envelope(DeploymentDiagnosticRecord row, Guid tenant, Guid deployment)
     {
         if (row.DeliveryJson is not null && row.TenantId is not null && row.StoredAt is not null)
@@ -175,7 +202,13 @@ public sealed class DeploymentArchiveBackfillWorker(
             row.TerminalChannel ?? (row.Source == "GitHubActions" ? "github-actions" : "build"));
     }
 
-    /// <summary>Rejects damaged checkpoints rather than silently skipping history.</summary>
+    /// <summary>
+    ///     Rejects damaged checkpoints rather than silently skipping history.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the progress projection derived from the verified inputs.</returns>
+    /// <exception cref="InvalidDataException">Archive checkpoint checksum mismatch.</exception>
     private static async Task<Progress> ReadAsync(string path, CancellationToken token)
     {
         var record = JsonSerializer.Deserialize<Checkpoint>(await File.ReadAllTextAsync(path, token))!;
@@ -184,7 +217,13 @@ public sealed class DeploymentArchiveBackfillWorker(
         return JsonSerializer.Deserialize<Progress>(record.Payload)!;
     }
 
-    /// <summary>Only advances after all corresponding archive writes have been durably flushed.</summary>
+    /// <summary>
+    ///     Only advances after all corresponding archive writes have been durably flushed.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private static async Task WriteAsync(string path, Progress state, CancellationToken token)
     {
         var payload = JsonSerializer.Serialize(state);
@@ -200,7 +239,15 @@ public sealed class DeploymentArchiveBackfillWorker(
         File.Move(path + ".tmp", path, true);
     }
 
-    /// <summary>Only owner/deployment discovery metadata and bounded cursors are kept here.</summary>
+    /// <summary>
+    ///     Only owner/deployment discovery metadata and bounded cursors are kept here.
+    /// </summary>
+    /// <param name="Cutoff">Absolute time boundary used to limit the read.</param>
+    /// <param name="LegacyCursor">Position used to resume retained legacy history.</param>
+    /// <param name="LogCursor">Position used to resume archived log history.</param>
+    /// <param name="MetricStart">Absolute start of the metric observation window.</param>
+    /// <param name="LegacyDone">Whether retained legacy history has been fully read.</param>
+    /// <param name="LogsDone">Whether archived log history has been fully read.</param>
     private sealed record Progress(
         DateTimeOffset Cutoff,
         long LegacyCursor,
@@ -213,6 +260,10 @@ public sealed class DeploymentArchiveBackfillWorker(
         public bool Complete => LegacyDone && LogsDone && MetricStart >= Cutoff;
     }
 
-    /// <summary>Checksummed crash-recovery metadata.</summary>
+    /// <summary>
+    ///     Checksummed crash-recovery metadata.
+    /// </summary>
+    /// <param name="Payload">Serialized payload subject to bounded validation and redaction.</param>
+    /// <param name="Checksum">Checksum used to verify persisted segment integrity.</param>
     private sealed record Checkpoint(string Payload, string Checksum);
 }

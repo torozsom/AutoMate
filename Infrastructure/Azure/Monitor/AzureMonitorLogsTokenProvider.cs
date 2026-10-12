@@ -9,14 +9,23 @@ using Microsoft.Extensions.Options;
 namespace Infrastructure.Azure;
 
 /// <summary>
-///     Exchanges the connected user's encrypted refresh token for a short-lived Azure Monitor Logs token.
+///     Exchanges the connected user's encrypted refresh token for a short-lived Azure Monitor
+///     Logs token.
 /// </summary>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class AzureMonitorLogsTokenProvider(
     IServiceScopeFactory scopeFactory,
     IHttpClientFactory httpClientFactory,
     IOptions<AzureMonitorLogsOptions> options) : IAzureMonitorLogsTokenProvider
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Gets a memory-only token suitable for Azure Monitor Logs queries.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning a memory-only token or a fixed acquisition-failure reason.</returns>
     public async Task<AzureMonitorLogsTokenResult> GetTokenAsync(Guid userId,
         CancellationToken cancellationToken = default)
     {

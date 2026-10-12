@@ -16,8 +16,37 @@ using Microsoft.Extensions.Options;
 namespace Application.Orchestration;
 
 /// <summary>
-///     Orchestrates cloud deployment preparation by generating IaC and workflow files and committing them to GitHub.
+///     Orchestrates cloud deployment preparation by generating IaC and workflow files and
+///     committing them to GitHub.
 /// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="templateService">Provides the templating service boundary used by this operation.</param>
+/// <param name="gitHubService">Provides the git hub service boundary used by this operation.</param>
+/// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+/// <param name="azureDeploymentOrchestrator">
+///     Provides the azure deployment orchestrator boundary used by this operation.
+/// </param>
+/// <param name="azureContainerAppRuntimeStreamer">
+///     Provides the azure container app runtime streamer boundary used by this operation.
+/// </param>
+/// <param name="capabilities">Hosting-profile capability flags used to gate provider operations.</param>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="workflowMonitoringOptions">
+///     Provides the configured limits and endpoint settings for this service.
+/// </param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="loggerFactory">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="statusNotifier">Publishes deployment transitions to in-process subscribers.</param>
+/// <param name="azureCredentials">
+///     Resolves current scoped Azure authorization without logging credentials.
+/// </param>
 public sealed class CloudDeploymentOrchestrator(
     AutoMateDbContext dbContext,
     ITemplatingService templateService,
@@ -35,24 +64,27 @@ public sealed class CloudDeploymentOrchestrator(
     AzureArmCredentialsProvider azureCredentials)
     : ICloudDeploymentOrchestrator
 {
-    /// <summary>
-    ///     Resolves or creates the C# project associated with cloud deployments.
-    /// </summary>
+    /// <summary>Resolves or creates the C# project associated with cloud deployments.</summary>
     private readonly CloudCsProjectResolver _csProjectResolver = new(dbContext);
 
-    /// <summary>
-    ///     Persists cloud deployment status transitions and notifies UI subscribers.
-    /// </summary>
+    /// <summary>Persists cloud deployment status transitions and notifies UI subscribers.</summary>
     private readonly DeploymentStatusUpdater _statusUpdater =
         new(dbContext, statusNotifier, logger, nameof(CloudDeploymentOrchestrator));
 
-    /// <summary>
-    ///     Polls GitHub Actions and streams cloud deployment logs.
-    /// </summary>
+    /// <summary>Polls GitHub Actions and streams cloud deployment logs.</summary>
     private readonly GitHubWorkflowMonitor _workflowMonitor = new(dbContext, gitHubService, diagnostics, redactor,
         workflowMonitoringOptions.Value, loggerFactory.CreateLogger<GitHubWorkflowMonitor>());
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Generates cloud deployment files and commits them to the configured GitHub repository
+    ///     branch.
+    /// </summary>
+    /// <param name="request">The cloud deployment request.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning the created deployment record.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Cloud deployments are disabled for this AutoMate instance.
+    /// </exception>
     public async Task<Deployment> DeployCloudProjectAsync(CloudDeploymentRequestDto request,
         CancellationToken cancellationToken = default)
     {

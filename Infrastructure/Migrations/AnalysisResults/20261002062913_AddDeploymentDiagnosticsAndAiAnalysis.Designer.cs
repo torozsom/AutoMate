@@ -11,11 +11,18 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Infrastructure.Migrations
 {
+    /// <summary>
+    ///     EF schema migration and target-model metadata for Add Deployment Diagnostics And Ai
+    ///     Analysis.
+    /// </summary>
     [DbContext(typeof(AutoMateDbContext))]
     [Migration("20261002062913_AddDeploymentDiagnosticsAndAiAnalysis")]
     partial class AddDeploymentDiagnosticsAndAiAnalysis
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Defines the historical EF model produced by this migration.
+        /// </summary>
+        /// <param name="modelBuilder">Builds the documented EF entity mappings or historical model.</param>
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

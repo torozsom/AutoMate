@@ -14,52 +14,39 @@ using ProductHeaderValue = Octokit.ProductHeaderValue;
 namespace Infrastructure.GitHub;
 
 /// <summary>
-///     Coordinates GitHub repository, secret, workflow, and log operations for AutoMate deployments.
+///     Coordinates GitHub repository, secret, workflow, and log operations for AutoMate
+///     deployments.
 /// </summary>
 public sealed class GitHubService : IGitHubService
 {
-    /// <summary>
-    ///     Product name sent in GitHub user-agent headers.
-    /// </summary>
+    /// <summary>Product name sent in GitHub user-agent headers.</summary>
     private const string ProductName = "AutoMate";
 
-    /// <summary>
-    ///     Product version sent in GitHub user-agent headers.
-    /// </summary>
+    /// <summary>Product version sent in GitHub user-agent headers.</summary>
     private const string ProductVersion = "1.0";
 
-    /// <summary>
-    ///     GitHub REST API base address.
-    /// </summary>
+    /// <summary>GitHub REST API base address.</summary>
     private static readonly Uri GitHubApiBaseAddress = new("https://api.github.com/");
 
-    /// <summary>
-    ///     JSON options used for GitHub REST API DTO serialization.
-    /// </summary>
+    /// <summary>JSON options used for GitHub REST API DTO serialization.</summary>
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
 
-    /// <summary>
-    ///     Typed HTTP client configured for GitHub REST API calls.
-    /// </summary>
+    /// <summary>Typed HTTP client configured for GitHub REST API calls.</summary>
     private readonly HttpClient _httpClient;
 
-    /// <summary>
-    ///     Logger for GitHub integration operations.
-    /// </summary>
+    /// <summary>Logger for GitHub integration operations.</summary>
     private readonly ILogger<GitHubService> _logger;
 
-    /// <summary>
-    ///     Distributed cache helper for user repository lists.
-    /// </summary>
+    /// <summary>Distributed cache helper for user repository lists.</summary>
     private readonly GitHubRepositoryCache _repositoryCache;
 
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="GitHubService" /> class.
-    ///     It configures the HttpClient with the base URL and sets the User-Agent header required by GitHub API.
+    ///     Initializes a new instance of the <see cref="GitHubService" /> class. It configures the
+    ///     HttpClient with the base URL and sets the User-Agent header required by GitHub API.
     /// </summary>
     /// <param name="httpClient">The HttpClient instance used for making HTTP requests.</param>
     /// <param name="cache">The IMemoryCache instance used for caching data.</param>
@@ -76,7 +63,23 @@ public sealed class GitHubService : IGitHubService
         _httpClient.BaseAddress ??= GitHubApiBaseAddress;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Finds a recent commit containing a durable deployment marker after an uncertain push
+    ///     result.
+    /// </summary>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="repoOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repoName">The GitHub repository name.</param>
+    /// <param name="branchName">The repository branch used for deployment assets or workflow selection.</param>
+    /// <param name="marker">The stable deployment marker used to find an existing generated commit.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the matching deployment commit SHA, or null when no marked commit
+    ///     exists.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Unable to verify the prior AutoMate commit in this branch's recent history.
+    /// </exception>
     public async Task<string?> FindDeploymentCommitAsync(string accessToken, string repoOwner, string repoName,
         string branchName, string marker, CancellationToken cancellationToken = default)
     {
@@ -108,7 +111,20 @@ public sealed class GitHubService : IGitHubService
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Asynchronously retrieves the list of repositories for the authenticated user from
+    ///     GitHub.
+    /// </summary>
+    /// <param name="accessToken">The access token of the authenticated user.</param>
+    /// <param name="forceRefresh">
+    ///     A flag indicating whether to force a refresh of the repository list, bypassing the
+    ///     cache.
+    /// </param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>
+    ///     A task returning a list of GitHubRepositoryDto objects representing the user's
+    ///     repositories.
+    /// </returns>
     public async Task<List<GitHubRepositoryDto>> GetUserRepositoriesAsync(string accessToken, bool forceRefresh,
         CancellationToken cancellationToken = default)
     {
@@ -164,7 +180,22 @@ public sealed class GitHubService : IGitHubService
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Creates or updates a cloud deployment branch and commits the generated deployment files
+    ///     to it.
+    /// </summary>
+    /// <param name="accessToken">The GitHub access token with repository write permissions.</param>
+    /// <param name="repoOwner">The repository owner or organization.</param>
+    /// <param name="repoName">The repository name.</param>
+    /// <param name="files">The generated template files to commit.</param>
+    /// <param name="branchName">The branch that should receive the deployment commit.</param>
+    /// <param name="commitMessage">The commit message to use for the generated files.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning the pushed commit SHA.</returns>
+    /// <exception cref="ArgumentException">GitHub access token is required.</exception>
+    /// <exception cref="GitHubRateLimitException">
+    ///     The deployment file selection is invalid or GitHub throttles the commit request.
+    /// </exception>
     public async Task<string> CommitCloudDeploymentFilesAsync(string accessToken, string repoOwner, string repoName,
         List<TemplateFile> files, string branchName = DeploymentDefaults.CloudDeploymentBranchName,
         string commitMessage = "Add AutoMate Azure deployment workflow", CancellationToken cancellationToken = default)
@@ -251,7 +282,20 @@ public sealed class GitHubService : IGitHubService
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Creates or updates GitHub Actions repository secrets used by the generated cloud
+    ///     workflow.
+    /// </summary>
+    /// <param name="accessToken">The GitHub access token with repository secrets permissions.</param>
+    /// <param name="repoOwner">The repository owner or organization.</param>
+    /// <param name="repoName">The repository name.</param>
+    /// <param name="secrets">The secret name/value pairs to upsert.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task that completes after the encrypted repository secrets are submitted.</returns>
+    /// <exception cref="ArgumentException">GitHub access token is required.</exception>
+    /// <exception cref="InvalidOperationException">GitHub repository public key could not be loaded.</exception>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task UpsertRepositorySecretsAsync(string accessToken, string repoOwner, string repoName,
         IReadOnlyDictionary<string, string> secrets, CancellationToken cancellationToken = default)
     {
@@ -304,7 +348,17 @@ public sealed class GitHubService : IGitHubService
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Triggers a GitHub Actions workflow on the requested branch.
+    /// </summary>
+    /// <param name="accessToken">The GitHub access token with workflow permissions.</param>
+    /// <param name="repoOwner">The repository owner or organization.</param>
+    /// <param name="repoName">The repository name.</param>
+    /// <param name="workflowFileName">The workflow file name, for example deploy.yml.</param>
+    /// <param name="branchName">The branch that should run the workflow.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task that completes after the workflow dispatch request is accepted.</returns>
+    /// <exception cref="ArgumentException">GitHub access token is required.</exception>
     public async Task DispatchWorkflowAsync(string accessToken, string repoOwner, string repoName,
         string workflowFileName, string branchName, CancellationToken cancellationToken = default)
     {
@@ -336,7 +390,18 @@ public sealed class GitHubService : IGitHubService
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Gets the latest GitHub Actions workflow run for a branch.
+    /// </summary>
+    /// <param name="accessToken">The GitHub access token with workflow read permissions.</param>
+    /// <param name="repoOwner">The repository owner or organization.</param>
+    /// <param name="repoName">The repository name.</param>
+    /// <param name="workflowFileName">The workflow file name, for example deploy.yml.</param>
+    /// <param name="branchName">The branch to filter workflow runs by.</param>
+    /// <param name="headSha">Optional commit SHA to match.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning the latest matching run, or null when no run exists yet.</returns>
+    /// <exception cref="ArgumentException">Workflow file name is required.</exception>
     public async Task<GitHubWorkflowRunDto?> GetLatestWorkflowRunAsync(string accessToken, string repoOwner,
         string repoName, string workflowFileName, string branchName, string? headSha = null,
         CancellationToken cancellationToken = default)
@@ -371,7 +436,18 @@ public sealed class GitHubService : IGitHubService
     }
 
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Downloads the final workflow archive as individually named log entries.
+    /// </summary>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="repoOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repoName">The GitHub repository name.</param>
+    /// <param name="runId">The GitHub workflow-run identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the normalized bounded entries from the completed-run log archive.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     The workflow-run identifier is not positive.
+    /// </exception>
     public async Task<IReadOnlyList<GitHubWorkflowLogArchiveEntryDto>> DownloadWorkflowRunLogEntriesAsync(
         string accessToken, string repoOwner, string repoName, long runId,
         CancellationToken cancellationToken = default)
@@ -387,7 +463,18 @@ public sealed class GitHubService : IGitHubService
         return await GitHubWorkflowLogReader.ReadEntriesAsync(zipStream, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Lists jobs and steps for one workflow run.
+    /// </summary>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="repoOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repoName">The GitHub repository name.</param>
+    /// <param name="runId">The GitHub workflow-run identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the workflow's discovered jobs and steps.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     The workflow-run identifier is not positive.
+    /// </exception>
     public async Task<IReadOnlyList<GitHubWorkflowJobDto>> GetWorkflowJobsAsync(string accessToken, string repoOwner,
         string repoName, long runId, CancellationToken cancellationToken = default)
     {
@@ -412,7 +499,18 @@ public sealed class GitHubService : IGitHubService
         return GitHubWorkflowJobMapper.Map(jobs);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Downloads a plain-text log for one workflow job when GitHub makes it available.
+    /// </summary>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="repoOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repoName">The GitHub repository name.</param>
+    /// <param name="jobId">The GitHub workflow job identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the bounded download result and its finite log-availability state.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    ///     The workflow-job identifier is not positive.
+    /// </exception>
     public async Task<GitHubWorkflowJobLogDownload> DownloadWorkflowJobLogsAsync(string accessToken, string repoOwner,
         string repoName, long jobId, CancellationToken cancellationToken = default)
     {
@@ -442,9 +540,15 @@ public sealed class GitHubService : IGitHubService
     }
 
     /// <summary>
-    ///     Follows the short-lived, signed download location returned by GitHub Actions without forwarding OAuth credentials
-    ///     to the storage host. Automatic redirect behavior varies by handler and must not control log collection.
+    ///     Follows the short-lived, signed download location returned by GitHub Actions without
+    ///     forwarding OAuth credentials to the storage host. Automatic redirect behavior varies by
+    ///     handler and must not control log collection.
     /// </summary>
+    /// <param name="request">Configured bounded provider request; authorization must not be logged.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the http response message projection derived from the verified inputs.
+    /// </returns>
     private async Task<HttpResponseMessage> SendLogDownloadRequestAsync(HttpRequestMessage request,
         CancellationToken cancellationToken)
     {
@@ -469,6 +573,16 @@ public sealed class GitHubService : IGitHubService
     /// <summary>
     ///     Returns an existing branch reference or creates it from the supplied base SHA.
     /// </summary>
+    /// <param name="gitHubClient">
+    ///     Authorized GitHub client scoped to the initiating account or verified installation.
+    /// </param>
+    /// <param name="repoOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repoName">The GitHub repository name.</param>
+    /// <param name="branchName">The repository branch used for deployment assets or workflow selection.</param>
+    /// <param name="baseSha">Commit SHA used as the parent of the generated commit.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the reference projection derived from the verified inputs.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     private static async Task<Reference> GetOrCreateBranchReferenceAsync(GitHubClient gitHubClient, string repoOwner,
         string repoName, string branchName, string baseSha, CancellationToken cancellationToken)
     {
@@ -487,6 +601,8 @@ public sealed class GitHubService : IGitHubService
     /// <summary>
     ///     Creates an Octokit client authenticated as the connected GitHub user.
     /// </summary>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <returns>The git hub client projection derived from the verified inputs.</returns>
     private static GitHubClient CreateGitHubClient(string accessToken)
     {
         return new GitHubClient(new ProductHeaderValue(ProductName))

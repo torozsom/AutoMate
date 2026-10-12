@@ -1,6 +1,10 @@
 namespace Application.Abstractions.Diagnostics;
 
-/// <summary>Private host protocol information; contains no tenant data, endpoints or credentials.</summary>
+/// <summary>
+///     Private host protocol information; contains no tenant data, endpoints or credentials.
+/// </summary>
+/// <param name="Version">The private telemetry capability protocol version.</param>
+/// <param name="ArchiveOperations">The finite archive operations supported by the private host.</param>
 public sealed record TelemetryCapabilities(int Version, IReadOnlyList<string> ArchiveOperations)
 {
     /// <summary>Protocol version understood by this Web/Telemetry revision.</summary>

@@ -4,10 +4,15 @@ using Application.Data.Users;
 
 namespace Web.Routes.Endpoints;
 
-/// <summary>Authenticated bounded history APIs; provider query languages are never accepted.</summary>
+/// <summary>
+///     Authenticated bounded history APIs; provider query languages are never accepted.
+/// </summary>
 public sealed class DeploymentHistoryEndpoint : IEndpoint
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Maps bounded owner-authorized log, metric and project analytics reads.
+    /// </summary>
+    /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/v2/projects/{projectId:guid}/deployments/{deploymentId:guid}/logs",
@@ -90,7 +95,13 @@ public sealed class DeploymentHistoryEndpoint : IEndpoint
             }).RequireAuthorization();
     }
 
-    /// <summary>Resolves GitHub and local principals through the existing user application contract.</summary>
+    /// <summary>
+    ///     Resolves GitHub and local principals through the existing user application contract.
+    /// </summary>
+    /// <param name="context">Current authenticated HTTP request and response.</param>
+    /// <param name="users">Resolves authenticated identifiers to internal owners.</param>
+    /// <param name="token">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task returning the internal owner identity, or Guid.Empty when unauthenticated or unresolved.</returns>
     private static async Task<Guid> OwnerAsync(HttpContext context, IUserService users, CancellationToken token)
     {
         var identifier = context.User.FindFirstValue(ClaimTypes.NameIdentifier);

@@ -11,10 +11,16 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Checks real SDK span export, parentage and privacy without contacting a collector.</summary>
+/// <summary>
+///     Checks real SDK span export, parentage and privacy without contacting a collector.
+/// </summary>
 public sealed class DeploymentTracingTests
 {
-    /// <summary>Analysis SDK export retains reviewed names, parentage and GUID correlation while removing injected payloads.</summary>
+    /// <summary>
+    ///     Analysis SDK export retains reviewed names, parentage and GUID correlation while removing
+    ///     injected payloads.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Analysis_spans_cross_export_policy_without_payload_or_metric_identifiers()
     {
@@ -48,7 +54,14 @@ public sealed class DeploymentTracingTests
         Assert.DoesNotContain("private", JsonSerializer.Serialize(spans));
     }
 
-    /// <summary>Provider calls retain their result/exception/cancellation semantics and export only correlation/outcomes.</summary>
+    /// <summary>
+    ///     Provider calls retain their result/exception/cancellation semantics and export only
+    ///     correlation/outcomes.
+    /// </summary>
+    /// <param name="scenario">Selected fixture behavior scenario.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <param name="status">Expected or synthetic trace status.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("success", "completed", ActivityStatusCode.Ok)]
     [InlineData("failure", "failed", ActivityStatusCode.Error)]
@@ -97,13 +110,19 @@ public sealed class DeploymentTracingTests
     }
 }
 
-/// <summary>Copies activities at the export boundary before provider disposal.</summary>
+/// <summary>
+///     Copies activities at the export boundary before provider disposal.
+/// </summary>
 internal sealed class TraceSnapshotExporter : BaseExporter<Activity>
 {
     /// <summary>Detached immutable span snapshots.</summary>
     internal ConcurrentQueue<ExportedSpan> Spans { get; } = new();
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Captures detached span metadata for assertions and reports a successful export.
+    /// </summary>
+    /// <param name="batch">Exported SDK record batch or batch-export variant.</param>
+    /// <returns>The export outcome after the fixture captures its SDK records.</returns>
     public override ExportResult Export(in Batch<Activity> batch)
     {
         foreach (var activity in batch)
@@ -116,7 +135,17 @@ internal sealed class TraceSnapshotExporter : BaseExporter<Activity>
     }
 }
 
-/// <summary>Safe span snapshot used for correlation/status/privacy assertions.</summary>
+/// <summary>
+///     Safe span snapshot used for correlation/status/privacy assertions.
+/// </summary>
+/// <param name="Name">Fixture member, option or metric name selected by the caller.</param>
+/// <param name="TraceId">Captured trace identity.</param>
+/// <param name="SpanId">The optional diagnostic trace span identifier.</param>
+/// <param name="ParentSpanId">Captured parent span identity.</param>
+/// <param name="Status">Expected or synthetic trace status.</param>
+/// <param name="Description">Captured optional span status description.</param>
+/// <param name="Tags">Detached captured SDK attributes.</param>
+/// <param name="EventCount">Captured span event count.</param>
 internal sealed record ExportedSpan(
     string Name,
     ActivityTraceId TraceId,

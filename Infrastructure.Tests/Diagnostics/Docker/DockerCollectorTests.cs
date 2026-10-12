@@ -14,10 +14,17 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Exercises collector framing, owned lifecycle routing and cancellation through the Docker SDK contracts.</summary>
+/// <summary>
+///     Exercises collector framing, owned lifecycle routing and cancellation through the Docker SDK
+///     contracts.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class DockerCollectorTests
 {
-    /// <summary>Cancellation must close an idle owned log stream without waiting for its container to exit.</summary>
+    /// <summary>
+    ///     Cancellation must close an idle owned log stream without waiting for its container to exit.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [DockerSmokeFact]
     public async Task Real_idle_container_log_subscription_cancels_while_container_keeps_running()
     {
@@ -57,7 +64,11 @@ public sealed class DockerCollectorTests
         }
     }
 
-    /// <summary>A real idle daemon subscription must finish cancellation without generating any Docker lifecycle mutation.</summary>
+    /// <summary>
+    ///     A real idle daemon subscription must finish cancellation without generating any Docker
+    ///     lifecycle mutation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [DockerSmokeFact]
     public async Task Real_idle_daemon_subscription_cancels_without_lifecycle_events()
     {
@@ -74,7 +85,11 @@ public sealed class DockerCollectorTests
         await AwaitShutdownAsync(pending.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
-    /// <summary>Log collection waits through a creation race, then subscribes to owned output without a failure warning.</summary>
+    /// <summary>
+    ///     Log collection waits through a creation race, then subscribes to owned output without a
+    ///     failure warning.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Initial_missing_container_waits_then_collects_owned_output()
     {
@@ -112,7 +127,11 @@ public sealed class DockerCollectorTests
         Assert.Equal(DeploymentDiagnosticSeverity.Information, waiting.Severity);
     }
 
-    /// <summary>Missing containers during Compose startup are a wait state; permission failures still warn.</summary>
+    /// <summary>
+    ///     Missing containers during Compose startup are a wait state; permission failures still warn.
+    /// </summary>
+    /// <param name="missing">Whether the fixture omits the required resource.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -133,7 +152,10 @@ public sealed class DockerCollectorTests
         Assert.DoesNotContain(publisher.Events, e => e.Message.Contains("private"));
     }
 
-    /// <summary>Multiplexed frames retain separate streams, redact secrets and explicitly report EOF.</summary>
+    /// <summary>
+    ///     Multiplexed frames retain separate streams, redact secrets and explicitly report EOF.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Container_frames_are_redacted_before_confirmation_and_report_eof()
     {
@@ -173,7 +195,10 @@ public sealed class DockerCollectorTests
         Assert.DoesNotContain(publisher.Events, e => e.Message.Contains("private-value"));
     }
 
-    /// <summary>A mismatched inspection never subscribes to another deployment's output.</summary>
+    /// <summary>
+    ///     A mismatched inspection never subscribes to another deployment's output.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Unowned_container_never_opens_logs()
     {
@@ -190,7 +215,11 @@ public sealed class DockerCollectorTests
         Assert.Contains("ownership", publisher.Events.Single().Message);
     }
 
-    /// <summary>A failed durable admission replays from the old checkpoint and retains repeated legitimate messages.</summary>
+    /// <summary>
+    ///     A failed durable admission replays from the old checkpoint and retains repeated legitimate
+    ///     messages.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Reconnect_retries_unconfirmed_output_without_collapsing_repeated_lines()
     {
@@ -229,7 +258,11 @@ public sealed class DockerCollectorTests
         Assert.NotEqual(logs[0].EventId, logs[1].EventId);
     }
 
-    /// <summary>Supported SDK event callbacks filter before durable publication and cancel without detached tasks.</summary>
+    /// <summary>
+    ///     Supported SDK event callbacks filter before durable publication and cancel without detached
+    ///     tasks.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Daemon_callbacks_are_filtered_and_receiver_is_awaited_on_shutdown()
     {
@@ -251,6 +284,15 @@ public sealed class DockerCollectorTests
             e => e.Source == DeploymentDiagnosticSource.DockerDaemon && e.Kind == DeploymentDiagnosticKind.Lifecycle);
 
         // The custom progress adapter executes synchronously and is governed by the source cancellation token.
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Reports controlled Docker lifecycle events and waits for cancellation before signaling
+        ///     shutdown.
+        /// </summary>
+        /// <param name="progress">Sink receiving synthetic Docker lifecycle events.</param>
+        /// <param name="cancellation">Cancellation source owning this supervised operation.</param>
+        /// <returns>A pending operation that completes through cancellation rather than producing a value.</returns>
+        /// <exception cref="OperationCanceledException">The caller cancellation or fixture deadline ends the pending operation.</exception>
         async Task ReceiveAsync(IProgress<Message> progress, CancellationToken cancellation)
         {
             try
@@ -269,9 +311,14 @@ public sealed class DockerCollectorTests
                 exited.TrySetResult();
             }
         }
+#pragma warning restore CS1587
     }
 
-    /// <summary>An explicitly enabled smoke test verifies owned and unrelated Docker containers without host ports or volumes.</summary>
+    /// <summary>
+    ///     An explicitly enabled smoke test verifies owned and unrelated Docker containers without host
+    ///     ports or volumes.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [DockerSmokeFact]
     public async Task Real_docker_lifecycle_and_streams_use_only_disposable_owned_containers()
     {
@@ -326,7 +373,11 @@ public sealed class DockerCollectorTests
         }
     }
 
-    /// <summary>Real Compose receives deployment labels and reports exit outcomes without changing host resources.</summary>
+    /// <summary>
+    ///     Real Compose receives deployment labels and reports exit outcomes without changing host
+    ///     resources.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [DockerSmokeFact]
     public async Task Real_compose_injects_deployment_labels_and_reports_success_and_failure()
     {
@@ -393,7 +444,11 @@ public sealed class DockerCollectorTests
         }
     }
 
-    /// <summary>Accepts source cancellation while still observing every task fault.</summary>
+    /// <summary>
+    ///     Accepts source cancellation while still observing every task fault.
+    /// </summary>
+    /// <param name="task">Owned asynchronous operation to supervise.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static async Task AwaitShutdownAsync(Task task)
     {
         try
@@ -405,14 +460,23 @@ public sealed class DockerCollectorTests
         }
     }
 
-    /// <summary>Creates a collector with the production redactor and deterministic fake transport.</summary>
+    /// <summary>
+    ///     Creates a collector with the production redactor and deterministic fake transport.
+    /// </summary>
+    /// <param name="client">Fixture HTTP or Docker client.</param>
+    /// <param name="publisher">Accepts normalized observations for bounded redaction and durable delivery.</param>
+    /// <returns>The configured Docker diagnostic collector instance or response for this scenario.</returns>
     private static DockerDiagnosticCollector Collector(IDockerClient client, RecordingPublisher publisher)
     {
         return new DockerDiagnosticCollector(client, publisher, new DiagnosticRedactor(), TimeProvider.System,
             NullLogger.Instance);
     }
 
-    /// <summary>Builds Docker's eight-byte multiplexed frame headers.</summary>
+    /// <summary>
+    ///     Builds Docker's eight-byte multiplexed frame headers.
+    /// </summary>
+    /// <param name="frames">Stream-number and text pairs to encode as Docker output frames.</param>
+    /// <returns>The synthetic encoded payload.</returns>
     private static byte[] Frames(params (int Stream, string Text)[] frames)
     {
         using var bytes = new MemoryStream();
@@ -430,7 +494,12 @@ public sealed class DockerCollectorTests
         return bytes.ToArray();
     }
 
-    /// <summary>Creates a small SDK contract fake without adding a mocking dependency.</summary>
+    /// <summary>
+    ///     Creates a small SDK contract fake without adding a mocking dependency.
+    /// </summary>
+    /// <param name="handler">Configured HTTP handler or reflected port callback.</param>
+    /// <typeparam name="T">Interface or result type created by the fixture.</typeparam>
+    /// <returns>The configured t instance or response for this scenario.</returns>
     private static T Proxy<T>(Func<MethodInfo, object?[]?, object?> handler) where T : class
     {
         var proxy = DispatchProxy.Create<T, SdkProxy>();
@@ -438,25 +507,44 @@ public sealed class DockerCollectorTests
         return proxy;
     }
 
-    /// <summary>Counts warnings and rejects any raw provider error body.</summary>
+    /// <summary>
+    ///     Counts warnings and rejects any raw provider error body.
+    /// </summary>
     private sealed class CollectorLogger : ILogger
     {
         /// <summary>Number of actual failure warnings.</summary>
         public int Warnings { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns no scope handle because this fixture does not retain scopes.
+        /// </summary>
+        /// <param name="state">Synthetic readiness or structured logger state; ignored by this fixture.</param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
+        /// <returns>Null; this fixture retains no scopes.</returns>
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull
         {
             return null;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Enables every log level so the fixture can observe all emitted records.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+        /// <returns>True for every call in this fixture.</returns>
         public bool IsEnabled(LogLevel level)
         {
             return true;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Captures or checks the logger call using the fixture assertions and supplied formatter.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output.</param>
+        /// <param name="id">Selected project identity; ignored by this fixture.</param>
+        /// <param name="state">Synthetic readiness or structured logger state.</param>
+        /// <param name="error">Original failure to classify without persisting arbitrary exception text.</param>
+        /// <param name="formatter">Provider log formatter; untrusted rendered text is not exported.</param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
         public void Log<TState>(LogLevel level, EventId id,
             TState state, Exception? error, Func<TState, Exception?, string> formatter)
         {
@@ -466,37 +554,73 @@ public sealed class DockerCollectorTests
         }
     }
 
-    /// <summary>Dispatches only the SDK members a test expects.</summary>
+    /// <summary>
+    ///     Dispatches only the SDK members a test expects.
+    /// </summary>
     public class SdkProxy : DispatchProxy
     {
         /// <summary>Test-specific SDK response handler.</summary>
         public Func<MethodInfo, object?[]?, object?> Handler { get; set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="targetMethod">Reflected port member dispatched by the fake.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             return Handler(targetMethod!, args);
         }
     }
 
-    /// <summary>Fails if a Compose operation unexpectedly attempts direct live metric/terminal transport.</summary>
+    /// <summary>
+    ///     Fails if a Compose operation unexpectedly attempts direct live metric/terminal transport.
+    /// </summary>
     private sealed class UnusedLive : ILogStreamer
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects stream container metrics because this member is deliberately unavailable in the
+        ///     fixture.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="container">Recorded container identity to select; ignored by this fixture.</param>
+        /// <param name="cpu">Provider CPU display value; ignored by this fixture.</param>
+        /// <param name="memory">Provider memory display value; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         public Task StreamContainerMetricsAsync(Guid projectId, string container, string cpu, string memory,
             CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects stream terminal log because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="diagnostic">Synthetic diagnostic event or terminal record; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         public Task StreamTerminalLogAsync(DeploymentTerminalLog diagnostic,
             CancellationToken cancellationToken = default)
         {
             throw new NotSupportedException();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects stream terminal notice because this member is deliberately unavailable in the
+        ///     fixture.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="notice">Synthetic availability guidance delivered by the fixture; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         public Task StreamTerminalNoticeAsync(Guid projectId, string notice,
             CancellationToken cancellationToken = default)
         {
@@ -504,7 +628,9 @@ public sealed class DockerCollectorTests
         }
     }
 
-    /// <summary>Records already-redacted durable admissions and safe source notices.</summary>
+    /// <summary>
+    ///     Records already-redacted durable admissions and safe source notices.
+    /// </summary>
     private sealed class RecordingPublisher : IDeploymentDiagnosticPublisher, IDurableDeploymentDiagnosticPublisher
     {
         /// <summary>Simulates a failed durable receipt before any checkpoint is committed.</summary>
@@ -522,7 +648,12 @@ public sealed class DockerCollectorTests
         /// <summary>Owned daemon exit event.</summary>
         public TaskCompletionSource Died { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records normalized fixture observations and reports the configured publication outcome.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask PublishAsync(DeploymentDiagnosticEvent e, CancellationToken cancellationToken = default)
         {
             Events.Enqueue(e);
@@ -531,7 +662,13 @@ public sealed class DockerCollectorTests
             return ValueTask.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records accepted events, rejects the configured next log and signals selected delivery
+        ///     milestones.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
         public Task<bool> PublishDurablyAsync(DeploymentDiagnosticEvent e,
             CancellationToken cancellationToken = default)
         {
@@ -549,10 +686,15 @@ public sealed class DockerCollectorTests
         }
     }
 
-    /// <summary>Requires explicit opt-in and a pre-existing test image for disposable real-daemon verification.</summary>
+    /// <summary>
+    ///     Requires explicit opt-in and a pre-existing test image for disposable real-daemon
+    ///     verification.
+    /// </summary>
     private sealed class DockerSmokeFactAttribute : FactAttribute
     {
-        /// <summary>Skips real daemon access during normal credential-free test runs.</summary>
+        /// <summary>
+        ///     Skips real daemon access during normal credential-free test runs.
+        /// </summary>
         public DockerSmokeFactAttribute()
         {
             if (Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE") != "1")

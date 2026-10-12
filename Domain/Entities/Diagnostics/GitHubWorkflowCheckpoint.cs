@@ -1,6 +1,8 @@
 namespace Domain.Entities;
 
-/// <summary>Stores durable, non-sensitive progress for one GitHub Actions workflow run.</summary>
+/// <summary>
+///     Stores durable, non-sensitive progress for one GitHub Actions workflow run.
+/// </summary>
 public sealed class GitHubWorkflowCheckpoint : BaseEntity
 {
     /// <summary>Deployment that owns this workflow run.</summary>

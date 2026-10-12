@@ -1,9 +1,15 @@
 namespace Infrastructure.Data;
 
-/// <summary>Database boundary capture covers tracked saves, direct SQL, bulk cleanup and multiple deployment workers.</summary>
+/// <summary>
+///     Database boundary capture covers tracked saves, direct SQL, bulk cleanup and multiple
+///     deployment workers.
+/// </summary>
 internal static class FailedDeploymentAnalysisTrigger
 {
-    /// <summary>Captures only actual failures, atomically with the status write; one marker survives result/receipt cleanup.</summary>
+    /// <summary>
+    ///     Captures only actual failures, atomically with the status write; one marker survives
+    ///     result/receipt cleanup.
+    /// </summary>
     internal const string CreateSql = """
                                       CREATE FUNCTION capture_failed_deployment_analysis() RETURNS trigger LANGUAGE plpgsql AS $body$
                                       BEGIN

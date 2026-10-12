@@ -1,6 +1,9 @@
 namespace Application.Ai;
 
-/// <summary>Finite owner-visible skip reasons; provider errors and configuration text never become result guidance.</summary>
+/// <summary>
+///     Finite owner-visible skip reasons; provider errors and configuration text never become
+///     result guidance.
+/// </summary>
 public enum AnalysisSkipReason
 {
     /// <summary>Missing/disabled/unapproved provider configuration or revoked egress policy.</summary>
@@ -34,10 +37,17 @@ public enum AnalysisSkipReason
     BudgetCurrencyMismatch
 }
 
-/// <summary>Fixed code/message mapping shared by persistence and owner readback, including legacy unavailable results.</summary>
+/// <summary>
+///     Fixed code/message mapping shared by persistence and owner readback, including legacy
+///     unavailable results.
+/// </summary>
 public static class AnalysisSkipPolicy
 {
-    /// <summary>Returns only bounded authored codes.</summary>
+    /// <summary>
+    ///     Returns only bounded authored codes.
+    /// </summary>
+    /// <param name="reason">The finite rejection or admission-denial category.</param>
+    /// <returns>The stable persisted skip code for the finite reason.</returns>
     public static string Code(AnalysisSkipReason reason)
     {
         return reason switch
@@ -55,7 +65,11 @@ public static class AnalysisSkipPolicy
         };
     }
 
-    /// <summary>Ignores any persisted/provider summary and uses authored explanations only.</summary>
+    /// <summary>
+    ///     Ignores any persisted/provider summary and uses authored explanations only.
+    /// </summary>
+    /// <param name="code">The fixed failure or skip code; unknown codes use safe fallback guidance.</param>
+    /// <returns>Fixed actionable skip guidance, with safe wording for unknown codes.</returns>
     public static string Message(string? code)
     {
         return code switch

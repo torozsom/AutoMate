@@ -5,11 +5,22 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Deletes expired redacted diagnostics in bounded batches.</summary>
+/// <summary>
+///     Deletes expired redacted diagnostics in bounded batches.
+/// </summary>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class DeploymentDiagnosticRetentionService(
     IServiceScopeFactory scopeFactory,
     ILogger<DeploymentDiagnosticRetentionService> logger) : BackgroundService
 {
+    /// <summary>
+    ///     Removes bounded batches of expired legacy diagnostic records.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(1));

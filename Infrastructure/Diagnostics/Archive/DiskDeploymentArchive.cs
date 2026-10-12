@@ -9,7 +9,10 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Checksummed immutable per-event segments on the telemetry volume, retained until owner deletion.</summary>
+/// <summary>
+///     Checksummed immutable per-event segments on the telemetry volume, retained until owner
+///     deletion.
+/// </summary>
 public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposable
 {
     /// <summary>Serializes writes, queries and deletion within the volume's single-writer host.</summary>
@@ -24,7 +27,17 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
     /// <summary>Archive partition root, isolated from pending-spool cleanup.</summary>
     private readonly string _root;
 
-    /// <summary>Uses a child of the existing persistent spool volume.</summary>
+    /// <summary>
+    ///     Uses a child of the existing persistent spool volume.
+    /// </summary>
+    /// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+    /// <param name="logger">
+    ///     Receives reviewed operational events without diagnostic payloads or credentials.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    ///     Archive requires an absolute persistent spool directory.
+    /// </exception>
     public DiskDeploymentArchive(IOptions<DiskSpoolOptions> options, IDiagnosticRedactor redactor,
         ILogger<DiskDeploymentArchive>? logger = null)
     {
@@ -35,7 +48,15 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         _logger = logger;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Filters before pagination and returns recorded source metadata without diagnostic prose
+    ///     in catalogs.
+    /// </summary>
+    /// <param name="query">The frozen resource scope, selection and bounded read options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning selected bounded evidence and recorded source metadata.</returns>
+    /// <exception cref="ArgumentException">Invalid archive selection.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<ArchiveAssessmentPage> ReadAssessmentAsync(ArchiveAssessmentQuery query, CancellationToken token)
     {
         var selection = query.Selection.Normalize();
@@ -86,7 +107,14 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Filters container identities before bounded metric aggregation.
+    /// </summary>
+    /// <param name="query">The frozen resource scope, selection and bounded read options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning bounded metric aggregates for the selected containers and time window.
+    /// </returns>
     public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAssessmentMetricsAsync(ArchiveAssessmentQuery query,
         CancellationToken token)
     {
@@ -96,7 +124,17 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
                 query.Window.Start, query.Window.End, 100, token, query.Selection.Normalize().MetricContainers);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Durably appends an immutable event; duplicate identities return the original receipt.
+    /// </summary>
+    /// <param name="envelope">The immutable redacted event and durable routing metadata.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the durable original receipt, including when the event identity already
+    ///     exists.
+    /// </returns>
+    /// <exception cref="ArgumentException">Archive identities must be nonempty.</exception>
+    /// <exception cref="InvalidOperationException">Deleted project cannot accept archive events.</exception>
     public async Task<DeploymentLogEnvelope> AppendAsync(DeploymentLogEnvelope envelope, CancellationToken token)
     {
         if (envelope.TenantId == Guid.Empty || envelope.Event.ProjectId == Guid.Empty || envelope.EventId == Guid.Empty)
@@ -137,7 +175,20 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Returns a bounded ordered log page with optional plain-text search.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="deployment">The exact deployment identity used to scope the operation.</param>
+    /// <param name="cursor">The previous read position; an absent cursor selects the initial page.</param>
+    /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="search">The optional plain-text search term.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning a bounded ordered page of redacted log envelopes.</returns>
+    /// <exception cref="ArgumentException">Archive search exceeds its bound.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
         long cursor, bool backwards, int limit, string? search, CancellationToken token)
     {
@@ -168,14 +219,34 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Aggregates retained numeric samples without zero-filling missing intervals.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="deployment">The exact deployment identity used to scope the operation.</param>
+    /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="maximumPoints">The maximum number of returned aggregate points.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning recorded bounded numeric aggregates without zero-filling missing
+    ///     intervals.
+    /// </returns>
     public Task<IReadOnlyList<DeploymentMetricPoint>> ReadMetricsAsync(Guid tenant, Guid project, Guid deployment,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken token)
     {
         return ReadMetricsCoreAsync(tenant, project, deployment, start, end, maximumPoints, token, null);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Idempotently imports still-available interval statistics from the operational backend.
+    /// </summary>
+    /// <param name="import">The retained interval statistics to import idempotently.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after retained interval statistics are imported.</returns>
+    /// <exception cref="ArgumentException">Invalid bounded metric import.</exception>
+    /// <exception cref="InvalidOperationException">Deleted project cannot accept archive events.</exception>
     public async Task ImportMetricsAsync(ArchiveMetricImport import, CancellationToken token)
     {
         if (import.Tenant == Guid.Empty || import.Project == Guid.Empty || import.Deployment == Guid.Empty ||
@@ -230,7 +301,15 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Removes one deleted project's partition; repeated cleanup is harmless.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after the deleted project's archived partition is removed.</returns>
+    /// <exception cref="ArgumentException">Invalid archive deletion identity.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task DeleteProjectAsync(Guid tenant, Guid project, CancellationToken token)
     {
         if (tenant == Guid.Empty || project == Guid.Empty)
@@ -256,13 +335,33 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Releases owned resources and completes the documented service lifetime.
+    /// </summary>
     public void Dispose()
     {
         _gate.Dispose();
     }
 
-    /// <summary>Container selection applies before aggregation limits, independently of selected log families.</summary>
+    /// <summary>
+    ///     Container selection applies before aggregation limits, independently of selected log
+    ///     families.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <param name="start">Absolute observation-window start or owner-authorized cloud launch request.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="maximumPoints">The maximum number of returned aggregate points.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <param name="selected">Selected container identities; null selects all recorded containers.</param>
+    /// <returns>
+    ///     A task returning the metrics core async selection with its documented bounds and
+    ///     ordering.
+    /// </returns>
+    /// <exception cref="ArgumentException">Metric range must be positive.</exception>
+    /// <exception cref="InvalidOperationException">Narrow the archived metric range.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     private async Task<IReadOnlyList<DeploymentMetricPoint>> ReadMetricsCoreAsync(Guid tenant, Guid project,
         Guid deployment,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken token, string[]? selected)
@@ -332,20 +431,38 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         }
     }
 
-    /// <summary>Constructs paths exclusively from typed GUIDs, never provider names or user paths.</summary>
+    /// <summary>
+    ///     Constructs paths exclusively from typed GUIDs, never provider names or user paths.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <returns>The partition derived from the validated input.</returns>
     private string Partition(Guid tenant, Guid project, Guid deployment)
     {
         return Path.Combine(_root, tenant.ToString("N"), project.ToString("N"), deployment.ToString("N"));
     }
 
-    /// <summary>Enumerates segment names without loading their payloads into memory.</summary>
+    /// <summary>
+    ///     Enumerates segment names without loading their payloads into memory.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <returns>The files selection with its documented bounds and ordering.</returns>
     private IEnumerable<string> Files(Guid tenant, Guid project, Guid deployment)
     {
         var directory = Partition(tenant, project, deployment);
         return Directory.Exists(directory) ? Directory.EnumerateFiles(directory, "*.segment") : [];
     }
 
-    /// <summary>Checks the immutable checksum before decoding and applying current redaction.</summary>
+    /// <summary>
+    ///     Checks the immutable checksum before decoding and applying current redaction.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the immutable redacted delivery envelope with its stable identity.</returns>
+    /// <exception cref="InvalidDataException">Missing archive envelope.</exception>
     private async Task<DeploymentLogEnvelope> ReadSegmentAsync(string path, CancellationToken token)
     {
         return Mask(JsonSerializer.Deserialize<DeploymentLogEnvelope>(await ReadPayloadAsync(path, token),
@@ -353,7 +470,13 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
                     ?? throw new InvalidDataException("Missing archive envelope."));
     }
 
-    /// <summary>Verifies both log and imported-metric segments before decoding.</summary>
+    /// <summary>
+    ///     Verifies both log and imported-metric segments before decoding.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the payload async derived from the validated input.</returns>
+    /// <exception cref="InvalidDataException">Archive segment exceeds its bound.</exception>
     private static async Task<string> ReadPayloadAsync(string path, CancellationToken token)
     {
         if (new FileInfo(path).Length > 1024 * 1024)
@@ -366,7 +489,11 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         return segment.Payload;
     }
 
-    /// <summary>Detaches and masks payloads at both persistence and replay boundaries.</summary>
+    /// <summary>
+    ///     Detaches and masks payloads at both persistence and replay boundaries.
+    /// </summary>
+    /// <param name="entry">The archived diagnostic envelope to classify or filter.</param>
+    /// <returns>The immutable redacted delivery envelope with its stable identity.</returns>
     private DeploymentLogEnvelope Mask(DeploymentLogEnvelope entry)
     {
         return entry with
@@ -376,10 +503,17 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         };
     }
 
-    /// <summary>Versioned checksummed disk record; contains only normalized redacted diagnostics.</summary>
+    /// <summary>
+    ///     Versioned checksummed disk record; contains only normalized redacted diagnostics.
+    /// </summary>
+    /// <param name="Version">The private telemetry capability protocol version.</param>
+    /// <param name="Payload">Serialized payload subject to bounded validation and redaction.</param>
+    /// <param name="Checksum">Checksum used to verify persisted segment integrity.</param>
     private sealed record Segment(int Version, string Payload, string Checksum);
 
-    /// <summary>Constant-memory statistics for one chart bucket.</summary>
+    /// <summary>
+    ///     Constant-memory statistics for one chart bucket.
+    /// </summary>
     private sealed class Aggregate
     {
         /// <summary>Observed sample count.</summary>
@@ -394,13 +528,21 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposa
         /// <summary>Sum of observed samples.</summary>
         public double Sum;
 
-        /// <summary>Accumulates one finite sample.</summary>
+        /// <summary>
+        ///     Accumulates one finite sample.
+        /// </summary>
+        /// <param name="value">The value to normalize, redact or validate.</param>
         public void Add(double value)
         {
             Add(value, value, value);
         }
 
-        /// <summary>Accumulates retained interval statistics without inventing raw weighting.</summary>
+        /// <summary>
+        ///     Accumulates retained interval statistics without inventing raw weighting.
+        /// </summary>
+        /// <param name="mean">Observed arithmetic mean of the represented samples.</param>
+        /// <param name="minimum">The observed minimum value.</param>
+        /// <param name="maximum">The supported upper bound.</param>
         public void Add(double mean, double minimum, double maximum)
         {
             Sum += mean;

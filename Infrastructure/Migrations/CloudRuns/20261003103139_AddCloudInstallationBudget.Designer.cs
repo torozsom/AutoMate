@@ -11,11 +11,17 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Infrastructure.Migrations
 {
+    /// <summary>
+    ///     EF schema migration and target-model metadata for Add Cloud Installation Budget.
+    /// </summary>
     [DbContext(typeof(AutoMateDbContext))]
     [Migration("20261003103139_AddCloudInstallationBudget")]
     partial class AddCloudInstallationBudget
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Defines the historical EF model produced by this migration.
+        /// </summary>
+        /// <param name="modelBuilder">Builds the documented EF entity mappings or historical model.</param>
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

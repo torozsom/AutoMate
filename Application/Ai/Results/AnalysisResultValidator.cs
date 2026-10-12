@@ -4,7 +4,10 @@ using Application.Abstractions.Diagnostics;
 
 namespace Application.Ai;
 
-/// <summary>Validates legacy/v2 result shapes and redacts every provider-authored text field.</summary>
+/// <summary>
+///     Validates legacy/v2 result shapes and redacts every provider-authored text field.
+/// </summary>
+/// <param name="redactor">The shared redaction boundary used before persistence or presentation.</param>
 public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor) : IAnalysisResultValidator
 {
     /// <summary>Current version of the persisted structured result contract.</summary>
@@ -25,7 +28,14 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     /// <summary>Maximum size of one evidence reference.</summary>
     public const int MaximumEvidenceCharacters = 512;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Validates the complete result contract and redacts every provider-authored text field.
+    /// </summary>
+    /// <param name="response">The untrusted structured analysis response to validate.</param>
+    /// <returns>An independent fully validated and redacted result; no partial output is accepted.</returns>
+    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    ///     The response or value violates the supported result, text or provenance contract.
+    /// </exception>
     public LlmAnalysisResponse Validate(LlmAnalysisResponse response)
     {
         if (response is null || response.ResultSchemaVersion is not (null or 1 or SchemaVersion) ||
@@ -62,7 +72,17 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
         };
     }
 
-    /// <summary>Rejects oversized/null collections and redacts each element separately before JSON serialization.</summary>
+    /// <summary>
+    ///     Rejects oversized/null collections and redacts each element separately before JSON
+    ///     serialization.
+    /// </summary>
+    /// <param name="values">The values to validate and copy.</param>
+    /// <param name="count">The maximum allowed collection size.</param>
+    /// <param name="length">The maximum permitted identifier or text length.</param>
+    /// <returns>An independent collection of validated, individually redacted text values.</returns>
+    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    ///     The response or value violates the supported result, text or provenance contract.
+    /// </exception>
     private string[] Items(IReadOnlyList<string> values, int count, int length)
     {
         if (values is null) throw new InvalidAnalysisResultException();
@@ -72,7 +92,16 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
         return safe;
     }
 
-    /// <summary>Validates both raw and redacted limits; no partially truncated result is accepted as complete.</summary>
+    /// <summary>
+    ///     Validates both raw and redacted limits; no partially truncated result is accepted as
+    ///     complete.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <param name="maximum">The supported upper bound.</param>
+    /// <returns>Validated and redacted text within the requested length bound.</returns>
+    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    ///     The response or value violates the supported result, text or provenance contract.
+    /// </exception>
     private string Text(string value, int maximum)
     {
         if (string.IsNullOrWhiteSpace(value)) throw new InvalidAnalysisResultException();
@@ -85,7 +114,15 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
         return safe;
     }
 
-    /// <summary>Accepts short non-secret provider/model/version identifiers rather than arbitrary metadata payloads.</summary>
+    /// <summary>
+    ///     Accepts short non-secret provider/model/version identifiers rather than arbitrary
+    ///     metadata payloads.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>A bounded provenance identifier unchanged by redaction.</returns>
+    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    ///     The response or value violates the supported result, text or provenance contract.
+    /// </exception>
     private string Identifier(string value)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > 100)
@@ -96,22 +133,39 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
         return safe;
     }
 
-    /// <summary>Leaves unknown provenance unknown rather than fabricating a model revision.</summary>
+    /// <summary>
+    ///     Leaves unknown provenance unknown rather than fabricating a model revision.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The validated provenance identifier, or null when it was not supplied.</returns>
+    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    ///     The response or value violates the supported result, text or provenance contract.
+    /// </exception>
     private string? OptionalIdentifier(string? value)
     {
         return value is null ? null : Identifier(value);
     }
 
-    /// <summary>Limits provenance to conventional model/provider identifiers, excluding URLs, secrets and control text.</summary>
+    /// <summary>
+    ///     Limits provenance to conventional model/provider identifiers, excluding URLs, secrets
+    ///     and control text.
+    /// </summary>
+    /// <returns>The cached pattern for bounded non-secret provenance identifiers.</returns>
     [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:/-]*$", RegexOptions.CultureInvariant)]
     private static partial Regex IdentifierPattern();
 }
 
-/// <summary>Safe rejection of malformed, oversized or secret-bearing provenance; contains no provider payload.</summary>
+/// <summary>
+///     Safe rejection of malformed, oversized or secret-bearing provenance; contains no
+///     provider payload.
+/// </summary>
+/// <param name="reason">The finite rejection or admission-denial category.</param>
 public sealed class InvalidAnalysisResultException(AnalysisResultRejection reason)
     : Exception("The provider analysis did not satisfy the result contract.")
 {
-    /// <summary>Retains the original parameterless exception contract for existing callers.</summary>
+    /// <summary>
+    ///     Retains the original parameterless exception contract for existing callers.
+    /// </summary>
     public InvalidAnalysisResultException() : this(AnalysisResultRejection.SchemaMismatch)
     {
     }
@@ -134,7 +188,12 @@ public sealed class InvalidAnalysisResultException(AnalysisResultRejection reaso
         _ => "invalid_response"
     };
 
-    /// <summary>Fixed user guidance for retained and current validation failures; unknown codes return no guidance.</summary>
+    /// <summary>
+    ///     Fixed user guidance for retained and current validation failures; unknown codes return
+    ///     no guidance.
+    /// </summary>
+    /// <param name="code">The fixed failure or skip code; unknown codes use safe fallback guidance.</param>
+    /// <returns>Fixed actionable rejection guidance, or null for an unrecognized code.</returns>
     public static string? Guidance(string? code)
     {
         return code switch
@@ -156,7 +215,10 @@ public sealed class InvalidAnalysisResultException(AnalysisResultRejection reaso
     }
 }
 
-/// <summary>Allowlisted result-rejection categories safe for persisted metadata and operational diagnostics.</summary>
+/// <summary>
+///     Allowlisted result-rejection categories safe for persisted metadata and operational
+///     diagnostics.
+/// </summary>
 public enum AnalysisResultRejection
 {
     /// <summary>Provider did not complete its answer.</summary>
@@ -187,7 +249,10 @@ public enum AnalysisResultRejection
     ResponseTooLarge
 }
 
-/// <summary>Safe unavailable-provider classification, independent of raw provider exceptions.</summary>
+/// <summary>
+///     Safe unavailable-provider classification, independent of raw provider exceptions.
+/// </summary>
+/// <param name="reason">The finite rejection or admission-denial category.</param>
 public sealed class AnalysisProviderUnavailableException(AnalysisSkipReason reason = AnalysisSkipReason.Unavailable)
     : Exception("AI analysis is unavailable.")
 {

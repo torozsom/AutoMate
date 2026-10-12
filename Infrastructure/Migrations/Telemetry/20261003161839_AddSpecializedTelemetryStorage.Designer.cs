@@ -11,11 +11,17 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Infrastructure.Migrations
 {
+    /// <summary>
+    ///     EF schema migration and target-model metadata for Add Specialized Telemetry Storage.
+    /// </summary>
     [DbContext(typeof(AutoMateDbContext))]
     [Migration("20261003161839_AddSpecializedTelemetryStorage")]
     partial class AddSpecializedTelemetryStorage
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Defines the historical EF model produced by this migration.
+        /// </summary>
+        /// <param name="modelBuilder">Builds the documented EF entity mappings or historical model.</param>
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

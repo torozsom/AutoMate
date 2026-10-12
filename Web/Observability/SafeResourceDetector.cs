@@ -3,7 +3,15 @@ using OpenTelemetry.Resources;
 
 namespace Web.Observability;
 
-/// <summary>Builds only reviewed resource fields; environment detectors cannot import arbitrary attributes.</summary>
+/// <summary>
+///     Builds only reviewed resource fields; environment detectors cannot import arbitrary
+///     attributes.
+/// </summary>
+/// <param name="redactor">Masks credentials and unsafe diagnostic text.</param>
+/// <param name="service">Operator-configured service label.</param>
+/// <param name="environment">Operator-configured environment label.</param>
+/// <param name="version">Operator-configured service version.</param>
+/// <param name="profile">Selected hosting profile label.</param>
 public sealed class SafeResourceDetector(
     IDiagnosticRedactor redactor,
     string service,
@@ -11,7 +19,10 @@ public sealed class SafeResourceDetector(
     string version,
     string profile) : IResourceDetector
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Builds an SDK resource containing only reviewed operator labels.
+    /// </summary>
+    /// <returns>An SDK resource with reviewed service, version, environment and profile labels.</returns>
     public Resource Detect()
     {
         return new Resource(new Dictionary<string, object>
@@ -23,7 +34,13 @@ public sealed class SafeResourceDetector(
         });
     }
 
-    /// <summary>Accepts bounded operator labels after masking, rejecting URLs, assignments and control characters.</summary>
+    /// <summary>
+    ///     Accepts bounded operator labels after masking, rejecting URLs, assignments and control
+    ///     characters.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <param name="fallback">Fixed label used when the supplied value is unsafe.</param>
+    /// <returns>The unchanged safe label, or the supplied fixed fallback.</returns>
     private string Label(string value, string fallback)
     {
         return value.Length is > 0 and <= 64 &&

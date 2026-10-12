@@ -7,9 +7,7 @@ namespace Application.Orchestration;
 /// </summary>
 public interface IDeploymentStatusNotifier
 {
-    /// <summary>
-    ///     Raised when a deployment changes status.
-    /// </summary>
+    /// <summary>Notifies in-process subscribers of a project runtime transition.</summary>
     event Action<Guid, DeploymentStatus> OnStatusChanged;
 
     /// <summary>

@@ -9,13 +9,24 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.ApplicationServices.Orchestration;
 
-/// <summary>Runs short SaaS launch tasks and renews their database leases across host instances.</summary>
+/// <summary>
+///     Runs short SaaS launch tasks and renews their database leases across host instances.
+/// </summary>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class CloudDeploymentScheduler(
     IServiceScopeFactory scopeFactory,
     IOptions<CloudSaasOptions> options,
     ILogger<CloudDeploymentScheduler> logger) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Claims durable cloud launches within shared admission and lease limits.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var running = new List<Task>();
@@ -50,7 +61,13 @@ public sealed class CloudDeploymentScheduler(
         await Task.WhenAll(running);
     }
 
-    /// <summary>Executes one claimed run in its own scope and maintains a separate lease heartbeat.</summary>
+    /// <summary>
+    ///     Executes one claimed run in its own scope and maintains a separate lease heartbeat.
+    /// </summary>
+    /// <param name="runId">Verified durable cloud or provider workflow-run identity.</param>
+    /// <param name="leaseOwner">Worker ownership identity for this operation.</param>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RunClaimedAsync(Guid runId, Guid leaseOwner, CancellationToken stoppingToken)
     {
         using var runCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
@@ -88,7 +105,15 @@ public sealed class CloudDeploymentScheduler(
         }
     }
 
-    /// <summary>Keeps a slow Azure/GitHub preparation from being claimed by a second worker.</summary>
+    /// <summary>
+    ///     Keeps a slow Azure/GitHub preparation from being claimed by a second worker.
+    /// </summary>
+    /// <param name="runId">Verified durable cloud or provider workflow-run identity.</param>
+    /// <param name="leaseOwner">Worker ownership identity for this operation.</param>
+    /// <param name="runCancellation">
+    ///     Owns cancellation of the supervised work and must be disposed by its owner.
+    /// </param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RenewLeaseAsync(Guid runId, Guid leaseOwner, CancellationTokenSource runCancellation)
     {
         var cancellationToken = runCancellation.Token;

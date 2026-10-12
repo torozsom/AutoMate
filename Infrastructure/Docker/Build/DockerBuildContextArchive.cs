@@ -6,11 +6,23 @@ namespace Infrastructure.Docker;
 /// <summary>
 ///     Creates temporary tar archives used as Docker image build contexts.
 /// </summary>
+/// <param name="options">The current validated options used by this operation.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 internal sealed class DockerBuildContextArchive(DockerOptions options, ILogger logger)
 {
     /// <summary>
     ///     Creates a tar build context from a source directory while applying .dockerignore rules.
     /// </summary>
+    /// <param name="sourceDirectory">Validated source directory used by project scanning.</param>
+    /// <param name="targetTarFilePath">Destination of the Docker build-context archive.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="DirectoryNotFoundException">
+    ///     The selected Docker build-context source directory does not exist.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task CreateAsync(string sourceDirectory, string targetTarFilePath,
         CancellationToken cancellationToken)
     {
@@ -35,8 +47,10 @@ internal sealed class DockerBuildContextArchive(DockerOptions options, ILogger l
     }
 
     /// <summary>
-    ///     Deletes the temporary tar archive and logs cleanup failures without hiding the original operation result.
+    ///     Deletes the temporary tar archive and logs cleanup failures without hiding the original
+    ///     operation result.
     /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
     public void DeleteTempFile(string path)
     {
         try
@@ -57,6 +71,9 @@ internal sealed class DockerBuildContextArchive(DockerOptions options, ILogger l
     /// <summary>
     ///     Loads project-specific .dockerignore rules or falls back to configured defaults.
     /// </summary>
+    /// <param name="sourceDirectory">Validated source directory used by project scanning.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the ignore.ignore projection derived from the verified inputs.</returns>
     private async Task<Ignore.Ignore> CreateIgnoreRulesAsync(string sourceDirectory,
         CancellationToken cancellationToken)
     {

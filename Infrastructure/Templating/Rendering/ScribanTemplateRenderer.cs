@@ -7,11 +7,24 @@ namespace Infrastructure.Templating;
 /// <summary>
 ///     Parses and renders individual Scriban templates.
 /// </summary>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 internal sealed class ScribanTemplateRenderer(ILogger logger)
 {
     /// <summary>
     ///     Renders a manifest rule's template with the supplied model.
     /// </summary>
+    /// <param name="rule">Provider detection or template selection rule.</param>
+    /// <param name="model">The provider-returned model identity, if known.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the render async derived from the validated input, or null when no
+    ///     value is available.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The selected template cannot be parsed or rendered under its supported contract.
+    /// </exception>
     public async Task<string?> RenderAsync(TemplateManifestRuleDto rule, object model,
         CancellationToken cancellationToken)
     {

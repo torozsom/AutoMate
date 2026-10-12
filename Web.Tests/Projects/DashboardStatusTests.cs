@@ -15,10 +15,20 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Exercises background deployment notifications against a real renderer dispatcher.</summary>
+/// <summary>
+///     Exercises background deployment notifications against a real renderer dispatcher.
+/// </summary>
 public sealed class DashboardStatusTests
 {
-    /// <summary>Only an owned running local deployment with enabled hosting can enter the stop queue.</summary>
+    /// <summary>
+    ///     Only an owned running local deployment with enabled hosting can enter the stop queue.
+    /// </summary>
+    /// <param name="source">Local or remote project source under test.</param>
+    /// <param name="status">Deployment state under test.</param>
+    /// <param name="localEnabled">Whether fixture capabilities enable local deployment.</param>
+    /// <param name="owned">Whether the fixture resource belongs to the selected principal.</param>
+    /// <param name="accepted">Expected admission or operation success.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(SourceType.Local, DeploymentStatus.Running, true, true, true)]
     [InlineData(SourceType.Local, DeploymentStatus.Stopped, true, true, false)]
@@ -89,15 +99,26 @@ public sealed class DashboardStatusTests
             Assert.Equal(app.CsProjects.Single().Path, submitted.CsProjectPath);
         }
 
-        /// <summary>Supplies provider-free Application ports.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Supplies provider-free Application ports.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        /// <param name="value">Fixture member value to assign.</param>
         void Property(string name, object value)
         {
             typeof(Dashboard).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
                 value);
         }
+#pragma warning restore CS1587
     }
 
-    /// <summary>Terminal notifications update both status and pending controls without cross-thread rendering errors.</summary>
+    /// <summary>
+    ///     Terminal notifications update both status and pending controls without cross-thread
+    ///     rendering errors.
+    /// </summary>
+    /// <param name="status">Deployment state under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(DeploymentStatus.Running)]
     [InlineData(DeploymentStatus.Failed)]
@@ -141,15 +162,25 @@ public sealed class DashboardStatusTests
         await Task.Run(async () => await (Task)handler.Invoke(component, [app.Id, DeploymentStatus.Starting])!);
         Assert.Equal(status, deployment.Status);
 
-        /// <summary>Seeds presentation state without database or authentication work.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Seeds presentation state without database or authentication work.
+        /// </summary>
+        /// <param name="field">Private field name accessed by the fixture.</param>
+        /// <param name="value">Fixture member value to assign.</param>
         void Set(string field, object value)
         {
             typeof(Dashboard).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
                 value);
         }
+#pragma warning restore CS1587
     }
 
-    /// <summary>Notifications refresh the bounded inventory even after deployment preparation cached an entity.</summary>
+    /// <summary>
+    ///     Notifications refresh the bounded inventory even after deployment preparation cached an
+    ///     entity.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Selected_project_status_refreshes_inventory_projection()
     {
@@ -206,31 +237,51 @@ public sealed class DashboardStatusTests
         Assert.Equal(DeploymentStatus.Failed, deployment.Status);
         Assert.Empty(renderer.Errors);
 
-        /// <summary>Seeds actual notification state.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Seeds actual notification state.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        /// <param name="value">Fixture member value to assign.</param>
         void Set(string name, object value)
         {
             typeof(Dashboard).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(component, value);
         }
+#pragma warning restore CS1587
 
-        /// <summary>Supplies provider-free Application ports.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Supplies provider-free Application ports.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        /// <param name="value">Fixture member value to assign.</param>
         void Property(string name, object value)
         {
             typeof(Dashboard).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
                 value);
         }
+#pragma warning restore CS1587
     }
 
-    /// <summary>Retains the real status implementation with minimal rendering and no external services.</summary>
+    /// <summary>
+    ///     Retains the real status implementation with minimal rendering and no external services.
+    /// </summary>
     private sealed class FixtureDashboard : Dashboard
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live on initialized work.
+        /// </summary>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         protected override Task OnInitializedAsync()
         {
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Builds the synthetic component tree used by the rendering fixture.
+        /// </summary>
+        /// <param name="builder">Blazor builder receiving the fixture component tree.</param>
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
             builder.AddContent(0, "fixture");
@@ -238,10 +289,13 @@ public sealed class DashboardStatusTests
     }
 
 #pragma warning disable BL0006 // A real test renderer is required to verify dispatcher behavior.
-    /// <summary>Captures actual render commits and renderer exceptions.</summary>
+    /// <summary>
+    ///     Captures actual render commits and renderer exceptions.
+    /// </summary>
+    /// <param name="services">Fixture dependency provider.</param>
     private sealed class TestRenderer(IServiceProvider services) : Renderer(services, NullLoggerFactory.Instance)
     {
-        /// <inheritdoc />
+        /// <summary>Renderer dispatcher used to serialize fixture component updates.</summary>
         public override Dispatcher Dispatcher { get; } = Dispatcher.CreateDefault();
 
         /// <summary>Successful renders observed on the dispatcher.</summary>
@@ -250,19 +304,30 @@ public sealed class DashboardStatusTests
         /// <summary>Unhandled renderer errors.</summary>
         public List<Exception> Errors { get; } = [];
 
-        /// <summary>Attaches the real component to the test renderer.</summary>
+        /// <summary>
+        ///     Attaches the real component to the test renderer.
+        /// </summary>
+        /// <param name="component">Component rendered by the fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public Task AttachAsync(IComponent component)
         {
             return RenderRootComponentAsync(AssignRootComponentId(component));
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Captures renderer failures for scenario assertions.
+        /// </summary>
+        /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
         protected override void HandleException(Exception exception)
         {
             Errors.Add(exception);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes a renderer update without a browser and records any configured render count.
+        /// </summary>
+        /// <param name="renderBatch">Renderer update batch supplied by Blazor; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         protected override Task UpdateDisplayAsync(in RenderBatch renderBatch)
         {
             RenderCount++;

@@ -2,10 +2,22 @@ using Application.Abstractions.Diagnostics;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Snapshots and redacts store-bound batches before serialization, including direct adapter callers.</summary>
+/// <summary>
+///     Snapshots and redacts store-bound batches before serialization, including direct adapter
+///     callers.
+/// </summary>
 internal static class TelemetryWriteBoundary
 {
-    /// <summary>Rejects cross-tenant batches and returns detached safe event/channel copies without changing receipts.</summary>
+    /// <summary>
+    ///     Rejects cross-tenant batches and returns detached safe event/channel copies without
+    ///     changing receipts.
+    /// </summary>
+    /// <param name="events">The bounded batch of redacted diagnostic envelopes.</param>
+    /// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>The snapshot selection with its documented bounds and ordering.</returns>
+    /// <exception cref="ArgumentException">Telemetry write batch exceeds its supported bound.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     internal static DeploymentLogEnvelope[] Snapshot(IReadOnlyList<DeploymentLogEnvelope> events,
         IDiagnosticRedactor redactor,
         CancellationToken token)

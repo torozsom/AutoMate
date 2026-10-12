@@ -1,9 +1,16 @@
 namespace Application.Ai;
 
-/// <summary>Safe transient signal carrying only a bounded numeric server delay, never an error body or inner exception.</summary>
+/// <summary>
+///     Safe transient signal carrying only a bounded numeric server delay, never an error body
+///     or inner exception.
+/// </summary>
 public sealed class TransientAnalysisProviderException : Exception
 {
-    /// <summary>Creates a fixed safe error; large server delays remain above policy limits and cannot trigger early retries.</summary>
+    /// <summary>
+    ///     Creates a fixed safe error; large server delays remain above policy limits and cannot
+    ///     trigger early retries.
+    /// </summary>
+    /// <param name="retryAfterSeconds">The optional bounded provider retry delay in seconds.</param>
     public TransientAnalysisProviderException(int? retryAfterSeconds = null) : base(
         "AI provider temporarily unavailable.")
     {
@@ -14,10 +21,20 @@ public sealed class TransientAnalysisProviderException : Exception
     public int? RetryAfterSeconds { get; }
 }
 
-/// <summary>Bounds retries and exponential waits; durable scheduling and fresh consent checks belong to the worker.</summary>
+/// <summary>
+///     Bounds retries and exponential waits; durable scheduling and fresh consent checks belong
+///     to the worker.
+/// </summary>
 public static class AnalysisRetryPolicy
 {
-    /// <summary>Returns a jittered delay or null on exhaustion/unsupported server delay; custom options are clamped.</summary>
+    /// <summary>
+    ///     Returns a jittered delay or null on exhaustion/unsupported server delay; custom options
+    ///     are clamped.
+    /// </summary>
+    /// <param name="options">The current validated options used by this operation.</param>
+    /// <param name="completedRetries">The number of provider retries already scheduled.</param>
+    /// <param name="retryAfterSeconds">The optional bounded provider retry delay in seconds.</param>
+    /// <returns>The bounded retry delay, or null when no further provider retry is allowed.</returns>
     public static TimeSpan? Delay(AiAnalysisOptions options, int completedRetries, int? retryAfterSeconds)
     {
         var retries = Math.Clamp(options.MaximumProviderRetries, 0, 5);

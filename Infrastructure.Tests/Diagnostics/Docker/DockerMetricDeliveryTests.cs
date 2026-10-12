@@ -7,10 +7,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Verifies Docker live refresh is independent of durable metric sampling and delivery failures.</summary>
+/// <summary>
+///     Verifies Docker live refresh is independent of durable metric sampling and delivery
+///     failures.
+/// </summary>
 public sealed class DockerMetricDeliveryTests
 {
-    /// <summary>Each observation reaches viewers while only one sample per interval enters history.</summary>
+    /// <summary>
+    ///     Each observation reaches viewers while only one sample per interval enters history.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Live_updates_are_frequent_and_history_stays_sampled()
     {
@@ -41,7 +47,10 @@ public sealed class DockerMetricDeliveryTests
         history.Events.Should().HaveCount(2);
     }
 
-    /// <summary>A transient UI failure cannot terminate collection; live values are centrally redacted.</summary>
+    /// <summary>
+    ///     A transient UI failure cannot terminate collection; live values are centrally redacted.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Live_delivery_recovers_and_redacts_before_transport()
     {
@@ -64,22 +73,38 @@ public sealed class DockerMetricDeliveryTests
         history.Events.Should().ContainSingle();
     }
 
-    /// <summary>Deterministic history sampling clock.</summary>
+    /// <summary>
+    ///     Deterministic history sampling clock.
+    /// </summary>
     private sealed class TestClock : TimeProvider
     {
+        /// <summary>Controlled UTC clock value.</summary>
         public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
 
+        /// <summary>
+        ///     Returns the controlled UTC clock value.
+        /// </summary>
+        /// <returns>The fixture-controlled UTC time.</returns>
         public override DateTimeOffset GetUtcNow()
         {
             return Now;
         }
     }
 
-    /// <summary>Records only durable sampling calls.</summary>
+    /// <summary>
+    ///     Records only durable sampling calls.
+    /// </summary>
     private sealed class RecordingPublisher : IDeploymentDiagnosticPublisher
     {
+        /// <summary>Synthetic events captured or supplied by this fixture.</summary>
         public List<DeploymentDiagnosticEvent> Events { get; } = [];
 
+        /// <summary>
+        ///     Records normalized fixture observations and reports the configured publication outcome.
+        /// </summary>
+        /// <param name="diagnosticEvent">The normalized diagnostic observation to process.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken token = default)
         {
             Events.Add(diagnosticEvent);
@@ -87,12 +112,29 @@ public sealed class DockerMetricDeliveryTests
         }
     }
 
-    /// <summary>Records redacted live observations and simulates a transient delivery failure.</summary>
+    /// <summary>
+    ///     Records redacted live observations and simulates a transient delivery failure.
+    /// </summary>
     private sealed class RecordingLive : ILogStreamer
     {
+        /// <summary>Whether to fail the next operation only.</summary>
         public bool FailNext { get; set; }
+
+        /// <summary>Captured compatibility CPU/memory values.</summary>
         public List<(string Cpu, string Memory)> Values { get; } = [];
 
+        /// <summary>
+        ///     Captures metric display values and optionally fails the next live-delivery call.
+        /// </summary>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="container">Recorded container identity to select; ignored by this fixture.</param>
+        /// <param name="cpu">Provider CPU display value.</param>
+        /// <param name="memory">Provider memory display value.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public Task StreamContainerMetricsAsync(Guid project, string container, string cpu, string memory,
             CancellationToken cancellationToken = default)
         {
@@ -106,12 +148,27 @@ public sealed class DockerMetricDeliveryTests
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        ///     Completes immediately without executing live stream terminal log work.
+        /// </summary>
+        /// <param name="terminalLog">Redacted deployment output with channel and replay identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task StreamTerminalLogAsync(DeploymentTerminalLog terminalLog,
             CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        ///     Completes immediately without executing live stream terminal notice work.
+        /// </summary>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="message">
+        ///     Display message; secret-bearing provider text must not be supplied; ignored by this fixture.
+        /// </param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task StreamTerminalNoticeAsync(Guid project, string message,
             CancellationToken cancellationToken = default)
         {

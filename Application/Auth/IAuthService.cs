@@ -3,19 +3,26 @@ using Domain.Entities;
 namespace Application.Auth;
 
 /// <summary>
-///     Service interface for handling user authentication, registration, and email verification.
+///     Service interface for handling user authentication, registration, and email
+///     verification.
 /// </summary>
 public interface IAuthService
 {
     /// <summary>
-    ///     Registers a new user by creating their account, saving their details, and sending a verification email.
+    ///     Registers a new user by creating their account, saving their details, and sending a
+    ///     verification email.
     /// </summary>
     /// <param name="username">The username of the user being registered.</param>
     /// <param name="email">The email address of the user being registered.</param>
     /// <param name="password">The password for the user's account (will be hashed).</param>
     /// <param name="verificationLinkFactory">Factory method to generate the email verification link.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns>True if registration is successful; false if the email is already in use or sending fails.</returns>
+    /// <returns>
+    ///     A task returning true if registration is successful; false if the email is already in
+    ///     use or sending fails.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">The verification-link factory is null.</exception>
+    /// <exception cref="OperationCanceledException">An account read or write observes cancellation.</exception>
     Task<bool> RegisterAsync(string username, string email, string password,
         Func<string, string> verificationLinkFactory, CancellationToken cancellationToken = default);
 
@@ -25,7 +32,10 @@ public interface IAuthService
     /// </summary>
     /// <param name="token">The secure email verification token.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns>True if successful; false if token is invalid, expired, or user already verified.</returns>
+    /// <returns>
+    ///     A task returning true if successful; false if token is invalid, expired, or user already
+    ///     verified.
+    /// </returns>
     Task<bool> VerifyEmailAsync(string token, CancellationToken cancellationToken = default);
 
 
@@ -35,7 +45,7 @@ public interface IAuthService
     /// <param name="email">The email address of the user.</param>
     /// <param name="password">The password provided by the user.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
-    /// <returns>A tuple containing the user if successful, or an error message.</returns>
+    /// <returns>A task returning a tuple containing the user if successful, or an error message.</returns>
     Task<(LocalUser? User, string? ErrorMessage)> LoginAsync(string email, string password,
         CancellationToken cancellationToken = default);
 
@@ -49,6 +59,7 @@ public interface IAuthService
     /// <param name="avatarUrl">The user's avatar URL.</param>
     /// <param name="accessToken">The GitHub OAuth access token.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task that completes after the GitHub account metadata is persisted.</returns>
     Task CreateOrUpdateGitHubUserAsync(string githubId, string username, string email, string? avatarUrl,
         string? accessToken, CancellationToken cancellationToken = default);
 
@@ -56,16 +67,21 @@ public interface IAuthService
     /// <summary>
     ///     Links or refreshes Azure OAuth identity data on an existing AutoMate user.
     /// </summary>
-    /// <param name="currentUserIdentifier">The current authenticated user's local ID or GitHub account ID.</param>
+    /// <param name="currentUserIdentifier">
+    ///     The current authenticated user's local ID or GitHub account ID.
+    /// </param>
     /// <param name="azureAccountId">The unique Microsoft Entra user account ID.</param>
     /// <param name="email">The email address returned by Microsoft identity.</param>
     /// <param name="displayName">The display name returned by Microsoft identity.</param>
     /// <param name="tenantId">The Microsoft Entra tenant ID associated with the token.</param>
-    /// <param name="subscriptionId">The Azure subscription ID selected for deployments, if already known.</param>
+    /// <param name="subscriptionId">
+    ///     The Azure subscription ID selected for deployments, if already known.
+    /// </param>
     /// <param name="accessToken">The Azure OAuth access token.</param>
     /// <param name="refreshToken">The Azure OAuth refresh token.</param>
     /// <param name="expiresAt">The UTC timestamp when the access token expires.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task that completes after the Azure account connection is persisted.</returns>
     Task LinkAzureAccountAsync(
         string currentUserIdentifier,
         string azureAccountId,

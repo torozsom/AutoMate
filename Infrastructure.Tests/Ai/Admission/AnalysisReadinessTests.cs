@@ -11,10 +11,22 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Verifies local policy, credential reload and real read-only queue/schema access without provider resolution.</summary>
+/// <summary>
+///     Verifies local policy, credential reload and real read-only queue/schema access without
+///     provider resolution.
+/// </summary>
 public sealed class AnalysisReadinessTests
 {
-    /// <summary>Current configuration distinguishes disabled admission, blocked egress and locally ready providers.</summary>
+    /// <summary>
+    ///     Current configuration distinguishes disabled admission, blocked egress and locally ready
+    ///     providers.
+    /// </summary>
+    /// <param name="enabled">Whether to include the option.</param>
+    /// <param name="egress">Whether diagnostic provider egress is enabled in the fixture.</param>
+    /// <param name="approved">Whether operator processing approval is present.</param>
+    /// <param name="credentials">Configured credential-presence value or callback; no real credential is supplied.</param>
+    /// <param name="expected">Expected outcome for this scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, false, false, false, AnalysisConfigurationState.Disabled)]
     [InlineData(true, false, true, true, AnalysisConfigurationState.EgressDisabled)]
@@ -40,7 +52,11 @@ public sealed class AnalysisReadinessTests
         Assert.Empty(db.ChangeTracker.Entries());
     }
 
-    /// <summary>Repeated probes use current policy and credential presence rather than caching an earlier approval.</summary>
+    /// <summary>
+    ///     Repeated probes use current policy and credential presence rather than caching an earlier
+    ///     approval.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Policy_and_credentials_are_rechecked_and_validation_failures_are_safe()
     {
@@ -63,7 +79,12 @@ public sealed class AnalysisReadinessTests
         Assert.DoesNotContain("private", invalid.ToString());
     }
 
-    /// <summary>A missing queue, wakeup or analysis schema is unavailable even when a plain database connection succeeds.</summary>
+    /// <summary>
+    ///     A missing queue, wakeup or analysis schema is unavailable even when a plain database
+    ///     connection succeeds.
+    /// </summary>
+    /// <param name="table">Metadata table included in or removed from the fixture schema.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("DeploymentAnalysisWorkItems")]
     [InlineData("FailedDeploymentAnalysisEvents")]
@@ -91,7 +112,11 @@ public sealed class AnalysisReadinessTests
         Assert.Equal(AnalysisConfigurationState.Disabled, result.Configuration);
     }
 
-    /// <summary>Caller cancellation reaches the real relational operation and cannot become a successful probe.</summary>
+    /// <summary>
+    ///     Caller cancellation reaches the real relational operation and cannot become a successful
+    ///     probe.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Queue_operation_observes_cancellation()
     {
@@ -108,7 +133,12 @@ public sealed class AnalysisReadinessTests
         Assert.Equal(1, commands.Reads);
     }
 
-    /// <summary>Creates the production metadata model with an isolated in-memory relational database.</summary>
+    /// <summary>
+    ///     Creates the production metadata model with an isolated in-memory relational database.
+    /// </summary>
+    /// <param name="connection">Fixture database connection or explicitly isolated connection string.</param>
+    /// <param name="commands">Optional read-only command interceptor.</param>
+    /// <returns>An independent metadata context owned by the caller.</returns>
     private static AutoMateDbContext CreateDb(SqliteConnection connection, ReadOnlyCommands? commands = null)
     {
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection);
@@ -116,7 +146,13 @@ public sealed class AnalysisReadinessTests
         return new AutoMateDbContext(options.Options, new EphemeralDataProtectionProvider());
     }
 
-    /// <summary>Supplies explicit shared policy while allowing approval denial to be tested separately.</summary>
+    /// <summary>
+    ///     Supplies explicit shared policy while allowing approval denial to be tested separately.
+    /// </summary>
+    /// <param name="enabled">Whether to include the option.</param>
+    /// <param name="egress">Whether diagnostic provider egress is enabled in the fixture.</param>
+    /// <param name="approved">Whether operator processing approval is present.</param>
+    /// <returns>The configured ai analysis options instance or response for this scenario.</returns>
     private static AiAnalysisOptions Settings(bool enabled, bool egress, bool approved)
     {
         return new AiAnalysisOptions
@@ -134,7 +170,12 @@ public sealed class AnalysisReadinessTests
         };
     }
 
-    /// <summary>A throwing adapter proves readiness uses only registration metadata and local credential checks.</summary>
+    /// <summary>
+    ///     A throwing adapter proves readiness uses only registration metadata and local credential
+    ///     checks.
+    /// </summary>
+    /// <param name="credentials">Configured credential-presence value or callback; no real credential is supplied.</param>
+    /// <returns>The configured analysis provider catalog instance or response for this scenario.</returns>
     private static AnalysisProviderCatalog Catalog(Func<bool> credentials)
     {
         return new AnalysisProviderCatalog([
@@ -142,16 +183,31 @@ public sealed class AnalysisReadinessTests
         ]);
     }
 
-    /// <summary>Test adapter that cannot be instantiated or called by readiness.</summary>
+    /// <summary>
+    ///     Test adapter that cannot be instantiated or called by readiness.
+    /// </summary>
     private sealed class UnreachableProvider : ILlmAnalysisProvider
     {
-        /// <summary>Rejects any accidental construction.</summary>
+        /// <summary>
+        ///     Rejects any accidental construction.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public UnreachableProvider()
         {
             throw new InvalidOperationException("Provider must not be resolved.");
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects analyze because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="request">Analysis request supplied to the synthetic provider; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public Task<LlmAnalysisResponse> AnalyzeAsync(LlmAnalysisRequest request,
             CancellationToken cancellationToken = default)
         {
@@ -159,7 +215,9 @@ public sealed class AnalysisReadinessTests
         }
     }
 
-    /// <summary>Mutable monitor simulates policy reload and safe translation of validation failures.</summary>
+    /// <summary>
+    ///     Mutable monitor simulates policy reload and safe translation of validation failures.
+    /// </summary>
     private sealed class SettingsMonitor : IOptionsMonitor<AiAnalysisOptions>
     {
         /// <summary>Current synthetic settings.</summary>
@@ -168,27 +226,38 @@ public sealed class AnalysisReadinessTests
         /// <summary>Optional validation failure injected during reads.</summary>
         public Exception? Failure { get; set; }
 
-        /// <inheritdoc />
+        /// <summary>Current synthetic analysis options.</summary>
         public AiAnalysisOptions CurrentValue
         {
             get => Failure is null ? _settings : throw Failure;
             set => _settings = value;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns current synthetic options without selecting by option name.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller; ignored by this fixture.</param>
+        /// <returns>The current synthetic options instance.</returns>
         public AiAnalysisOptions Get(string? name)
         {
             return CurrentValue;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns no change subscription because this options fixture does not notify listeners.
+        /// </summary>
+        /// <param name="listener">Options-change callback supplied by the caller; ignored by this fixture.</param>
+        /// <returns>Null; this fixture does not subscribe to options changes.</returns>
         public IDisposable? OnChange(Action<AiAnalysisOptions, string?> listener)
         {
             return null;
         }
     }
 
-    /// <summary>Checks bounded SELECT-only probe commands and injects cancellation into the actual database call.</summary>
+    /// <summary>
+    ///     Checks bounded SELECT-only probe commands and injects cancellation into the actual database
+    ///     call.
+    /// </summary>
     private sealed class ReadOnlyCommands : DbCommandInterceptor
     {
         /// <summary>Allows schema creation before read-only enforcement begins.</summary>
@@ -200,7 +269,15 @@ public sealed class AnalysisReadinessTests
         /// <summary>Optional cancellation source triggered at relational execution.</summary>
         public CancellationTokenSource? Cancel { get; init; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Checks bounded SELECT-only readiness reads and optionally cancels them before execution.
+        /// </summary>
+        /// <param name="command">Database command intercepted by the fixture.</param>
+        /// <param name="eventData">EF command interception metadata.</param>
+        /// <param name="result">Current EF reader-interception result.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the unchanged EF interception result after fixture checks or failure injection.</returns>
+        /// <exception cref="OperationCanceledException">The caller cancellation or fixture deadline ends the pending operation.</exception>
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
@@ -217,7 +294,14 @@ public sealed class AnalysisReadinessTests
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects writes while read-only readiness enforcement is active.
+        /// </summary>
+        /// <param name="command">Database command intercepted by the fixture.</param>
+        /// <param name="eventData">EF command interception metadata.</param>
+        /// <param name="result">Current EF nonquery-interception result.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the unchanged EF interception result after fixture checks or failure injection.</returns>
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {

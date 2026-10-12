@@ -1,5 +1,8 @@
-@namespace Web.Components.Shared
 @using Application.Abstractions.Diagnostics
+@*
+    Presents metric charts and an independent paginated numeric alternative from recorded aggregates.
+*@
+@namespace Web.Components.Shared
 <div class="metric-statistics-view">
     @if (Availability is not null)
     {
@@ -94,7 +97,10 @@
     /// <summary>Complete chart input remains stable across numeric page changes.</summary>
     private IReadOnlyList<TelemetryChartPoint> _cpu = [], _memory = [];
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Rebuilds ordered rows and cached chart points, resetting the table page when data identity
+    ///     changes.
+    /// </summary>
     protected override void OnParametersSet()
     {
         if (!ReferenceEquals(_previous, Data))
@@ -108,26 +114,40 @@
         }
     }
 
-    /// <summary>Changes only the numeric alternative's page.</summary>
+    /// <summary>
+    ///     Changes only the numeric alternative's page.
+    /// </summary>
+    /// <param name="page">One-based numeric table page.</param>
     private void SetPage(int page)
     {
         _page = page;
     }
 
-    /// <summary>Resizing begins at page one.</summary>
+    /// <summary>
+    ///     Resizing begins at page one.
+    /// </summary>
+    /// <param name="size">Requested row count from the supported size catalog.</param>
     private void SetSize(int size)
     {
         _size = size;
         _page = 1;
     }
 
-    /// <summary>Reads cached full evidence rather than rebuilding charts when a numeric page changes.</summary>
+    /// <summary>
+    ///     Reads cached full evidence rather than rebuilding charts when a numeric page changes.
+    /// </summary>
+    /// <param name="metric">Stored metric series name.</param>
+    /// <returns>Observed chart points in timestamp order, without synthetic missing samples.</returns>
     private IReadOnlyList<TelemetryChartPoint> Points(string metric)
     {
         return metric == TelemetryPresentation.Cpu ? _cpu : _memory;
     }
 
-    /// <summary>Sample-weighted population observations; imported interval means stay explicitly qualified.</summary>
+    /// <summary>
+    ///     Sample-weighted population observations; imported interval means stay explicitly qualified.
+    /// </summary>
+    /// <param name="metric">Stored metric series name.</param>
+    /// <returns>Observed chart points in timestamp order, without synthetic missing samples.</returns>
     private IReadOnlyList<TelemetryChartPoint> BuildPoints(string metric)
     {
         return Data.Where(p => p.Metric == metric)

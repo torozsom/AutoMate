@@ -4,10 +4,23 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Web.Configs;
 
-/// <summary>Maps safe Application readiness to host health without provider requests or exception disclosure.</summary>
+/// <summary>
+///     Maps safe Application readiness to host health without provider requests or exception
+///     disclosure.
+/// </summary>
+/// <param name="readiness">Reads safe analysis dependency readiness without making provider requests.</param>
 public sealed class AnalysisReadinessHealthCheck(IDeploymentAnalysisReadiness readiness) : IHealthCheck
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Maps safe analysis readiness to a dependency-health result without exposing provider
+    ///     responses.
+    /// </summary>
+    /// <param name="context">Framework health-check registration context.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>
+    ///     A task returning healthy, degraded or unhealthy status with finite readiness data; dependency
+    ///     exceptions become unhealthy status.
+    /// </returns>
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
@@ -29,13 +42,20 @@ public sealed class AnalysisReadinessHealthCheck(IDeploymentAnalysisReadiness re
     }
 }
 
-/// <summary>Separates dependency readiness from existing lightweight liveness and serializes only finite safe fields.</summary>
+/// <summary>
+///     Separates dependency readiness from existing lightweight liveness and serializes only finite
+///     safe fields.
+/// </summary>
 public static class AnalysisHealthChecks
 {
     /// <summary>Tag used to select the bounded AI check independently of liveness.</summary>
     public const string ReadinessTag = "ai-ready";
 
-    /// <summary>Maps liveness plus AI readiness; intentionally disabled AI is healthy if queue metadata remains available.</summary>
+    /// <summary>
+    ///     Maps liveness plus AI readiness; intentionally disabled AI is healthy if queue metadata
+    ///     remains available.
+    /// </summary>
+    /// <param name="app">Application host to configure.</param>
     public static void MapApplicationHealthChecks(this WebApplication app)
     {
         app.MapHealthChecks("/health", new HealthCheckOptions
@@ -55,7 +75,13 @@ public static class AnalysisHealthChecks
         });
     }
 
-    /// <summary>Omits framework descriptions, exceptions and arbitrary check data from the public probe response.</summary>
+    /// <summary>
+    ///     Omits framework descriptions, exceptions and arbitrary check data from the public probe
+    ///     response.
+    /// </summary>
+    /// <param name="context">Current probe request and response; authentication is not required by this mapping.</param>
+    /// <param name="report">Health results containing only approved public status fields.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private static Task WriteReadinessAsync(HttpContext context, HealthReport report)
     {
         var snapshot = report.Entries.TryGetValue("ai_analysis", out var entry) &&

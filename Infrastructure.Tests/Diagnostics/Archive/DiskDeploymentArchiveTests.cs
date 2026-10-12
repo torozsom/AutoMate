@@ -5,10 +5,17 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Exercises permanent archive durability, isolation, redaction and bounded replay without provider calls.</summary>
+/// <summary>
+///     Exercises permanent archive durability, isolation, redaction and bounded replay without
+///     provider calls.
+/// </summary>
 public sealed class DiskDeploymentArchiveTests
 {
-    /// <summary>Events retain identity after expiration/restart; duplicate delivery cannot alter saved payloads.</summary>
+    /// <summary>
+    ///     Events retain identity after expiration/restart; duplicate delivery cannot alter saved
+    ///     payloads.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Restart_preserves_old_events_and_cursor_search_without_duplicates()
     {
@@ -46,7 +53,11 @@ public sealed class DiskDeploymentArchiveTests
         }
     }
 
-    /// <summary>Bounded old metrics preserve extrema, imported intervals deduplicate and deletion prevents resurrection.</summary>
+    /// <summary>
+    ///     Bounded old metrics preserve extrema, imported intervals deduplicate and deletion prevents
+    ///     resurrection.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Metrics_and_deletion_are_durable_idempotent_and_bounded()
     {
@@ -88,7 +99,11 @@ public sealed class DiskDeploymentArchiveTests
         }
     }
 
-    /// <summary>Checksum damage fails explicitly; incomplete unacknowledged temporary files do not become history.</summary>
+    /// <summary>
+    ///     Checksum damage fails explicitly; incomplete unacknowledged temporary files do not become
+    ///     history.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Corruption_is_detected_and_temporary_segments_are_ignored()
     {
@@ -112,7 +127,11 @@ public sealed class DiskDeploymentArchiveTests
         }
     }
 
-    /// <summary>Receipt availability follows archive persistence, and deletion rejection cannot acknowledge ingestion.</summary>
+    /// <summary>
+    ///     Receipt availability follows archive persistence, and deletion rejection cannot acknowledge
+    ///     ingestion.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Spool_receipts_require_archive_persistence()
     {
@@ -144,14 +163,26 @@ public sealed class DiskDeploymentArchiveTests
         }
     }
 
-    /// <summary>Creates an isolated volume using the production redactor.</summary>
+    /// <summary>
+    ///     Creates an isolated volume using the production redactor.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
+    /// <returns>The configured disk deployment archive instance or response for this scenario.</returns>
     private static DiskDeploymentArchive Create(string path)
     {
         return new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
             new DiagnosticRedactor());
     }
 
-    /// <summary>Expired timestamps demonstrate that operational retention never filters archive reads.</summary>
+    /// <summary>
+    ///     Expired timestamps demonstrate that operational retention never filters archive reads.
+    /// </summary>
+    /// <param name="tenant">Synthetic owner identity.</param>
+    /// <param name="project">Synthetic project identity.</param>
+    /// <param name="deployment">Synthetic deployment identity.</param>
+    /// <param name="order">Durable ordering position of the synthetic record.</param>
+    /// <param name="message">Display message; secret-bearing provider text must not be supplied.</param>
+    /// <returns>The configured deployment log envelope instance or response for this scenario.</returns>
     private static DeploymentLogEnvelope Entry(Guid tenant, Guid project, Guid deployment, long order, string message)
     {
         var time = DateTimeOffset.UtcNow.AddDays(-120);

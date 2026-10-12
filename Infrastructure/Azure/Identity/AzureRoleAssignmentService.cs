@@ -11,6 +11,7 @@ namespace Infrastructure.Azure;
 /// <summary>
 ///     Assigns Azure RBAC permissions needed by the deployment managed identity.
 /// </summary>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
 internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFactory)
 {
     /// <summary>Azure built-in AcrPull role.</summary>
@@ -19,7 +20,15 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
     /// <summary>Azure built-in AcrPush role.</summary>
     private const string AcrPushRole = "8311e382-0749-4cb8-b61a-304f252e45ec";
 
-    /// <summary>Grants the workflow identity push and the app identity pull on one ACR.</summary>
+    /// <summary>
+    ///     Grants the workflow identity push and the app identity pull on one ACR.
+    /// </summary>
+    /// <param name="registryId">Verified Azure registry resource identity.</param>
+    /// <param name="workflowIdentity">Managed identity used by GitHub OIDC deployment workflows.</param>
+    /// <param name="pullIdentity">Dedicated registry pull identity attached to the Container App.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task EnsureRegistryAssignmentsAsync(string registryId,
         UserAssignedIdentityResource workflowIdentity, UserAssignedIdentityResource pullIdentity,
         string accessToken, CancellationToken cancellationToken)
@@ -28,7 +37,16 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
         await EnsureRoleAsync(registryId, pullIdentity, AcrPullRole, accessToken, cancellationToken);
     }
 
-    /// <summary>Creates a deterministic resource-scoped role assignment.</summary>
+    /// <summary>
+    ///     Creates a deterministic resource-scoped role assignment.
+    /// </summary>
+    /// <param name="scope">Verified ARM, telemetry or logger-correlation scope.</param>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="roleId">Allowlisted Azure role-definition identity.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="InvalidOperationException">Azure managed identity principal ID is missing.</exception>
     private async Task EnsureRoleAsync(string scope, UserAssignedIdentityResource identity,
         string roleId, string accessToken, CancellationToken cancellationToken)
     {
@@ -58,6 +76,14 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
     /// <summary>
     ///     Ensures the managed identity has Contributor access on the target resource group.
     /// </summary>
+    /// <param name="resourceGroup">Verified Azure resource group used for provisioning.</param>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Azure managed identity principal ID could not be loaded.
+    /// </exception>
     public async Task EnsureContributorAssignmentAsync(ResourceGroupResource resourceGroup,
         UserAssignedIdentityResource identity, string accessToken, CancellationToken cancellationToken)
     {
@@ -102,6 +128,8 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
     /// <summary>
     ///     Creates a stable GUID so repeated role assignment calls target the same ARM resource.
     /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The resolved internal identity.</returns>
     private static Guid CreateDeterministicGuid(string value)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));

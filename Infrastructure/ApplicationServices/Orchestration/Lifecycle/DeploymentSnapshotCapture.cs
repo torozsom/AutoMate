@@ -6,10 +6,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Orchestration;
 
-/// <summary>Captures an explicit whitelist of non-secret launch settings once per deployment.</summary>
+/// <summary>
+///     Captures an explicit whitelist of non-secret launch settings once per deployment.
+/// </summary>
 internal static class DeploymentSnapshotCapture
 {
-    /// <summary>Adds discovered artifact facts without reading or replacing current project settings.</summary>
+    /// <summary>
+    ///     Adds discovered artifact facts without reading or replacing current project settings.
+    /// </summary>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="runtime">Recorded .NET runtime version, if supplied.</param>
+    /// <param name="commit">Recorded deployment commit, if known.</param>
     internal static void Resolve(Deployment deployment, string? runtime = null, string? commit = null)
     {
         if (deployment.ConfigurationSnapshotJson is not { } json) return;
@@ -23,7 +30,17 @@ internal static class DeploymentSnapshotCapture
         });
     }
 
-    /// <summary>Captures initial settings before provider side effects; recovery never overwrites an existing snapshot.</summary>
+    /// <summary>
+    ///     Captures initial settings before provider side effects; recovery never overwrites an
+    ///     existing snapshot.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="branch">Recorded deployment branch, if known.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal static async Task CaptureAsync(AutoMateDbContext db, Deployment deployment, DeploymentConfigDto config,
         string? source, string? branch, CancellationToken token)
     {

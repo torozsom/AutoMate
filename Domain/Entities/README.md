@@ -14,9 +14,11 @@ Persisted business entities with no EF Core or transport dependencies.
 - `BaseEntity.cs`
 - `Projects/Configuration.cs`
 - `Projects/CsProject.cs`
-- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`, `Cloud/CloudInstallationBudget.cs` — SaaS
+- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`,
+  `Cloud/CloudInstallationBudget.cs` — SaaS
   control-plane state, verified webhook inbox, and installation cooldowns.
-- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`, `Cloud/CloudInstallationBudget.cs` — SaaS
+- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`,
+  `Cloud/CloudInstallationBudget.cs` — SaaS
   control-plane state, verified webhook inbox, and installation cooldowns.
 - `Deployments/Deployment.cs`
 - `Diagnostics/GitHubWorkflowCheckpoint.cs`
@@ -33,7 +35,8 @@ Keep this module independent of Application, Infrastructure, Web, framework APIs
 
 - [Solution navigation map](../../navigation.md)
 
-`Diagnostics/TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state. Application runtime
+`Diagnostics/TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state.
+Application runtime
 and managed-storage flags default to true and remain temporary compatibility fields. Diagnostic collection and approved
 storage are automatic; AI egress consent remains separate.
 
@@ -74,9 +77,15 @@ without clearing existing cursor rows or archived history.
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Ai/` — `Ai/AiAnalysisBudgetEntry.cs`, `Ai/AiAnalysisRequest.cs`, `Ai/AiDeploymentAnalysis.cs`, `Ai/DeploymentAnalysisWorkItem.cs`, `Ai/FailedDeploymentAnalysisEvent.cs`.
-- `Cloud/` — `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudInstallationBudget.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`.
-- `Deployments/` — `Deployments/Deployment.cs`, `Deployments/DeploymentConfigurationSnapshot.cs`, `Deployments/DeploymentArchiveCleanup.cs`.
-- `Diagnostics/` — `Diagnostics/AzureContainerAppLogCheckpoint.cs`, `Diagnostics/GitHubWorkflowCheckpoint.cs`, `Diagnostics/GitHubWorkflowJobCheckpoint.cs`, `Diagnostics/DeploymentDailyTelemetry.cs`, `Diagnostics/DeploymentDiagnosticRecord.cs`, `Diagnostics/DeploymentDiagnosticSnapshot.cs`, `Diagnostics/TelemetryTenantState.cs`.
+- `Ai/` — `Ai/AiAnalysisBudgetEntry.cs`, `Ai/AiAnalysisRequest.cs`, `Ai/AiDeploymentAnalysis.cs`,
+  `Ai/DeploymentAnalysisWorkItem.cs`, `Ai/FailedDeploymentAnalysisEvent.cs`.
+- `Cloud/` — `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudInstallationBudget.cs`, `Cloud/CloudRunOutbox.cs`,
+  `Cloud/CloudWebhookDelivery.cs`.
+- `Deployments/` — `Deployments/Deployment.cs`, `Deployments/DeploymentConfigurationSnapshot.cs`,
+  `Deployments/DeploymentArchiveCleanup.cs`.
+- `Diagnostics/` — `Diagnostics/AzureContainerAppLogCheckpoint.cs`, `Diagnostics/GitHubWorkflowCheckpoint.cs`,
+  `Diagnostics/GitHubWorkflowJobCheckpoint.cs`, `Diagnostics/DeploymentDailyTelemetry.cs`,
+  `Diagnostics/DeploymentDiagnosticRecord.cs`, `Diagnostics/DeploymentDiagnosticSnapshot.cs`,
+  `Diagnostics/TelemetryTenantState.cs`.
 - `Projects/` — `Projects/Application.cs`, `Projects/Configuration.cs`, `Projects/CsProject.cs`.
 - `Users/` — `Users/User.cs`, `Users/LocalUser.cs`, `Users/RemoteUser.cs`.

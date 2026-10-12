@@ -8,7 +8,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Reclaims expired analysis metadata and cascading work items even when AI admission is disabled.</summary>
+/// <summary>
+///     Reclaims expired analysis metadata and cascading work items even when AI admission is
+///     disabled.
+/// </summary>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class DeploymentAnalysisRetentionService(
     IServiceScopeFactory scopes,
     TimeProvider clock,
@@ -18,7 +26,11 @@ public sealed class DeploymentAnalysisRetentionService(
     /// <summary>Bounds each database delete to keep cleanup work predictable.</summary>
     internal const int BatchSize = 1_000;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Expires bounded analysis metadata while preserving saved results marked for retention.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(1), clock);
@@ -64,7 +76,13 @@ public sealed class DeploymentAnalysisRetentionService(
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Deletes one bounded expiry batch; database cascades remove its queue rows.</summary>
+    /// <summary>
+    ///     Deletes one bounded expiry batch; database cascades remove its queue rows.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="now">The current time used for window validation or duration calculation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the numeric position, count or status described by this operation.</returns>
     internal static async Task<int> DeleteBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
         var expiredWork = db.AiDeploymentAnalyses.Where(item => item.RetainUntilDeleted && item.ExpiresAt <= now &&
@@ -77,14 +95,28 @@ public sealed class DeploymentAnalysisRetentionService(
             .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
     }
 
-    /// <summary>Deletes one bounded receipt expiry batch; current-day quota and live idempotency receipts remain intact.</summary>
+    /// <summary>
+    ///     Deletes one bounded receipt expiry batch; current-day quota and live idempotency
+    ///     receipts remain intact.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="now">The current time used for window validation or duration calculation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the numeric position, count or status described by this operation.</returns>
     internal static Task<int> DeleteRequestBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
         return db.AiAnalysisRequests.Where(item => item.ExpiresAt <= now)
             .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
     }
 
-    /// <summary>Bounds cleanup of accounting metadata to ninety days, preserving all current-day/window charges.</summary>
+    /// <summary>
+    ///     Bounds cleanup of accounting metadata to ninety days, preserving all current-day/window
+    ///     charges.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="now">The current time used for window validation or duration calculation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the numeric position, count or status described by this operation.</returns>
     internal static Task<int> DeleteBudgetBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
         return db.AiAnalysisBudgetEntries.Where(item => item.OccurredAt < now.AddDays(-90))

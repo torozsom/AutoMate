@@ -19,7 +19,21 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Azure;
 
-/// <summary>Host-managed coordinator for Azure Container Apps state, metrics, console output, and system events.</summary>
+/// <summary>
+///     Host-managed coordinator for Azure Container Apps state, metrics, console output, and
+///     system events.
+/// </summary>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="monitorTokenProvider">
+///     Provides the azure monitor logs token provider boundary used by this operation.
+/// </param>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="telemetry">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class AzureContainerAppRuntimeStreamer(
     IDeploymentDiagnosticPublisher diagnostics,
     IAzureMonitorLogsTokenProvider monitorTokenProvider,
@@ -29,26 +43,41 @@ public sealed class AzureContainerAppRuntimeStreamer(
     ILogger<AzureContainerAppRuntimeStreamer> logger,
     IOptions<TelemetryStorageOptions>? telemetry = null) : BackgroundService, IAzureContainerAppRuntimeStreamer
 {
+    /// <summary>Stable resource identity used by compatibility web metric delivery.</summary>
     private const string CloudWebContainerName = "cloud-web";
+
+    /// <summary>Host-managed Azure observation cadence, independent of browser presence.</summary>
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
+
+    /// <summary>Reads verified Container App state and metrics through bounded ARM requests.</summary>
     private readonly AzureContainerAppClient _containerAppClient = new(httpClientFactory);
 
     /// <summary>Reads tagged managed databases independently of Container Apps logs.</summary>
     private readonly AzureManagedDatabaseClient _databaseClient = new(httpClientFactory);
 
+    /// <summary>Per-host fencing identity used to acquire runtime collector leases.</summary>
     private readonly Guid _leaseOwner = Guid.NewGuid();
 
     /// <summary>Long-lived ACA HTTP readers are independent of the finite polling deadline.</summary>
     private readonly AzureContainerAppLiveLogs _liveLogs = new(httpClientFactory, diagnostics, logger);
 
+    /// <summary>Queries bounded verified console, system and managed-database history.</summary>
     private readonly AzureMonitorLogsClient _monitorLogsClient = new(httpClientFactory);
+
+    /// <summary>Deduplicates current finite source-availability notices.</summary>
     private readonly ConcurrentDictionary<string, string> _reportedIssues = new();
+
+    /// <summary>Verified active deployment targets supervised by this host.</summary>
     private readonly ConcurrentDictionary<Guid, ContainerAppStreamTarget> _targets = new();
 
     /// <summary>Live sessions start only while this coordinator is hosted and stop with its lifetime.</summary>
     private CancellationToken? _liveLifetime;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Starts background streaming for a cloud deployment's Container App.
+    /// </summary>
+    /// <param name="request">The verified deployment resource and revision to supervise.</param>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
     public void StartStreaming(AzureContainerAppRuntimeStreamRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -63,7 +92,11 @@ public sealed class AzureContainerAppRuntimeStreamer(
         _targets.AddOrUpdate(target.DeploymentId, target, (_, _) => target);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Supervises automatic verified Azure runtime collection and independent source recovery.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Azure Container Apps runtime monitoring coordinator started.");
@@ -90,7 +123,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
     }
 
-    /// <summary>Processes each registered target once. Internal for deterministic collector verification.</summary>
+    /// <summary>
+    ///     Processes each registered target once. Internal for deterministic collector
+    ///     verification.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task PollOnceAsync(CancellationToken cancellationToken)
     {
         await Parallel.ForEachAsync(_targets.Values, new ParallelOptions
@@ -121,6 +159,13 @@ public sealed class AzureContainerAppRuntimeStreamer(
         });
     }
 
+    /// <summary>
+    ///     Collects verified runtime state, logs and metrics while isolating independent source
+    ///     failures.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PollTargetAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
     {
         await using var policyScope = scopeFactory.CreateAsyncScope();
@@ -241,7 +286,13 @@ public sealed class AzureContainerAppRuntimeStreamer(
         await PollDatabasesAsync(target, tokenResult.AccessToken, cancellationToken);
     }
 
-    /// <summary>Resolves the environment log scope and publishes only observed, revision-scoped web metrics.</summary>
+    /// <summary>
+    ///     Resolves the environment log scope and publishes only observed, revision-scoped web
+    ///     metrics.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PollStateAndMetricsAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
     {
         AzureContainerAppState? state = null;
@@ -348,7 +399,14 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
     }
 
-    /// <summary>Collects each managed database independently so a database failure cannot suppress web diagnostics.</summary>
+    /// <summary>
+    ///     Collects each managed database independently so a database failure cannot suppress web
+    ///     diagnostics.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="logsToken">Memory-only Azure Monitor data-plane access token.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PollDatabasesAsync(ContainerAppStreamTarget target, string? logsToken,
         CancellationToken cancellationToken)
     {
@@ -396,7 +454,14 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
     }
 
-    /// <summary>Publishes native database gauges through the same redacted live and durable metric pipeline.</summary>
+    /// <summary>
+    ///     Publishes native database gauges through the same redacted live and durable metric
+    ///     pipeline.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="database">Selected owned database resource or deployment configuration.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PublishDatabaseMetricsAsync(ContainerAppStreamTarget target, AzureManagedDatabase database,
         CancellationToken cancellationToken)
     {
@@ -426,7 +491,17 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
     }
 
-    /// <summary>Prints web observations once per provider minute; database metrics use numeric delivery only.</summary>
+    /// <summary>
+    ///     Prints web observations once per provider minute; database metrics use numeric delivery
+    ///     only.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="resource">Verified provider resource identity.</param>
+    /// <param name="observation">
+    ///     Typed Azure resource observation preserving timestamp, units and aggregations.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PublishMetricSummaryAsync(ContainerAppStreamTarget target, string resource,
         AzureMetricObservation observation, CancellationToken cancellationToken)
     {
@@ -457,7 +532,16 @@ public sealed class AzureContainerAppRuntimeStreamer(
         target.LastMetricSummary[resource] = observation.Timestamp;
     }
 
-    /// <summary>Advances one database cursor only for confirmed writes, preserving retry identity across restart.</summary>
+    /// <summary>
+    ///     Advances one database cursor only for confirmed writes, preserving retry identity across
+    ///     restart.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="database">Selected owned database resource or deployment configuration.</param>
+    /// <param name="key">Stable lookup or configuration key.</param>
+    /// <param name="logsToken">Memory-only Azure Monitor data-plane access token.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task TailDatabaseAsync(ContainerAppStreamTarget target, AzureManagedDatabase database, string key,
         string logsToken, CancellationToken cancellationToken)
     {
@@ -517,6 +601,16 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
     }
 
+    /// <summary>
+    ///     Queries a bounded verified Azure source and advances its cursor only after durable
+    ///     acknowledgement.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="checkpoints">Persists source cursors only after durable acknowledgement.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task TailSourceAsync(ContainerAppStreamTarget target, AzureContainerAppLogSource source,
         string accessToken, AzureContainerAppLogCheckpointStore checkpoints, CancellationToken cancellationToken)
     {
@@ -604,6 +698,13 @@ public sealed class AzureContainerAppRuntimeStreamer(
             "Runtime log collection is catching up with a backlog.", cancellationToken);
     }
 
+    /// <summary>
+    ///     Projects an Azure record into a deployment-correlated terminal diagnostic.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="source">Verified source classification, resource identity or owned input stream.</param>
+    /// <param name="record">Normalized Azure event with its original timestamp and ingestion cursor.</param>
+    /// <returns>The normalized deployment-correlated observation.</returns>
     private static DeploymentDiagnosticEvent CreateLogEvent(ContainerAppStreamTarget target,
         AzureContainerAppLogSource source, AzureMonitorLogRecord record)
     {
@@ -637,6 +738,14 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 isConsole ? record.ContainerName : record.RevisionName));
     }
 
+    /// <summary>
+    ///     Publishes a deduplicated source-availability notice outside ordinary terminal output.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="issue">Finite source-availability issue identifier.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PublishIssueOnceAsync(ContainerAppStreamTarget target, string issue, string message,
         CancellationToken cancellationToken)
     {
@@ -654,6 +763,11 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 DeploymentDiagnosticStream.System, target.ContainerAppName)), cancellationToken);
     }
 
+    /// <summary>
+    ///     Clears a recovered source-availability issue so a later failure can be reported.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="issue">Finite source-availability issue identifier.</param>
     private void ClearIssue(ContainerAppStreamTarget target, string issue)
     {
         if (_reportedIssues.TryRemove($"{target.DeploymentId:N}:{issue}", out _) &&
@@ -662,6 +776,14 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 new KeyValuePair<string, object?>("deployment.source", "AzureContainerApps"));
     }
 
+    /// <summary>
+    ///     Compares ingestion timestamp and stable hash against the last durably confirmed source
+    ///     cursor.
+    /// </summary>
+    /// <param name="record">Normalized Azure event with its original timestamp and ingestion cursor.</param>
+    /// <param name="tieBreaker">Stable hash ordering observations with equal timestamps.</param>
+    /// <param name="checkpoint">Durable source position used to avoid duplicate delivery.</param>
+    /// <returns>Whether the documented after checkpoint condition holds.</returns>
     private static bool IsAfterCheckpoint(AzureMonitorLogRecord record, string tieBreaker,
         AzureContainerAppLogCheckpoint checkpoint)
     {
@@ -677,7 +799,15 @@ public sealed class AzureContainerAppRuntimeStreamer(
                                            string.CompareOrdinal(tieBreaker, hash) > 0);
     }
 
-    /// <summary>Gives an Azure metric minute a stable retry identity independent of polling time.</summary>
+    /// <summary>
+    ///     Gives an Azure metric minute a stable retry identity independent of polling time.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="resource">Verified provider resource identity.</param>
+    /// <param name="observation">
+    ///     Typed Azure resource observation preserving timestamp, units and aggregations.
+    /// </param>
+    /// <returns>The resolved internal identity.</returns>
     private static Guid MetricEventId(ContainerAppStreamTarget target, string resource,
         AzureMetricObservation observation)
     {
@@ -685,6 +815,11 @@ public sealed class AzureContainerAppRuntimeStreamer(
             Encoding.UTF8.GetBytes($"{target.DeploymentId:N}/{resource}/{observation.Timestamp:O}"))[..16]);
     }
 
+    /// <summary>
+    ///     Derives a stable content identity for records sharing a provider timestamp.
+    /// </summary>
+    /// <param name="record">Normalized Azure event with its original timestamp and ingestion cursor.</param>
+    /// <returns>The stable identity derived from the documented metadata or content.</returns>
     private static string CreateTieBreaker(AzureMonitorLogRecord record)
     {
         if (record.CursorHash is not null) return record.CursorHash;
@@ -693,6 +828,14 @@ public sealed class AzureContainerAppRuntimeStreamer(
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
     }
 
+    /// <summary>
+    ///     Validates deployment resource identity and creates a non-secret collector target.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <returns>True when validation or acquisition succeeds; otherwise false.</returns>
     private static bool TryCreateStreamTarget(AzureContainerAppRuntimeStreamRequest request,
         out ContainerAppStreamTarget target)
     {
@@ -715,12 +858,22 @@ public sealed class AzureContainerAppRuntimeStreamer(
         return true;
     }
 
+    /// <summary>
+    ///     Formats observed Container App availability without claiming application health.
+    /// </summary>
+    /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+    /// <returns>The availability message derived from the validated input.</returns>
     private static string CreateAvailabilityMessage(AzureContainerAppState state)
     {
         return
             $"Azure Container App is available{(string.IsNullOrWhiteSpace(state.Fqdn) ? string.Empty : $" at https://{state.Fqdn}")}. Latest ready revision: {state.LatestRevision}.";
     }
 
+    /// <summary>
+    ///     Restores collection for eligible verified cloud deployments after host restart.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RecoverTargetsAsync(CancellationToken token)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -758,6 +911,19 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
     }
 
+    /// <summary>
+    ///     Holds verified resource identity, collector cursors and current runtime observations.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="resourceId">Verified Azure resource identity used to scope provider reads.</param>
+    /// <param name="containerAppName">Verified Azure Container App name.</param>
+    /// <param name="azureCredentials">
+    ///     Resolves current scoped Azure authorization without logging credentials.
+    /// </param>
     private sealed class ContainerAppStreamTarget(
         Guid projectId,
         Guid deploymentId,
@@ -769,36 +935,60 @@ public sealed class AzureContainerAppRuntimeStreamer(
         /// <summary>Only the latest verified active deployment collects shared database observations.</summary>
         public bool CollectDatabases { get; set; }
 
-        /// <summary>Configured exact database container names; managed databases use their separate resource collector.</summary>
+        /// <summary>
+        ///     Configured exact database container names; managed databases use their separate resource
+        ///     collector.
+        /// </summary>
         public IReadOnlySet<string> DatabaseContainers { get; set; } = new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>Metric sampling can be slower than the sixty-second live ownership heartbeat.</summary>
         public DateTimeOffset NextMetricsAt { get; set; }
 
-        /// <summary>Each resource uses the configured sampling interval despite more frequent lease renewal.</summary>
+        /// <summary>
+        ///     Each resource uses the configured sampling interval despite more frequent lease renewal.
+        /// </summary>
         public bool MetricsDue { get; set; }
 
         /// <summary>Prevents overlapping metric polling windows from printing the same minute repeatedly.</summary>
         public Dictionary<string, DateTimeOffset> LastMetricSummary { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>Verified collector project id metadata.</summary>
         public Guid ProjectId { get; } = projectId;
+
+        /// <summary>Verified collector deployment id metadata.</summary>
         public Guid DeploymentId { get; } = deploymentId;
+
+        /// <summary>Verified collector user id metadata.</summary>
         public Guid UserId { get; } = userId;
+
+        /// <summary>Verified collector resource id metadata.</summary>
         public string ResourceId { get; } = resourceId;
 
         /// <summary>Environment ARM scope resolved from the selected app, refreshed with state reads.</summary>
         public string? LogResourceId { get; set; }
 
+        /// <summary>Verified collector log environment name metadata.</summary>
         public string? LogEnvironmentName { get; set; }
+
+        /// <summary>Verified collector log environment resource name metadata.</summary>
         public string? LogEnvironmentResourceName { get; set; }
 
         /// <summary>Verified tagged inventory retained only in memory between metrics and log polling.</summary>
         public IReadOnlyList<AzureManagedDatabase> Databases { get; set; } = [];
 
+        /// <summary>Verified collector container app name metadata.</summary>
         public string ContainerAppName { get; } = containerAppName;
+
+        /// <summary>Verified collector azure credentials metadata.</summary>
         public AzureCloudCredentialsDto AzureCredentials { get; set; } = azureCredentials;
+
+        /// <summary>Verified collector expected revision metadata.</summary>
         public string? ExpectedRevision { get; set; }
+
+        /// <summary>Verified collector last revision metadata.</summary>
         public string LastRevision { get; set; } = string.Empty;
+
+        /// <summary>Verified collector last fqdn metadata.</summary>
         public string LastFqdn { get; set; } = string.Empty;
     }
 }

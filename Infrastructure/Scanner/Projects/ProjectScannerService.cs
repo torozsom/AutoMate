@@ -7,26 +7,33 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Scanner;
 
 /// <summary>
-///     Coordinates C# project metadata scanning, dependency analysis, and environment-variable extraction.
+///     Coordinates C# project metadata scanning, dependency analysis, and environment-variable
+///     extraction.
 /// </summary>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger) : IProjectScannerService
 {
-    /// <summary>
-    ///     Database provider rule source loaded from the scanner configuration file.
-    /// </summary>
+    /// <summary>Database provider rule source loaded from the scanner configuration file.</summary>
     private readonly DatabaseProviderRuleCatalog _databaseProviderRules = new(logger);
 
-    /// <summary>
-    ///     Environment variable extractor for appsettings, launchSettings, and .env files.
-    /// </summary>
+    /// <summary>Environment variable extractor for appsettings, launchSettings, and .env files.</summary>
     private readonly ProjectEnvironmentVariableExtractor _environmentVariableExtractor = new(logger);
 
-    /// <summary>
-    ///     Allocates local host ports for generated deployment configurations.
-    /// </summary>
+    /// <summary>Allocates local host ports for generated deployment configurations.</summary>
     private readonly ScannerPortProvider _portProvider = new(logger);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Scans the provided project file path to extract solution-wide metadata.
+    /// </summary>
+    /// <param name="filePath">The full path to the .csproj file to scan.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning project metadata containing references and target framework.</returns>
+    /// <exception cref="FileNotFoundException">The selected C# project file does not exist.</exception>
+    /// <exception cref="T:System.OperationCanceledException">
+    ///     The underlying read or analysis observes cancellation.
+    /// </exception>
     public async Task<ProjectMetadataDto> ScanProjectContentAsync(string filePath,
         CancellationToken cancellationToken = default)
     {
@@ -39,7 +46,18 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
         return await ProjectDependencyGraphScanner.ScanAsync(filePath, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Analyzes the dependencies of the given project to determine deployment configurations.
+    /// </summary>
+    /// <param name="app">The parent project entity.</param>
+    /// <param name="csProject">The specific C# project being analyzed.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>
+    ///     A task returning a deployment configuration including identified database dependencies.
+    /// </returns>
+    /// <exception cref="T:System.OperationCanceledException">
+    ///     The underlying read or analysis observes cancellation.
+    /// </exception>
     public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Domain.Entities.Application app,
         CsProject csProject,
         CancellationToken cancellationToken = default)
@@ -81,7 +99,12 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
         return config;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Extracts environment variables from configuration files in the project directory.
+    /// </summary>
+    /// <param name="projectPath">The root path of the project containing configuration files.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning a dictionary of extracted environment variables.</returns>
     public async Task<Dictionary<string, string>> ExtractEnvironmentVariablesAsync(string projectPath,
         CancellationToken cancellationToken = default)
     {
@@ -89,8 +112,12 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
     }
 
     /// <summary>
-    ///     Creates the baseline local deployment configuration before dependency-specific defaults are applied.
+    ///     Creates the baseline local deployment configuration before dependency-specific defaults
+    ///     are applied.
     /// </summary>
+    /// <param name="app">The application whose project dependencies are being analyzed.</param>
+    /// <param name="csProject">The selected C# project and its recorded metadata.</param>
+    /// <returns>The deployment config dto projection derived from the verified inputs.</returns>
     private DeploymentConfigDto CreateDefaultDeploymentConfig(Domain.Entities.Application app, CsProject csProject)
     {
         return new DeploymentConfigDto
@@ -107,6 +134,9 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
     /// <summary>
     ///     Checks whether any discovered package matches a database provider rule.
     /// </summary>
+    /// <param name="rule">Provider detection or template selection rule.</param>
+    /// <param name="packageNames">Dependency package names checked against provider rules.</param>
+    /// <returns>Whether the documented rule match packages condition holds.</returns>
     private static bool DoesRuleMatchPackages(DbProviderRuleDto rule, IEnumerable<string> packageNames)
     {
         return packageNames.Any(projectPackage =>
@@ -117,6 +147,8 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
     /// <summary>
     ///     Creates the deployment database configuration implied by a matched provider rule.
     /// </summary>
+    /// <param name="rule">Provider detection or template selection rule.</param>
+    /// <returns>The database config dto projection derived from the verified inputs.</returns>
     private static DatabaseConfigDto CreateDatabaseConfig(DbProviderRuleDto rule)
     {
         return new DatabaseConfigDto

@@ -10,6 +10,13 @@ internal static class CloudDeploymentRequestValidator
     /// <summary>
     ///     Throws when required repository or credential values are missing.
     /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    ///     A requesting user is required for cloud runtime monitoring.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
     public static void Validate(CloudDeploymentRequestDto request)
     {
         ArgumentNullException.ThrowIfNull(request);

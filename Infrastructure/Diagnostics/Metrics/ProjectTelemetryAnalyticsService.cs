@@ -8,7 +8,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Authorizes project access before returning bounded metric projections and SQL deployment summaries.</summary>
+/// <summary>
+///     Authorizes project access before returning bounded metric projections and SQL deployment
+///     summaries.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="exploration">Provides the metric exploration? boundary used by this operation.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="storage">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class ProjectTelemetryAnalyticsService(
     AutoMateDbContext db,
     IDiagnosticRedactor redactor,
@@ -17,7 +28,20 @@ public sealed class ProjectTelemetryAnalyticsService(
     IOptions<TelemetryStorageOptions>? storage = null,
     ILogger<ProjectTelemetryAnalyticsService>? logger = null) : IProjectTelemetryAnalytics
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads owned project outcomes and daily observations for an absolute UTC window.
+    /// </summary>
+    /// <param name="user">The internal user identity used for authorization.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning recorded project outcomes and daily observations with independent
+    ///     availability notices.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Managed telemetry processing is not approved.</exception>
+    /// <exception cref="UnauthorizedAccessException">Project analytics access denied.</exception>
     public async Task<ProjectTelemetryAnalytics> ReadAsync(Guid user, Guid project, DateTimeOffset start,
         DateTimeOffset end, CancellationToken token = default)
     {
@@ -90,7 +114,16 @@ public sealed class ProjectTelemetryAnalyticsService(
                 d.Minimum, d.Maximum, d.ObservedErrors, d.Incomplete, d.UpdatedAt)).ToArray(), notice);
     }
 
-    /// <summary>Streams timestamp pairs in constant memory for SQLite, which cannot translate interval averages.</summary>
+    /// <summary>
+    ///     Streams timestamp pairs in constant memory for SQLite, which cannot translate interval
+    ///     averages.
+    /// </summary>
+    /// <param name="completed">Queryable completed deployments used for aggregate calculations.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the observed finite numeric aggregate, or null when no value is
+    ///     available.
+    /// </returns>
     private static async Task<double?> ReadPortableDurationAsync(IQueryable<Deployment> completed,
         CancellationToken token)
     {

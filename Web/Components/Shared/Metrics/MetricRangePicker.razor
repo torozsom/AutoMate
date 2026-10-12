@@ -1,5 +1,8 @@
-@namespace Web.Components.Shared
 @using Application.Abstractions.Diagnostics
+@*
+    Selects relative or explicit frozen UTC windows and validates range bounds before publication.
+*@
+@namespace Web.Components.Shared
 <div class="metric-range-picker">
     <label for="@(_id + "-period")">Period (UTC)
         <select id="@(_id + "-period")" class="form-select" value="@_choice" @onchange="ChooseAsync">
@@ -70,7 +73,9 @@
         new("1y", "1 year"), new("5y", "5 years")
     ];
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Initializes the selected preset and a custom window covering the last 30 days.
+    /// </summary>
     protected override void OnInitialized()
     {
         _choice = Default;
@@ -79,7 +84,11 @@
         _end = now.UtcDateTime;
     }
 
-    /// <summary>Publishes relative windows immediately, while custom inputs await explicit validation.</summary>
+    /// <summary>
+    ///     Publishes relative windows immediately, while custom inputs await explicit validation.
+    /// </summary>
+    /// <param name="args">Browser event data for this interaction.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ChooseAsync(ChangeEventArgs args)
     {
         _choice = args.Value?.ToString() ?? Default;
@@ -87,7 +96,10 @@
         if (_choice != "custom") await ApplyAsync();
     }
 
-    /// <summary>Validates a frozen UTC window and reports clipping explicitly.</summary>
+    /// <summary>
+    ///     Validates a frozen UTC window and reports clipping explicitly.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ApplyAsync()
     {
         var now = DateTimeOffset.UtcNow;

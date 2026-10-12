@@ -9,7 +9,14 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Orchestration;
 
-/// <summary>Host-owned supervision; every subscription is tracked, canceled and awaited on replacement/shutdown.</summary>
+/// <summary>
+///     Host-owned supervision; every subscription is tracked, canceled and awaited on
+///     replacement/shutdown.
+/// </summary>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class LocalDeploymentLogStreamManager(
     IServiceScopeFactory scopes,
     ILogger<LocalDeploymentLogStreamManager> logger) : BackgroundService, ILocalDeploymentDiagnostics
@@ -26,14 +33,34 @@ public sealed class LocalDeploymentLogStreamManager(
     /// <summary>Ensures singleton/host registrations can safely dispose the same owner more than once.</summary>
     private int _disposed;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Checks whether recovery must register a current deployment.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <returns>Whether a matching deployment supervisor is registered.</returns>
     public bool IsActive(Guid projectId, Guid deploymentId)
     {
         return _targets.TryGetValue(projectId, out var state) &&
                state.Target.DeploymentId == deploymentId && !state.Task.IsCompleted;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Registers or replaces a deployment; startup operations collect lifecycle events before
+    ///     Compose runs.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="deploymentOperation">
+    ///     Whether a deployment operation currently requires daemon collection.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after the deployment's diagnostic supervisor is registered.</returns>
+    /// <exception cref="ArgumentException">
+    ///     Local diagnostics require ownership and a bounded container inventory.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">Local collector capacity has been reached.</exception>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task RegisterAsync(DockerDeploymentTarget target, bool deploymentOperation,
         CancellationToken cancellationToken = default)
     {
@@ -99,7 +126,16 @@ public sealed class LocalDeploymentLogStreamManager(
             }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Enables lifecycle collection for a deployment operation, independently of runtime
+    ///     viewing consent.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="active">The current active-operation count.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after the supervisor's deployment-operation interest is updated.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public Task SetOperationAsync(Guid projectId, Guid deploymentId, bool active,
         CancellationToken cancellationToken = default)
     {
@@ -109,7 +145,12 @@ public sealed class LocalDeploymentLogStreamManager(
         return Task.CompletedTask;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Cancels and awaits all collectors for a project.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after the project's supervised sources have stopped.</returns>
     public async Task StopProjectAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
         TargetState? state;
@@ -139,7 +180,12 @@ public sealed class LocalDeploymentLogStreamManager(
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Supervises owned local source tasks and automatically restores eligible runtime
+    ///     collection.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
@@ -166,14 +212,20 @@ public sealed class LocalDeploymentLogStreamManager(
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Stops admission and awaits owned background work before host shutdown.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         await _shutdown.CancelAsync();
         await base.StopAsync(cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Releases owned resources and completes the documented service lifetime.
+    /// </summary>
     public override void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
@@ -183,7 +235,11 @@ public sealed class LocalDeploymentLogStreamManager(
         _changes.Dispose();
     }
 
-    /// <summary>Separates source lifetimes and viewing consent while tracking every child task.</summary>
+    /// <summary>
+    ///     Separates source lifetimes and viewing consent while tracking every child task.
+    /// </summary>
+    /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RunTargetAsync(TargetState state)
     {
         var token = state.Cancellation.Token;
@@ -282,7 +338,15 @@ public sealed class LocalDeploymentLogStreamManager(
         }
     }
 
-    /// <summary>Reads current deployment eligibility using an independent EF scope.</summary>
+    /// <summary>
+    ///     Reads current deployment eligibility using an independent EF scope.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the grouped values described by this operation, preserving unavailable
+    ///     fields.
+    /// </returns>
     private async Task<(bool Current, bool Runtime, DeploymentStatus Status)> ReadPolicyAsync(
         DockerDeploymentTarget target, CancellationToken token)
     {
@@ -295,7 +359,14 @@ public sealed class LocalDeploymentLogStreamManager(
         return (latest?.Id == target.DeploymentId, interest, latest?.Status ?? DeploymentStatus.Stopped);
     }
 
-    /// <summary>Cancels and awaits a source group before disposing its cancellation owner.</summary>
+    /// <summary>
+    ///     Cancels and awaits a source group before disposing its cancellation owner.
+    /// </summary>
+    /// <param name="cancellation">
+    ///     Owns cancellation of the supervised work and must be disposed by its owner.
+    /// </param>
+    /// <param name="tasks">Owned asynchronous operations to await during cleanup.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task CancelTasksAsync(CancellationTokenSource cancellation, IEnumerable<Task> tasks)
     {
         await cancellation.CancelAsync();
@@ -303,7 +374,11 @@ public sealed class LocalDeploymentLogStreamManager(
         cancellation.Dispose();
     }
 
-    /// <summary>Observes faults without exposing provider bodies or abandoning other sources.</summary>
+    /// <summary>
+    ///     Observes faults without exposing provider bodies or abandoning other sources.
+    /// </summary>
+    /// <param name="task">Owned operation to await while preserving its completion or failure.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task ObserveTaskAsync(Task task)
     {
         try
@@ -320,7 +395,11 @@ public sealed class LocalDeploymentLogStreamManager(
         }
     }
 
-    /// <summary>Releases the cancellation owner only after its supervisor and children finish.</summary>
+    /// <summary>
+    ///     Releases the cancellation owner only after its supervisor and children finish.
+    /// </summary>
+    /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task StopTargetAsync(TargetState state)
     {
         await state.Cancellation.CancelAsync();
@@ -328,7 +407,14 @@ public sealed class LocalDeploymentLogStreamManager(
         state.Cancellation.Dispose();
     }
 
-    /// <summary>Owns one deployment's tasks without retaining configuration credentials.</summary>
+    /// <summary>
+    ///     Owns one deployment's tasks without retaining configuration credentials.
+    /// </summary>
+    /// <param name="target">Verified project/deployment collector inventory and ownership labels.</param>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="cancellation">
+    ///     Owns cancellation of the supervised work and must be disposed by its owner.
+    /// </param>
     private sealed class TargetState(
         DockerDeploymentTarget target,
         bool operation,

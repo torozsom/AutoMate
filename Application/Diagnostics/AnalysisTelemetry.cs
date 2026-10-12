@@ -5,7 +5,9 @@ using Application.Ai;
 
 namespace Application.Diagnostics;
 
-/// <summary>Reviewed analysis steps; external text never becomes an operation name.</summary>
+/// <summary>
+///     Reviewed analysis steps; external text never becomes an operation name.
+/// </summary>
 public enum AnalysisOperation
 {
     /// <summary>Durable queue acquisition.</summary>
@@ -33,7 +35,9 @@ public enum AnalysisOperation
     Retry
 }
 
-/// <summary>Finite attempt outcomes, independent of provider error messages.</summary>
+/// <summary>
+///     Finite attempt outcomes, independent of provider error messages.
+/// </summary>
 public enum AnalysisOutcome
 {
     /// <summary>Operation committed successfully.</summary>
@@ -58,7 +62,10 @@ public enum AnalysisOutcome
     RetryScheduled
 }
 
-/// <summary>Payload-free analysis traces and finite-dimensional metrics shared without an SDK dependency.</summary>
+/// <summary>
+///     Payload-free analysis traces and finite-dimensional metrics shared without an SDK
+///     dependency.
+/// </summary>
 public static class AnalysisTelemetry
 {
     /// <summary>Stable analysis activity source.</summary>
@@ -89,27 +96,66 @@ public static class AnalysisTelemetry
     private static readonly Histogram<long> OutputTokens =
         Meter.CreateHistogram<long>("automate.analysis.output.tokens", "{token}");
 
-    /// <summary>Begins a correlated operation without accepting provider names, text or arbitrary labels.</summary>
+    /// <summary>
+    ///     Begins a correlated operation without accepting provider names, text or arbitrary
+    ///     labels.
+    /// </summary>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>An owned measurement whose disposal records outcome and balances active attempts.</returns>
     public static Measurement Start(AnalysisOperation operation, Guid? deploymentId = null, Guid? analysisId = null,
         CancellationToken token = default)
     {
         return new Measurement(operation, deploymentId, analysisId, token);
     }
 
-    /// <summary>Reports nonnegative queue wait only after a durable acquisition succeeds.</summary>
+    /// <summary>
+    ///     Reports nonnegative queue wait only after a durable acquisition succeeds.
+    /// </summary>
+    /// <param name="eligibleAt">The recorded time at which the work became eligible for acquisition.</param>
+    /// <param name="now">The current time used for window validation or duration calculation.</param>
     public static void Claimed(DateTimeOffset eligibleAt, DateTimeOffset now)
     {
         QueueWait.Record(Math.Max(0, (now - eligibleAt).TotalMilliseconds));
     }
 
-    /// <summary>Records known usage only after result validation; missing counts remain absent.</summary>
+    /// <summary>
+    ///     Records known usage only after result validation; missing counts remain absent.
+    /// </summary>
+    /// <param name="response">The untrusted structured analysis response to validate.</param>
     public static void Usage(LlmAnalysisResponse response)
     {
         if (response.InputTokens is >= 0) InputTokens.Record(response.InputTokens.Value);
         if (response.OutputTokens is >= 0) OutputTokens.Record(response.OutputTokens.Value);
     }
 
-    /// <summary>Preserves result and exception identity while completing a payload-free child measurement.</summary>
+    /// <summary>
+    ///     Preserves result and exception identity while completing a payload-free child
+    ///     measurement.
+    /// </summary>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="action">
+    ///     The operation to execute while preserving its result and exception identity.
+    /// </param>
+    /// <param name="outcome">The optional selector mapping the returned result to a finite outcome.</param>
+    /// <typeparam name="T">The result type returned by the supplied operation.</typeparam>
+    /// <returns>
+    ///     A task returning the supplied operation's result, preserving its exception and
+    ///     cancellation semantics.
+    /// </returns>
+    /// <exception cref="Application.Ai.AnalysisProviderUnavailableException">
+    ///     The supplied operation reports that current policy prevents provider execution.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">The supplied operation observes cancellation.</exception>
     public static async Task<T> RunAsync<T>(AnalysisOperation operation, Guid? deploymentId, Guid? analysisId,
         CancellationToken token, Func<Task<T>> action, Func<T, AnalysisOutcome>? outcome = null)
     {
@@ -132,7 +178,10 @@ public static class AnalysisTelemetry
         }
     }
 
-    /// <summary>A single operation lifetime; disposal always balances active attempts and records exactly once.</summary>
+    /// <summary>
+    ///     A single operation lifetime; disposal always balances active attempts and records
+    ///     exactly once.
+    /// </summary>
     public sealed class Measurement : IDisposable
     {
         /// <summary>Optional sampled child span.</summary>
@@ -156,7 +205,15 @@ public static class AnalysisTelemetry
         /// <summary>Default failure ensures exceptions cannot accidentally report success.</summary>
         private AnalysisOutcome _outcome = AnalysisOutcome.Failed;
 
-        /// <summary>Starts only fixed-name operations with GUID correlation.</summary>
+        /// <summary>
+        ///     Starts only fixed-name operations with GUID correlation.
+        /// </summary>
+        /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+        /// <param name="deploymentId">
+        ///     The deployment identity; null is used only where legacy observations permit it.
+        /// </param>
+        /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
+        /// <param name="token">Cancels the operation when supported by the underlying work.</param>
         internal Measurement(AnalysisOperation operation, Guid? deploymentId, Guid? analysisId, CancellationToken token)
         {
             _token = token;
@@ -170,7 +227,10 @@ public static class AnalysisTelemetry
             if (_processing) Active.Add(1);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records the final outcome once, closes its activity and balances active-attempt
+        ///     accounting.
+        /// </summary>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
@@ -192,7 +252,10 @@ public static class AnalysisTelemetry
             _activity?.Dispose();
         }
 
-        /// <summary>Sets the final finite outcome; no untrusted enum value can create a label.</summary>
+        /// <summary>
+        ///     Sets the final finite outcome; no untrusted enum value can create a label.
+        /// </summary>
+        /// <param name="outcome">The finite recorded operation or deployment outcome.</param>
         public void Finish(AnalysisOutcome outcome)
         {
             _outcome = Enum.IsDefined(outcome) ? outcome : AnalysisOutcome.Failed;

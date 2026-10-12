@@ -8,7 +8,15 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Leases tenant streams and retains each ordered batch until its complete prefix is query-visible.</summary>
+/// <summary>
+///     Leases tenant streams and retains each ordered batch until its complete prefix is query-
+///     visible.
+/// </summary>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class TelemetryDeliveryWorker(
     IServiceScopeFactory scopes,
     IOptions<TelemetryStorageOptions> options,
@@ -17,7 +25,11 @@ public sealed class TelemetryDeliveryWorker(
     /// <summary>Bounds operational alerts while retaining measurements each cycle.</summary>
     private DateTimeOffset _nextCleanupWarning;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Drains retained legacy delivery buffers under tenant-scoped leases.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Keep draining legacy database outboxes during migration, even with DiskGateway enabled.
@@ -40,7 +52,11 @@ public sealed class TelemetryDeliveryWorker(
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Processes at most eight eligible owners fairly in one bounded cycle.</summary>
+    /// <summary>
+    ///     Processes at most eight eligible owners fairly in one bounded cycle.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task DeliverOnceAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
@@ -157,14 +173,29 @@ public sealed class TelemetryDeliveryWorker(
         }
     }
 
-    /// <summary>Checks fencing before mutating delivery state.</summary>
+    /// <summary>
+    ///     Checks fencing before mutating delivery state.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="lease">Worker ownership token fencing this attempt.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning whether the documented owns lease async condition holds.</returns>
     private static Task<bool> OwnsLeaseAsync(AutoMateDbContext db, Guid tenant, Guid lease, CancellationToken token)
     {
         return db.TelemetryTenantStates.AnyAsync(
             s => s.TenantId == tenant && s.LeaseId == lease && s.LeaseUntil > DateTimeOffset.UtcNow, token);
     }
 
-    /// <summary>Records bounded-buffer expiry as durable, visible loss before deleting payloads.</summary>
+    /// <summary>
+    ///     Records bounded-buffer expiry as durable, visible loss before deleting payloads.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="lease">Worker ownership token fencing this attempt.</param>
+    /// <param name="ids">Bounded internal deployment identifiers.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task DropAsync(AutoMateDbContext db, Guid tenant, Guid lease, Guid[] ids, CancellationToken token)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(token);
@@ -180,7 +211,14 @@ public sealed class TelemetryDeliveryWorker(
             ids.Length, tenant);
     }
 
-    /// <summary>Removes confirmed payloads and releases capacity in the same short transaction.</summary>
+    /// <summary>
+    ///     Removes confirmed payloads and releases capacity in the same short transaction.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="ids">Bounded internal deployment identifiers.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal static async Task RemoveBufferedAsync(AutoMateDbContext db, Guid tenant, Guid[] ids,
         CancellationToken token)
     {
@@ -191,7 +229,14 @@ public sealed class TelemetryDeliveryWorker(
         await transaction.CommitAsync(token);
     }
 
-    /// <summary>Accounts for actual deleted rows, making recovery and duplicate deletion harmless.</summary>
+    /// <summary>
+    ///     Accounts for actual deleted rows, making recovery and duplicate deletion harmless.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="ids">Bounded internal deployment identifiers.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private static async Task RemoveRowsAsync(AutoMateDbContext db, Guid tenant, Guid[] ids, CancellationToken token)
     {
         var bytes = await db.DeploymentDiagnosticRecords.Where(r => ids.Contains(r.Id) && r.DeliveryJson != null)

@@ -10,9 +10,16 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 namespace Infrastructure.Migrations
 {
+    /// <summary>
+    ///     EF schema migration and target-model metadata for Auto Mate Db Context Model Snapshot.
+    /// </summary>
     [DbContext(typeof(AutoMateDbContext))]
     partial class AutoMateDbContextModelSnapshot : ModelSnapshot
     {
+        /// <summary>
+        ///     Defines the current EF model snapshot used to compare future migrations.
+        /// </summary>
+        /// <param name="modelBuilder">Builds the documented EF entity mappings or historical model.</param>
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

@@ -7,21 +7,24 @@ using Microsoft.AspNetCore.Components;
 namespace Web.Components.Shared;
 
 /// <summary>
-///     A Blazor component that provides a user interface for configuring deployment settings for a .NET project.
+///     A Blazor component that provides a user interface for configuring deployment settings for a
+///     .NET project.
 /// </summary>
 public partial class ConfigurationForm : ComponentBase
 {
-    /// <summary>
-    ///     UI-friendly representation of environment variables to allow Blazor data binding.
-    /// </summary>
+    /// <summary>UI-friendly representation of environment variables to allow Blazor data binding.</summary>
     private readonly List<EnvVarItem> _envVars = [];
 
+    /// <summary>Last generated names used to preserve explicit edits.</summary>
     private CloudDefaults? _lastCloudDefaults;
 
     /// <summary>Prevents overlapping scans and exposes progress to the form.</summary>
     private bool _loadingVariables;
 
+    /// <summary>Current deployment environment name.</summary>
     private string _selectedEnvironment = DeploymentDefaults.DevelopmentEnvironmentName;
+
+    /// <summary>First actionable deployment-setting error.</summary>
     private string? _validationMessage;
 
     /// <summary>Safe feedback without configuration values or filesystem details.</summary>
@@ -41,43 +44,32 @@ public partial class ConfigurationForm : ComponentBase
         : $"https://github.com/apps/{Uri.EscapeDataString(Configuration["GitHubApp:AppSlug"]!)}/installations/new";
 
 
-    /// <summary>
-    ///     The deployment configuration settings for the project being deployed.
-    /// </summary>
+    /// <summary>The deployment configuration settings for the project being deployed.</summary>
     [Parameter]
     public DeploymentConfigDto Config { get; set; } = new();
 
-    /// <summary>
-    ///     The file system path to the project being configured for deployment.
-    /// </summary>
+    /// <summary>The file system path to the project being configured for deployment.</summary>
     [Parameter]
     public string ProjectPath { get; set; } = string.Empty;
 
-    /// <summary>
-    ///     Indicates whether the form should render cloud-specific deployment settings.
-    /// </summary>
+    /// <summary>Indicates whether the form should render cloud-specific deployment settings.</summary>
     [Parameter]
     public bool IsCloudDeployment { get; set; }
 
-    /// <summary>
-    ///     An event callback invoked when the user confirms the deployment with the specified configuration.
-    /// </summary>
+    /// <summary>An event callback invoked when the user confirms the deployment with the specified configuration.</summary>
     [Parameter]
     public EventCallback<DeploymentConfigDto> OnDeployConfirmed { get; set; }
 
-    /// <summary>
-    ///     An event callback invoked when the user cancels the deployment configuration process.
-    /// </summary>
+    /// <summary>An event callback invoked when the user cancels the deployment configuration process.</summary>
     [Parameter]
     public EventCallback OnCancel { get; set; }
 
 
-    /// <summary>
-    ///     Service responsible for scanning project files to extract environment variables and metadata.
-    /// </summary>
+    /// <summary>Service responsible for scanning project files to extract environment variables and metadata.</summary>
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
 
+    /// <summary>Updates environment defaults while preserving edited names.</summary>
     private string SelectedEnvironment
     {
         get => _selectedEnvironment;
@@ -97,8 +89,8 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///     Initializes the component and populates the UI list of environment variables
-    ///     from the incoming configuration dictionary.
+    ///     Initializes the component and populates the UI list of environment variables from the incoming
+    ///     configuration dictionary.
     /// </summary>
     protected override void OnInitialized()
     {
@@ -118,9 +110,10 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///     Scans the project directory for configuration files (appsettings.json, launchSettings.json, .env)
-    ///     and loads discovered variables into the UI list without overwriting existing ones.
+    ///     Scans the project directory for configuration files (appsettings.json, launchSettings.json,
+    ///     .env) and loads discovered variables into the UI list without overwriting existing ones.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task LoadVariablesFromConfigFilesAsync()
     {
         if (IsCloudDeployment || _loadingVariables) return;
@@ -160,8 +153,10 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///     Validates and rebuilds the configuration dictionary, then triggers the deployment confirmation event.
+    ///     Validates and rebuilds the configuration dictionary, then triggers the deployment confirmation
+    ///     event.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ConfirmDeploy()
     {
         _validationMessage = null;
@@ -188,6 +183,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Validates cloud database and environment settings and records the first actionable field
+    ///     error.
+    /// </summary>
+    /// <returns>True when all settings pass validation; otherwise false with the first field error saved for display.</returns>
     private bool ValidateCloudRuntimeConfiguration()
     {
         var connectionStringEnvNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -279,6 +279,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Checks the finite catalog of supported database engine names.
+    /// </summary>
+    /// <param name="dbType">Configured database engine name.</param>
+    /// <returns>True for PostgreSQL, MySQL, SQL Server, MongoDB or Redis after trimming and case normalization.</returns>
     private static bool IsSupportedDatabaseEngine(string dbType)
     {
         return dbType.Trim().ToLowerInvariant() switch
@@ -289,12 +294,22 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Checks whether the engine requires administrator credentials.
+    /// </summary>
+    /// <param name="dbType">Configured database engine name.</param>
+    /// <returns>True for PostgreSQL, MySQL or SQL Server; otherwise false.</returns>
     private static bool RequiresDatabaseLogin(string dbType)
     {
         return dbType.Trim().ToLowerInvariant() is "postgresql" or "mysql" or "sqlserver";
     }
 
 
+    /// <summary>
+    ///     Checks a nonempty connection-key segment for letters, digits and underscores.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>True for a nonempty trimmed sequence of letters, digits and underscores.</returns>
     private static bool IsValidConfigurationKeySegment(string value)
     {
         return !string.IsNullOrWhiteSpace(value) &&
@@ -302,6 +317,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Checks administrator syntax and rejects reserved account names.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>True for a nonreserved alphanumeric account name beginning with a letter.</returns>
     private static bool IsValidDatabaseAdministrator(string value)
     {
         var trimmed = value.Trim();
@@ -314,6 +334,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Checks the minimum length and uppercase, lowercase and numeric requirements.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>True for at least eight characters containing uppercase, lowercase and numeric characters.</returns>
     private static bool IsStrongEnoughDatabasePassword(string value)
     {
         return value.Length >= 8 &&
@@ -323,6 +348,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Checks the environment-variable identifier syntax.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>True for a nonempty letter/underscore-led name containing only letters, digits and underscores.</returns>
     private static bool IsValidEnvironmentVariableName(string value)
     {
         var trimmed = value.Trim();
@@ -332,6 +362,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Updates empty or previously generated resource names while preserving explicit user edits.
+    /// </summary>
+    /// <param name="overwriteOnlyEmptyFields">Whether populated values must remain unchanged.</param>
+    /// <param name="previousDefaults">Previously generated names, or null when no defaults have been applied.</param>
     private void ApplyCloudDefaults(bool overwriteOnlyEmptyFields, CloudDefaults? previousDefaults = null)
     {
         var defaults = BuildCloudDefaults(Config.ProjectName, Config.EnvironmentName);
@@ -352,6 +387,13 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Decides whether an empty or unchanged generated field can receive a new default.
+    /// </summary>
+    /// <param name="currentValue">Current user-editable field value.</param>
+    /// <param name="previousDefault">Earlier generated value, if available.</param>
+    /// <param name="overwriteOnlyEmptyFields">Whether populated values must remain unchanged.</param>
+    /// <returns>True for empty fields or, when permitted, fields matching the prior generated default.</returns>
     private static bool ShouldApplyCloudDefault(string currentValue, string? previousDefault,
         bool overwriteOnlyEmptyFields)
     {
@@ -364,6 +406,12 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Derives Azure resource names and the hosting-profile registry default.
+    /// </summary>
+    /// <param name="projectName">Project name used to derive resource defaults.</param>
+    /// <param name="environmentName">Selected deployment environment.</param>
+    /// <returns>Generated resource-group, app and registry defaults for the selected profile.</returns>
     private CloudDefaults BuildCloudDefaults(string projectName, string environmentName)
     {
         var resourceName = NormalizeResourceName(projectName);
@@ -377,6 +425,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Maps standard environment names to short resource suffixes.
+    /// </summary>
+    /// <param name="environmentName">Selected deployment environment.</param>
+    /// <returns>A normalized short suffix, defaulting to "dev" for an empty name.</returns>
     private static string GetEnvironmentSuffix(string environmentName)
     {
         var normalized = environmentName.Trim().ToLowerInvariant();
@@ -392,6 +445,11 @@ public partial class ConfigurationForm : ComponentBase
     }
 
 
+    /// <summary>
+    ///     Creates a lowercase hyphenated resource name bounded to 23 characters.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>A nonempty normalized name of at most 23 characters.</returns>
     private static string NormalizeResourceName(string value)
     {
         var normalized = new string(value
@@ -411,7 +469,7 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///     Adds a new empty database configuration entry to the UI list.
+    ///     Adds a PostgreSQL configuration with editable database, account and connection-key defaults.
     /// </summary>
     private void AddEmptyDatabase()
     {
@@ -439,7 +497,7 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///     Adds a new empty environment variable entry to the UI list.
+    ///     Adds an empty environment-variable row for editing.
     /// </summary>
     private void AddEmptyEnvVar()
     {
@@ -462,9 +520,18 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     private class EnvVarItem
     {
+        /// <summary>Environment-variable name edited in the form.</summary>
         public string Key { get; set; } = string.Empty;
+
+        /// <summary>Environment-variable value; may contain secrets and must not enter logs.</summary>
         public string Value { get; set; } = string.Empty;
     }
 
+    /// <summary>
+    ///     Groups generated resource names for comparison with later user edits.
+    /// </summary>
+    /// <param name="ResourceGroup">Generated Azure resource-group name.</param>
+    /// <param name="ContainerApp">Generated Container App name.</param>
+    /// <param name="RegistryServer">Default registry server, possibly empty for managed provisioning.</param>
     private sealed record CloudDefaults(string ResourceGroup, string ContainerApp, string RegistryServer);
 }

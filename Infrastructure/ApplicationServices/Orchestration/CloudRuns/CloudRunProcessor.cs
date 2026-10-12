@@ -18,7 +18,23 @@ using Npgsql;
 
 namespace Infrastructure.ApplicationServices.Orchestration;
 
-/// <summary>Claims SaaS launches with cluster-wide admission and executes a short launch phase.</summary>
+/// <summary>
+///     Claims SaaS launches with cluster-wide admission and executes a short launch phase.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+/// <param name="azureCredentials">
+///     Resolves current scoped Azure authorization without logging credentials.
+/// </param>
+/// <param name="orchestrator">
+///     Provides the cloud deployment orchestrator boundary used by this operation.
+/// </param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class CloudRunProcessor(
     AutoMateDbContext dbContext,
     IGitHubAppCredentials githubApp,
@@ -27,7 +43,14 @@ public sealed class CloudRunProcessor(
     IOptions<CloudSaasOptions> options,
     ILogger<CloudRunProcessor> logger)
 {
-    /// <summary>Atomic cluster-wide claim, including fair user ordering and provider limits.</summary>
+    /// <summary>
+    ///     Atomic cluster-wide claim, including fair user ordering and provider limits.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the grouped values described by this operation, preserving unavailable
+    ///     fields, or null when no value is available.
+    /// </returns>
     public async Task<(Guid RunId, Guid LeaseOwner)?> TryClaimAsync(CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
@@ -91,7 +114,13 @@ public sealed class CloudRunProcessor(
         return null;
     }
 
-    /// <summary>Resumes the launch from its protected snapshot using fresh provider credentials.</summary>
+    /// <summary>
+    ///     Resumes the launch from its protected snapshot using fresh provider credentials.
+    /// </summary>
+    /// <param name="runId">Verified durable cloud or provider workflow-run identity.</param>
+    /// <param name="leaseOwner">Worker ownership identity for this operation.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task ProcessAsync(Guid runId, Guid leaseOwner, CancellationToken cancellationToken)
     {
         var launchTimer = Stopwatch.StartNew();
@@ -215,7 +244,11 @@ public sealed class CloudRunProcessor(
         }
     }
 
-    /// <summary>Allows only authored, non-provider error text into the customer-visible run row.</summary>
+    /// <summary>
+    ///     Allows only authored, non-provider error text into the customer-visible run row.
+    /// </summary>
+    /// <param name="exception">Optional original exception reviewed before safe platform logging.</param>
+    /// <returns>The bounded normalized text with supported unsafe values removed.</returns>
     private static string SafeFailureReason(Exception exception)
     {
         if (exception is UnauthorizedAccessException)

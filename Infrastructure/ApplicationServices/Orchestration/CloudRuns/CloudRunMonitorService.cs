@@ -4,12 +4,22 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.ApplicationServices.Orchestration;
 
-/// <summary>Consumes webhook receipts and reconciles missing GitHub events across SaaS instances.</summary>
+/// <summary>
+///     Consumes webhook receipts and reconciles missing GitHub events across SaaS instances.
+/// </summary>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class CloudRunMonitorService(
     IServiceScopeFactory scopeFactory,
     ILogger<CloudRunMonitorService> logger) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reconciles verified remote workflows independently of the launch lease.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)

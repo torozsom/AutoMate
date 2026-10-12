@@ -1,6 +1,9 @@
 namespace Domain.Enums;
 
-/// <summary>Lifecycle state of an asynchronous AI deployment analysis; existing persisted ordinals remain stable.</summary>
+/// <summary>
+///     Lifecycle state of an asynchronous AI deployment analysis; existing persisted ordinals
+///     remain stable.
+/// </summary>
 public enum AiAnalysisStatus
 {
     /// <summary>Waiting for initial processing or a scheduled retry.</summary>

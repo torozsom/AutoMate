@@ -17,10 +17,19 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Verifies resource and metric policy at real SDK and OTLP serialization boundaries.</summary>
+/// <summary>
+///     Verifies resource and metric policy at real SDK and OTLP serialization boundaries.
+/// </summary>
 public sealed class MetricResourceSafetyTests
 {
-    /// <summary>Operator labels remain useful while default resource attributes and secret-bearing labels are excluded.</summary>
+    /// <summary>
+    ///     Operator labels remain useful while default resource attributes and secret-bearing labels
+    ///     are excluded.
+    /// </summary>
+    /// <param name="service">Fixture service-registration flag or service resource label.</param>
+    /// <param name="environment">Operator-configured environment label.</param>
+    /// <param name="expectedService">Expected approved service resource label.</param>
+    /// <param name="expectedEnvironment">Expected approved environment resource label.</param>
     [Theory]
     [InlineData("AutoMate", "Testing", "AutoMate", "Testing")]
     [InlineData("password=private-secret", "https://private-host/path", "AutoMate", "unknown")]
@@ -39,9 +48,10 @@ public sealed class MetricResourceSafetyTests
     }
 
     /// <summary>
-    ///     Real metric export retains aggregate HTTP measurements and approved operational labels without
-    ///     payloads/exemplars.
+    ///     Real metric export retains aggregate HTTP measurements and approved operational labels
+    ///     without payloads/exemplars.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Metric_wire_omits_external_tags_unknown_instruments_and_exemplars()
     {

@@ -13,6 +13,12 @@ internal static class AzureOidcSetupPlanner
     /// <summary>
     ///     Creates the provisioning context for a GitHub repository branch deployment.
     /// </summary>
+    /// <param name="credentials">The connected Azure credentials used for resource preparation.</param>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <param name="repositoryOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repositoryName">The GitHub repository name.</param>
+    /// <param name="branchName">The repository branch used for deployment assets or workflow selection.</param>
+    /// <returns>Verified provisioning scope and repository/branch trust metadata.</returns>
     public static AzureOidcSetupContext Create(AzureCloudCredentialsDto credentials, DeploymentConfigDto config,
         string repositoryOwner, string repositoryName, string branchName)
     {
@@ -29,8 +35,15 @@ internal static class AzureOidcSetupPlanner
     }
 
     /// <summary>
-    ///     Maps the created managed identity and setup context into the deployment DTO consumed by callers.
+    ///     Maps the created managed identity and setup context into the deployment DTO consumed by
+    ///     callers.
     /// </summary>
+    /// <param name="credentials">The connected Azure credentials used for resource preparation.</param>
+    /// <param name="identity">Verified user-assigned Azure identity.</param>
+    /// <param name="setupContext">
+    ///     Verified Azure setup scope, repository identity and OIDC trust metadata.
+    /// </param>
+    /// <returns>The verified OIDC and managed-identity identifiers.</returns>
     public static AzureOidcSetupResultDto CreateResult(AzureCloudCredentialsDto credentials,
         UserAssignedIdentityResource identity, AzureOidcSetupContext setupContext)
     {
@@ -50,6 +63,14 @@ internal static class AzureOidcSetupPlanner
     /// <summary>
     ///     Fails fast when required Azure credentials or GitHub repository values are missing.
     /// </summary>
+    /// <param name="credentials">The connected Azure credentials used for resource preparation.</param>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <param name="repositoryOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repositoryName">The GitHub repository name.</param>
+    /// <param name="branchName">The repository branch used for deployment assets or workflow selection.</param>
+    /// <exception cref="ArgumentException">
+    ///     Azure access token is required for cloud deployment setup.
+    /// </exception>
     private static void ValidateSetupInput(AzureCloudCredentialsDto credentials, DeploymentConfigDto config,
         string repositoryOwner, string repositoryName, string branchName)
     {
@@ -83,6 +104,10 @@ internal static class AzureOidcSetupPlanner
     /// <summary>
     ///     Creates the exact GitHub Actions OIDC subject for a branch ref.
     /// </summary>
+    /// <param name="repositoryOwner">The GitHub repository owner or organization.</param>
+    /// <param name="repositoryName">The GitHub repository name.</param>
+    /// <param name="branchName">The repository branch used for deployment assets or workflow selection.</param>
+    /// <returns>The git hub branch subject derived from the validated input.</returns>
     private static string CreateGitHubBranchSubject(string repositoryOwner, string repositoryName, string branchName)
     {
         return $"repo:{repositoryOwner}/{repositoryName}:ref:refs/heads/{branchName}";
@@ -91,14 +116,19 @@ internal static class AzureOidcSetupPlanner
     /// <summary>
     ///     Creates a stable short hash used to keep generated Azure names unique and compact.
     /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The stable identity derived from the documented metadata or content.</returns>
     private static string CreateShortHash(string value)
     {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..10].ToLowerInvariant();
     }
 
     /// <summary>
-    ///     Converts arbitrary repository-derived text into an Azure managed identity compatible name.
+    ///     Converts arbitrary repository-derived text into an Azure managed identity compatible
+    ///     name.
     /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The normalized identity used for the documented routing or lookup.</returns>
     private static string ToAzureIdentityName(string value)
     {
         var normalized = new string(value

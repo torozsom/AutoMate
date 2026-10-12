@@ -6,7 +6,17 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Authorizes deployment history before any provider query or preference change.</summary>
+/// <summary>
+///     Authorizes deployment history before any provider query or preference change.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="store">
+///     Deployment telemetry store combining durable gateway writes with retained legacy reads.
+/// </param>
+/// <param name="metrics">Recorded numeric samples or aggregate points.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="gateway">Provides the telemetry gateway? boundary used by this operation.</param>
+/// <param name="archive">Provides the deployment archive? boundary used by this operation.</param>
 public sealed class DeploymentHistoryService(
     AutoMateDbContext db,
     DeploymentTelemetryStore store,
@@ -15,6 +25,22 @@ public sealed class DeploymentHistoryService(
     ITelemetryGateway? gateway = null,
     IDeploymentArchive? archive = null) : IDeploymentHistoryService
 {
+    /// <summary>
+    ///     Reads authorized terminal history using versioned resource-scoped navigation cursors.
+    /// </summary>
+    /// <param name="user">The internal user identity used for authorization.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="deployment">The exact deployment identity used to scope the operation.</param>
+    /// <param name="cursor">The previous read position; an absent cursor selects the initial page.</param>
+    /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="search">The optional plain-text search term.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning an owned terminal page with opaque navigation cursors and availability
+    ///     metadata.
+    /// </returns>
+    /// <exception cref="ArgumentException">Log search is limited to 256 characters.</exception>
     public async Task<TelemetryLogPage> ReadLogsV2Async(Guid user, Guid project, Guid deployment, string? cursor,
         bool backwards, int limit, string? search = null, CancellationToken token = default)
     {
@@ -26,7 +52,17 @@ public sealed class DeploymentHistoryService(
         return TelemetryHistoryCursor.Page(history, project, deployment);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads owner-scoped automatic collection status and processing location.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the owned saved selection and source catalog, or null for missing or
+    ///     unauthorized deployments.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">Project access denied.</exception>
     public async Task<DeploymentTelemetryPreferences> GetPreferencesAsync(Guid userId, Guid projectId,
         CancellationToken cancellationToken = default)
     {
@@ -37,7 +73,17 @@ public sealed class DeploymentHistoryService(
             options.Value.ManagedService, options.Value.ProcessingRegion);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Compatibility operation; authorizes the owner and keeps approved telemetry storage
+    ///     enabled.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="enabled">The legacy preference value; approved automatic collection remains enabled.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after owner authorization and the compatibility storage update.</returns>
+    /// <exception cref="InvalidOperationException">Managed provider onboarding is not configured.</exception>
+    /// <exception cref="UnauthorizedAccessException">Project access denied.</exception>
     public async Task SetManagedConsentAsync(Guid userId, Guid projectId, bool enabled,
         CancellationToken cancellationToken = default)
     {
@@ -48,7 +94,19 @@ public sealed class DeploymentHistoryService(
         if (changed == 0) throw new UnauthorizedAccessException("Project access denied.");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads terminal output only after checking project and deployment ownership.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="cursor">The previous read position; an absent cursor selects the initial page.</param>
+    /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning owned terminal output with explicit omissions and storage availability.
+    /// </returns>
     public async Task<DeploymentTerminalHistory> ReadLogsAsync(Guid userId, Guid projectId, Guid deploymentId,
         long cursor, bool backwards, int limit, CancellationToken cancellationToken = default)
     {
@@ -57,7 +115,18 @@ public sealed class DeploymentHistoryService(
             cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads bounded numeric history only after checking ownership.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="maximumPoints">The maximum number of returned aggregate points.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning bounded numeric aggregates and any storage-availability notice.</returns>
+    /// <exception cref="ArgumentException">Metric range must be positive.</exception>
     public async Task<DeploymentMetricHistory> ReadMetricsAsync(Guid userId, Guid projectId, Guid deploymentId,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken = default)
     {
@@ -163,7 +232,17 @@ public sealed class DeploymentHistoryService(
             .OrderBy(p => p.Timestamp).ToArray(), availability);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Compatibility operation; authorizes the owner and keeps runtime collection enabled.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="enabled">The legacy preference value; approved automatic collection remains enabled.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task that completes after owner authorization and the compatibility collection update.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">Project access denied.</exception>
     public async Task SetRuntimeCollectionAsync(Guid userId, Guid projectId, bool enabled,
         CancellationToken cancellationToken = default)
     {
@@ -172,7 +251,15 @@ public sealed class DeploymentHistoryService(
         if (changed == 0) throw new UnauthorizedAccessException("Project access denied.");
     }
 
-    /// <summary>Prevents cross-owner and cross-project deployment queries.</summary>
+    /// <summary>
+    ///     Prevents cross-owner and cross-project deployment queries.
+    /// </summary>
+    /// <param name="user">The local or connected account whose metadata is being updated.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="UnauthorizedAccessException">Deployment history access denied.</exception>
     private async Task AuthorizeAsync(Guid user, Guid project, Guid deployment, CancellationToken token)
     {
         if (!await db.Deployments.AnyAsync(d => d.Id == deployment && d.CsProject!.AppId == project &&

@@ -2,7 +2,9 @@ using System.Diagnostics;
 
 namespace Application.Diagnostics;
 
-/// <summary>Fixed deployment operation names; user inputs never become span names.</summary>
+/// <summary>
+///     Fixed deployment operation names; user inputs never become span names.
+/// </summary>
 public enum DeploymentOperation
 {
     /// <summary>Authorized SignalR subscription.</summary>
@@ -66,7 +68,9 @@ public enum DeploymentOperation
     DockerMetrics
 }
 
-/// <summary>Finite outcomes, without exception bodies or provider diagnostics.</summary>
+/// <summary>
+///     Finite outcomes, without exception bodies or provider diagnostics.
+/// </summary>
 public enum DeploymentTraceOutcome
 {
     /// <summary>Operation completed successfully.</summary>
@@ -85,10 +89,21 @@ public enum DeploymentTraceOutcome
     TimedOut
 }
 
-/// <summary>Creates correlated, fixed-name spans without SDK dependencies or exception/payload capture.</summary>
+/// <summary>
+///     Creates correlated, fixed-name spans without SDK dependencies or exception/payload
+///     capture.
+/// </summary>
 public static class DeploymentTracing
 {
-    /// <summary>Starts a child of the ambient activity with GUID-only correlation attributes.</summary>
+    /// <summary>
+    ///     Starts a child of the ambient activity with GUID-only correlation attributes.
+    /// </summary>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <returns>The child activity, or null when no listener requests an activity.</returns>
     public static Activity? Start(DeploymentOperation operation, Guid? projectId = null, Guid? deploymentId = null)
     {
         var name = operation switch
@@ -134,7 +149,11 @@ public static class DeploymentTracing
         return activity;
     }
 
-    /// <summary>Records a fixed outcome; cancellation is distinct from operational failure.</summary>
+    /// <summary>
+    ///     Records a fixed outcome; cancellation is distinct from operational failure.
+    /// </summary>
+    /// <param name="activity">Recorded deployment outcomes grouped by UTC day.</param>
+    /// <param name="outcome">The finite recorded operation or deployment outcome.</param>
     public static void Finish(Activity? activity, DeploymentTraceOutcome outcome)
     {
         activity?.SetTag("deployment.outcome", outcome switch
@@ -153,7 +172,19 @@ public static class DeploymentTracing
         });
     }
 
-    /// <summary>Traces synchronous normalization without recording inputs, results or exceptions.</summary>
+    /// <summary>
+    ///     Traces synchronous normalization without recording inputs, results or exceptions.
+    /// </summary>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="action">
+    ///     The operation to execute while preserving its result and exception identity.
+    /// </param>
+    /// <typeparam name="T">The result type returned by the supplied operation.</typeparam>
+    /// <returns>The supplied operation's result, preserving its exception and cancellation semantics.</returns>
     public static T Run<T>(DeploymentOperation operation, Guid? projectId, Guid? deploymentId, Func<T> action)
     {
         using var activity = Start(operation, projectId, deploymentId);
@@ -170,7 +201,29 @@ public static class DeploymentTracing
         }
     }
 
-    /// <summary>Traces a provider/sink call and preserves its result, exception and cancellation semantics.</summary>
+    /// <summary>
+    ///     Traces a provider/sink call and preserves its result, exception and cancellation
+    ///     semantics.
+    /// </summary>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="action">
+    ///     The operation to execute while preserving its result and exception identity.
+    /// </param>
+    /// <param name="succeeded">
+    ///     Optional result predicate used to distinguish provider success from a nonthrowing
+    ///     failure.
+    /// </param>
+    /// <typeparam name="T">The result type returned by the supplied operation.</typeparam>
+    /// <returns>
+    ///     A task returning the supplied operation's result, preserving its exception and
+    ///     cancellation semantics.
+    /// </returns>
+    /// <exception cref="OperationCanceledException">The supplied operation observes cancellation.</exception>
     public static async Task<T> RunAsync<T>(DeploymentOperation operation, Guid? projectId, Guid? deploymentId,
         CancellationToken cancellationToken, Func<Task<T>> action, Func<T, bool>? succeeded = null)
     {
@@ -196,7 +249,20 @@ public static class DeploymentTracing
         }
     }
 
-    /// <summary>Traces calls without results using the same outcome and cancellation policy.</summary>
+    /// <summary>
+    ///     Traces calls without results using the same outcome and cancellation policy.
+    /// </summary>
+    /// <param name="operation">The reviewed finite operation used for telemetry or auditing.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="action">
+    ///     The operation to execute while preserving its result and exception identity.
+    /// </param>
+    /// <returns>A task that completes after the operation finishes.</returns>
+    /// <exception cref="OperationCanceledException">The supplied operation observes cancellation.</exception>
     public static Task RunAsync(DeploymentOperation operation, Guid? projectId, Guid? deploymentId,
         CancellationToken cancellationToken, Func<Task> action)
     {

@@ -6,10 +6,25 @@ using Domain.DTO;
 
 namespace Infrastructure.Azure;
 
-/// <summary>Ensures a customer-owned Basic ACR exists in the deployment resource group.</summary>
+/// <summary>
+///     Ensures a customer-owned Basic ACR exists in the deployment resource group.
+/// </summary>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
 internal sealed class AzureContainerRegistryProvisioner(IHttpClientFactory httpClientFactory)
 {
-    /// <summary>Gets or creates the requested registry and waits for ARM provisioning to finish.</summary>
+    /// <summary>
+    ///     Gets or creates the requested registry and waits for ARM provisioning to finish.
+    /// </summary>
+    /// <param name="credentials">The connected Azure credentials used for resource preparation.</param>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the ensure async derived from the validated input.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     SaaS deployments require Azure Container Registry.
+    /// </exception>
+    /// <exception cref="TimeoutException">
+    ///     Azure Container Registry provisioning did not finish in time.
+    /// </exception>
     public async Task<string> EnsureAsync(AzureCloudCredentialsDto credentials, DeploymentConfigDto config,
         CancellationToken cancellationToken)
     {
@@ -68,7 +83,16 @@ internal sealed class AzureContainerRegistryProvisioner(IHttpClientFactory httpC
         throw new TimeoutException("Azure Container Registry provisioning did not finish in time.");
     }
 
-    /// <summary>Checks that an existing registry matches the configured login server.</summary>
+    /// <summary>
+    ///     Checks that an existing registry matches the configured login server.
+    /// </summary>
+    /// <param name="response">The untrusted structured analysis response to validate.</param>
+    /// <param name="server">Validated registry, mail or telemetry server.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The selected Azure registry does not match its login server.
+    /// </exception>
     private static async Task VerifyServerAsync(HttpResponseMessage response, string server,
         CancellationToken cancellationToken)
     {
@@ -79,7 +103,13 @@ internal sealed class AzureContainerRegistryProvisioner(IHttpClientFactory httpC
             throw new InvalidOperationException("The selected Azure registry does not match its login server.");
     }
 
-    /// <summary>Builds an ARM request with a fresh delegated token.</summary>
+    /// <summary>
+    ///     Builds an ARM request with a fresh delegated token.
+    /// </summary>
+    /// <param name="method">HTTP method used for the bounded provider request.</param>
+    /// <param name="uri">Validated provider endpoint URI.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <returns>The configured request with bounded provider headers and protected authorization.</returns>
     private static HttpRequestMessage Request(HttpMethod method, string uri, string token)
     {
         var request = new HttpRequestMessage(method, uri);

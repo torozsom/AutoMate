@@ -6,13 +6,28 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Read-only local readiness checks; never resolves an LLM adapter, reads diagnostics or changes queue ownership.</summary>
+/// <summary>
+///     Read-only local readiness checks; never resolves an LLM adapter, reads diagnostics or
+///     changes queue ownership.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="catalog">Allowlisted provider registry used for adapter selection.</param>
 public sealed class DeploymentAnalysisReadinessService(
     AutoMateDbContext db,
     IOptionsMonitor<AiAnalysisOptions> options,
     AnalysisProviderCatalog catalog) : IDeploymentAnalysisReadiness
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads current configuration and bounded queue metadata; cancellation reaches the
+    ///     database operation.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning a finite readiness snapshot without provider calls or diagnostic
+    ///     payloads.
+    /// </returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<DeploymentAnalysisReadiness> CheckAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -62,7 +77,11 @@ public sealed class DeploymentAnalysisReadinessService(
         }
     }
 
-    /// <summary>Uses current validated policy and local credential presence only; reload failures become finite states.</summary>
+    /// <summary>
+    ///     Uses current validated policy and local credential presence only; reload failures become
+    ///     finite states.
+    /// </summary>
+    /// <returns>The analysis configuration state projection derived from the verified inputs.</returns>
     private AnalysisConfigurationState ReadConfiguration()
     {
         try

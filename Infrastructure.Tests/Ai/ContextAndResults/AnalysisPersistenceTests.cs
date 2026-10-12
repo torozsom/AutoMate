@@ -25,10 +25,23 @@ using DeploymentAnalysisWorkItem = Domain.Entities.DeploymentAnalysisWorkItem;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Verifies real metadata persistence and authorized safe readback without contacting a provider.</summary>
+/// <summary>
+///     Verifies real metadata persistence and authorized safe readback without contacting a
+///     provider.
+/// </summary>
+/// <exception cref="IOException">The returned task faults when the fixture failure is selected.</exception>
+/// <exception cref="AnalysisProviderUnavailableException">
+///     The returned task faults when the fixture failure is selected.
+/// </exception>
+/// <exception cref="TransientAnalysisProviderException">The returned task faults when the fixture failure is selected.</exception>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class AnalysisPersistenceTests
 {
-    /// <summary>A permanent access denial is saved distinctly without scheduling a provider retry or retaining messages.</summary>
+    /// <summary>
+    ///     A permanent access denial is saved distinctly without scheduling a provider retry or
+    ///     retaining messages.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Provider_access_denial_is_persisted_without_retry()
     {
@@ -42,7 +55,12 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(0, (await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).ProviderRetryCount);
     }
 
-    /// <summary>Lease-fenced publication retains v2 sections and collection choices for both completed and empty-context runs.</summary>
+    /// <summary>
+    ///     Lease-fenced publication retains v2 sections and collection choices for both completed and
+    ///     empty-context runs.
+    /// </summary>
+    /// <param name="empty">Whether to supply an empty section or observation set.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -91,7 +109,10 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Zero spending prevents provider invocation and produces safe durable budget guidance.</summary>
+    /// <summary>
+    ///     Zero spending prevents provider invocation and produces safe durable budget guidance.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Disabled_spending_skips_before_provider_and_preserves_deployment()
     {
@@ -113,7 +134,13 @@ public sealed class AnalysisPersistenceTests
         Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
     }
 
-    /// <summary>Actual fenced processing emits correlated stage outcomes without provider payloads or identifier labels.</summary>
+    /// <summary>
+    ///     Actual fenced processing emits correlated stage outcomes without provider payloads or
+    ///     identifier labels.
+    /// </summary>
+    /// <param name="mode">Selected legacy, provider or fixture behavior mode.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("completed", "completed")]
     [InlineData("failure", "failed")]
@@ -178,18 +205,25 @@ public sealed class AnalysisPersistenceTests
             samples.Count(sample => sample.Name == "automate.analysis.input.tokens"));
         if (mode == "completed") Assert.Contains(("automate.analysis.output.tokens", 7L), samples);
 
-        /// <summary>Simulates cooperative cancellation without contacting any provider.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Simulates cooperative cancellation without contacting any provider.
+        /// </summary>
+        /// <returns>A canceled task carrying the configured fixture cancellation token.</returns>
         Task<LlmAnalysisResponse> Cancel()
         {
             token.Cancel();
             return Task.FromCanceled<LlmAnalysisResponse>(token.Token);
         }
+#pragma warning restore CS1587
     }
 
     /// <summary>
-    ///     Production builder scopes log/metric reads, excludes foreign events and isolates optional Mimir
-    ///     outages/consent.
+    ///     Production builder scopes log/metric reads, excludes foreign events and isolates optional
+    ///     Mimir outages/consent.
     /// </summary>
+    /// <param name="mode">Selected legacy, provider or fixture behavior mode.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("available")]
     [InlineData("unavailable")]
@@ -247,7 +281,10 @@ public sealed class AnalysisPersistenceTests
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
     }
 
-    /// <summary>Structurally valid output with a fabricated reference cannot be saved as a completed result.</summary>
+    /// <summary>
+    ///     Structurally valid output with a fabricated reference cannot be saved as a completed result.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Fabricated_evidence_fails_without_persisting_provider_guidance()
     {
@@ -265,7 +302,11 @@ public sealed class AnalysisPersistenceTests
         Assert.Null(analysis.EvidenceReferencesJson);
     }
 
-    /// <summary>Worker writes only redacted results plus provenance and optional non-sensitive usage/cost metadata.</summary>
+    /// <summary>
+    ///     Worker writes only redacted results plus provenance and optional non-sensitive usage/cost
+    ///     metadata.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Completed_result_is_redacted_persisted_and_owner_scoped()
     {
@@ -302,7 +343,13 @@ public sealed class AnalysisPersistenceTests
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
     }
 
-    /// <summary>Raw output and exception bodies never become saved summaries for rejected or failed results.</summary>
+    /// <summary>
+    ///     Raw output and exception bodies never become saved summaries for rejected or failed results.
+    /// </summary>
+    /// <param name="kind">Synthetic operation or response kind.</param>
+    /// <param name="code">Synthetic fixed provider code or HTTP status representation.</param>
+    /// <param name="status">Analysis state under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("invalid", "invalid_response_limits", AiAnalysisStatus.Failed)]
     [InlineData("exception", "provider_failure", AiAnalysisStatus.Failed)]
@@ -338,7 +385,10 @@ public sealed class AnalysisPersistenceTests
         Assert.Null(analysis.ResultSchemaVersion);
     }
 
-    /// <summary>Caller cancellation does not mark an incomplete response as completed or terminally failed.</summary>
+    /// <summary>
+    ///     Caller cancellation does not mark an incomplete response as completed or terminally failed.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Caller_cancellation_keeps_work_unfinished_without_output()
     {
@@ -355,7 +405,12 @@ public sealed class AnalysisPersistenceTests
         Assert.Null((await fixture.Db.AiDeploymentAnalyses.SingleAsync()).Summary);
     }
 
-    /// <summary>Existing unvalidated results are redacted again on read; corrupt JSON produces a safe failed view.</summary>
+    /// <summary>
+    ///     Existing unvalidated results are redacted again on read; corrupt JSON produces a safe failed
+    ///     view.
+    /// </summary>
+    /// <param name="corrupt">Whether to damage the fixture payload deliberately.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -378,7 +433,13 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(corrupt ? AiAnalysisStatus.Failed : AiAnalysisStatus.Completed, view.Status);
     }
 
-    /// <summary>Foreign owners cannot discover/delete results; the owner deletes only inactive or expired work.</summary>
+    /// <summary>
+    ///     Foreign owners cannot discover/delete results; the owner deletes only inactive or expired
+    ///     work.
+    /// </summary>
+    /// <param name="status">Analysis state under test.</param>
+    /// <param name="deletable">Whether the saved result is eligible for deletion.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(AiAnalysisStatus.Queued, false)]
     [InlineData(AiAnalysisStatus.Running, false)]
@@ -406,7 +467,10 @@ public sealed class AnalysisPersistenceTests
                 await service.DeleteAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
     }
 
-    /// <summary>Expiry prevents read/claim/provider calls immediately, before hourly physical cleanup.</summary>
+    /// <summary>
+    ///     Expiry prevents read/claim/provider calls immediately, before hourly physical cleanup.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Expired_work_is_hidden_unclaimed_and_owner_deletable()
     {
@@ -423,7 +487,11 @@ public sealed class AnalysisPersistenceTests
         Assert.Empty(await fixture.Db.DeploymentAnalysisWorkItems.ToListAsync());
     }
 
-    /// <summary>Bounded cleanup covers every state, cascades work items and preserves unexpired data/deployments.</summary>
+    /// <summary>
+    ///     Bounded cleanup covers every state, cascades work items and preserves unexpired
+    ///     data/deployments.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Retention_deletes_bounded_batches_across_all_states()
     {
@@ -458,7 +526,12 @@ public sealed class AnalysisPersistenceTests
             DeploymentAnalysisRetentionService.DeleteBatchAsync(fixture.Db, now, canceled.Token));
     }
 
-    /// <summary>An in-flight provider cannot publish results after expiry, with or without physical deletion.</summary>
+    /// <summary>
+    ///     An in-flight provider cannot publish results after expiry, with or without physical
+    ///     deletion.
+    /// </summary>
+    /// <param name="cleanup">Whether to exercise retained-result cleanup.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -490,7 +563,13 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Actual worker audit outcomes/scopes omit untrusted result and exception text across terminal paths.</summary>
+    /// <summary>
+    ///     Actual worker audit outcomes/scopes omit untrusted result and exception text across terminal
+    ///     paths.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
+    /// <param name="expected">Expected outcome for this scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("completed", "Completed")]
     [InlineData("invalid", "InvalidResult")]
@@ -520,7 +599,10 @@ public sealed class AnalysisPersistenceTests
         Assert.DoesNotContain("private", JsonSerializer.Serialize(audit.Entries));
     }
 
-    /// <summary>Empty bounded context has a distinct safe skip reason and never invokes the provider.</summary>
+    /// <summary>
+    ///     Empty bounded context has a distinct safe skip reason and never invokes the provider.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Unsupported_context_skips_without_provider_calls()
     {
@@ -543,7 +625,10 @@ public sealed class AnalysisPersistenceTests
         Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
     }
 
-    /// <summary>Queued work uses fresh persisted consent and does not contact a provider after revocation.</summary>
+    /// <summary>
+    ///     Queued work uses fresh persisted consent and does not contact a provider after revocation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Revoked_consent_skips_queued_work_without_provider_calls()
     {
@@ -562,7 +647,11 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal("unavailable", saved.FailureCode);
     }
 
-    /// <summary>Tenant ownership is resolved from persisted deployment metadata and automatic triggers remain disabled.</summary>
+    /// <summary>
+    ///     Tenant ownership is resolved from persisted deployment metadata and automatic triggers
+    ///     remain disabled.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Authorization_rejects_foreign_missing_and_automatic_scopes()
     {
@@ -577,7 +666,11 @@ public sealed class AnalysisPersistenceTests
         Assert.False(await foreign.AuthorizeAsync(fixture.DeploymentId, AiAnalysisTrigger.Manual));
     }
 
-    /// <summary>A consent change while context is fetched is checked again before invoking even a fake provider.</summary>
+    /// <summary>
+    ///     A consent change while context is fetched is checked again before invoking even a fake
+    ///     provider.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Consent_revoked_during_context_build_prevents_provider_invocation()
     {
@@ -598,7 +691,10 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(0, calls);
     }
 
-    /// <summary>Reloading the operator switch denies both admission and already queued work.</summary>
+    /// <summary>
+    ///     Reloading the operator switch denies both admission and already queued work.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Reloaded_operator_switch_blocks_existing_work_and_new_admission()
     {
@@ -619,7 +715,11 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(0, calls);
     }
 
-    /// <summary>Model configuration containing a recognized credential produces only safe skipped metadata without new work.</summary>
+    /// <summary>
+    ///     Model configuration containing a recognized credential produces only safe skipped metadata
+    ///     without new work.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Secret_bearing_model_configuration_creates_only_safe_skip_metadata()
     {
@@ -638,7 +738,10 @@ public sealed class AnalysisPersistenceTests
         Assert.Single(await fixture.Db.DeploymentAnalysisWorkItems.ToListAsync());
     }
 
-    /// <summary>New metadata expires under the approved retention policy without extending existing results.</summary>
+    /// <summary>
+    ///     New metadata expires under the approved retention policy without extending existing results.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Admission_applies_configured_result_retention()
     {
@@ -657,7 +760,11 @@ public sealed class AnalysisPersistenceTests
         Assert.InRange(stored.ExpiresAt, before.AddDays(7), DateTimeOffset.UtcNow.AddDays(7));
     }
 
-    /// <summary>A late response from an expired generation cannot replace a recovered worker's validated result.</summary>
+    /// <summary>
+    ///     A late response from an expired generation cannot replace a recovered worker's validated
+    ///     result.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Stale_worker_response_cannot_overwrite_recovered_completion()
     {
@@ -686,7 +793,11 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(2, calls);
     }
 
-    /// <summary>Repeated interrupted acquisitions become a safe terminal outcome without another provider call.</summary>
+    /// <summary>
+    ///     Repeated interrupted acquisitions become a safe terminal outcome without another provider
+    ///     call.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Exhausted_recovery_attempts_finish_without_context_or_provider_calls()
     {
@@ -711,7 +822,12 @@ public sealed class AnalysisPersistenceTests
         Assert.Null(await queue.ClaimNextAsync());
     }
 
-    /// <summary>Future work is not immediately reclaimed; retries rebuild context and recheck current consent/configuration.</summary>
+    /// <summary>
+    ///     Future work is not immediately reclaimed; retries rebuild context and recheck current
+    ///     consent/configuration.
+    /// </summary>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("complete")]
     [InlineData("consent")]
@@ -770,7 +886,11 @@ public sealed class AnalysisPersistenceTests
         Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
     }
 
-    /// <summary>Only the configured number of transient retries can be scheduled; failure never alters deployment state.</summary>
+    /// <summary>
+    ///     Only the configured number of transient retries can be scheduled; failure never alters
+    ///     deployment state.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Repeated_transient_failures_exhaust_durable_retry_budget()
     {
@@ -800,7 +920,12 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(originalStatus, (await fixture.Db.Deployments.AsNoTracking().SingleAsync()).Status);
     }
 
-    /// <summary>Long server waits or imminent result expiry terminate without silently scheduling an early attempt.</summary>
+    /// <summary>
+    ///     Long server waits or imminent result expiry terminate without silently scheduling an early
+    ///     attempt.
+    /// </summary>
+    /// <param name="imminentExpiry">Whether the result is near its expiry boundary.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -818,7 +943,11 @@ public sealed class AnalysisPersistenceTests
         Assert.NotNull(row.CompletedAt);
     }
 
-    /// <summary>A stale transient failure cannot requeue an analysis already completed under a replacement lease.</summary>
+    /// <summary>
+    ///     A stale transient failure cannot requeue an analysis already completed under a replacement
+    ///     lease.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Stale_transient_failure_cannot_requeue_newer_result()
     {
@@ -846,7 +975,12 @@ public sealed class AnalysisPersistenceTests
         Assert.Null(await queue.ClaimNextAsync());
     }
 
-    /// <summary>Owner cancellation is durable/idempotent with AI disabled and retires initial or delayed retry work.</summary>
+    /// <summary>
+    ///     Owner cancellation is durable/idempotent with AI disabled and retires initial or delayed
+    ///     retry work.
+    /// </summary>
+    /// <param name="scheduledRetry">Whether the work has a future retry time.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -893,7 +1027,12 @@ public sealed class AnalysisPersistenceTests
             await service.DeleteAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
     }
 
-    /// <summary>Missing/foreign/mismatched/expired identities return the same result without altering active work.</summary>
+    /// <summary>
+    ///     Missing/foreign/mismatched/expired identities return the same result without altering active
+    ///     work.
+    /// </summary>
+    /// <param name="mismatch">Identity or provider mismatch selected by the scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("owner")]
     [InlineData("deployment")]
@@ -915,7 +1054,12 @@ public sealed class AnalysisPersistenceTests
         Assert.Null((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
     }
 
-    /// <summary>Terminal analyses preserve their state and guidance; request-token cancellation performs no mutation.</summary>
+    /// <summary>
+    ///     Terminal analyses preserve their state and guidance; request-token cancellation performs no
+    ///     mutation.
+    /// </summary>
+    /// <param name="status">Analysis state under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(AiAnalysisStatus.Completed)]
     [InlineData(AiAnalysisStatus.Failed)]
@@ -941,7 +1085,12 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(original.CompletedAt, saved.CompletedAt);
     }
 
-    /// <summary>Uncooperative provider completion or transient failure after cancellation cannot publish or schedule work.</summary>
+    /// <summary>
+    ///     Uncooperative provider completion or transient failure after cancellation cannot publish or
+    ///     schedule work.
+    /// </summary>
+    /// <param name="transient">Whether to inject a transient failure.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -978,7 +1127,10 @@ public sealed class AnalysisPersistenceTests
         Assert.Null(await queue.ClaimNextAsync());
     }
 
-    /// <summary>Cancellation during context construction prevents the provider from being invoked.</summary>
+    /// <summary>
+    ///     Cancellation during context construction prevents the provider from being invoked.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Cancellation_during_context_build_stops_provider_admission()
     {
@@ -1000,7 +1152,11 @@ public sealed class AnalysisPersistenceTests
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
     }
 
-    /// <summary>Renewal detects durable owner cancellation, cancels the provider token and ends without a worker error.</summary>
+    /// <summary>
+    ///     Renewal detects durable owner cancellation, cancels the provider token and ends without a
+    ///     worker error.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Lease_coordinator_cancels_local_provider_after_owner_cancellation()
     {
@@ -1029,7 +1185,11 @@ public sealed class AnalysisPersistenceTests
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
     }
 
-    /// <summary>A queue retirement failure rolls back cancellation state and does not emit a completed owner audit event.</summary>
+    /// <summary>
+    ///     A queue retirement failure rolls back cancellation state and does not emit a completed owner
+    ///     audit event.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Cancellation_rolls_back_when_queue_retirement_fails()
     {
@@ -1051,9 +1211,11 @@ public sealed class AnalysisPersistenceTests
     }
 
     /// <summary>
-    ///     The production coordinator cancels on uncertain ownership or shutdown, then releases only its own unfinished
-    ///     lease.
+    ///     The production coordinator cancels on uncertain ownership or shutdown, then releases only
+    ///     its own unfinished lease.
     /// </summary>
+    /// <param name="renewSucceeds">Whether the fixture lease renewal succeeds.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -1090,13 +1252,25 @@ public sealed class AnalysisPersistenceTests
         Assert.Equal(2, (await queue.ClaimNextAsync())!.Attempt);
     }
 
-    /// <summary>Injects a failure at the second cancellation write so transaction rollback is exercised.</summary>
+    /// <summary>
+    ///     Injects a failure at the second cancellation write so transaction rollback is exercised.
+    /// </summary>
     private sealed class RetirementFailure : DbCommandInterceptor
     {
         /// <summary>Whether queue retirement updates fail.</summary>
         public bool Fail { get; set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Injects failure during configured work-retirement updates.
+        /// </summary>
+        /// <param name="command">Database command intercepted by the fixture.</param>
+        /// <param name="eventData">EF command interception metadata.</param>
+        /// <param name="result">Current EF nonquery-interception result.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the unchanged EF interception result after fixture checks or failure injection.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
@@ -1108,18 +1282,36 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Scopes share only probe state; actual lease mutations still go through the production queue.</summary>
+    /// <summary>
+    ///     Scopes share only probe state; actual lease mutations still go through the production queue.
+    /// </summary>
+    /// <param name="inner">Underlying queue wrapped by the renewal probe.</param>
+    /// <param name="success">Whether the configured operation succeeds.</param>
+    /// <param name="renewed">Signal completed after the renewal attempt.</param>
     private sealed class RenewalProbe(IDeploymentAnalysisQueue inner, bool success, TaskCompletionSource renewed)
         : IDeploymentAnalysisQueue
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Forwards claim next to the underlying fixture adapter.
+        /// </summary>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>
+        ///     A task returning the configured application.abstractions.ai.deployment analysis work item
+        ///     result, or null when the fixture supplies no value.
+        /// </returns>
         public Task<Application.Abstractions.Ai.DeploymentAnalysisWorkItem?> ClaimNextAsync(
             CancellationToken token = default)
         {
             return inner.ClaimNextAsync(token);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Applies configured renewal success, delegates permitted renewal and signals that the attempt
+        ///     completed.
+        /// </summary>
+        /// <param name="work">Claimed fixture work or work-item selection.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
         public async Task<bool> RenewAsync(Application.Abstractions.Ai.DeploymentAnalysisWorkItem work,
             CancellationToken token = default)
         {
@@ -1128,7 +1320,12 @@ public sealed class AnalysisPersistenceTests
             return owned;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Forwards release to the underlying fixture adapter.
+        /// </summary>
+        /// <param name="work">Claimed fixture work or work-item selection.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
         public Task<bool> ReleaseAsync(Application.Abstractions.Ai.DeploymentAnalysisWorkItem work,
             CancellationToken token = default)
         {
@@ -1136,7 +1333,9 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Captures actual worker state and ambient ILogger scopes for privacy assertions.</summary>
+    /// <summary>
+    ///     Captures actual worker state and ambient ILogger scopes for privacy assertions.
+    /// </summary>
     private sealed class AuditLoggerProvider : ILoggerProvider, ISupportExternalScope
     {
         /// <summary>Framework scope provider.</summary>
@@ -1145,39 +1344,70 @@ public sealed class AnalysisPersistenceTests
         /// <summary>Independent snapshots of logged attributes and scopes.</summary>
         public List<Dictionary<string, object?>> Entries { get; } = [];
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Creates a logger writing to the fixture capture provider.
+        /// </summary>
+        /// <param name="categoryName">Logger category reviewed before platform output; ignored by this fixture.</param>
+        /// <returns>A logger attached to the fixture capture provider.</returns>
         public ILogger CreateLogger(string categoryName)
         {
             return new AuditLogger(this);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no dispose work in this fixture.
+        /// </summary>
         public void Dispose()
         {
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Stores the external scope provider used by subsequent fixture logging.
+        /// </summary>
+        /// <param name="scopeProvider">Scope provider used to capture logger correlation.</param>
         public void SetScopeProvider(IExternalScopeProvider scopeProvider)
         {
             _scopes = scopeProvider;
         }
 
-        /// <summary>Captures state without relying on rendered message strings.</summary>
+        /// <summary>
+        ///     Captures state without relying on rendered message strings.
+        /// </summary>
+        /// <param name="provider">Logger provider capturing fixture observations.</param>
         private sealed class AuditLogger(AuditLoggerProvider provider) : ILogger
         {
-            /// <inheritdoc />
+            /// <summary>
+            ///     Pushes the supplied state into the fixture scope provider.
+            /// </summary>
+            /// <param name="state">Synthetic readiness or structured logger state.</param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
+            /// <returns>A disposable scope from the fixture external scope provider.</returns>
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull
             {
                 return provider._scopes.Push(state);
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Enables every log level so the fixture can observe all emitted records.
+            /// </summary>
+            /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+            /// <returns>True for every call in this fixture.</returns>
             public bool IsEnabled(LogLevel level)
             {
                 return true;
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Captures or checks the logger call using the fixture assertions and supplied formatter.
+            /// </summary>
+            /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+            /// <param name="eventId">The stable event identity used to deduplicate retries; ignored by this fixture.</param>
+            /// <param name="state">Synthetic readiness or structured logger state.</param>
+            /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
+            /// <param name="formatter">
+            ///     Provider log formatter; untrusted rendered text is not exported; ignored by this fixture.
+            /// </param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
             public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception,
                 Func<TState, Exception?, string> formatter)
             {
@@ -1197,7 +1427,15 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Owns an isolated SQLite metadata store and fake provider/context ports.</summary>
+    /// <summary>
+    ///     Owns an isolated SQLite metadata store and fake provider/context ports.
+    /// </summary>
+    /// <param name="connection">Fixture database connection or explicitly isolated connection string.</param>
+    /// <param name="services">Fixture dependency provider.</param>
+    /// <param name="db">Fixture metadata context.</param>
+    /// <param name="owner">Synthetic owner identity.</param>
+    /// <param name="deployment">Synthetic deployment identity.</param>
+    /// <param name="analysis">The authorized analysis view, if admission produced or reused a result.</param>
     private sealed class Fixture(
         SqliteConnection connection,
         ServiceProvider services,
@@ -1221,7 +1459,10 @@ public sealed class AnalysisPersistenceTests
         /// <summary>Persisted queued analysis.</summary>
         public Guid AnalysisId { get; } = analysis;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture services, connections and background resources.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async ValueTask DisposeAsync()
         {
             await Services.DisposeAsync();
@@ -1229,14 +1470,27 @@ public sealed class AnalysisPersistenceTests
             await connection.DisposeAsync();
         }
 
-        /// <summary>Processes the fixture only after an actual durable claim; expired/terminal analyses remain untouched.</summary>
+        /// <summary>
+        ///     Processes the fixture only after an actual durable claim; expired/terminal analyses remain
+        ///     untouched.
+        /// </summary>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async Task ProcessAsync(CancellationToken token = default)
         {
             var work = await Services.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync(token);
             if (work is not null) await DeploymentAnalysisWorker.ProcessAsync(Services, work, token);
         }
 
-        /// <summary>Seeds deployment/analysis metadata only; diagnostic payload reads cross a fake store port.</summary>
+        /// <summary>
+        ///     Seeds deployment/analysis metadata only; diagnostic payload reads cross a fake store port.
+        /// </summary>
+        /// <param name="respond">Callback supplying a controlled synthetic provider or HTTP response.</param>
+        /// <param name="audit">Optional capturing logger provider.</param>
+        /// <param name="tokenResponse">Optional cancellation-aware provider-response callback.</param>
+        /// <param name="decorateQueue">Optional wrapper applied to the fixture queue.</param>
+        /// <param name="interceptor">Optional EF interceptor used to observe or inject fixture database failures.</param>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync(Func<Task<LlmAnalysisResponse>> respond,
             ILoggerProvider? audit = null,
             Func<CancellationToken, Task<LlmAnalysisResponse>>? tokenResponse = null,
@@ -1305,13 +1559,27 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Supplies only an in-memory redacted context; unexpected storage calls fail the test.</summary>
+    /// <summary>
+    ///     Supplies only an in-memory redacted context; unexpected storage calls fail the test.
+    /// </summary>
     public class ContextProxy : DispatchProxy
     {
         /// <summary>Optional test hook runs during context construction.</summary>
         public Func<Task<DeploymentAnalysisContext>>? Build { get; set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             return method?.Name == "BuildAsync"
@@ -1321,20 +1589,34 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Strict fake history/query port used to verify actual builder query arguments.</summary>
+    /// <summary>
+    ///     Strict fake history/query port used to verify actual builder query arguments.
+    /// </summary>
     public class ReadPort : DispatchProxy
     {
         /// <summary>Test-specific response callback.</summary>
         public Func<MethodInfo?, object?[]?, object?> Call { get; set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             return Call(method, args);
         }
     }
 
-    /// <summary>Provider fixture that can simulate any completion or safe/unsafe failure.</summary>
+    /// <summary>
+    ///     Provider fixture that can simulate any completion or safe/unsafe failure.
+    /// </summary>
+    /// <param name="respond">Callback supplying a controlled synthetic provider or HTTP response.</param>
+    /// <param name="tokenResponse">Optional cancellation-aware provider-response callback.</param>
     private sealed class Provider(
         Func<Task<LlmAnalysisResponse>> respond,
         Func<CancellationToken, Task<LlmAnalysisResponse>>? tokenResponse = null) : ILlmAnalysisProvider
@@ -1342,7 +1624,13 @@ public sealed class AnalysisPersistenceTests
         /// <summary>Captures the exact mode and evidence passed to the provider fixture.</summary>
         public LlmAnalysisRequest? LastRequest { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records the request and invokes the configured cancellation-aware or ordinary response
+        ///     callback.
+        /// </summary>
+        /// <param name="request">Analysis request supplied to the synthetic provider.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the configured llm analysis response instance or response for this scenario.</returns>
         public Task<LlmAnalysisResponse> AnalyzeAsync(LlmAnalysisRequest request,
             CancellationToken cancellationToken = default)
         {
@@ -1351,12 +1639,19 @@ public sealed class AnalysisPersistenceTests
         }
     }
 
-    /// <summary>Converts chronological analysis reads to SQLite-compatible tick ordering.</summary>
+    /// <summary>
+    ///     Converts chronological analysis reads to SQLite-compatible tick ordering.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
+    /// <param name="protection">Ephemeral fixture data-protection provider.</param>
     private sealed class AnalysisContext(
         DbContextOptions<AutoMateDbContext> options,
         IDataProtectionProvider protection) : AutoMateDbContext(options, protection)
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="builder">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);

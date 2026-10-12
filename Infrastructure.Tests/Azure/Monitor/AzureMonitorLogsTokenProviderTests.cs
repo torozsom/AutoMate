@@ -11,10 +11,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Azure;
 
-/// <summary>Verifies fixed consent guidance without exposing provider response messages.</summary>
+/// <summary>
+///     Verifies fixed consent guidance without exposing provider response messages.
+/// </summary>
 public sealed class AzureMonitorLogsTokenProviderTests
 {
-    /// <summary>Only the recognized consent error selects permission guidance; arbitrary messages stay private.</summary>
+    /// <summary>
+    ///     Only the recognized consent error selects permission guidance; arbitrary messages stay
+    ///     private.
+    /// </summary>
+    /// <param name="body">The original webhook body used for signature validation.</param>
+    /// <param name="consent">Legacy preference value used to verify automatic collection behavior.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("{\"error_codes\":[65001],\"error_description\":\"private-data\"}", true)]
     [InlineData("{\"error_codes\":[70000],\"error_description\":\"private-data\"}", false)]
@@ -29,7 +37,10 @@ public sealed class AzureMonitorLogsTokenProviderTests
         await db.Database.EnsureCreatedAsync();
         var user = new RemoteUser
         {
-            AccountId = "fixture", Username = "fixture", Email = "fixture@example.test", AzureRefreshToken = "refresh"
+            AccountId = "fixture",
+            Username = "fixture",
+            Email = "fixture@example.test",
+            AzureRefreshToken = "refresh"
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -40,7 +51,8 @@ public sealed class AzureMonitorLogsTokenProviderTests
         var provider = new AzureMonitorLogsTokenProvider(services.GetRequiredService<IServiceScopeFactory>(), factory,
             Options.Create(new AzureMonitorLogsOptions
             {
-                ClientId = "fixture", ClientSecret = "fixture",
+                ClientId = "fixture",
+                ClientSecret = "fixture",
                 TokenEndpoint = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
             }));
         var result = await provider.GetTokenAsync(user.Id);

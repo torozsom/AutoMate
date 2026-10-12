@@ -3,10 +3,21 @@ using System.Text;
 
 namespace Infrastructure.Docker;
 
-/// <summary>A complete provider line or an explicit omission, before central redaction.</summary>
+/// <summary>
+///     A complete provider line or an explicit omission, before central redaction.
+/// </summary>
+/// <param name="Text">The diagnostic context or text being processed.</param>
+/// <param name="Timestamp">The provider observation timestamp, if known.</param>
+/// <param name="ProviderTimestamp">Original provider sample timestamp, if supplied.</param>
+/// <param name="Omitted">Whether bounded collection excluded part of the requested output.</param>
 internal sealed record DockerLogLine(string Text, DateTimeOffset Timestamp, string? ProviderTimestamp, bool Omitted);
 
-/// <summary>Incrementally decodes one UTF-8 stream with bounded partial lines and preserved CR/LF semantics.</summary>
+/// <summary>
+///     Incrementally decodes one UTF-8 stream with bounded partial lines and preserved CR/LF
+///     semantics.
+/// </summary>
+/// <param name="timestamps">Whether provider output includes observation timestamps.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
 internal sealed class DockerLogDecoder(bool timestamps, TimeProvider clock)
 {
     /// <summary>Bounds raw partial text until a complete line can be centrally redacted.</summary>
@@ -24,7 +35,12 @@ internal sealed class DockerLogDecoder(bool timestamps, TimeProvider clock)
     /// <summary>Whether an oversized line is being discarded through its delimiter.</summary>
     private bool _overflow;
 
-    /// <summary>Returns completed lines without confusing byte chunks with character or line boundaries.</summary>
+    /// <summary>
+    ///     Returns completed lines without confusing byte chunks with character or line boundaries.
+    /// </summary>
+    /// <param name="bytes">The maximum encoded UTF-8 size of provider input.</param>
+    /// <param name="flush">Whether the write must be flushed before returning.</param>
+    /// <returns>The feed selection with its documented bounds and ordering.</returns>
     internal IReadOnlyList<DockerLogLine> Feed(ReadOnlySpan<byte> bytes, bool flush = false)
     {
         var characters = new char[Encoding.UTF8.GetMaxCharCount(bytes.Length)];
@@ -49,7 +65,10 @@ internal sealed class DockerLogDecoder(bool timestamps, TimeProvider clock)
         return output;
     }
 
-    /// <summary>Completes a bounded line and strips only a validated provider timestamp prefix.</summary>
+    /// <summary>
+    ///     Completes a bounded line and strips only a validated provider timestamp prefix.
+    /// </summary>
+    /// <param name="output">Output stream classification or normalized process output.</param>
     private void Emit(List<DockerLogLine> output)
     {
         var text = _overflow

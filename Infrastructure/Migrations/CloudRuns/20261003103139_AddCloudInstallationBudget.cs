@@ -1,37 +1,40 @@
-﻿using System;
+﻿#nullable disable
+
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
-#nullable disable
+namespace Infrastructure.Migrations;
 
-namespace Infrastructure.Migrations
+/// <summary>
+///     EF schema migration and target-model metadata for Add Cloud Installation Budget.
+/// </summary>
+public partial class AddCloudInstallationBudget : Migration
 {
-    /// <inheritdoc />
-    public partial class AddCloudInstallationBudget : Migration
+    /// <summary>
+    ///     Defines the forward schema and data operations for this migration.
+    /// </summary>
+    /// <param name="migrationBuilder">Collects operations executed by the EF migration runner.</param>
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
-        /// <inheritdoc />
-        protected override void Up(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.CreateTable(
-                name: "cloud_installation_budgets",
-                columns: table => new
-                {
-                    installation_id = table.Column<long>(type: "bigint", nullable: false),
-                    paused_until = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    throttle_count = table.Column<int>(type: "integer", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_cloud_installation_budgets", x => x.installation_id);
-                });
-        }
+        migrationBuilder.CreateTable(
+            "cloud_installation_budgets",
+            table => new
+            {
+                installation_id = table.Column<long>("bigint", nullable: false),
+                paused_until = table.Column<DateTimeOffset>("timestamp with time zone", nullable: false),
+                updated_at = table.Column<DateTimeOffset>("timestamp with time zone", nullable: false),
+                throttle_count = table.Column<int>("integer", nullable: false)
+            },
+            constraints: table => { table.PrimaryKey("pk_cloud_installation_budgets", x => x.installation_id); });
+    }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropTable(
-                name: "cloud_installation_budgets");
-        }
+    /// <summary>
+    ///     Defines downgrade operations for this migration without promising restoration of removed
+    ///     data.
+    /// </summary>
+    /// <param name="migrationBuilder">Collects operations executed by the EF migration runner.</param>
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        migrationBuilder.DropTable(
+            "cloud_installation_budgets");
     }
 }

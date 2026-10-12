@@ -1,14 +1,16 @@
 namespace Domain.Enums;
 
-/// <summary>Deployment completion outcome, independent of later runtime stops.</summary>
+/// <summary>
+///     Deployment completion outcome, independent of later runtime stops.
+/// </summary>
 public enum DeploymentOutcome
 {
     /// <summary>No reliable completion evidence is available.</summary>
     Unknown,
 
-    /// <summary>The deployment reached Running successfully.</summary>
+    /// <summary>Deployment preparation or the remote workflow completed successfully.</summary>
     Succeeded,
 
-    /// <summary>The deployment failed before becoming operational.</summary>
+    /// <summary>Deployment preparation or the remote workflow failed.</summary>
     Failed
 }

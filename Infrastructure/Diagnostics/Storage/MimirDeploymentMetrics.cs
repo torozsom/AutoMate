@@ -7,7 +7,12 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>OTLP/HTTP numeric ingestion and Prometheus-compatible historical queries.</summary>
+/// <summary>
+///     OTLP/HTTP numeric ingestion and Prometheus-compatible historical queries.
+/// </summary>
+/// <param name="transport">Bounded authenticated HTTP transport for the private telemetry backends.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
 public sealed class MimirDeploymentMetrics(
     TelemetryHttpTransport transport,
     IOptions<TelemetryStorageOptions> options,
@@ -17,9 +22,22 @@ public sealed class MimirDeploymentMetrics(
     /// <summary>Fixed series names prevent arbitrary metric/label injection.</summary>
     internal static readonly IReadOnlyDictionary<string, string> Units = DeploymentMetricCatalog.Units;
 
+    /// <summary>Finite metric-name to native-unit catalog accepted by storage and transport.</summary>
     public static IReadOnlyDictionary<string, string> SupportedUnits => Units;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads recorded daily container metric statistics within the selected window.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="project">The project identity used to scope the operation.</param>
+    /// <param name="deployment">The exact deployment identity used to scope the operation.</param>
+    /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning recorded daily sufficient statistics without synthesizing missing
+    ///     observations.
+    /// </returns>
     public async Task<IReadOnlyList<DailyMetricStatistics>> ReadDailyAsync(Guid tenant, Guid project, Guid deployment,
         DateTimeOffset start, DateTimeOffset end, CancellationToken token)
     {
@@ -53,14 +71,32 @@ public sealed class MimirDeploymentMetrics(
         return result;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Returns interval aggregates without synthesizing missing samples.
+    /// </summary>
+    /// <param name="tenantId">The internal owner-account telemetry identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="maximumPoints">The maximum number of returned aggregate points.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning recorded bounded metric aggregates without zero-filling missing
+    ///     observations.
+    /// </returns>
     public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken)
     {
         return ReadCoreAsync(tenantId, projectId, deploymentId, start, end, maximumPoints, cancellationToken, null);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Selected containers are independent of chosen log sources.
+    /// </summary>
+    /// <param name="query">The frozen resource scope, selection and bounded read options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the selected bounded numeric aggregate points.</returns>
     public Task<IReadOnlyList<DeploymentMetricPoint>> ReadAssessmentAsync(ArchiveAssessmentQuery query,
         CancellationToken token)
     {
@@ -71,7 +107,15 @@ public sealed class MimirDeploymentMetrics(
                 query.Selection.Normalize().MetricContainers);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Confirms every exact sample is queryable.
+    /// </summary>
+    /// <param name="events">The bounded batch of redacted diagnostic envelopes.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning whether every exact numeric sample is queryable in the specialized
+    ///     store.
+    /// </returns>
     public async Task<bool> ContainsAsync(IReadOnlyList<DeploymentLogEnvelope> events,
         CancellationToken cancellationToken)
     {
@@ -99,7 +143,13 @@ public sealed class MimirDeploymentMetrics(
         return true;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Writes samples for one tenant with retries preserving timestamps and values.
+    /// </summary>
+    /// <param name="events">The bounded batch of redacted diagnostic envelopes.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after the redacted batch is written.</returns>
+    /// <exception cref="InvalidOperationException">Telemetry metric batch was partially rejected.</exception>
     public async Task WriteAsync(IReadOnlyList<DeploymentLogEnvelope> events, CancellationToken cancellationToken)
     {
         events = TelemetryWriteBoundary.Snapshot(events, redactor, cancellationToken);
@@ -133,7 +183,20 @@ public sealed class MimirDeploymentMetrics(
             throw new InvalidOperationException("Telemetry metric batch was partially rejected.");
     }
 
-    /// <summary>Filters metric labels before interval aggregation.</summary>
+    /// <summary>
+    ///     Filters metric labels before interval aggregation.
+    /// </summary>
+    /// <param name="tenantId">The internal owner-account telemetry identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="start">Absolute observation-window start or owner-authorized cloud launch request.</param>
+    /// <param name="end">The upper bound of the selected observation window.</param>
+    /// <param name="maximumPoints">The maximum number of returned aggregate points.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <param name="selected">Selected container identities; null selects all recorded containers.</param>
+    /// <returns>A task returning the core async selection with its documented bounds and ordering.</returns>
     private async Task<IReadOnlyList<DeploymentMetricPoint>> ReadCoreAsync(Guid tenantId, Guid projectId,
         Guid deploymentId,
         DateTimeOffset start, DateTimeOffset end, int maximumPoints, CancellationToken cancellationToken,
@@ -180,7 +243,11 @@ public sealed class MimirDeploymentMetrics(
             .OrderBy(p => p.Timestamp).ToArray();
     }
 
-    /// <summary>Rejects unsupported or nonfinite samples before store writes and visibility queries.</summary>
+    /// <summary>
+    ///     Rejects unsupported or nonfinite samples before store writes and visibility queries.
+    /// </summary>
+    /// <param name="events">The bounded batch of redacted diagnostic envelopes.</param>
+    /// <exception cref="ArgumentException">Telemetry metric batch contains unsupported samples.</exception>
     private static void ValidateSamples(IReadOnlyList<DeploymentLogEnvelope> events)
     {
         if (events.Any(item => item.Event.Metrics?.Any(sample =>
@@ -189,13 +256,27 @@ public sealed class MimirDeploymentMetrics(
             throw new ArgumentException("Telemetry metric batch contains unsupported samples.");
     }
 
-    /// <summary>Restricts queries to server-constructed GUID selectors.</summary>
+    /// <summary>
+    ///     Restricts queries to server-constructed GUID selectors.
+    /// </summary>
+    /// <param name="name">The recorded display name or fixed metric identity.</param>
+    /// <param name="project">The owned project identity or normalized local import metadata.</param>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <returns>The selector derived from the validated input.</returns>
     private static string Selector(string name, Guid project, Guid deployment)
     {
         return $"{name}{{project_id=\"{project:N}\",deployment_id=\"{deployment:N}\"}}";
     }
 
-    /// <summary>Issues a bounded query against an operator-configured base endpoint.</summary>
+    /// <summary>
+    ///     Issues a bounded query against an operator-configured base endpoint.
+    /// </summary>
+    /// <param name="tenant">The internal owner-account telemetry scope.</param>
+    /// <param name="endpoint">Verified provider endpoint selected for this operation.</param>
+    /// <param name="query">Bounded provider query or immutable resource/source selection.</param>
+    /// <param name="suffix">Stable component or artifact name suffix.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the owned parsed JSON response; the caller must dispose it.</returns>
     private Task<JsonDocument> QueryAsync(Guid tenant, string endpoint, string query, string suffix,
         CancellationToken token)
     {
@@ -203,13 +284,22 @@ public sealed class MimirDeploymentMetrics(
                                    "?query=" + Uri.EscapeDataString(query) + suffix, tenant, null, token);
     }
 
-    /// <summary>Creates a string OTLP attribute without resource promotion dependencies.</summary>
+    /// <summary>
+    ///     Creates a string OTLP attribute without resource promotion dependencies.
+    /// </summary>
+    /// <param name="key">Stable lookup or configuration key.</param>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The bounded projection of the documented configuration or status fields.</returns>
     private static object Attribute(string key, string value)
     {
         return new { key, value = new { stringValue = value } };
     }
 
-    /// <summary>Formats query time invariantly.</summary>
+    /// <summary>
+    ///     Formats query time invariantly.
+    /// </summary>
+    /// <param name="time">The observation timestamp to assign to a UTC bucket.</param>
+    /// <returns>The seconds derived from the validated input.</returns>
     private static string Seconds(DateTimeOffset time)
     {
         return (time.ToUnixTimeMilliseconds() / 1000d).ToString(CultureInfo.InvariantCulture);

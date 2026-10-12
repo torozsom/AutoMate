@@ -22,10 +22,19 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Verifies admission/idempotency/quotas through the production service and independent relational connections.</summary>
+/// <summary>
+///     Verifies admission/idempotency/quotas through the production service and independent
+///     relational connections.
+/// </summary>
 public sealed class AnalysisAdmissionTests
 {
-    /// <summary>Queued Automatic choices resolve from current persisted status and configuration alone is not evidence.</summary>
+    /// <summary>
+    ///     Queued Automatic choices resolve from current persisted status and configuration alone is
+    ///     not evidence.
+    /// </summary>
+    /// <param name="status">Deployment state under test.</param>
+    /// <param name="expected">Expected outcome for this scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(DeploymentStatus.Starting, AssessmentKind.Startup)]
     [InlineData(DeploymentStatus.Failed, AssessmentKind.FailureDiagnosis)]
@@ -61,7 +70,11 @@ public sealed class AnalysisAdmissionTests
         Assert.All(await db.AiAnalysisBudgetEntries.ToListAsync(), entry => Assert.Equal(0, entry.ReservedCostUnits));
     }
 
-    /// <summary>Preferences remain mutable while admission options and idempotency are immutable and owner scoped.</summary>
+    /// <summary>
+    ///     Preferences remain mutable while admission options and idempotency are immutable and owner
+    ///     scoped.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Assessment_preferences_and_request_options_are_independent_and_conflicting_replay_is_denied()
     {
@@ -94,9 +107,11 @@ public sealed class AnalysisAdmissionTests
 
 
     /// <summary>
-    ///     Stable-ID skips coalesce concurrently, consume no quota/work and replay safe guidance without exposing saved
-    ///     payloads.
+    ///     Stable-ID skips coalesce concurrently, consume no quota/work and replay safe guidance
+    ///     without exposing saved payloads.
     /// </summary>
+    /// <param name="reason">Expected finite rejection or failure reason.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("quota")]
     [InlineData("egress")]
@@ -142,9 +157,10 @@ public sealed class AnalysisAdmissionTests
     }
 
     /// <summary>
-    ///     Cancellation during the first diagnostic preserves the newly created deployment's failure, rather than failing
-    ///     an older deployment.
+    ///     Cancellation during the first diagnostic preserves the newly created deployment's failure,
+    ///     rather than failing an older deployment.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Early_local_cancellation_persists_actual_deployment_failure()
     {
@@ -165,7 +181,10 @@ public sealed class AnalysisAdmissionTests
             (await db.Deployments.AsNoTracking().SingleAsync(item => item.Id == fixture.Deployments[0])).Status);
     }
 
-    /// <summary>Automatic/manual admissions share active work and a single project daily allowance.</summary>
+    /// <summary>
+    ///     Automatic/manual admissions share active work and a single project daily allowance.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Automatic_admission_coalesces_manual_work_and_shares_quota()
     {
@@ -190,7 +209,11 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(0, await db.FailedDeploymentAnalysisEvents.CountAsync(item => item.CompletedAt == null));
     }
 
-    /// <summary>Recovered and concurrent dispatchers admit once, and result/receipt deletion cannot reset the marker.</summary>
+    /// <summary>
+    ///     Recovered and concurrent dispatchers admit once, and result/receipt deletion cannot reset
+    ///     the marker.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Automatic_dispatch_survives_restart_and_result_deletion()
     {
@@ -225,7 +248,12 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(1, await check.FailedDeploymentAnalysisEvents.CountAsync());
     }
 
-    /// <summary>Policy denial retires wakeups; later enabling/consenting never backfills denied historical failures.</summary>
+    /// <summary>
+    ///     Policy denial retires wakeups; later enabling/consenting never backfills denied historical
+    ///     failures.
+    /// </summary>
+    /// <param name="reason">Expected finite rejection or failure reason.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("disabled")]
     [InlineData("consent")]
@@ -265,9 +293,10 @@ public sealed class AnalysisAdmissionTests
     }
 
     /// <summary>
-    ///     Failure and wakeup roll back together; direct bulk writes and repeated failed writes use actual deployment
-    ///     IDs.
+    ///     Failure and wakeup roll back together; direct bulk writes and repeated failed writes use
+    ///     actual deployment IDs.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Failure_capture_is_transactional_and_ignores_repeated_failed_writes()
     {
@@ -292,7 +321,11 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(0, await db.FailedDeploymentAnalysisEvents.CountAsync());
     }
 
-    /// <summary>Failed admission rolls back result/work/receipt/completion while preserving the committed deployment failure.</summary>
+    /// <summary>
+    ///     Failed admission rolls back result/work/receipt/completion while preserving the committed
+    ///     deployment failure.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Automatic_insert_failure_leaves_recoverable_wakeup()
     {
@@ -313,7 +346,12 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(1, await db.DeploymentAnalysisWorkItems.CountAsync());
     }
 
-    /// <summary>Concurrent legacy or stable-ID requests coalesce into one analysis/work item and one quota charge.</summary>
+    /// <summary>
+    ///     Concurrent legacy or stable-ID requests coalesce into one analysis/work item and one quota
+    ///     charge.
+    /// </summary>
+    /// <param name="stableId">Whether the synthetic event has a stable identity.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -337,7 +375,12 @@ public sealed class AnalysisAdmissionTests
         Assert.True((await check.AiAnalysisRequests.SingleAsync()).ConsumesQuota);
     }
 
-    /// <summary>Different stable keys for active work become aliases and replay the same completed/canceled result.</summary>
+    /// <summary>
+    ///     Different stable keys for active work become aliases and replay the same completed/canceled
+    ///     result.
+    /// </summary>
+    /// <param name="terminal">Terminal analysis state under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(AiAnalysisStatus.Completed)]
     [InlineData(AiAnalysisStatus.Cancelled)]
@@ -370,7 +413,11 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(1, await check.DeploymentAnalysisWorkItems.CountAsync());
     }
 
-    /// <summary>Different deployments in one project cannot race past a daily allowance; the project itself is unchanged.</summary>
+    /// <summary>
+    ///     Different deployments in one project cannot race past a daily allowance; the project itself
+    ///     is unchanged.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Concurrent_deployments_obey_project_quota()
     {
@@ -397,7 +444,11 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(updated, project.UpdatedAt);
     }
 
-    /// <summary>Deleting a canceled result neither refunds allowance nor lets the original request create work again.</summary>
+    /// <summary>
+    ///     Deleting a canceled result neither refunds allowance nor lets the original request create
+    ///     work again.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Deleted_result_preserves_quota_and_request_identity()
     {
@@ -422,9 +473,10 @@ public sealed class AnalysisAdmissionTests
     }
 
     /// <summary>
-    ///     Stable request IDs are deployment/owner scoped; inaccessible IDs and empty/canceled requests do not admit
-    ///     work.
+    ///     Stable request IDs are deployment/owner scoped; inaccessible IDs and empty/canceled requests
+    ///     do not admit work.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Request_identity_is_scoped_and_invalid_admission_has_no_side_effects()
     {
@@ -450,9 +502,10 @@ public sealed class AnalysisAdmissionTests
     }
 
     /// <summary>
-    ///     A failed work insert rolls back result/receipt writes and detaches only failed admission entities for safe
-    ///     retry.
+    ///     A failed work insert rolls back result/receipt writes and detaches only failed admission
+    ///     entities for safe retry.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Admission_failure_rolls_back_and_reused_context_can_retry()
     {
@@ -473,9 +526,10 @@ public sealed class AnalysisAdmissionTests
     }
 
     /// <summary>
-    ///     Expired result cleanup preserves receipts; separate receipt cleanup is bounded and respects the idempotency
-    ///     window.
+    ///     Expired result cleanup preserves receipts; separate receipt cleanup is bounded and respects
+    ///     the idempotency window.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Retention_keeps_live_receipts_and_bounds_receipt_cleanup()
     {
@@ -511,9 +565,10 @@ public sealed class AnalysisAdmissionTests
     }
 
     /// <summary>
-    ///     Receipt aliases are bounded independently of quota; existing stable IDs and legacy active reads remain
-    ///     available.
+    ///     Receipt aliases are bounded independently of quota; existing stable IDs and legacy active
+    ///     reads remain available.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Receipt_cap_does_not_block_existing_request_replay()
     {
@@ -540,7 +595,11 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(1, await db.AiAnalysisRequests.CountAsync(item => item.ConsumesQuota));
     }
 
-    /// <summary>Zero allowance denies new work and retains all ownership/consent checks without charging a request.</summary>
+    /// <summary>
+    ///     Zero allowance denies new work and retains all ownership/consent checks without charging a
+    ///     request.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Zero_allowance_creates_skipped_receipt_but_revoked_consent_does_not()
     {
@@ -560,7 +619,10 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(0, await db.DeploymentAnalysisWorkItems.CountAsync());
     }
 
-    /// <summary>Stopping changes runtime state but retains the successful historical outcome.</summary>
+    /// <summary>
+    ///     Stopping changes runtime state but retains the successful historical outcome.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Successful_outcome_survives_stopping_and_snapshot_remains_immutable()
     {
@@ -579,7 +641,12 @@ public sealed class AnalysisAdmissionTests
         Assert.DoesNotContain("changed", deployment.ConfigurationSnapshotJson);
     }
 
-    /// <summary>Every manual status is admitted; old saved results remain owner-scoped and paged after expiry.</summary>
+    /// <summary>
+    ///     Every manual status is admitted; old saved results remain owner-scoped and paged after
+    ///     expiry.
+    /// </summary>
+    /// <param name="status">Deployment state under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(DeploymentStatus.Starting)]
     [InlineData(DeploymentStatus.Running)]
@@ -609,10 +676,20 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(2, (await fixture.Service(db).ListAsync(fixture.OwnerId, deployment.Id)).Count);
     }
 
-    /// <summary>Cancels on preparation and simulates unavailable diagnostics on the failure path.</summary>
+    /// <summary>
+    ///     Cancels on preparation and simulates unavailable diagnostics on the failure path.
+    /// </summary>
+    /// <param name="cancellation">Fixture cancellation source controlling the operation.</param>
     private sealed class CancelingDiagnostics(CancellationTokenSource cancellation) : IDeploymentDiagnosticPublisher
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Cancels the configured source and injects cancellation at the diagnostic publication
+        ///     boundary.
+        /// </summary>
+        /// <param name="diagnosticEvent">The normalized diagnostic observation to process; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
+        /// <exception cref="OperationCanceledException">Cancellation is requested or deliberately injected by the fixture.</exception>
         public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent,
             CancellationToken cancellationToken = default)
         {
@@ -621,43 +698,84 @@ public sealed class AnalysisAdmissionTests
         }
     }
 
-    /// <summary>Provides inert collector lifecycle operations for a failure before Docker is invoked.</summary>
+    /// <summary>
+    ///     Provides inert collector lifecycle operations for a failure before Docker is invoked.
+    /// </summary>
     private sealed class NoLocalDiagnostics : ILocalDeploymentDiagnostics
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live register work.
+        /// </summary>
+        /// <param name="target">Verified project, deployment and provider resource inventory; ignored by this fixture.</param>
+        /// <param name="deploymentOperation">
+        ///     Whether a deployment operation currently requires daemon collection; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task RegisterAsync(DockerDeploymentTarget target, bool deploymentOperation,
             CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Reports no active local diagnostics in this admission fixture.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deploymentId">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <returns>False for every call in this fixture.</returns>
         public bool IsActive(Guid projectId, Guid deploymentId)
         {
             return false;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live set operation work.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deploymentId">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="active">The current active-operation count; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task SetOperationAsync(Guid projectId, Guid deploymentId, bool active,
             CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live stop project work.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task StopProjectAsync(Guid projectId, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
         }
     }
 
-    /// <summary>Injects a synthetic insert failure after admission entities have been staged.</summary>
+    /// <summary>
+    ///     Injects a synthetic insert failure after admission entities have been staged.
+    /// </summary>
     private sealed class WorkInsertFailure : DbCommandInterceptor
     {
         /// <summary>Whether work inserts fail.</summary>
         public bool Fail { get; set; } = true;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Injects a configured failure when EF inserts analysis work; otherwise preserves command
+        ///     execution.
+        /// </summary>
+        /// <param name="command">Database command intercepted by the fixture.</param>
+        /// <param name="eventData">EF command interception metadata.</param>
+        /// <param name="result">Current EF reader-interception result.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the unchanged EF interception result after fixture checks or failure injection.</returns>
+        /// <exception cref="InvalidOperationException">
+        ///     The fixture injects a configured failure or detects an unexpected operation.
+        /// </exception>
         public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<DbDataReader> result,
             CancellationToken cancellationToken = default)
@@ -669,7 +787,10 @@ public sealed class AnalysisAdmissionTests
         }
     }
 
-    /// <summary>Owns isolated metadata and synthetic policy; no context or provider is used.</summary>
+    /// <summary>
+    ///     Owns isolated metadata and synthetic policy; no context or provider is used.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
     private sealed class Fixture(string path) : IAsyncDisposable
     {
         /// <summary>Controlled UTC admission clock.</summary>
@@ -687,7 +808,10 @@ public sealed class AnalysisAdmissionTests
         /// <summary>Deployment identities.</summary>
         public Guid[] Deployments { get; private set; } = [];
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture resources and removes its temporary database files.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask DisposeAsync()
         {
             File.Delete(path);
@@ -696,7 +820,11 @@ public sealed class AnalysisAdmissionTests
             return ValueTask.CompletedTask;
         }
 
-        /// <summary>Independent connections verify actual database serialization.</summary>
+        /// <summary>
+        ///     Independent connections verify actual database serialization.
+        /// </summary>
+        /// <param name="interceptor">Optional EF interceptor used to observe or inject fixture database failures.</param>
+        /// <returns>An independent metadata context owned by the caller.</returns>
         public AutoMateDbContext NewDb(DbCommandInterceptor? interceptor = null)
         {
             var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(new SqliteConnectionStringBuilder
@@ -705,7 +833,11 @@ public sealed class AnalysisAdmissionTests
             return new AdmissionContext(options.Options);
         }
 
-        /// <summary>Production admission service and real metadata egress gate.</summary>
+        /// <summary>
+        ///     Production admission service and real metadata egress gate.
+        /// </summary>
+        /// <param name="db">Fixture metadata context.</param>
+        /// <returns>The configured deployment analysis service instance or response for this scenario.</returns>
         public DeploymentAnalysisService Service(AutoMateDbContext db)
         {
             return new DeploymentAnalysisService(db, Options, AnalysisResultTests.Validator(), Clock,
@@ -713,7 +845,12 @@ public sealed class AnalysisAdmissionTests
                 NullLogger<DeploymentAnalysisService>.Instance);
         }
 
-        /// <summary>Seeds one consenting project and multiple deployments without any prior admission.</summary>
+        /// <summary>
+        ///     Seeds one consenting project and multiple deployments without any prior admission.
+        /// </summary>
+        /// <param name="deploymentCount">Number of seeded deployments.</param>
+        /// <param name="limit">Requested count or configured admission bound.</param>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync(int deploymentCount = 1, int limit = 5)
         {
             var fixture = new Fixture(Path.Combine(Path.GetTempPath(),
@@ -757,24 +894,35 @@ public sealed class AnalysisAdmissionTests
         }
     }
 
-    /// <summary>Allows UTC day rollover without real waits.</summary>
+    /// <summary>
+    ///     Allows UTC day rollover without real waits.
+    /// </summary>
     private sealed class TestClock : TimeProvider
     {
         /// <summary>Current UTC time.</summary>
         public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns the controlled UTC clock value.
+        /// </summary>
+        /// <returns>The fixture-controlled UTC time.</returns>
         public override DateTimeOffset GetUtcNow()
         {
             return Now;
         }
     }
 
-    /// <summary>SQLite chronological representation of production metadata timestamps.</summary>
+    /// <summary>
+    ///     SQLite chronological representation of production metadata timestamps.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
     private sealed class AdmissionContext(DbContextOptions<AutoMateDbContext> options)
         : AutoMateDbContext(options, new EphemeralDataProtectionProvider())
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="builder">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);

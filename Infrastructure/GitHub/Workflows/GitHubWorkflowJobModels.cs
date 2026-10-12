@@ -2,12 +2,16 @@ using System.Text.Json.Serialization;
 
 namespace Infrastructure.GitHub;
 
-/// <summary>GitHub REST response for a workflow run's jobs.</summary>
+/// <summary>
+///     GitHub REST response for a workflow run's jobs.
+/// </summary>
 /// <param name="Jobs">Jobs returned by the requested page.</param>
 internal sealed record GitHubWorkflowJobsResponse(
     [property: JsonPropertyName("jobs")] List<GitHubWorkflowJobItem> Jobs);
 
-/// <summary>GitHub REST fields used to monitor one workflow job.</summary>
+/// <summary>
+///     GitHub REST fields used to monitor one workflow job.
+/// </summary>
 /// <param name="Id">Stable GitHub job identifier.</param>
 /// <param name="Name">Job display name.</param>
 /// <param name="Status">Current execution state.</param>
@@ -30,7 +34,9 @@ internal sealed record GitHubWorkflowJobItem(
     DateTimeOffset? CompletedAt,
     [property: JsonPropertyName("steps")] List<GitHubWorkflowStepItem>? Steps);
 
-/// <summary>GitHub REST fields used to monitor one workflow step.</summary>
+/// <summary>
+///     GitHub REST fields used to monitor one workflow step.
+/// </summary>
 /// <param name="Number">Step number within the job.</param>
 /// <param name="Name">Step display name.</param>
 /// <param name="Status">Current execution state.</param>

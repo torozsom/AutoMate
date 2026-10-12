@@ -1,6 +1,9 @@
-@namespace Web.Components.Shared
 @using System.Text.Json
 @using Domain.Entities
+@*
+    Presents recorded launch settings with safe links and explicitly selected metadata copying.
+*@
+@namespace Web.Components.Shared
 @if (Deployment is not null)
 {
     var snapshot = Snapshot;
@@ -173,7 +176,12 @@ else
         ? "https://portal.azure.com/#resource" + id
         : null;
 
-    /// <summary>External links reject credential-bearing URLs and unsafe schemes.</summary>
+    /// <summary>
+    ///     External links reject credential-bearing URLs and unsafe schemes.
+    /// </summary>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <param name="github">Whether to additionally restrict the link to GitHub.</param>
+    /// <returns>The extracted or validated string, or null when absent or invalid.</returns>
     private static string? SafeUrl(string? value, bool github = false)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&

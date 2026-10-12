@@ -10,6 +10,13 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Creates the unified model combining deployment configuration and project metadata.
     /// </summary>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <param name="metadata">
+    ///     The non-secret project metadata supplied to evidence or artifact generation.
+    /// </param>
+    /// <param name="csProjectName">The selected C# project name used for generated artifacts.</param>
+    /// <param name="outputDirectory">The destination directory for generated deployment artifacts.</param>
+    /// <returns>The bounded projection of the documented configuration or status fields.</returns>
     public static object Create(DeploymentConfigDto config, ProjectMetadataDto metadata, string csProjectName,
         string outputDirectory)
     {
@@ -63,6 +70,11 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Creates template project entries with paths relative to the template root.
     /// </summary>
+    /// <param name="metadata">
+    ///     The non-secret project metadata supplied to evidence or artifact generation.
+    /// </param>
+    /// <param name="solutionRoot">Resolved local solution/repository root.</param>
+    /// <returns>The project list selection with its documented bounds and ordering.</returns>
     private static List<object> CreateProjectList(ProjectMetadataDto metadata, string solutionRoot)
     {
         return metadata.AllProjectPaths
@@ -82,6 +94,12 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Resolves the main project file and folder values expected by Dockerfile templates.
     /// </summary>
+    /// <param name="metadata">
+    ///     The non-secret project metadata supplied to evidence or artifact generation.
+    /// </param>
+    /// <param name="csProjectName">The selected C# project name used for generated artifacts.</param>
+    /// <param name="solutionRoot">Resolved local solution/repository root.</param>
+    /// <returns>Resolved main-project paths and runtime fields for template rendering.</returns>
     private static MainProjectTemplateInfo ResolveMainProject(ProjectMetadataDto metadata, string csProjectName,
         string solutionRoot)
     {
@@ -105,6 +123,8 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Creates template database entries from deployment database configuration.
     /// </summary>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <returns>The database list selection with its documented bounds and ordering.</returns>
     private static List<object> CreateDatabaseList(DeploymentConfigDto config)
     {
         return config.Databases
@@ -116,6 +136,9 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Creates the anonymous template model for one configured database.
     /// </summary>
+    /// <param name="database">Selected owned database resource or deployment configuration.</param>
+    /// <param name="index">Validated numeric position or durable lookup identity.</param>
+    /// <returns>The bounded projection of the documented configuration or status fields.</returns>
     private static object CreateDatabaseTemplateModel(DatabaseConfigDto database, int index)
     {
         var type = TemplateNameNormalizer.NormalizeDatabaseType(database.DbType);
@@ -160,6 +183,9 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Resolves cloud resource names with the same fallbacks used before refactoring.
     /// </summary>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <param name="normalizedAppName">Validated normalized application artifact name.</param>
+    /// <returns>Normalized cloud resource names used by generated assets.</returns>
     private static CloudNameTemplateInfo CreateCloudNames(DeploymentConfigDto config, string normalizedAppName)
     {
         var containerAppName = string.IsNullOrWhiteSpace(config.CloudContainerAppName)
@@ -180,6 +206,8 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Creates ordered custom environment variable template entries.
     /// </summary>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <returns>The custom environment list selection with its documented bounds and ordering.</returns>
     private static List<object> CreateCustomEnvironmentList(DeploymentConfigDto config)
     {
         return config.CustomEnvVars?
@@ -202,11 +230,16 @@ internal static class TemplateModelFactory
     /// <summary>
     ///     Main project path data exposed to templates.
     /// </summary>
+    /// <param name="RelativePath">Validated path relative to the configured root.</param>
+    /// <param name="Folder">Source or output folder used for deployment artifacts.</param>
     private readonly record struct MainProjectTemplateInfo(string RelativePath, string Folder);
 
     /// <summary>
     ///     Cloud resource name data exposed to templates.
     /// </summary>
+    /// <param name="ContainerAppName">Verified Azure Container App name.</param>
+    /// <param name="ResourceGroupName">Azure resource-group name used by this deployment.</param>
+    /// <param name="RegistryName">Container registry name used by the deployment.</param>
     private readonly record struct CloudNameTemplateInfo(
         string ContainerAppName,
         string ResourceGroupName,

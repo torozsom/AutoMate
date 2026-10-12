@@ -2,10 +2,14 @@ using Application.Ai;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Verifies retry timing bounds independently of network/database scheduling.</summary>
+/// <summary>
+///     Verifies retry timing bounds independently of network/database scheduling.
+/// </summary>
 public sealed class AnalysisRetryPolicyTests
 {
-    /// <summary>Waits increase exponentially with bounded jitter; server minimums never shorten a delay.</summary>
+    /// <summary>
+    ///     Waits increase exponentially with bounded jitter; server minimums never shorten a delay.
+    /// </summary>
     [Fact]
     public void Backoff_grows_and_respects_server_minimum()
     {

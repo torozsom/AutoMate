@@ -6,10 +6,14 @@ using Infrastructure.Docker;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Verifies stream parsing, strict ownership and confirmed overlap without contacting Docker.</summary>
+/// <summary>
+///     Verifies stream parsing, strict ownership and confirmed overlap without contacting Docker.
+/// </summary>
 public sealed class DockerOutputTests
 {
-    /// <summary>Every possible byte split retains Unicode, timestamps, CRLF and an EOF partial line.</summary>
+    /// <summary>
+    ///     Every possible byte split retains Unicode, timestamps, CRLF and an EOF partial line.
+    /// </summary>
     [Fact]
     public void Utf8_frame_boundaries_do_not_change_output()
     {
@@ -25,7 +29,9 @@ public sealed class DockerOutputTests
         }
     }
 
-    /// <summary>Independent stdout/stderr decoders keep interleaved partial lines apart and retain bare CR.</summary>
+    /// <summary>
+    ///     Independent stdout/stderr decoders keep interleaved partial lines apart and retain bare CR.
+    /// </summary>
     [Fact]
     public void Separate_streams_preserve_partial_lines_and_carriage_returns()
     {
@@ -37,7 +43,9 @@ public sealed class DockerOutputTests
         Assert.Equal(new[] { "error\r", "next" }, stderr.Feed("or\rnext"u8, true).Select(e => e.Text));
     }
 
-    /// <summary>No prefix of an oversized secret-bearing line escapes before the explicit omission.</summary>
+    /// <summary>
+    ///     No prefix of an oversized secret-bearing line escapes before the explicit omission.
+    /// </summary>
     [Fact]
     public void Oversized_lines_are_omitted_whole_and_next_line_recovers()
     {
@@ -49,7 +57,14 @@ public sealed class DockerOutputTests
         Assert.Equal("ok\n", result[1].Text);
     }
 
-    /// <summary>Stderr progress remains informational; recognizable failures and identities gain structured attributes.</summary>
+    /// <summary>
+    ///     Stderr progress remains informational; recognizable failures and identities gain structured
+    ///     attributes.
+    /// </summary>
+    /// <param name="text">The diagnostic context or text being processed.</param>
+    /// <param name="kind">Synthetic operation or response kind.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
+    /// <param name="phase">The recorded cloud-run phase.</param>
     [Theory]
     [InlineData("#12 exporting sha256:abcdef123456\r\n", "BuildProgress", "Information", "build")]
     [InlineData(" Container sample-web Started\n", "Lifecycle", "Information", "compose")]
@@ -71,7 +86,9 @@ public sealed class DockerOutputTests
         if (text.Contains("sha256")) Assert.Equal("sha256:abcdef123456", e.Attributes["image_id"]);
     }
 
-    /// <summary>Web labels bind a deployment while stable database labels remain valid across redeployments.</summary>
+    /// <summary>
+    ///     Web labels bind a deployment while stable database labels remain valid across redeployments.
+    /// </summary>
     [Fact]
     public void Ownership_never_trusts_a_display_name_or_other_deployment()
     {
@@ -88,7 +105,9 @@ public sealed class DockerOutputTests
             new Dictionary<string, string> { ["name"] = web.Name }));
     }
 
-    /// <summary>Pre-label Compose containers remain viewable, but can never enter the daemon lifecycle feed.</summary>
+    /// <summary>
+    ///     Pre-label Compose containers remain viewable, but can never enter the daemon lifecycle feed.
+    /// </summary>
     [Fact]
     public void Legacy_compose_ownership_is_only_allowed_for_runtime_streams()
     {
@@ -102,7 +121,12 @@ public sealed class DockerOutputTests
         Assert.False(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels, true));
     }
 
-    /// <summary>Only registered actions reach Build; provider secrets are excluded rather than copied as attributes.</summary>
+    /// <summary>
+    ///     Only registered actions reach Build; provider secrets are excluded rather than copied as
+    ///     attributes.
+    /// </summary>
+    /// <param name="action">Scoped analysis operation receiving its service and cancellation token.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
     [Theory]
     [InlineData("create", "Information")]
     [InlineData("start", "Information")]
@@ -129,7 +153,10 @@ public sealed class DockerOutputTests
         Assert.Null(DockerDiagnosticNormalizer.Daemon(target, message));
     }
 
-    /// <summary>Replay skips confirmed occurrences only, retaining legitimate repeated text and failed admissions.</summary>
+    /// <summary>
+    ///     Replay skips confirmed occurrences only, retaining legitimate repeated text and failed
+    ///     admissions.
+    /// </summary>
     [Fact]
     public void Replay_checkpoint_advances_only_on_confirmation()
     {
@@ -149,7 +176,9 @@ public sealed class DockerOutputTests
         Assert.NotNull(replay.Observe(stamp, DeploymentDiagnosticStream.StandardError, "same"));
     }
 
-    /// <summary>Saved source metadata restores redacted occurrences only for the actual container instance.</summary>
+    /// <summary>
+    ///     Saved source metadata restores redacted occurrences only for the actual container instance.
+    /// </summary>
     [Fact]
     public void Replay_restores_source_metadata_and_reports_finite_eviction()
     {
@@ -168,7 +197,10 @@ public sealed class DockerOutputTests
         Assert.True(replay.Evicted);
     }
 
-    /// <summary>Creates a non-secret registered web/database inventory.</summary>
+    /// <summary>
+    ///     Creates a non-secret registered web/database inventory.
+    /// </summary>
+    /// <returns>The configured Docker deployment target instance or response for this scenario.</returns>
     internal static DockerDeploymentTarget Target()
     {
         return new DockerDeploymentTarget(Guid.NewGuid(), Guid.NewGuid(), "sample",
@@ -176,7 +208,12 @@ public sealed class DockerOutputTests
             DateTimeOffset.UtcNow);
     }
 
-    /// <summary>Creates canonical explicit ownership labels.</summary>
+    /// <summary>
+    ///     Creates canonical explicit ownership labels.
+    /// </summary>
+    /// <param name="target">Verified project, deployment and provider resource inventory.</param>
+    /// <param name="container">Recorded container identity to select.</param>
+    /// <returns>The configured synthetic collection or recorded fixture selection.</returns>
     internal static Dictionary<string, string> Labels(DockerDeploymentTarget target, DockerContainerTarget container)
     {
         return new Dictionary<string, string>
@@ -189,7 +226,12 @@ public sealed class DockerOutputTests
         };
     }
 
-    /// <summary>Creates a canonical timestamped Docker lifecycle observation.</summary>
+    /// <summary>
+    ///     Creates a canonical timestamped Docker lifecycle observation.
+    /// </summary>
+    /// <param name="labels">Synthetic Docker ownership labels.</param>
+    /// <param name="action">Scoped analysis operation receiving its service and cancellation token.</param>
+    /// <returns>The configured message instance or response for this scenario.</returns>
     internal static Message Event(Dictionary<string, string> labels, string action)
     {
         return new Message

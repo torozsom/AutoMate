@@ -14,13 +14,13 @@ using Web.Components.Shared;
 namespace Web.Components.Pages;
 
 /// <summary>
-///     Represents a dashboard component that displays user-specific project data.
-///     This component is responsible for verifying user authentication and fetching
-///     the associated projects based on the authenticated user's ID.
+///     Represents a dashboard component that displays user-specific project data. This component is
+///     responsible for verifying user authentication and fetching the associated projects based on
+///     the authenticated user's ID.
 /// </summary>
 public partial class Dashboard : ComponentBase, IDisposable
 {
-    /// A thread-safe dictionary containing the deployment states of projects.
+    /// <summary>Per-project deployment-admission state.</summary>
     private readonly ConcurrentDictionary<Guid, bool> _deployingStates = new();
 
     /// <summary>Read lifetime cancelled on navigation.</summary>
@@ -29,25 +29,25 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>Prevents duplicate stop requests while loading the owned project.</summary>
     private readonly HashSet<Guid> _preparingStops = [];
 
-    /// The list of apps associated with the authenticated user, fetched from the database.
+    /// <summary>Current owner project inventory, or null before loading.</summary>
     private List<Domain.Entities.Application>? _apps;
 
-    /// The Azure tenant ID entered for personal Microsoft account connections.
+    /// <summary>Tenant identity entered for Azure account connection.</summary>
     private string _azureTenantId = string.Empty;
 
-    /// The current deployment configuration being edited by the user, if any.
+    /// <summary>User-editable deployment configuration for the open form.</summary>
     private DeploymentConfigDto? _currentDeployConfig;
 
-    /// The ID of the currently authenticated user, used to fetch and manage their projects.
+    /// <summary>Resolved internal owner identity.</summary>
     private Guid _currentUserId;
 
     /// <summary>Prevents notifications queued before navigation from updating a disposed component.</summary>
     private bool _disposed;
 
-    /// A message to display global errors that occur during operations like deployment or project fetching.
+    /// <summary>Safe page-level operation failure.</summary>
     private string? _globalErrorMessage;
 
-    /// A message to display global success notifications, such as successful deployments.
+    /// <summary>Page-level successful-operation feedback.</summary>
     private string? _globalSuccessMessage;
 
     /// <summary>Bounded inventory projection.</summary>
@@ -56,10 +56,10 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>Fences superseded inventory replies.</summary>
     private int _inventoryVersion;
 
-    /// A flag indicating whether the current user has connected an Azure account.
+    /// <summary>Whether Azure credentials are available for this owner.</summary>
     private bool _isAzureConnected;
 
-    /// A flag indicating whether the component is currently loading data, used to show loading indicators in the UI.
+    /// <summary>Whether initial owned data is being loaded.</summary>
     private bool _isLoading = true;
 
     /// <summary>Stable retry key while one cloud submission is pending.</summary>
@@ -77,16 +77,16 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>Editable search text.</summary>
     private string _search = "";
 
-    /// The remote application currently selected for cloud deployment.
+    /// <summary>Saved remote project selected for deployment.</summary>
     private Domain.Entities.Application? _selectedCloudApp;
 
-    /// The file system path of the project currently selected for deployment configuration.
+    /// <summary>Local project directory supplied to variable discovery.</summary>
     private string? _selectedProjectPath;
 
     /// <summary>Connection dialog state.</summary>
     private bool _showAzureConnect;
 
-    /// A flag indicating whether the deployment configuration modal is currently visible to the user.
+    /// <summary>Whether deployment settings are visible.</summary>
     private bool _showConfigModal;
 
     /// <summary>Editable sort selection.</summary>
@@ -103,15 +103,15 @@ public partial class Dashboard : ComponentBase, IDisposable
     private ILogger<Dashboard> Logger { get; set; } = null!;
 
 
-    /// Authentication State Provider for checking user authentication and retrieving user information.
+    /// <summary>Current circuit authentication state.</summary>
     [Inject]
     private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    /// Service for managing projects, including fetching, creating, and deleting projects associated with users.
+    /// <summary>Owner-scoped saved-project operations.</summary>
     [Inject]
     private IApplicationService ApplicationService { get; set; } = null!;
 
-    /// Queue that hands deployment work to the hosted background worker.
+    /// <summary>Admits bounded deployment jobs.</summary>
     [Inject]
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
@@ -119,29 +119,31 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
 
-    /// Service for managing user accounts.
+    /// <summary>Resolves owner accounts and protected provider connections.</summary>
     [Inject]
     private IUserService UserService { get; set; } = null!;
 
-    /// Service responsible for scanning project files to extract metadata and analyze dependencies.
+    /// <summary>Discovers deployment metadata and configuration variables.</summary>
     [Inject]
     private IProjectScannerService ProjectScanner { get; set; } = null!;
 
-    [Inject] private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
+    /// <summary>Server-enforced hosting-profile capability flags.</summary>
+    [Inject]
+    private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
-    /// Navigation manager for handling navigation within the application.
+    /// <summary>Application navigation and absolute-link generation.</summary>
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
 
-    /// Service responsible for notifying subscribers about changes in deployment statuses.
+    /// <summary>Subscribes to project deployment status changes.</summary>
     [Inject]
     private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
-    /// JS Runtime for interacting with the browser's JavaScript environment.
+    /// <summary>Browser interop for owned UI interactions.</summary>
     [Inject]
     private IJSRuntime JSRuntime { get; set; } = null!;
 
-    /// Azure connection error returned by the OAuth callback, if any.
+    /// <summary>Connection feedback supplied through the dashboard query parameter.</summary>
     [Parameter]
     [SupplyParameterFromQuery(Name = "azure_error")]
     public string? AzureConnectionError { get; set; }
@@ -193,14 +195,14 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     On initialization, we check if the user is authenticated. If they are,
-    ///     we attempt to retrieve their projects using their user ID. If the user ID
-    ///     is not a valid GUID (which may be the case for GitHub users), we look up the
-    ///     user in the database using their GitHub account ID and then retrieve their projects
-    ///     using the internal user ID.
-    ///     If the user is not authenticated, we simply set the loading state to false, which
-    ///     will trigger the UI to show the appropriate message for unauthenticated users.
+    ///     On initialization, we check if the user is authenticated. If they are, we attempt to retrieve
+    ///     their projects using their user ID. If the user ID is not a valid GUID (which may be the case
+    ///     for GitHub users), we look up the user in the database using their GitHub account ID and then
+    ///     retrieve their projects using the internal user ID. If the user is not authenticated, we
+    ///     simply set the loading state to false, which will trigger the UI to show the appropriate
+    ///     message for unauthenticated users.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnInitializedAsync()
     {
         AuthStateProvider.AuthenticationStateChanged += OnAuthenticationChanged;
@@ -223,9 +225,10 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Event handler that is called whenever the deployment status of an app changes. This method updates
-    ///     the status of the latest deployment for the affected app in the UI. If no deployment record exists
-    ///     yet for the app, it triggers a refresh of the apps list to ensure the UI reflects the status.
+    ///     Event handler that is called whenever the deployment status of an app changes. This method
+    ///     updates the status of the latest deployment for the affected app in the UI. If no deployment
+    ///     record exists yet for the app, it triggers a refresh of the apps list to ensure the UI
+    ///     reflects the status.
     /// </summary>
     /// <param name="appId">The unique identifier of the app whose deployment status has changed.</param>
     /// <param name="status">The new deployment status to be applied.</param>
@@ -234,7 +237,13 @@ public partial class Dashboard : ComponentBase, IDisposable
         _ = DispatchStatusChangedAsync(appId, status);
     }
 
-    /// <summary>Marshals model changes and rendering together onto the circuit and observes notification failures.</summary>
+    /// <summary>
+    ///     Marshals model changes and rendering together onto the circuit and observes notification
+    ///     failures.
+    /// </summary>
+    /// <param name="appId">Project identity associated with the notification.</param>
+    /// <param name="status">New deployment status.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task DispatchStatusChangedAsync(Guid appId, DeploymentStatus status)
     {
         if (_disposed) return;
@@ -258,7 +267,12 @@ public partial class Dashboard : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>Updates the current model and deploy controls only on the renderer dispatcher.</summary>
+    /// <summary>
+    ///     Updates the current model and deploy controls only on the renderer dispatcher.
+    /// </summary>
+    /// <param name="appId">Project identity associated with the notification.</param>
+    /// <param name="status">New deployment status.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task ApplyStatusChangedAsync(Guid appId, DeploymentStatus status)
     {
         var app = _apps?.FirstOrDefault(p => p.Id == appId);
@@ -293,6 +307,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Refreshes the list of apps for the current user.
     /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RefreshAppsAsync()
     {
         if (_currentUserId == Guid.Empty || _disposed) return;
@@ -325,10 +340,11 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Deletes an app by its ID. This method first checks if the current user ID is valid.
-    ///     If it is, it calls the app service to delete the project.
+    ///     Deletes an app by its ID. This method first checks if the current user ID is valid. If it is,
+    ///     it calls the app service to delete the project.
     /// </summary>
     /// <param name="appId"></param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task DeleteAppAsync(Guid appId)
     {
         if (_currentUserId == Guid.Empty) return;
@@ -350,11 +366,12 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Initiates the deployment process for a given app. If the app is local,
-    ///     it looks for a web project within the solution. If a web project is found, it analyzes
-    ///     the app's dependencies to prepare the deployment configuration.
+    ///     Initiates the deployment process for a given app. If the app is local, it looks for a web
+    ///     project within the solution. If a web project is found, it analyzes the app's dependencies to
+    ///     prepare the deployment configuration.
     /// </summary>
     /// <param name="app"></param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task DeployAppAsync(Domain.Entities.Application app)
     {
         ClearMessages();
@@ -402,8 +419,8 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Cancels the deployment process by hiding the configuration modal
-    ///     and clearing any selected project path or current deployment configuration.
+    ///     Cancels the deployment process by hiding the configuration modal and clearing any selected
+    ///     project path or current deployment configuration.
     /// </summary>
     private void HideConfigModal()
     {
@@ -415,17 +432,15 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Initiates the deployment process for a specified project configuration.
-    ///     This method handles the deployment by invoking the local deployment orchestrator,
-    ///     updating the UI state, and managing deployment success or failure messages.
+    ///     Initiates the deployment process for a specified project configuration. This method handles
+    ///     the deployment by invoking the local deployment orchestrator, updating the UI state, and
+    ///     managing deployment success or failure messages.
     /// </summary>
     /// <param name="finalConfig">
-    ///     The deployment configuration containing details such as project ID,
-    ///     project name, environment settings, and database configuration.
+    ///     The deployment configuration containing details such as project ID, project name, environment
+    ///     settings, and database configuration.
     /// </param>
-    /// <returns>
-    ///     A task representing the asynchronous deployment operation.
-    /// </returns>
+    /// <returns>A task representing the asynchronous deployment operation.</returns>
     private async Task ExecuteDeploymentAsync(DeploymentConfigDto finalConfig)
     {
         var owner = _currentUserId;
@@ -542,6 +557,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Resolves the current user's internal AutoMate ID from authentication claims.
     /// </summary>
+    /// <returns>A task returning the internal owner identity, or Guid.Empty when unauthenticated or unresolved.</returns>
     private async Task<Guid> GetCurrentUserIdAsync()
     {
         return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider, UserService);
@@ -551,6 +567,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Gets the current user details, including the GitHub token for remote deployments.
     /// </summary>
+    /// <returns>A task returning owner identity, optional GitHub token and account kind; unresolved identities use Guid.Empty.</returns>
     private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
     {
         var details = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(AuthStateProvider, UserService);
@@ -561,6 +578,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Checks if a project is currently being deployed.
     /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <returns>True when the project is preparing or has queued/active deployment work.</returns>
     private bool IsDeploying(Guid projectId)
     {
         var state = DeploymentJobQueue.GetProjectState(projectId);
@@ -568,13 +587,21 @@ public partial class Dashboard : ComponentBase, IDisposable
                state.QueuedDeployments > 0 || state.ActiveDeployments > 0;
     }
 
-    /// <summary>Checks stop preparation and background queue activity.</summary>
+    /// <summary>
+    ///     Checks stop preparation and background queue activity.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <returns>True when the project is preparing a stop or has queued/active stop work.</returns>
     private bool IsStopping(Guid projectId)
     {
         var state = DeploymentJobQueue.GetProjectState(projectId);
         return _preparingStops.Contains(projectId) || state.QueuedStops > 0 || state.ActiveStops > 0;
     }
 
+    /// <summary>
+    ///     Schedules a renderer update when a project queue changes.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
     private void OnQueueStateChanged(Guid projectId)
     {
         if (!_disposed && (_inventory?.Items.Any(app => app.Id == projectId) == true ||
@@ -585,6 +612,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Determines whether a project card's deploy action should be disabled.
     /// </summary>
+    /// <param name="app">Saved project metadata used for this deployment.</param>
+    /// <returns>True during admission, for disabled local deployments, or when a remote project lacks an Azure connection.</returns>
     private bool IsDeployDisabled(Domain.Entities.Application app)
     {
         return IsDeploying(app.Id) ||
@@ -596,6 +625,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Gets a short tooltip explaining why a remote deploy action is disabled.
     /// </summary>
+    /// <param name="app">Saved project metadata used for this deployment.</param>
+    /// <returns>Fixed Azure-connection guidance for a disconnected remote project; otherwise the deployment label.</returns>
     private string GetDeployButtonTitle(Domain.Entities.Application app)
     {
         return app.SourceType == SourceType.Remote && !_isAzureConnected
@@ -607,6 +638,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Creates a cloud deployment configuration for a saved remote repository.
     /// </summary>
+    /// <param name="app">Saved project metadata used for this deployment.</param>
+    /// <returns>Default deployment settings for the saved remote repository.</returns>
     private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
@@ -636,6 +669,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <summary>
     ///     Gets the latest deployment status of an app.
     /// </summary>
+    /// <param name="app">Saved project metadata used for this deployment.</param>
+    /// <returns>The newest recorded deployment status, or null when no deployment exists.</returns>
     private static DeploymentStatus? GetLatestStatus(Domain.Entities.Application app)
     {
         return app.CsProjects
@@ -661,8 +696,8 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Clears any global error or success messages. This is typically called before starting
-    ///     a new operation to ensure that old messages do not persist and confuse the user.
+    ///     Clears any global error or success messages. This is typically called before starting a new
+    ///     operation to ensure that old messages do not persist and confuse the user.
     /// </summary>
     private void ClearMessages()
     {
@@ -680,7 +715,10 @@ public partial class Dashboard : ComponentBase, IDisposable
         NavigationManager.NavigateTo($"/project/{appId}");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Applies navigation query filters and refreshes the owned project inventory.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnParametersSetAsync()
     {
         _search = Search ?? "";
@@ -690,20 +728,30 @@ public partial class Dashboard : ComponentBase, IDisposable
         await RefreshAppsAsync();
     }
 
-    /// <summary>Encodes a stable filter URL for pagination and browser history.</summary>
+    /// <summary>
+    ///     Encodes a stable filter URL for pagination and browser history.
+    /// </summary>
+    /// <param name="page">One-based numeric table page.</param>
+    /// <returns>The dashboard URL retaining escaped filters and a page number of at least one.</returns>
     private string InventoryUrl(int page)
     {
         return
             $"/dashboard?q={Uri.EscapeDataString(_search)}&source={Uri.EscapeDataString(_source)}&status={Uri.EscapeDataString(_status)}&sort={_sort}&page={Math.Max(1, page)}";
     }
 
-    /// <summary>Applies filters through navigation and resets to the first page.</summary>
+    /// <summary>
+    ///     Applies filters through navigation and resets to the first page.
+    /// </summary>
     private void ApplyFilters()
     {
         NavigationManager.NavigateTo(InventoryUrl(1));
     }
 
-    /// <summary>Loads only the selected owned entity graph when an action needs it.</summary>
+    /// <summary>
+    ///     Loads only the selected owned entity graph when an action needs it.
+    /// </summary>
+    /// <param name="id">Selected project identity.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task DeployInventoryAsync(Guid id)
     {
         if (_disposed || _preparingProject is not null || IsStopping(id)) return;
@@ -737,7 +785,11 @@ public partial class Dashboard : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>Queues the existing local stop operation after reloading the owned running project.</summary>
+    /// <summary>
+    ///     Queues the existing local stop operation after reloading the owned running project.
+    /// </summary>
+    /// <param name="id">Selected project identity.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task StopInventoryAsync(Guid id)
     {
         if (_disposed || _currentUserId == Guid.Empty || IsDeploying(id) || IsStopping(id)) return;
@@ -796,38 +848,55 @@ public partial class Dashboard : ComponentBase, IDisposable
         }
     }
 
-    /// <summary>Opens the project removal confirmation.</summary>
+    /// <summary>
+    ///     Opens the project removal confirmation.
+    /// </summary>
+    /// <param name="id">Selected project identity.</param>
     private void ConfirmRemoval(Guid id)
     {
         _removeProject = id;
     }
 
-    /// <summary>Dismisses project removal.</summary>
+    /// <summary>
+    ///     Dismisses project removal.
+    /// </summary>
     private void CancelRemoval()
     {
         _removeProject = null;
     }
 
-    /// <summary>Removes the explicitly selected owned project and reloads its page.</summary>
+    /// <summary>
+    ///     Removes the explicitly selected owned project and reloads its page.
+    /// </summary>
+    /// <param name="id">Selected project identity.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RemoveConfirmedAsync(Guid id)
     {
         _removeProject = null;
         await DeleteAppAsync(id);
     }
 
-    /// <summary>Dismisses the connection dialog.</summary>
+    /// <summary>
+    ///     Dismisses the connection dialog.
+    /// </summary>
     private void CloseAzureDialog()
     {
         _showAzureConnect = false;
     }
 
-    /// <summary>Clears project state when authentication changes on a still-open circuit.</summary>
+    /// <summary>
+    ///     Clears project state when authentication changes on a still-open circuit.
+    /// </summary>
+    /// <param name="state">Pending authentication state used to detect an owner change.</param>
     private void OnAuthenticationChanged(Task<AuthenticationState> state)
     {
         _ = RebindOwnerAsync();
     }
 
-    /// <summary>Fences old-owner replies and closes configuration before binding the new account.</summary>
+    /// <summary>
+    ///     Fences old-owner replies and closes configuration before binding the new account.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RebindOwnerAsync()
     {
         if (_disposed) return;

@@ -8,10 +8,21 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Merges bounded selected archive/legacy/backend evidence without retaining unfiltered payloads.</summary>
+/// <summary>
+///     Merges bounded selected archive/legacy/backend evidence without retaining unfiltered
+///     payloads.
+/// </summary>
 internal static class AssessmentEvidenceReader
 {
-    /// <summary>Returns detached selected evidence with bounded catalog and explicit omission metadata.</summary>
+    /// <summary>
+    ///     Returns detached selected evidence with bounded catalog and explicit omission metadata.
+    /// </summary>
+    /// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+    /// <param name="archive">Provides the deployment archive? boundary used by this operation.</param>
+    /// <param name="query">Bounded provider query or immutable resource/source selection.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <param name="retainedLogs">Provides the deployment log query? boundary used by this operation.</param>
+    /// <returns>A task returning bounded selected evidence and recorded channel metadata.</returns>
     public static async Task<ArchiveAssessmentPage> ReadAsync(AutoMateDbContext db, IDeploymentArchive? archive,
         ArchiveAssessmentQuery query, CancellationToken token, IDeploymentLogQuery? retainedLogs = null)
     {

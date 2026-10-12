@@ -4,10 +4,23 @@ using Application.Abstractions.Diagnostics;
 
 namespace Infrastructure.Azure;
 
-/// <summary>Discovers only AutoMate-tagged databases in a deployment's resource group and reads native metrics.</summary>
+/// <summary>
+///     Discovers only AutoMate-tagged databases in a deployment's resource group and reads
+///     native metrics.
+/// </summary>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
 internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFactory)
 {
-    /// <summary>Lists a bounded inventory scoped by project and Container App ownership tags.</summary>
+    /// <summary>
+    ///     Lists a bounded inventory scoped by project and Container App ownership tags.
+    /// </summary>
+    /// <param name="appResourceId">Verified Container App ARM resource identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="appName">Application name used for deployment artifacts.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the discover async selection with its documented bounds and ordering.</returns>
+    /// <exception cref="InvalidOperationException">Database inventory exceeds the collection limit.</exception>
     internal async Task<IReadOnlyList<AzureManagedDatabase>> DiscoverAsync(string appResourceId, Guid projectId,
         string appName, string token, CancellationToken cancellationToken)
     {
@@ -51,14 +64,30 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
         return result;
     }
 
-    /// <summary>Preserves native percent/byte units and missing samples instead of inventing core usage.</summary>
+    /// <summary>
+    ///     Preserves native percent/byte units and missing samples instead of inventing core usage.
+    /// </summary>
+    /// <param name="database">Selected owned database resource or deployment configuration.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the metrics async selection with its documented bounds and ordering.</returns>
     internal async Task<IReadOnlyList<DeploymentMetricSample>> MetricsAsync(AzureManagedDatabase database,
         string token, CancellationToken cancellationToken)
     {
         return (await MetricObservationsAsync(database, token, cancellationToken)).LastOrDefault()?.Samples ?? [];
     }
 
-    /// <summary>Reads all native minute buckets, aggregating dimensions explicitly and leaving gaps absent.</summary>
+    /// <summary>
+    ///     Reads all native minute buckets, aggregating dimensions explicitly and leaving gaps
+    ///     absent.
+    /// </summary>
+    /// <param name="database">Selected owned database resource or deployment configuration.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the metric observations async selection with its documented bounds and
+    ///     ordering.
+    /// </returns>
     internal async Task<IReadOnlyList<AzureMetricObservation>> MetricObservationsAsync(AzureManagedDatabase database,
         string token, CancellationToken cancellationToken)
     {
@@ -79,7 +108,15 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
         return AzureMetricObservations.Parse(document.RootElement, aggregation, false);
     }
 
-    /// <summary>Bounds inventory pages and verifies every continuation before forwarding a bearer token.</summary>
+    /// <summary>
+    ///     Bounds inventory pages and verifies every continuation before forwarding a bearer token.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="group">Fixed terminal or provider query group.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <param name="ct">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the list async selection with its documented bounds and ordering.</returns>
+    /// <exception cref="InvalidOperationException">Azure inventory exceeds the resource limit.</exception>
     private async Task<List<JsonElement>> ListAsync(string path, string group, string token, CancellationToken ct)
     {
         var result = new List<JsonElement>();
@@ -102,7 +139,13 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
         throw new InvalidOperationException("Azure inventory exceeds the page limit.");
     }
 
-    /// <summary>Rejects failed ARM reads; callers publish a finite availability notice and retry.</summary>
+    /// <summary>
+    ///     Rejects failed ARM reads; callers publish a finite availability notice and retry.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the owned parsed JSON response; the caller must dispose it.</returns>
     private async Task<JsonDocument> GetAsync(string path, string token, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, AzureConstants.ManagementEndpoint + path);
@@ -114,7 +157,13 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
     }
 }
 
-/// <summary>Non-secret verified database identity and provider metric names; never connection strings.</summary>
+/// <summary>
+///     Non-secret verified database identity and provider metric names; never connection
+///     strings.
+/// </summary>
+/// <param name="ResourceId">Verified Azure resource identity used to scope provider reads.</param>
+/// <param name="Name">The recorded display name or fixed metric identity.</param>
+/// <param name="MetricNames">Fixed metric-series names requested from the provider.</param>
 internal sealed record AzureManagedDatabase(string ResourceId, string Name, string MetricNames)
 {
     /// <summary>Operational logs exist without requiring opt-in audit or slow-query categories.</summary>

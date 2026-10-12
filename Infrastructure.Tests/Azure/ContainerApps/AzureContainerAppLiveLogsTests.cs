@@ -10,10 +10,18 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Azure;
 
-/// <summary>Exercises incremental ACA HTTP reading, ownership boundaries and stream supervision without Azure credentials.</summary>
+/// <summary>
+///     Exercises incremental ACA HTTP reading, ownership boundaries and stream supervision without
+///     Azure credentials.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class AzureContainerAppLiveLogsTests
 {
-    /// <summary>A record is delivered before the server ends its response, and cancellation closes a quiet stream.</summary>
+    /// <summary>
+    ///     A record is delivered before the server ends its response, and cancellation closes a quiet
+    ///     stream.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Console_is_delivered_before_eof_and_quiet_reader_cancels()
     {
@@ -50,7 +58,10 @@ public sealed class AzureContainerAppLiveLogsTests
         await pipe.Writer.CompleteAsync();
     }
 
-    /// <summary>Oversized records do not allocate unbounded memory or suppress the next valid record.</summary>
+    /// <summary>
+    ///     Oversized records do not allocate unbounded memory or suppress the next valid record.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Oversized_and_malformed_envelopes_do_not_suppress_following_records()
     {
@@ -66,7 +77,11 @@ public sealed class AzureContainerAppLiveLogsTests
         Assert.Equal("next", Assert.Single(records).Message);
     }
 
-    /// <summary>Replica enumeration retains every container and constructs missing stream URLs from the verified app endpoint.</summary>
+    /// <summary>
+    ///     Replica enumeration retains every container and constructs missing stream URLs from the
+    ///     verified app endpoint.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Discovery_selects_exact_revision_and_enumerates_all_replica_containers()
     {
@@ -92,7 +107,11 @@ public sealed class AzureContainerAppLiveLogsTests
                                             "/revisions/rev-1/replicas/pod-2/containers/web/logstream"));
     }
 
-    /// <summary>An untrusted discovery response is rejected before any ACA token can be sent to its origin.</summary>
+    /// <summary>
+    ///     An untrusted discovery response is rejected before any ACA token can be sent to its origin.
+    /// </summary>
+    /// <param name="endpoint">Parsed HTTP(S) collector endpoint, or null when invalid or absent.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("https://attacker.example/logstream")]
     [InlineData("http://centralus.azurecontainerapps.dev/logstream")]
@@ -111,7 +130,10 @@ public sealed class AzureContainerAppLiveLogsTests
         Assert.Equal(1, requests);
     }
 
-    /// <summary>Platform messages retain severity/time and application JSON text does not rewrite envelope identity.</summary>
+    /// <summary>
+    ///     Platform messages retain severity/time and application JSON text does not rewrite envelope
+    ///     identity.
+    /// </summary>
     [Fact]
     public void Parser_and_routing_preserve_source_identity()
     {
@@ -132,7 +154,11 @@ public sealed class AzureContainerAppLiveLogsTests
             ConsoleEndpoint() with { Key = "pod-2/web", Replica = "pod-2" }, record).EventId);
     }
 
-    /// <summary>Log Analytics is unnecessary for live collection; wrong revisions are rejected and lease shutdown is prompt.</summary>
+    /// <summary>
+    ///     Log Analytics is unnecessary for live collection; wrong revisions are rejected and lease
+    ///     shutdown is prompt.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Supervisor_streams_without_monitor_token_and_filters_other_revisions()
     {
@@ -178,7 +204,11 @@ public sealed class AzureContainerAppLiveLogsTests
                                                e.DeploymentId == target.DeploymentId);
     }
 
-    /// <summary>Authorization failures give fixed actionable guidance, never provider response bodies or credentials.</summary>
+    /// <summary>
+    ///     Authorization failures give fixed actionable guidance, never provider response bodies or
+    ///     credentials.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Access_denied_is_visible_in_system_terminal_without_provider_payload()
     {
@@ -194,7 +224,11 @@ public sealed class AzureContainerAppLiveLogsTests
         Assert.DoesNotContain(publisher.Events, e => e.Message.Contains("private-provider-secret"));
     }
 
-    /// <summary>Reconnect tails retain stable identities and only exact acknowledged console rows reconcile with history.</summary>
+    /// <summary>
+    ///     Reconnect tails retain stable identities and only exact acknowledged console rows reconcile
+    ///     with history.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Reconnect_deduplicates_confirmed_tail_and_reconciles_exact_history()
     {
@@ -244,7 +278,10 @@ public sealed class AzureContainerAppLiveLogsTests
         Assert.Single(publisher.Events, e => e.Message == "live");
     }
 
-    /// <summary>A stale collection lease cannot establish a live Azure connection.</summary>
+    /// <summary>
+    ///     A stale collection lease cannot establish a live Azure connection.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Expired_ownership_does_not_connect()
     {
@@ -259,7 +296,12 @@ public sealed class AzureContainerAppLiveLogsTests
         Assert.Equal(0, requests);
     }
 
-    /// <summary>Creates a credential-free collector with a controlled HTTP boundary.</summary>
+    /// <summary>
+    ///     Creates a credential-free collector with a controlled HTTP boundary.
+    /// </summary>
+    /// <param name="respond">Callback supplying a controlled synthetic provider or HTTP response.</param>
+    /// <param name="publisher">Accepts normalized observations for bounded redaction and durable delivery.</param>
+    /// <returns>The configured Azure container app live logs instance or response for this scenario.</returns>
     private static AzureContainerAppLiveLogs Create(Func<HttpRequestMessage, HttpResponseMessage> respond,
         RecordingPublisher? publisher = null)
     {
@@ -267,7 +309,10 @@ public sealed class AzureContainerAppLiveLogsTests
             publisher ?? new RecordingPublisher(), NullLogger.Instance);
     }
 
-    /// <summary>Returns the app's provider-derived stream endpoint.</summary>
+    /// <summary>
+    ///     Returns the app's provider-derived stream endpoint.
+    /// </summary>
+    /// <returns>The configured HTTP response message instance or response for this scenario.</returns>
     private static HttpResponseMessage AppResponse()
     {
         return DelegateHttpMessageHandler.Json("""
@@ -275,7 +320,11 @@ public sealed class AzureContainerAppLiveLogsTests
                                                """);
     }
 
-    /// <summary>Uses stable ownership IDs so repeated envelopes have comparable retry identities.</summary>
+    /// <summary>
+    ///     Uses stable ownership IDs so repeated envelopes have comparable retry identities.
+    /// </summary>
+    /// <param name="deployment">Synthetic deployment identity, or null when absent.</param>
+    /// <returns>The configured Azure live log target instance or response for this scenario.</returns>
     private static AzureLiveLogTarget Target(Guid? deployment = null)
     {
         return new AzureLiveLogTarget(
@@ -285,14 +334,20 @@ public sealed class AzureContainerAppLiveLogsTests
             DateTimeOffset.UtcNow.AddMinutes(2), true, new HashSet<string> { "db" });
     }
 
-    /// <summary>Returns a trusted console address for incremental transport tests.</summary>
+    /// <summary>
+    ///     Returns a trusted console address for incremental transport tests.
+    /// </summary>
+    /// <returns>The configured Azure live log endpoint instance or response for this scenario.</returns>
     private static AzureLiveLogEndpoint ConsoleEndpoint()
     {
         return new AzureLiveLogEndpoint("pod-1/web",
             new Uri("https://centralus.azurecontainerapps.dev/logstream"), false, "pod-1", "web");
     }
 
-    /// <summary>Captures durable records and queued status guidance across concurrent console/system readers.</summary>
+    /// <summary>
+    ///     Captures durable records and queued status guidance across concurrent console/system
+    ///     readers.
+    /// </summary>
     private sealed class RecordingPublisher : IDeploymentDiagnosticPublisher, IDurableDeploymentDiagnosticPublisher
     {
         /// <summary>Normalized events observed at the publication boundary.</summary>
@@ -304,7 +359,12 @@ public sealed class AzureContainerAppLiveLogsTests
         /// <summary>Signals actionable provider guidance.</summary>
         public TaskCompletionSource Notice { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records normalized events and signals observed log-stream permission guidance.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask PublishAsync(DeploymentDiagnosticEvent e, CancellationToken cancellationToken = default)
         {
             Events.Enqueue(e);
@@ -312,7 +372,12 @@ public sealed class AzureContainerAppLiveLogsTests
             return ValueTask.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records the event, signals cloud-web delivery and acknowledges the synthetic durable write.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning true for every fixture call.</returns>
         public Task<bool> PublishDurablyAsync(DeploymentDiagnosticEvent e, CancellationToken cancellationToken)
         {
             Events.Enqueue(e);

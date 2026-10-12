@@ -52,18 +52,33 @@ using Web.Services;
 namespace Web.Configs;
 
 /// <summary>
-///     Provides a centralized, modular configuration for ASP.NET Core dependency injection.
-///     Ensures separation of concerns by splitting infrastructure, security, and presentation setups.
+///     Provides a centralized, modular configuration for ASP.NET Core dependency injection. Ensures
+///     separation of concerns by splitting infrastructure, security, and presentation setups.
 /// </summary>
 public static class ServiceConfiguration
 {
+    /// <summary>Configuration key for the application database connection.</summary>
     private const string DefaultConnectionKey = "DefaultConnection";
+
+    /// <summary>Configuration key for optional distributed caching.</summary>
     private const string RedisConnectionKey = "Redis";
+
+    /// <summary>Fixed application identity used by service composition.</summary>
     private const string AppName = "AutoMate";
+
+    /// <summary>OAuth state key preserving the current AutoMate owner.</summary>
     private const string AutoMateUserIdAuthProperty = "automate_user_id";
+
+    /// <summary>Local dashboard destination after Azure account connection.</summary>
     private const string AzureConnectionRedirectUri = "/dashboard";
+
+    /// <summary>Azure Resource Manager delegated token scope.</summary>
     private const string AzureManagementScope = "https://management.azure.com/.default";
+
+    /// <summary>Log Analytics delegated token scope.</summary>
     private const string AzureMonitorLogsScope = "https://api.loganalytics.io/.default";
+
+    /// <summary>Default organizational Microsoft authority.</summary>
     private const string DefaultMicrosoftAuthorityTenant = "organizations";
 
 
@@ -88,8 +103,10 @@ public static class ServiceConfiguration
 
 
     /// <summary>
-    ///     Helper method to extract GitHub OAuth mapping logic, improving readability and testability.
+    ///     Persists the GitHub profile and access token from the completed OAuth ticket.
     /// </summary>
+    /// <param name="context">OAuth ticket context with provider tokens; never log secret fields.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private static async Task ProcessGitHubLoginAsync(OAuthCreatingTicketContext context)
     {
         var githubId = context.User.GetProperty("id").GetInt64().ToString();
@@ -114,8 +131,11 @@ public static class ServiceConfiguration
 
 
     /// <summary>
-    ///     Extracts Microsoft identity data from the OAuth callback and links it to the current AutoMate user.
+    ///     Extracts Microsoft identity data from the OAuth callback and links it to the current AutoMate
+    ///     user.
     /// </summary>
+    /// <param name="context">OAuth ticket context with provider tokens; never log secret fields.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private static async Task ProcessMicrosoftLoginAsync(OAuthCreatingTicketContext context)
     {
         if (!context.Properties.Items.TryGetValue(AutoMateUserIdAuthProperty, out var currentUserIdentifier) ||
@@ -169,8 +189,11 @@ public static class ServiceConfiguration
 
 
     /// <summary>
-    ///     Prevents the Azure connect callback from replacing the existing AutoMate authentication cookie.
+    ///     Prevents the Azure connect callback from replacing the existing AutoMate authentication
+    ///     cookie.
     /// </summary>
+    /// <param name="context">Completed OAuth ticket to reconcile with the existing AutoMate session.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private static Task CompleteMicrosoftConnectionAsync(TicketReceivedContext context)
     {
         if (context.Properties?.Items.ContainsKey(AutoMateUserIdAuthProperty) == true)
@@ -186,6 +209,12 @@ public static class ServiceConfiguration
     /// <summary>
     ///     Reads a string property from a JSON element.
     /// </summary>
+    /// <param name="source">Selected diagnostic source flag or JSON object.</param>
+    /// <param name="propertyName">JSON property or JWT claim name.</param>
+    /// <returns>The JSON string property, or null when absent or explicitly null.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The JSON value is not an object or the selected property is neither a string nor null.
+    /// </exception>
     private static string? GetString(JsonElement source, string propertyName)
     {
         return source.TryGetProperty(propertyName, out var property) ? property.GetString() : null;
@@ -195,6 +224,12 @@ public static class ServiceConfiguration
     /// <summary>
     ///     Reads a string value from the OAuth token response payload.
     /// </summary>
+    /// <param name="context">OAuth ticket context with provider tokens; never log secret fields.</param>
+    /// <param name="propertyName">JSON property or JWT claim name.</param>
+    /// <returns>The token-response string property, or null when the response/property is absent or explicitly null.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The response root is not an object or the selected property is neither a string nor null.
+    /// </exception>
     private static string? GetTokenResponseString(OAuthCreatingTicketContext context, string propertyName)
     {
         return context.TokenResponse.Response?.RootElement.TryGetProperty(propertyName, out var property) == true
@@ -206,6 +241,12 @@ public static class ServiceConfiguration
     /// <summary>
     ///     Calculates the access token expiry time from the OAuth token response.
     /// </summary>
+    /// <param name="context">OAuth ticket context with provider tokens; never log secret fields.</param>
+    /// <returns>
+    ///     The current UTC time plus the integer expires_in duration, or null when absent or not
+    ///     representable as an integer.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">The token response or expiry property has an incompatible JSON kind.</exception>
     private static DateTimeOffset? GetTokenExpiresAt(OAuthCreatingTicketContext context)
     {
         return context.TokenResponse.Response?.RootElement.TryGetProperty("expires_in", out var expiresInElement) ==
@@ -219,6 +260,18 @@ public static class ServiceConfiguration
     /// <summary>
     ///     Exchanges the OAuth refresh token for an Azure Resource Manager-scoped access token.
     /// </summary>
+    /// <param name="context">OAuth ticket context with provider tokens; never log secret fields.</param>
+    /// <returns>
+    ///     A task returning the ARM access token, or null for missing connection settings, a rejected
+    ///     exchange or an absent token.
+    /// </returns>
+    /// <exception cref="HttpRequestException">The token endpoint cannot be reached.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The token response is malformed JSON.</exception>
+    /// <exception cref="OperationCanceledException">The HTTP request is canceled or times out.</exception>
+    /// <exception cref="InvalidOperationException">
+    ///     Required services are unavailable or token fields have incompatible JSON
+    ///     kinds.
+    /// </exception>
     private static async Task<string?> ResolveAzureManagementTokenAsync(OAuthCreatingTicketContext context)
     {
         var refreshToken = context.RefreshToken;
@@ -307,6 +360,7 @@ public static class ServiceConfiguration
         /// <summary>
         ///     Binds application settings to strongly-typed option classes using the Options Pattern.
         /// </summary>
+        /// <returns>Server-enforced capability flags for the configured hosting profile.</returns>
         private IDeploymentCapabilities AddConfigurations()
         {
             builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
@@ -402,7 +456,9 @@ public static class ServiceConfiguration
         }
 
 
-        /// <summary>Registers OpenTelemetry for AutoMate's own requests, providers, and deployment diagnostics.</summary>
+        /// <summary>
+        ///     Registers OpenTelemetry for AutoMate's own requests, providers, and deployment diagnostics.
+        /// </summary>
         private void AddObservability()
         {
             var options = builder.Configuration.GetSection(OpenTelemetryOptions.SectionName)
@@ -575,9 +631,8 @@ public static class ServiceConfiguration
         /// <summary>
         ///     Registers authentication, authorization, rate limiting, and security headers.
         /// </summary>
-        /// <remarks>
-        ///     IMPORTANT: Proxy configuration assumes the application is hosted behind a trusted reverse proxy.
-        /// </remarks>
+        /// <exception cref="InvalidOperationException">Required host or OAuth configuration is missing.</exception>
+        /// <remarks>IMPORTANT: Proxy configuration assumes the application is hosted behind a trusted reverse proxy.</remarks>
         private void AddSecurity()
         {
             var services = builder.Services;
@@ -772,6 +827,7 @@ public static class ServiceConfiguration
         /// <summary>
         ///     Registers core domain and application services into the DI container.
         /// </summary>
+        /// <param name="capabilities">Server-enforced hosting-profile capabilities.</param>
         private void RegisterDomainServices(IDeploymentCapabilities capabilities)
         {
             // Core/Auth Services

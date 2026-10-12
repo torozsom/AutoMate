@@ -1,6 +1,9 @@
 namespace Infrastructure.GitHub;
 
-/// <summary>GitHub asked this installation to pause API requests until the indicated time.</summary>
+/// <summary>
+///     GitHub asked this installation to pause API requests until the indicated time.
+/// </summary>
+/// <param name="retryAt">UTC time when the next bounded attempt becomes eligible.</param>
 public sealed class GitHubRateLimitException(DateTimeOffset retryAt)
     : HttpRequestException("GitHub API rate limited the installation.")
 {

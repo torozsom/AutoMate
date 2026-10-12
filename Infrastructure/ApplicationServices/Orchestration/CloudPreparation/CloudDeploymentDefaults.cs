@@ -11,6 +11,7 @@ internal static class CloudDeploymentDefaults
     /// <summary>
     ///     Applies default values to missing cloud configuration fields.
     /// </summary>
+    /// <param name="config">The deployment configuration used by the operation.</param>
     public static void Apply(DeploymentConfigDto config)
     {
         var resourceName = OrchestrationNameNormalizer.NormalizeResourceName(config.ProjectName);
@@ -33,6 +34,8 @@ internal static class CloudDeploymentDefaults
     /// <summary>
     ///     Creates the suffix used in default cloud resource names from the environment name.
     /// </summary>
+    /// <param name="environmentName">Runtime environment name used for deployment assets.</param>
+    /// <returns>The environment suffix derived from the validated input.</returns>
     private static string GetEnvironmentSuffix(string environmentName)
     {
         var normalized = environmentName.Trim().ToLowerInvariant();

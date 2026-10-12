@@ -10,6 +10,10 @@ internal static class GitHubWorkflowRunMapper
     /// <summary>
     ///     Selects the latest run matching the optional commit SHA and preferred workflow file.
     /// </summary>
+    /// <param name="workflowRuns">Provider workflow-run projections to normalize.</param>
+    /// <param name="workflowFileName">The workflow filename selected for dispatch or lookup.</param>
+    /// <param name="headSha">The optional commit identity used to restrict workflow-run lookup.</param>
+    /// <returns>The normalized verified workflow-run metadata, or null when no value is available.</returns>
     public static GitHubWorkflowRunDto? SelectLatestMatchingRun(
         IEnumerable<GitHubWorkflowRunItem> workflowRuns,
         string workflowFileName,
@@ -39,6 +43,8 @@ internal static class GitHubWorkflowRunMapper
     /// <summary>
     ///     Maps one GitHub workflow run API item to the public DTO shape.
     /// </summary>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <returns>The normalized verified workflow-run metadata.</returns>
     private static GitHubWorkflowRunDto Map(GitHubWorkflowRunItem run)
     {
         return new GitHubWorkflowRunDto

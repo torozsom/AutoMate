@@ -9,7 +9,24 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Persists through the disk gateway and merges Loki history with legacy records for replay.</summary>
+/// <summary>
+///     Persists through the disk gateway and merges Loki history with legacy records for
+///     replay.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="postgres">
+///     Retained legacy PostgreSQL history reader; new payload writes are prohibited.
+/// </param>
+/// <param name="logs">Provides the deployment log query boundary used by this operation.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="viewers">Provides the deployment runtime viewers boundary used by this operation.</param>
+/// <param name="gateway">Provides the telemetry gateway? boundary used by this operation.</param>
+/// <param name="policies">Bounded current project-owner and processing-policy lookup.</param>
+/// <param name="archive">Provides the deployment archive? boundary used by this operation.</param>
 public sealed class DeploymentTelemetryStore(
     AutoMateDbContext db,
     DeploymentDiagnosticStore postgres,
@@ -22,7 +39,18 @@ public sealed class DeploymentTelemetryStore(
     TelemetryProjectPolicyCache? policies = null,
     IDeploymentArchive? archive = null) : IDeploymentDiagnosticStore
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Retains the legacy persistence contract; current PostgreSQL adapters reject new
+    ///     payloads.
+    /// </summary>
+    /// <param name="diagnosticEvent">Normalized diagnostic to redact before persistence or presentation.</param>
+    /// <param name="terminalChannel">The stable terminal routing channel.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>The persisted ordering identifier if an adapter supports legacy writes.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     New diagnostic payloads require the Loki/Mimir disk gateway.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<long> PersistAsync(DeploymentDiagnosticEvent diagnosticEvent, string? terminalChannel,
         CancellationToken cancellationToken = default)
     {
@@ -46,21 +74,47 @@ public sealed class DeploymentTelemetryStore(
         throw new InvalidOperationException("New diagnostic payloads require the Loki/Mimir disk gateway.");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads a bounded recent terminal-history page for one deployment.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning recent terminal records with explicit omissions and availability
+    ///     metadata.
+    /// </returns>
     public Task<DeploymentTerminalHistory> ReadRecentAsync(Guid projectId, Guid deploymentId, int limit,
         CancellationToken cancellationToken = default)
     {
         return ReadPageAsync(projectId, deploymentId, 0, true, limit, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Reads a bounded ordered page after a previously delivered terminal event.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="afterOrderId">The last confirmed ordering position; return only later records.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning ordered terminal records following the confirmed cursor, with coverage
+    ///     metadata.
+    /// </returns>
     public Task<DeploymentTerminalHistory> ReadAfterAsync(Guid projectId, Guid deploymentId, long afterOrderId,
         int limit, CancellationToken cancellationToken = default)
     {
         return ReadPageAsync(projectId, deploymentId, afterOrderId, false, limit, cancellationToken);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Deletes a bounded batch of expired diagnostic records.
+    /// </summary>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the number of expired records deleted in this batch.</returns>
     public async Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 10000);
@@ -75,7 +129,13 @@ public sealed class DeploymentTelemetryStore(
             : await postgres.DeleteExpiredAsync(limit - expired.Count, cancellationToken));
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Builds bounded redacted compatibility context for one deployment.
+    /// </summary>
+    /// <param name="deploymentId">The exact deployment identity used for ownership or correlation.</param>
+    /// <param name="maximumCharacters">The maximum permitted text length.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning bounded redacted diagnostic text suitable for legacy context callers.</returns>
     public async Task<string> BuildContextAsync(Guid deploymentId, int maximumCharacters,
         CancellationToken cancellationToken = default)
     {
@@ -96,7 +156,19 @@ public sealed class DeploymentTelemetryStore(
         return redactor.RedactText(context.ToString(), maximumCharacters);
     }
 
-    /// <summary>Merges ordered specialized history, legacy rows and unconfirmed durable events.</summary>
+    /// <summary>
+    ///     Merges ordered specialized history, legacy rows and unconfirmed durable events.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="cursor">The previous read position; an absent cursor selects the initial page.</param>
+    /// <param name="backwards">Whether to read earlier records rather than records after the cursor.</param>
+    /// <param name="limit">The maximum number of returned or processed records.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <param name="search">The optional plain-text search term.</param>
+    /// <returns>A task returning bounded ordered history with omission and availability metadata.</returns>
     public async Task<DeploymentTerminalHistory> ReadPageAsync(Guid projectId, Guid deploymentId, long cursor,
         bool backwards, int limit, CancellationToken cancellationToken, string? search = null)
     {
@@ -216,7 +288,11 @@ public sealed class DeploymentTelemetryStore(
             canAdvance);
     }
 
-    /// <summary>Restores the same immutable envelope on every delivery attempt.</summary>
+    /// <summary>
+    ///     Restores the same immutable envelope on every delivery attempt.
+    /// </summary>
+    /// <param name="record">Provider observation or retained diagnostic record to process.</param>
+    /// <returns>The immutable redacted delivery envelope with its stable identity.</returns>
     internal static DeploymentLogEnvelope Envelope(DeploymentDiagnosticRecord record)
     {
         return new DeploymentLogEnvelope(record.Id,

@@ -5,20 +5,21 @@ namespace Infrastructure.Templating;
 /// </summary>
 internal static class TemplatePaths
 {
-    /// <summary>
-    ///     Directory containing embedded Scriban templates copied to the application output.
-    /// </summary>
+    /// <summary>Directory containing embedded Scriban templates copied to the application output.</summary>
     public static readonly string TemplatesDirectory
         = Path.Combine(AppContext.BaseDirectory, "Templating", "Templates");
 
-    /// <summary>
-    ///     Full path to the template manifest file.
-    /// </summary>
+    /// <summary>Full path to the template manifest file.</summary>
     public static string ManifestPath => Path.Combine(TemplatesDirectory, "template-manifest.json");
 
     /// <summary>
     ///     Resolves a template file path and ensures it stays under the templates directory.
     /// </summary>
+    /// <param name="templateFile">Allowlisted template filename selected from the catalog.</param>
+    /// <returns>The validated path constrained to the documented root.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The requested template path is outside the configured catalog directory.
+    /// </exception>
     public static string ResolveTemplatePath(string templateFile)
     {
         var templatePath = Path.GetFullPath(Path.Combine(TemplatesDirectory, templateFile));
@@ -33,6 +34,12 @@ internal static class TemplatePaths
     /// <summary>
     ///     Resolves an output file path and ensures it stays under the target output directory.
     /// </summary>
+    /// <param name="outputDirectory">The destination directory for generated deployment artifacts.</param>
+    /// <param name="relativePath">Validated path relative to the configured root.</param>
+    /// <returns>The validated path constrained to the documented root.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The requested artifact path escapes the selected output root.
+    /// </exception>
     public static string ResolveOutputPath(string outputDirectory, string relativePath)
     {
         var outputRoot = Path.GetFullPath(outputDirectory);
@@ -47,6 +54,11 @@ internal static class TemplatePaths
     /// <summary>
     ///     Normalizes manifest output paths and rejects absolute or parent-traversal paths.
     /// </summary>
+    /// <param name="outputFile">Validated deployment-artifact output filename.</param>
+    /// <returns>The validated path constrained to the documented root.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Template manifest contains an empty output file path.
+    /// </exception>
     public static string NormalizeRelativeOutputPath(string outputFile)
     {
         if (string.IsNullOrWhiteSpace(outputFile))
@@ -65,6 +77,8 @@ internal static class TemplatePaths
     /// <summary>
     ///     Resolves the root used when calculating project paths for template rendering.
     /// </summary>
+    /// <param name="outputDirectory">The destination directory for generated deployment artifacts.</param>
+    /// <returns>The validated path constrained to the documented root.</returns>
     public static string ResolveTemplateRoot(string outputDirectory)
     {
         if (string.IsNullOrWhiteSpace(outputDirectory) || outputDirectory == ".")
@@ -79,6 +93,9 @@ internal static class TemplatePaths
     /// <summary>
     ///     Checks whether a resolved path is equal to or beneath a resolved root path.
     /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="root">Parsed provider JSON or validated filesystem root.</param>
+    /// <returns>Whether the documented path under root condition holds.</returns>
     private static bool IsPathUnderRoot(string path, string root)
     {
         var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)

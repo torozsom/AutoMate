@@ -14,10 +14,17 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Exercises the production private-host composition and authentication over loopback without external stores.</summary>
+/// <summary>
+///     Exercises the production private-host composition and authentication over loopback without
+///     external stores.
+/// </summary>
 public sealed class TelemetryHostSafetyTests
 {
-    /// <summary>Framework URL/header/body/error logs and ordinary providers cross the same safe logging factory as Web.</summary>
+    /// <summary>
+    ///     Framework URL/header/body/error logs and ordinary providers cross the same safe logging
+    ///     factory as Web.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Private_host_masks_logging_while_preserving_authentication_and_bad_request_status()
     {
@@ -93,39 +100,68 @@ public sealed class TelemetryHostSafetyTests
         Assert.Contains(PlatformTelemetryPolicy.UnknownMessage, exported);
     }
 
-    /// <summary>Captures ordinary logger-provider output, including framework calls from the live host.</summary>
+    /// <summary>
+    ///     Captures ordinary logger-provider output, including framework calls from the live host.
+    /// </summary>
     private sealed class CaptureProvider : ILoggerProvider
     {
         /// <summary>Thread-safe serialized snapshots of safe category, message and state.</summary>
         public ConcurrentQueue<object> Entries { get; } = new();
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Creates a logger writing to the fixture capture provider.
+        /// </summary>
+        /// <param name="categoryName">Logger category reviewed before platform output.</param>
+        /// <returns>A logger attached to the fixture capture provider.</returns>
         public ILogger CreateLogger(string categoryName)
         {
             return new CaptureLogger(this, categoryName);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Performs no dispose work in this fixture.
+        /// </summary>
         public void Dispose()
         {
         }
 
-        /// <summary>Observes the exact state passed to a registered provider.</summary>
+        /// <summary>
+        ///     Observes the exact state passed to a registered provider.
+        /// </summary>
+        /// <param name="capture">Logger provider retaining safe snapshots for assertions.</param>
+        /// <param name="category">Reviewed logger category or provider diagnostic category.</param>
         private sealed class CaptureLogger(CaptureProvider capture, string category) : ILogger
         {
-            /// <inheritdoc />
+            /// <summary>
+            ///     Returns no scope handle because this fixture does not retain scopes.
+            /// </summary>
+            /// <param name="state">Synthetic readiness or structured logger state; ignored by this fixture.</param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
+            /// <returns>Null; this fixture retains no scopes.</returns>
             public IDisposable? BeginScope<TState>(TState state) where TState : notnull
             {
                 return null;
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Enables every log level so the fixture can observe all emitted records.
+            /// </summary>
+            /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+            /// <returns>True for every call in this fixture.</returns>
             public bool IsEnabled(LogLevel level)
             {
                 return true;
             }
 
-            /// <inheritdoc />
+            /// <summary>
+            ///     Captures or checks the logger call using the fixture assertions and supplied formatter.
+            /// </summary>
+            /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+            /// <param name="eventId">The stable event identity used to deduplicate retries; ignored by this fixture.</param>
+            /// <param name="state">Synthetic readiness or structured logger state.</param>
+            /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
+            /// <param name="formatter">Provider log formatter; untrusted rendered text is not exported.</param>
+            /// <typeparam name="TState">Type of structured logger state.</typeparam>
             public void Log<TState>(LogLevel level, EventId eventId, TState state, Exception? exception,
                 Func<TState, Exception?, string> formatter)
             {

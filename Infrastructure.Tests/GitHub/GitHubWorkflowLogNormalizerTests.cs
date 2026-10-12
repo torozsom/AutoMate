@@ -3,10 +3,14 @@ using Infrastructure.GitHub;
 
 namespace Infrastructure.Tests.GitHub;
 
-/// <summary>Verifies safe normalization and bounded paging of GitHub Actions log text.</summary>
+/// <summary>
+///     Verifies safe normalization and bounded paging of GitHub Actions log text.
+/// </summary>
 public sealed class GitHubWorkflowLogNormalizerTests
 {
-    /// <summary>Ensures escape sequences are removed and line endings are terminal-safe.</summary>
+    /// <summary>
+    ///     Ensures escape sequences are removed and line endings are terminal-safe.
+    /// </summary>
     [Fact]
     public void EnumerateLines_removes_terminal_escape_sequences_and_normalizes_newlines()
     {
@@ -15,7 +19,9 @@ public sealed class GitHubWorkflowLogNormalizerTests
         result.Should().Equal("first\r\n", "second\r\n", "third\r\n");
     }
 
-    /// <summary>Ensures one untrusted line cannot exceed the configured display limit.</summary>
+    /// <summary>
+    ///     Ensures one untrusted line cannot exceed the configured display limit.
+    /// </summary>
     [Fact]
     public void EnumerateLines_truncates_an_oversized_line()
     {
@@ -27,7 +33,9 @@ public sealed class GitHubWorkflowLogNormalizerTests
             .And.HaveLength(GitHubWorkflowLogNormalizer.MaximumLineLength + " [truncated]\r\n".Length);
     }
 
-    /// <summary>Ensures a subsequent segment resumes without losing output.</summary>
+    /// <summary>
+    ///     Ensures a subsequent segment resumes without losing output.
+    /// </summary>
     [Fact]
     public void ReadChunk_resumes_after_the_bounded_first_chunk_without_dropping_lines()
     {

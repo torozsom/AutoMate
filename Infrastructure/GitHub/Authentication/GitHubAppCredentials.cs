@@ -8,14 +8,33 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.GitHub;
 
-/// <summary>Verifies repository access and issues short-lived GitHub App installation tokens.</summary>
+/// <summary>
+///     Verifies repository access and issues short-lived GitHub App installation tokens.
+/// </summary>
+/// <param name="httpClient">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubAppOptions> options)
     : IGitHubAppCredentials
 {
     /// <summary>Validated App settings.</summary>
     private readonly GitHubAppOptions _options = options.Value;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Checks the current user's write access and resolves the installed App for the
+    ///     repository.
+    /// </summary>
+    /// <param name="userAccessToken">The initiating user token used to verify repository access.</param>
+    /// <param name="owner">The GitHub repository owner or organization.</param>
+    /// <param name="repository">The GitHub repository name.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning the verified installation and repository identities authorized by the
+    ///     initiating user.
+    /// </returns>
+    /// <exception cref="UnauthorizedAccessException">Connect GitHub before deploying.</exception>
+    /// <exception cref="InvalidOperationException">
+    ///     Install the AutoMate GitHub App on this repository before deploying.
+    /// </exception>
     public async Task<(long InstallationId, long RepositoryId)> ResolveRepositoryAsync(
         string userAccessToken, string owner, string repository, CancellationToken cancellationToken)
     {
@@ -45,7 +64,19 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
         return (appPayload.RootElement.GetProperty("id").GetInt64(), repositoryId);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Mints a short-lived token for one installation when a worker needs GitHub access.
+    /// </summary>
+    /// <param name="installationId">The verified GitHub App installation identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning a short-lived installation access token; never persist it in diagnostic
+    ///     history.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The AutoMate GitHub App installation is unavailable. Reinstall or grant repository
+    ///     access.
+    /// </exception>
     public async Task<string> CreateInstallationTokenAsync(long installationId, CancellationToken cancellationToken)
     {
         using var request = CreateRequest(HttpMethod.Post,
@@ -62,7 +93,13 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
                ?? throw new InvalidOperationException("GitHub did not issue an installation token.");
     }
 
-    /// <summary>Builds an authenticated API request without placing credentials in a URI.</summary>
+    /// <summary>
+    ///     Builds an authenticated API request without placing credentials in a URI.
+    /// </summary>
+    /// <param name="method">HTTP method used for the bounded provider request.</param>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <returns>The configured request with bounded provider headers and protected authorization.</returns>
     private static HttpRequestMessage CreateRequest(HttpMethod method, string path, string token)
     {
         var request = new HttpRequestMessage(method, "https://api.github.com/" + path);
@@ -73,7 +110,13 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
         return request;
     }
 
-    /// <summary>Honors Retry-After and primary reset headers before another installation request.</summary>
+    /// <summary>
+    ///     Honors Retry-After and primary reset headers before another installation request.
+    /// </summary>
+    /// <param name="response">The untrusted structured analysis response to validate.</param>
+    /// <exception cref="GitHubRateLimitException">
+    ///     GitHub reports a rate limit requiring the installation launch cooldown.
+    /// </exception>
     internal static void ThrowIfRateLimited(HttpResponseMessage response)
     {
         if ((int)response.StatusCode != 429 && (int)response.StatusCode != 403) return;
@@ -94,7 +137,10 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
         throw new GitHubRateLimitException(retryAt);
     }
 
-    /// <summary>Signs GitHub's short-lived App JWT with the configured private key.</summary>
+    /// <summary>
+    ///     Signs GitHub's short-lived App JWT with the configured private key.
+    /// </summary>
+    /// <returns>The app jwt derived from the validated input.</returns>
     private string CreateAppJwt()
     {
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -113,7 +159,11 @@ public sealed class GitHubAppCredentials(HttpClient httpClient, IOptions<GitHubA
         return input + "." + Encode(signature);
     }
 
-    /// <summary>Encodes one JWT segment without padding.</summary>
+    /// <summary>
+    ///     Encodes one JWT segment without padding.
+    /// </summary>
+    /// <param name="bytes">The maximum encoded UTF-8 size of provider input.</param>
+    /// <returns>The encode derived from the validated input.</returns>
     private static string Encode(byte[] bytes)
     {
         return Convert.ToBase64String(bytes)

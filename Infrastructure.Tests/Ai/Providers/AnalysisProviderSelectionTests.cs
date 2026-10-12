@@ -5,10 +5,19 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Credential-free registry routing and fail-closed configuration tests, independent of workflow/UI changes.</summary>
+/// <summary>
+///     Credential-free registry routing and fail-closed configuration tests, independent of
+///     workflow/UI changes.
+/// </summary>
 public sealed class AnalysisProviderSelectionTests
 {
-    /// <summary>Missing/unknown/mismatched/disabled settings never instantiate or invoke a provider.</summary>
+    /// <summary>
+    ///     Missing/unknown/mismatched/disabled settings never instantiate or invoke a provider.
+    /// </summary>
+    /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+    /// <param name="enabled">Whether to include the option.</param>
+    /// <param name="endpoint">Parsed HTTP(S) collector endpoint, or null when invalid or absent.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(null, true, "https://eu.api.openai.com/v1/")]
     [InlineData("unknown", true, "https://eu.api.openai.com/v1/")]
@@ -32,9 +41,10 @@ public sealed class AnalysisProviderSelectionTests
     }
 
     /// <summary>
-    ///     An additional registered adapter and exact route policy are selected without changing worker or port
-    ///     contracts.
+    ///     An additional registered adapter and exact route policy are selected without changing worker
+    ///     or port contracts.
     /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Registered_adapter_selection_follows_current_typed_options()
     {
@@ -51,7 +61,10 @@ public sealed class AnalysisProviderSelectionTests
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
     }
 
-    /// <summary>A policy reload while resolving the adapter fails closed before its invocation.</summary>
+    /// <summary>
+    ///     A policy reload while resolving the adapter fails closed before its invocation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Reload_during_resolution_denies_invocation()
     {
@@ -70,7 +83,10 @@ public sealed class AnalysisProviderSelectionTests
         Assert.Equal(0, stub.Calls);
     }
 
-    /// <summary>Adapters cannot claim another provider identity in their result provenance.</summary>
+    /// <summary>
+    ///     Adapters cannot claim another provider identity in their result provenance.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Mismatched_provider_provenance_is_rejected()
     {
@@ -83,7 +99,9 @@ public sealed class AnalysisProviderSelectionTests
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
     }
 
-    /// <summary>Ambiguous names fail composition instead of silently choosing an adapter.</summary>
+    /// <summary>
+    ///     Ambiguous names fail composition instead of silently choosing an adapter.
+    /// </summary>
     [Fact]
     public void Duplicate_provider_names_are_rejected()
     {
@@ -91,20 +109,32 @@ public sealed class AnalysisProviderSelectionTests
             new AnalysisProviderCatalog([Registration("openai"), Registration("openai")]));
     }
 
-    /// <summary>Provides a synthetic route approval only; never contacts the endpoint.</summary>
+    /// <summary>
+    ///     Provides a synthetic route approval only; never contacts the endpoint.
+    /// </summary>
+    /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+    /// <returns>The configured analysis provider registration instance or response for this scenario.</returns>
     private static AnalysisProviderRegistration Registration(string name)
     {
         return new AnalysisProviderRegistration(name, typeof(Stub),
             settings => settings.Endpoint == $"https://{settings.ProcessingRegion}.api.openai.com/v1/");
     }
 
-    /// <summary>Records provider invocation without network activity.</summary>
+    /// <summary>
+    ///     Records provider invocation without network activity.
+    /// </summary>
+    /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
     private sealed class Stub(string name) : ILlmAnalysisProvider
     {
         /// <summary>Number of calls for fail-closed assertions.</summary>
         public int Calls { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies the configured synthetic provider response and records any fixture call count.
+        /// </summary>
+        /// <param name="request">Analysis request supplied to the synthetic provider; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured llm analysis response instance or response for this scenario.</returns>
         public Task<LlmAnalysisResponse> AnalyzeAsync(LlmAnalysisRequest request,
             CancellationToken cancellationToken = default)
         {

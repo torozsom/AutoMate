@@ -5,13 +5,23 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Resolves private batch scopes in SQL; callers cannot supply an unauthorized partition list.</summary>
+/// <summary>
+///     Resolves private batch scopes in SQL; callers cannot supply an unauthorized partition
+///     list.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="archive">Provides permanent owner-scoped redacted deployment history.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class ArchiveMetricBatchReader(
     AutoMateDbContext db,
     IDeploymentArchive archive,
     IOptions<TelemetryStorageOptions> options)
 {
-    /// <summary>Internal day-boundary fragments may be shorter than the public five-minute window.</summary>
+    /// <summary>
+    ///     Internal day-boundary fragments may be shorter than the public five-minute window.
+    /// </summary>
+    /// <param name="range">The selected frozen observation window or assessment range.</param>
+    /// <exception cref="ArgumentException">Invalid archived metric window.</exception>
     private static void ValidateArchiveWindow(MetricTimeRange range)
     {
         if (range.Start.Offset != TimeSpan.Zero || range.End.Offset != TimeSpan.Zero || range.End <= range.Start ||
@@ -19,7 +29,18 @@ public sealed class ArchiveMetricBatchReader(
             throw new ArgumentException("Invalid archived metric window.");
     }
 
-    /// <summary>Reads ten authorized partitions per request, with explicit continuation and availability.</summary>
+    /// <summary>
+    ///     Reads ten authorized partitions per request, with explicit continuation and
+    ///     availability.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning bounded numeric partitions and their continuation metadata.</returns>
+    /// <exception cref="InvalidOperationException">Managed telemetry processing is not approved.</exception>
+    /// <exception cref="ArgumentException">Invalid metric batch.</exception>
+    /// <exception cref="UnauthorizedAccessException">Metric access denied.</exception>
     public async Task<ArchiveMetricBatch> ReadAsync(ArchiveMetricBatchRequest request, CancellationToken token)
     {
         if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)

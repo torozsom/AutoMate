@@ -10,11 +10,26 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.GitHub;
 
-/// <summary>Authenticates GitHub events and persists only correlation metadata.</summary>
+/// <summary>
+///     Authenticates GitHub events and persists only correlation metadata.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class GitHubWebhookReceiver(AutoMateDbContext dbContext, IOptions<GitHubAppOptions> options)
     : IGitHubWebhookReceiver
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Accepts one authenticated delivery, deduplicating redelivery IDs.
+    /// </summary>
+    /// <param name="body">The original webhook body used for signature validation.</param>
+    /// <param name="signature">The GitHub webhook signature accompanying the original body.</param>
+    /// <param name="deliveryId">The GitHub delivery identifier used for idempotent webhook processing.</param>
+    /// <param name="eventName">The GitHub webhook event name used to select supported processing.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task that completes after webhook validation and supported durable processing.</returns>
+    /// <exception cref="UnauthorizedAccessException">Invalid GitHub webhook delivery.</exception>
     public async Task ReceiveAsync(ReadOnlyMemory<byte> body, string signature, string deliveryId,
         string eventName, CancellationToken cancellationToken)
     {

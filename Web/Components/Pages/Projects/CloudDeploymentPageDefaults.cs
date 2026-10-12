@@ -4,7 +4,8 @@ using Domain.DTO;
 namespace Web.Components.Pages;
 
 /// <summary>
-///     Creates UI-layer default values used when deploying saved GitHub repositories without a local project scan.
+///     Creates UI-layer default values used when deploying saved GitHub repositories without a local
+///     project scan.
 /// </summary>
 internal static class CloudDeploymentPageDefaults
 {
@@ -49,7 +50,7 @@ internal static class CloudDeploymentPageDefaults
 
 
     /// <summary>
-    ///     Normalizes a project name into the Azure resource-name format used by page defaults.
+    ///     Normalizes a name for page defaults; provisioning performs provider-specific validation.
     /// </summary>
     /// <param name="value">The project name to normalize.</param>
     /// <returns>An Azure-friendly resource name with the existing AutoMate fallback and length limit.</returns>

@@ -3,7 +3,9 @@ using Application.Abstractions.Diagnostics;
 
 namespace Web.Components.Shared;
 
-/// <summary>Presentation-only names, units and chart aggregates; never synthesizes missing measurements.</summary>
+/// <summary>
+///     Presentation-only names, units and chart aggregates; never synthesizes missing measurements.
+/// </summary>
 public static class TelemetryPresentation
 {
     /// <summary>CPU gauge name used by existing history contracts.</summary>
@@ -15,7 +17,11 @@ public static class TelemetryPresentation
     /// <summary>Reported container memory capacity gauge.</summary>
     public const string MemoryLimit = "automate_memory_limit_bytes";
 
-    /// <summary>Maps storage names to readable labels without hiding unknown measurements.</summary>
+    /// <summary>
+    ///     Maps storage names to readable labels without hiding unknown measurements.
+    /// </summary>
+    /// <param name="name">Metric or configuration name to resolve.</param>
+    /// <returns>The known metric label, or the original unknown name.</returns>
     public static string Label(string name)
     {
         return name switch
@@ -31,7 +37,12 @@ public static class TelemetryPresentation
         };
     }
 
-    /// <summary>Formats finite values without exponent notation; absent values remain unavailable.</summary>
+    /// <summary>
+    ///     Formats finite values without exponent notation; absent values remain unavailable.
+    /// </summary>
+    /// <param name="value">Observed finite value, or null when unavailable.</param>
+    /// <param name="metric">Stored metric series name.</param>
+    /// <returns>A readable metric value with its unit, or an unavailable marker for absent/nonfinite values.</returns>
     public static string Format(double? value, string metric)
     {
         if (value is not { } number || !double.IsFinite(number)) return "—";
@@ -52,7 +63,11 @@ public static class TelemetryPresentation
             metric.EndsWith("_percent", StringComparison.Ordinal) ? "%" : "");
     }
 
-    /// <summary>Weights daily means by actual sample counts, excluding missing rows.</summary>
+    /// <summary>
+    ///     Weights daily means by actual sample counts, excluding missing rows.
+    /// </summary>
+    /// <param name="rows">Recorded daily metric aggregates.</param>
+    /// <returns>The sample-weighted mean, or null when no supported observations exist.</returns>
     public static double? WeightedAverage(IEnumerable<DeploymentAnalyticsRow> rows)
     {
         var observed = rows.Where(r => r.SampleCount > 0 && r.Average is { } a && double.IsFinite(a)).ToArray();
@@ -60,7 +75,11 @@ public static class TelemetryPresentation
         return count == 0 ? null : observed.Sum(r => r.Average!.Value * r.SampleCount) / count;
     }
 
-    /// <summary>Builds one sample-weighted point per observed UTC day.</summary>
+    /// <summary>
+    ///     Builds one sample-weighted point per observed UTC day.
+    /// </summary>
+    /// <param name="rows">Recorded daily metric aggregates.</param>
+    /// <returns>Observed chart points in timestamp order, without synthetic missing samples.</returns>
     public static IReadOnlyList<TelemetryChartPoint> DailyPoints(IEnumerable<DeploymentAnalyticsRow> rows)
     {
         return rows.Where(r => r.SampleCount > 0 && r.Average.HasValue).GroupBy(r => r.DayUtc)
@@ -68,7 +87,11 @@ public static class TelemetryPresentation
                 g.Min(r => r.Minimum), g.Max(r => r.Maximum))).ToArray();
     }
 
-    /// <summary>Chooses a rounded nonzero axis ceiling while retaining sub-core CPU resolution.</summary>
+    /// <summary>
+    ///     Chooses a rounded nonzero axis ceiling while retaining sub-core CPU resolution.
+    /// </summary>
+    /// <param name="points">Recorded metric observations to format; missing samples remain unavailable.</param>
+    /// <returns>A rounded positive chart ceiling that retains fractional-core resolution.</returns>
     public static double AxisMaximum(IEnumerable<TelemetryChartPoint> points)
     {
         var max = points.Select(p => Math.Max(p.Average, p.Maximum ?? p.Average)).DefaultIfEmpty(0).Max();
@@ -79,7 +102,13 @@ public static class TelemetryPresentation
     }
 }
 
-/// <summary>A chart observation; extrema are optional for presentation of incomplete aggregates.</summary>
+/// <summary>
+///     A chart observation; extrema are optional for presentation of incomplete aggregates.
+/// </summary>
+/// <param name="Timestamp">Recorded timestamp, if available.</param>
+/// <param name="Average">Observed mean value.</param>
+/// <param name="Minimum">Observed minimum, or null when unavailable.</param>
+/// <param name="Maximum">Observed maximum, or null when unavailable.</param>
 public sealed record TelemetryChartPoint(
     DateTimeOffset Timestamp,
     double Average,

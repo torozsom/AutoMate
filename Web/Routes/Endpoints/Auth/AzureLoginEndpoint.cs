@@ -15,14 +15,28 @@ namespace Web.Routes.Endpoints.Auth;
 /// </summary>
 public sealed class AzureLoginEndpoint : IEndpoint
 {
+    /// <summary>Local dashboard destination after Azure account connection.</summary>
     private const string AzureConnectionRedirectUri = "/dashboard";
+
+    /// <summary>OAuth state key preserving the current AutoMate owner.</summary>
     private const string AutoMateUserIdAuthProperty = "automate_user_id";
+
+    /// <summary>Azure Resource Manager delegated token scope.</summary>
     private const string AzureManagementScope = "https://management.azure.com/.default";
+
+    /// <summary>Cache key prefix isolating Azure OAuth state.</summary>
     private const string StateCacheKeyPrefix = "azure-oauth-state:";
+
+    /// <summary>Maximum lifetime of cached OAuth state.</summary>
     private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(10);
+
+    /// <summary>Web-compatible token/state JSON serialization settings.</summary>
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Maps authorized Azure account connection and tenant-specific OAuth callback routes.
+    /// </summary>
+    /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/auth/azure-login",
@@ -135,8 +149,16 @@ public sealed class AzureLoginEndpoint : IEndpoint
 
 
     /// <summary>
-    ///     Starts a tenant-specific Microsoft OAuth authorization code flow for personal Microsoft-backed Azure tenants.
+    ///     Starts a tenant-specific Microsoft OAuth authorization code flow for personal Microsoft-backed
+    ///     Azure tenants.
     /// </summary>
+    /// <param name="context">Current authenticated HTTP request and response.</param>
+    /// <param name="configuration">Deployment settings or host configuration used by this operation.</param>
+    /// <param name="cache">Stores short-lived OAuth state.</param>
+    /// <param name="userIdentifier">Authenticated AutoMate identity claim.</param>
+    /// <param name="tenantId">Selected Microsoft tenant identity.</param>
+    /// <returns>A task returning the HTTP outcome of the authorized operation.</returns>
+    /// <exception cref="InvalidOperationException">Required host or OAuth configuration is missing.</exception>
     private static async Task<IResult> StartTenantSpecificAzureLoginAsync(HttpContext context,
         IConfiguration configuration, IDistributedCache cache, string userIdentifier, string tenantId)
     {
@@ -176,6 +198,17 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// <summary>
     ///     Exchanges the authorization code for ARM-scoped Azure tokens.
     /// </summary>
+    /// <param name="configuration">Deployment settings or host configuration used by this operation.</param>
+    /// <param name="httpClientFactory">Creates the scoped Azure HTTP client.</param>
+    /// <param name="tenantId">Selected Microsoft tenant identity.</param>
+    /// <param name="redirectUri">Registered absolute OAuth callback URI.</param>
+    /// <param name="code">Short-lived OAuth authorization code; never log it.</param>
+    /// <param name="cancellationToken">Cancels the current read, request or delivery operation.</param>
+    /// <returns>A task returning the parsed token response; secret fields must never enter diagnostics.</returns>
+    /// <exception cref="InvalidOperationException">Required host or OAuth configuration is missing.</exception>
+    /// <exception cref="HttpRequestException">The token endpoint rejects the code exchange or cannot be reached.</exception>
+    /// <exception cref="System.Text.Json.JsonException">The successful token response is malformed JSON.</exception>
+    /// <exception cref="OperationCanceledException">The HTTP request is canceled or times out.</exception>
     private static async Task<AzureTokenResponse> ExchangeAuthorizationCodeAsync(IConfiguration configuration,
         IHttpClientFactory httpClientFactory, string tenantId, string redirectUri, string code,
         CancellationToken cancellationToken)
@@ -215,6 +248,8 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// <summary>
     ///     Builds the absolute callback URL registered with the Microsoft identity platform.
     /// </summary>
+    /// <param name="context">Current authenticated HTTP request and response.</param>
+    /// <returns>The absolute tenant-specific OAuth callback URL for this request.</returns>
     private static string BuildAbsoluteCallbackUri(HttpContext context)
     {
         return $"{context.Request.Scheme}://{context.Request.Host}/api/auth/azure-login/callback";
@@ -224,6 +259,7 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// <summary>
     ///     Generates a cryptographically random state token for the tenant-specific Azure OAuth flow.
     /// </summary>
+    /// <returns>A cryptographically random Base64Url OAuth state value.</returns>
     private static string GenerateStateToken()
     {
         return WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
@@ -233,6 +269,8 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// <summary>
     ///     Builds the distributed cache key used to store tenant-specific OAuth state.
     /// </summary>
+    /// <param name="state">Cryptographically random OAuth state token.</param>
+    /// <returns>The Azure OAuth prefix combined with the state token.</returns>
     private static string GetStateCacheKey(string state)
     {
         return $"{StateCacheKeyPrefix}{state}";
@@ -242,6 +280,9 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// <summary>
     ///     Builds a dashboard redirect URL that carries an Azure connection status message.
     /// </summary>
+    /// <param name="key">Fixed connection-status query key.</param>
+    /// <param name="value">Input text to validate, normalize or format.</param>
+    /// <returns>A local dashboard URL with escaped connection-status query values.</returns>
     private static string BuildDashboardRedirect(string key, string value)
     {
         return QueryHelpers.AddQueryString(AzureConnectionRedirectUri, key, value);
@@ -251,6 +292,9 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// <summary>
     ///     Tenant-specific Azure OAuth state persisted between authorization and callback.
     /// </summary>
+    /// <param name="UserIdentifier">Authenticated AutoMate identity claim.</param>
+    /// <param name="TenantId">Selected Microsoft tenant identity.</param>
+    /// <param name="RedirectUri">Registered absolute OAuth callback URI.</param>
     private sealed record AzureOAuthState(string UserIdentifier, string TenantId, string RedirectUri);
 
 
@@ -259,12 +303,20 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// </summary>
     private sealed record AzureTokenResponse
     {
-        [JsonPropertyName("access_token")] public string? AccessToken { get; init; }
+        /// <summary>Provider access token, if returned; never log it.</summary>
+        [JsonPropertyName("access_token")]
+        public string? AccessToken { get; init; }
 
-        [JsonPropertyName("refresh_token")] public string? RefreshToken { get; init; }
+        /// <summary>Provider refresh token, if returned; never log it.</summary>
+        [JsonPropertyName("refresh_token")]
+        public string? RefreshToken { get; init; }
 
-        [JsonPropertyName("id_token")] public string? IdToken { get; init; }
+        /// <summary>Identity token used to read provider account claims; never log it.</summary>
+        [JsonPropertyName("id_token")]
+        public string? IdToken { get; init; }
 
-        [JsonPropertyName("expires_in")] public int ExpiresIn { get; init; }
+        /// <summary>Provider-reported access-token lifetime in seconds.</summary>
+        [JsonPropertyName("expires_in")]
+        public int ExpiresIn { get; init; }
     }
 }

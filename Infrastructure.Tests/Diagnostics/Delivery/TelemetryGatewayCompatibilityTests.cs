@@ -8,10 +8,16 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Verifies private protocol compatibility independently of tenant history and external storage.</summary>
+/// <summary>
+///     Verifies private protocol compatibility independently of tenant history and external
+///     storage.
+/// </summary>
 public sealed class TelemetryGatewayCompatibilityTests
 {
-    /// <summary>Successful probes are coalesced across reads and empty metrics remain a valid response.</summary>
+    /// <summary>
+    ///     Successful probes are coalesced across reads and empty metrics remain a valid response.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Compatible_host_reads_empty_metrics_and_caches_probe()
     {
@@ -45,7 +51,14 @@ public sealed class TelemetryGatewayCompatibilityTests
         Assert.Equal(2, reads);
     }
 
-    /// <summary>Missing routes, rejected server credentials, network faults and incomplete capabilities are distinct.</summary>
+    /// <summary>
+    ///     Missing routes, rejected server credentials, network faults and incomplete capabilities are
+    ///     distinct.
+    /// </summary>
+    /// <param name="status">Synthetic HTTP response status.</param>
+    /// <param name="body">The original webhook body used for signature validation.</param>
+    /// <param name="expected">Expected outcome for this scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(404, "{}", TelemetryCompatibilityFailure.IncompatibleHost)]
     [InlineData(403, "private-response", TelemetryCompatibilityFailure.AccessDenied)]
@@ -65,7 +78,10 @@ public sealed class TelemetryGatewayCompatibilityTests
         Assert.Null(error.InnerException);
     }
 
-    /// <summary>Network exceptions cannot become empty history or disclose rejected destinations.</summary>
+    /// <summary>
+    ///     Network exceptions cannot become empty history or disclose rejected destinations.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Unreachable_host_is_unavailable()
     {
@@ -77,7 +93,10 @@ public sealed class TelemetryGatewayCompatibilityTests
         Assert.DoesNotContain("private-url", error.ToString());
     }
 
-    /// <summary>A host advertising a missing archive route cannot turn a 404 into an empty metric history.</summary>
+    /// <summary>
+    ///     A host advertising a missing archive route cannot turn a 404 into an empty metric history.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Advertised_but_missing_archive_route_is_incompatible()
     {
@@ -97,7 +116,10 @@ public sealed class TelemetryGatewayCompatibilityTests
         Assert.DoesNotContain("private-response", error.ToString());
     }
 
-    /// <summary>Synthetic private connection settings never point at the user's configured services.</summary>
+    /// <summary>
+    ///     Synthetic private connection settings never point at the user's configured services.
+    /// </summary>
+    /// <returns>Synthetic private-gateway options independent of the user's configured services.</returns>
     private static IOptions<TelemetryStorageOptions> Settings()
     {
         return Options.Create(new TelemetryStorageOptions

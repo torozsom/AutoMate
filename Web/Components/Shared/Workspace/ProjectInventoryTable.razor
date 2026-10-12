@@ -1,6 +1,9 @@
-@namespace Web.Components.Shared
 @using Application.Data.Apps
 @using Domain.Enums
+@*
+    Presents paginated project inventory and delegates authorized deployment, stop and removal actions.
+*@
+@namespace Web.Components.Shared
 @if (Inventory is { } inventory)
 {
     <table class="table console-table responsive-inventory project-inventory">

@@ -53,4 +53,18 @@ five calendar years; AI selection limits remain separate. See ../docs/metric-exp
 
 ## Source organization
 
-See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
+existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
+layouts.
+
+## XML documentation
+
+All handwritten types, constructors and methods use concise multiline XML summaries, including private helpers and
+nested types. Document every parameter and type parameter, describe returned values or asynchronous completion, and
+list supported exceptions with their actual conditions. Fields, properties, events and enum members may use single-line
+summaries. Keep ownership, null results, bounds and compatibility defaults explicit where they affect the contract.
+Do not substitute standalone inheritdoc tags for method documentation or describe speculative framework failures.
+
+C# does not emit XML documentation for local functions. Their source summaries remain XML-formatted for review, with
+CS1587 suppressed only around the documented local function; project-wide documentation diagnostics remain enabled
+during verification. Documentation changes must preserve executable tokens and existing contracts.

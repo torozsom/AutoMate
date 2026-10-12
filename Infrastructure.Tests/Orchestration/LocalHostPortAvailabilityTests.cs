@@ -5,8 +5,14 @@ using FluentAssertions;
 
 namespace Infrastructure.Tests.Orchestration;
 
+/// <summary>
+///     Verifies bound-port detection before local Docker deployment starts.
+/// </summary>
 public sealed class LocalHostPortAvailabilityTests
 {
+    /// <summary>
+    ///     Verifies that reports a bound host port before Docker is started.
+    /// </summary>
     [Fact]
     public void Reports_a_bound_host_port_before_docker_is_started()
     {

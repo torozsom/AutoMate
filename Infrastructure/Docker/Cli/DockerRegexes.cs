@@ -10,18 +10,21 @@ internal static partial class DockerRegexes
     /// <summary>
     ///     Matches ANSI escape codes emitted by Docker stats in some terminals.
     /// </summary>
+    /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
     [GeneratedRegex(@"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")]
     public static partial Regex AnsiEscapeRegex();
 
     /// <summary>
     ///     Matches the host port portion of <c>docker port</c> output.
     /// </summary>
+    /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
     [GeneratedRegex(@":(\d+)")]
     public static partial Regex HostPortRegex();
 
     /// <summary>
     ///     Matches characters that are unsafe in Docker Compose project names.
     /// </summary>
+    /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
     [GeneratedRegex(@"[^a-z0-9_-]+")]
     public static partial Regex ProjectNameRegex();
 }

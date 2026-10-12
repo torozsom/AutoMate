@@ -7,7 +7,10 @@ namespace Web.Routes.Endpoints.Auth;
 /// </summary>
 public sealed class GitHubLoginEndpoint : IEndpoint
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Maps the GitHub OAuth login challenge.
+    /// </summary>
+    /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/auth/github-login", () =>

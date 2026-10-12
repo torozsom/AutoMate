@@ -14,10 +14,17 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Verifies that deadlines cancel real transport writes while retaining browser callback compatibility.</summary>
+/// <summary>
+///     Verifies that deadlines cancel real transport writes while retaining browser callback
+///     compatibility.
+/// </summary>
 public sealed class RealTimeLogStreamerTests
 {
-    /// <summary>Typed delivery preserves native timestamp/identity and accepts only the fixed numeric catalog.</summary>
+    /// <summary>
+    ///     Typed delivery preserves native timestamp/identity and accepts only the fixed numeric
+    ///     catalog.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Typed_metrics_preserve_identity_time_and_filter_invalid_samples()
     {
@@ -48,7 +55,11 @@ public sealed class RealTimeLogStreamerTests
         Assert.Equal(snapshot.Samples[0], Assert.Single(delivered.Samples));
     }
 
-    /// <summary>Terminal/notice/metric callbacks apply the final policy even to legacy or bypassed caller text.</summary>
+    /// <summary>
+    ///     Terminal/notice/metric callbacks apply the final policy even to legacy or bypassed caller
+    ///     text.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Every_transport_callback_masks_sensitive_text_without_changing_cursors_or_groups()
     {
@@ -76,7 +87,11 @@ public sealed class RealTimeLogStreamerTests
         Assert.Contains("private-text", log.Message);
     }
 
-    /// <summary>The transport receives the same callback names, arguments and authorized project group as before.</summary>
+    /// <summary>
+    ///     The transport receives the same callback names, arguments and authorized project group as
+    ///     before.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Sends_preserve_callback_contract_and_project_routing()
     {
@@ -99,7 +114,10 @@ public sealed class RealTimeLogStreamerTests
         Assert.Equal(["web", "1%", "2MiB"], calls[2].Arguments);
     }
 
-    /// <summary>Expiration cancels the underlying pending send; a later send remains usable.</summary>
+    /// <summary>
+    ///     Expiration cancels the underlying pending send; a later send remains usable.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Slow_write_is_canceled_and_later_output_is_delivered()
     {
@@ -125,7 +143,10 @@ public sealed class RealTimeLogStreamerTests
         Assert.Equal(2, writes);
     }
 
-    /// <summary>Caller shutdown is propagated as cancellation rather than a transport timeout.</summary>
+    /// <summary>
+    ///     Caller shutdown is propagated as cancellation rather than a transport timeout.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Caller_cancellation_reaches_the_transport()
     {
@@ -143,7 +164,14 @@ public sealed class RealTimeLogStreamerTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send);
     }
 
-    /// <summary>Real send spans distinguish deadline expiry from caller cancellation without exporting payloads.</summary>
+    /// <summary>
+    ///     Real send spans distinguish deadline expiry from caller cancellation without exporting
+    ///     payloads.
+    /// </summary>
+    /// <param name="cancel">Whether to cancel the controlled operation.</param>
+    /// <param name="outcome">Configured or expected operation outcome.</param>
+    /// <param name="status">Expected or synthetic trace status.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, "timed_out", ActivityStatusCode.Error)]
     [InlineData(true, "canceled", ActivityStatusCode.Unset)]
@@ -174,7 +202,12 @@ public sealed class RealTimeLogStreamerTests
         Assert.DoesNotContain("private", JsonSerializer.Serialize(span));
     }
 
-    /// <summary>Creates a SignalR context exposing the actual cancellable client-proxy send contract.</summary>
+    /// <summary>
+    ///     Creates a SignalR context exposing the actual cancellable client-proxy send contract.
+    /// </summary>
+    /// <param name="project">Synthetic project identity.</param>
+    /// <param name="send">Configured SignalR send callback receiving method, arguments and cancellation.</param>
+    /// <returns>The configured real time log streamer instance or response for this scenario.</returns>
     private static RealTimeLogStreamer Create(Guid project,
         Func<string, object?[], CancellationToken, Task> send)
     {
@@ -192,7 +225,12 @@ public sealed class RealTimeLogStreamerTests
             new DiagnosticRedactor());
     }
 
-    /// <summary>Creates interface collaborators without extra dependencies.</summary>
+    /// <summary>
+    ///     Creates interface collaborators without extra dependencies.
+    /// </summary>
+    /// <param name="handler">Configured HTTP handler or reflected port callback.</param>
+    /// <typeparam name="T">Interface or result type created by the fixture.</typeparam>
+    /// <returns>The configured t instance or response for this scenario.</returns>
     private static T Stub<T>(Func<MethodInfo?, object?[]?, object?> handler) where T : class
     {
         var proxy = DispatchProxy.Create<T, InterfaceStub>();
@@ -200,13 +238,23 @@ public sealed class RealTimeLogStreamerTests
         return proxy;
     }
 
-    /// <summary>Routes calls to the scenario-specific behavior.</summary>
+    /// <summary>
+    ///     Routes calls to the scenario-specific behavior.
+    /// </summary>
     public class InterfaceStub : DispatchProxy
     {
         /// <summary>Behavior for the intercepted method.</summary>
         public Func<MethodInfo?, object?[]?, object?> Handler { get; set; } = null!;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="targetMethod">Reflected port member dispatched by the fake.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             return Handler(targetMethod, args);

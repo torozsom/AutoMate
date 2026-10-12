@@ -9,10 +9,16 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Verifies that pending metric reads cannot update a closed page or report expected disposal as failure.</summary>
+/// <summary>
+///     Verifies that pending metric reads cannot update a closed page or report expected disposal
+///     as failure.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class ProjectDetailsMetricRecoveryTests
 {
-    /// <summary>Older recovery data cannot replace a newer RU observation or fabricate Cosmos CPU/memory.</summary>
+    /// <summary>
+    ///     Older recovery data cannot replace a newer RU observation or fabricate Cosmos CPU/memory.
+    /// </summary>
     [Fact]
     public void Typed_metric_merge_rejects_old_samples_and_retains_native_ru()
     {
@@ -44,7 +50,11 @@ public sealed class ProjectDetailsMetricRecoveryTests
         Assert.Equal(now, point.Timestamp);
     }
 
-    /// <summary>A reconnect callback after disposal must not touch a disposed cancellation source or service provider.</summary>
+    /// <summary>
+    ///     A reconnect callback after disposal must not touch a disposed cancellation source or service
+    ///     provider.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Disposed_page_does_not_start_metric_recovery()
     {
@@ -63,7 +73,11 @@ public sealed class ProjectDetailsMetricRecoveryTests
         await RecoverAsync(page);
     }
 
-    /// <summary>Late provider replies and disposal exceptions are fenced before renderer access.</summary>
+    /// <summary>
+    ///     Late provider replies and disposal exceptions are fenced before renderer access.
+    /// </summary>
+    /// <param name="failure">Failure flag or failure mode injected by the fixture.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -97,7 +111,11 @@ public sealed class ProjectDetailsMetricRecoveryTests
         Assert.Equal(1, proxy.Reads);
     }
 
-    /// <summary>Invokes only metric recovery, without OAuth, JavaScript, hosted workers or provider calls.</summary>
+    /// <summary>
+    ///     Invokes only metric recovery, without OAuth, JavaScript, hosted workers or provider calls.
+    /// </summary>
+    /// <param name="page">Fixture page component under test.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static Task RecoverAsync(ProjectDetails page)
     {
         return (Task)typeof(ProjectDetails).GetMethod("RestoreMetricSnapshotAsync",
@@ -105,19 +123,33 @@ public sealed class ProjectDetailsMetricRecoveryTests
             .Invoke(page, null)!;
     }
 
-    /// <summary>Arranges the real component's private lifecycle state.</summary>
+    /// <summary>
+    ///     Arranges the real component's private lifecycle state.
+    /// </summary>
+    /// <param name="page">Fixture page component under test.</param>
+    /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+    /// <param name="value">Optional fixture member or event value.</param>
     private static void Field(ProjectDetails page, string name, object? value)
     {
         typeof(ProjectDetails).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(page, value);
     }
 
-    /// <summary>Supplies the component's ordinary injected port.</summary>
+    /// <summary>
+    ///     Supplies the component's ordinary injected port.
+    /// </summary>
+    /// <param name="page">Fixture page component under test.</param>
+    /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+    /// <param name="value">Fixture member value to assign.</param>
     private static void Property(ProjectDetails page, string name, object value)
     {
         typeof(ProjectDetails).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(page, value);
     }
 
-    /// <summary>Gets the page lifetime cancellation source for a deterministic disposal race.</summary>
+    /// <summary>
+    ///     Gets the page lifetime cancellation source for a deterministic disposal race.
+    /// </summary>
+    /// <param name="page">Fixture page component under test.</param>
+    /// <returns>The configured cancellation token source instance or response for this scenario.</returns>
     private static CancellationTokenSource Cancellation(ProjectDetails page)
     {
         return (CancellationTokenSource)typeof(ProjectDetails).GetField("_cloudPollCancellation",
@@ -125,16 +157,34 @@ public sealed class ProjectDetailsMetricRecoveryTests
             .GetValue(page)!;
     }
 
-    /// <summary>Holds a provider reply independently of cancellation to model an already dispatched request.</summary>
+    /// <summary>
+    ///     Holds a provider reply independently of cancellation to model an already dispatched request.
+    /// </summary>
     public class HistoryProxy : DispatchProxy
     {
+        /// <summary>Signal or channel recording controlled operation starts.</summary>
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        /// <summary>Completion source controlling the saved-metric response.</summary>
         public TaskCompletionSource<DeploymentMetricHistory> Result { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        /// <summary>Number of recorded fixture reads.</summary>
         public int Reads { get; private set; }
 
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             if (method?.Name != nameof(IDeploymentHistoryService.ReadMetricsAsync)) throw new NotSupportedException();
@@ -144,21 +194,46 @@ public sealed class ProjectDetailsMetricRecoveryTests
         }
     }
 
-    /// <summary>Captures any unexpected lifecycle failure.</summary>
+    /// <summary>
+    ///     Captures any unexpected lifecycle failure.
+    /// </summary>
     private sealed class RecordingLogger : ILogger<ProjectDetails>
     {
+        /// <summary>Exception objects captured for fixture assertions.</summary>
         public List<Exception?> Exceptions { get; } = [];
 
+        /// <summary>
+        ///     Returns no scope handle because this fixture does not retain scopes.
+        /// </summary>
+        /// <param name="state">Synthetic readiness or structured logger state; ignored by this fixture.</param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
+        /// <returns>Null; this fixture retains no scopes.</returns>
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull
         {
             return null;
         }
 
+        /// <summary>
+        ///     Enables every log level so the fixture can observe all emitted records.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+        /// <returns>True for every call in this fixture.</returns>
         public bool IsEnabled(LogLevel level)
         {
             return true;
         }
 
+        /// <summary>
+        ///     Captures or checks the logger call using the fixture assertions and supplied formatter.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+        /// <param name="id">Selected project identity; ignored by this fixture.</param>
+        /// <param name="state">Synthetic readiness or structured logger state; ignored by this fixture.</param>
+        /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
+        /// <param name="formatter">
+        ///     Provider log formatter; untrusted rendered text is not exported; ignored by this fixture.
+        /// </param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
         public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter)
         {

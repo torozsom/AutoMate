@@ -1,7 +1,10 @@
-@namespace Web.Components.Shared
 @using Application.Abstractions.Ai
 @using Application.Ai
 @using Domain.Enums
+@*
+    Presents saved analysis state, fixed failure guidance and validated answer content.
+*@
+@namespace Web.Components.Shared
 <section class="card my-4 analysis-panel" aria-labelledby="@_headingId">
     <div class="card-body">
         <h2 id="@_headingId" class="h5">AI deployment analysis</h2>
@@ -257,7 +260,11 @@
         _ => "Analysis uses diagnostic data approved for this project."
     };
 
-    /// <summary>Explicit UTC timestamps prevent ambiguous deployment timing.</summary>
+    /// <summary>
+    ///     Explicit UTC timestamps prevent ambiguous deployment timing.
+    /// </summary>
+    /// <param name="value">UTC time to format.</param>
+    /// <returns>The timestamp converted to UTC with an explicit UTC suffix.</returns>
     private static string Timestamp(DateTimeOffset value)
     {
         return value.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'");

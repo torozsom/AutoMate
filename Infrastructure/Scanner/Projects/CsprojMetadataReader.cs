@@ -8,24 +8,22 @@ namespace Infrastructure.Scanner;
 /// </summary>
 internal static class CsprojMetadataReader
 {
-    /// <summary>
-    ///     Fallback target framework used when a project file does not declare one.
-    /// </summary>
+    /// <summary>Fallback target framework used when a project file does not declare one.</summary>
     private const string DefaultTargetFramework = "net10.0";
 
-    /// <summary>
-    ///     Fallback .NET version used when the target framework is not a net* TFM.
-    /// </summary>
+    /// <summary>Fallback .NET version used when the target framework is not a net* TFM.</summary>
     private const string DefaultDotNetVersion = "10.0";
 
-    /// <summary>
-    ///     SDK marker used by ASP.NET Core web project files.
-    /// </summary>
+    /// <summary>SDK marker used by ASP.NET Core web project files.</summary>
     private const string WebSdkName = "Microsoft.NET.Sdk.Web";
 
     /// <summary>
-    ///     Parses one .csproj file and extracts target framework, packages, references, and web SDK metadata.
+    ///     Parses one .csproj file and extracts target framework, packages, references, and web SDK
+    ///     metadata.
     /// </summary>
+    /// <param name="filePath">The C# project file to inspect.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the project metadata dto projection derived from the verified inputs.</returns>
     public static async Task<ProjectMetadataDto> ReadAsync(string filePath, CancellationToken cancellationToken)
     {
         await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096,
@@ -49,6 +47,8 @@ internal static class CsprojMetadataReader
     /// <summary>
     ///     Reads the first target framework from TargetFramework or TargetFrameworks.
     /// </summary>
+    /// <param name="document">Parsed provider JSON or project XML document.</param>
+    /// <returns>The target framework derived from the validated input.</returns>
     private static string GetTargetFramework(XContainer document)
     {
         var targetFramework = document.Descendants("TargetFramework").FirstOrDefault()?.Value;
@@ -63,6 +63,8 @@ internal static class CsprojMetadataReader
     /// <summary>
     ///     Derives the .NET version from a target framework moniker.
     /// </summary>
+    /// <param name="targetFramework">Recorded project target-framework identifier.</param>
+    /// <returns>The dot net version derived from the validated input.</returns>
     private static string GetDotNetVersion(string targetFramework)
     {
         return targetFramework.StartsWith("net", StringComparison.OrdinalIgnoreCase)
@@ -73,6 +75,8 @@ internal static class CsprojMetadataReader
     /// <summary>
     ///     Detects ASP.NET Core web projects by inspecting the root SDK attribute.
     /// </summary>
+    /// <param name="document">Parsed provider JSON or project XML document.</param>
+    /// <returns>Whether the documented web project condition holds.</returns>
     private static bool IsWebProject(XDocument document)
     {
         var sdkAttribute = document.Root?.Attribute("Sdk")?.Value;
@@ -83,6 +87,8 @@ internal static class CsprojMetadataReader
     /// <summary>
     ///     Reads package references and versions from PackageReference elements.
     /// </summary>
+    /// <param name="document">Parsed provider JSON or project XML document.</param>
+    /// <returns>The package references selection with its documented bounds and ordering.</returns>
     private static Dictionary<string, string> GetPackageReferences(XContainer document)
     {
         var packageReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -100,6 +106,8 @@ internal static class CsprojMetadataReader
     /// <summary>
     ///     Reads project reference paths from ProjectReference elements.
     /// </summary>
+    /// <param name="document">Parsed provider JSON or project XML document.</param>
+    /// <returns>The project references selection with its documented bounds and ordering.</returns>
     private static List<string> GetProjectReferences(XContainer document)
     {
         var projectReferences = new List<string>();

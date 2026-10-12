@@ -5,12 +5,16 @@ using Npgsql;
 namespace Infrastructure.Tests.Ai;
 
 /// <summary>
-///     Opt-in execution of the exact production PostgreSQL trigger in a disposable schema, without applying
-///     migrations.
+///     Opt-in execution of the exact production PostgreSQL trigger in a disposable schema, without
+///     applying migrations.
 /// </summary>
 public sealed class FailedDeploymentTriggerPostgresTests
 {
-    /// <summary>Proves real transition capture, bulk writes, rollback, duplicate suppression and deployment cascade deletion.</summary>
+    /// <summary>
+    ///     Proves real transition capture, bulk writes, rollback, duplicate suppression and deployment
+    ///     cascade deletion.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [AiPostgresFact]
     public async Task Production_trigger_captures_only_committed_failure_once()
     {
@@ -66,14 +70,23 @@ public sealed class FailedDeploymentTriggerPostgresTests
         }
     }
 
-    /// <summary>Executes authored SQL only in the test's uniquely generated schema.</summary>
+    /// <summary>
+    ///     Executes authored SQL only in the test's uniquely generated schema.
+    /// </summary>
+    /// <param name="connection">Fixture database connection or explicitly isolated connection string.</param>
+    /// <param name="sql">SQL executed against the isolated test database.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
     {
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
     }
 
-    /// <summary>Reads the total number of durable metadata markers.</summary>
+    /// <summary>
+    ///     Reads the total number of durable metadata markers.
+    /// </summary>
+    /// <param name="connection">Fixture database connection or explicitly isolated connection string.</param>
+    /// <returns>A task returning the fixture count or ordering position.</returns>
     private static async Task<long> CountAsync(NpgsqlConnection connection)
     {
         await using var command =
@@ -82,10 +95,14 @@ public sealed class FailedDeploymentTriggerPostgresTests
     }
 }
 
-/// <summary>Never connects to an application database during default test runs.</summary>
+/// <summary>
+///     Never connects to an application database during default test runs.
+/// </summary>
 public sealed class AiPostgresFactAttribute : FactAttribute
 {
-    /// <summary>Requires an explicitly configured isolated PostgreSQL test database.</summary>
+    /// <summary>
+    ///     Requires an explicitly configured isolated PostgreSQL test database.
+    /// </summary>
     public AiPostgresFactAttribute()
     {
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AUTOMATE_AI_TEST_DB")))

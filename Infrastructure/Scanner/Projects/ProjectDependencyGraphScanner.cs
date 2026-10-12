@@ -3,13 +3,18 @@ using Domain.DTO;
 namespace Infrastructure.Scanner;
 
 /// <summary>
-///     Walks project references from a root .csproj file and combines referenced project metadata.
+///     Walks project references from a root .csproj file and combines referenced project
+///     metadata.
 /// </summary>
 internal static class ProjectDependencyGraphScanner
 {
     /// <summary>
     ///     Scans the root project and recursively scans referenced projects once.
     /// </summary>
+    /// <param name="filePath">The C# project file to inspect.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the project metadata dto projection derived from the verified inputs.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public static async Task<ProjectMetadataDto> ScanAsync(string filePath, CancellationToken cancellationToken)
     {
         var mainMetadata = await CsprojMetadataReader.ReadAsync(filePath, cancellationToken);
@@ -57,5 +62,9 @@ internal static class ProjectDependencyGraphScanner
     /// <summary>
     ///     Queue item for dependency graph traversal.
     /// </summary>
+    /// <param name="Path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="Metadata">
+    ///     The non-secret project metadata supplied to evidence or artifact generation.
+    /// </param>
     private readonly record struct ProjectScanTarget(string Path, ProjectMetadataDto Metadata);
 }

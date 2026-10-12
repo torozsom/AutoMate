@@ -6,7 +6,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Combines full UTC-day statistics with exact archived boundary observations without double counting.</summary>
+/// <summary>
+///     Combines full UTC-day statistics with exact archived boundary observations without
+///     double counting.
+/// </summary>
+/// <param name="db">Application metadata context used for ownership, leases and persisted state.</param>
+/// <param name="archive">Provides permanent owner-scoped redacted deployment history.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="redactor">The shared redaction boundary used before persistence or presentation.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class MetricExplorationService(
     AutoMateDbContext db,
     IDeploymentArchive archive,
@@ -18,7 +29,19 @@ public sealed class MetricExplorationService(
     /// <summary>Current masking applies to numeric metadata from legacy database rows too.</summary>
     private readonly IDiagnosticRedactor _redactor = redactor ?? new DiagnosticRedactor();
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Authorizes scope, aggregates selected evidence, and pages statistics independently of
+    ///     charts.
+    /// </summary>
+    /// <param name="query">The frozen resource scope, selection and bounded read options.</param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>
+    ///     A task returning bounded chart observations, statistics, numeric pagination and
+    ///     availability metadata.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Managed telemetry processing is not approved.</exception>
+    /// <exception cref="ArgumentException">Invalid metric exploration request.</exception>
+    /// <exception cref="UnauthorizedAccessException">Metric access denied.</exception>
     public async Task<MetricExplorationResult> ReadAsync(MetricExplorationQuery query,
         CancellationToken token = default)
     {
@@ -125,7 +148,11 @@ public sealed class MetricExplorationService(
         return new MetricExplorationResult(all, all.Skip((page - 1) * query.PageSize).Take(query.PageSize).ToArray(),
             all.Length, page, query.PageSize, query.Range, notice);
 
-        /// <summary>Combines only matching metric/deployment/container buckets, retaining real denominators.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Combines only matching metric/deployment/container buckets, retaining real denominators.
+        /// </summary>
+        /// <param name="value">The value to normalize, redact or validate.</param>
         void Add(MetricObservation value)
         {
             if (!MimirDeploymentMetrics.SupportedUnits.TryGetValue(value.Metric, out var unit) || value.Unit != unit ||
@@ -167,8 +194,14 @@ public sealed class MetricExplorationService(
                 Incomplete = previous.Incomplete || value.Incomplete
             };
         }
+#pragma warning restore CS1587
 
-        /// <summary>Reads authorized boundary batches and preserves usable data during archive outages.</summary>
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Reads authorized boundary batches and preserves usable data during archive outages.
+        /// </summary>
+        /// <param name="range">The selected frozen observation window or assessment range.</param>
+        /// <returns>A task representing completion of the asynchronous operation.</returns>
         async Task BoundaryAsync(MetricTimeRange range)
         {
             // Boundary fragments may be under five minutes; the public enclosing window has already been validated.
@@ -212,5 +245,6 @@ public sealed class MetricExplorationService(
                 notice =
                     "Some deployment partitions exceed this query's batch budget; results are partial. Select a project.";
         }
+#pragma warning restore CS1587
     }
 }

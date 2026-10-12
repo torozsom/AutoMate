@@ -14,10 +14,16 @@ using WorkEntity = Domain.Entities.DeploymentAnalysisWorkItem;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Uses independent relational connections to verify atomic acquisition, recovery and lease fencing.</summary>
+/// <summary>
+///     Uses independent relational connections to verify atomic acquisition, recovery and lease
+///     fencing.
+/// </summary>
 public sealed class AnalysisQueueLeaseTests
 {
-    /// <summary>Concurrent workers cannot hold the same current generation.</summary>
+    /// <summary>
+    ///     Concurrent workers cannot hold the same current generation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Independent_workers_claim_one_job_only_once()
     {
@@ -35,7 +41,11 @@ public sealed class AnalysisQueueLeaseTests
         Assert.Equal(owner.LeaseId, (await read.DeploymentAnalysisWorkItems.SingleAsync()).LeaseId);
     }
 
-    /// <summary>Renewal never shortens or revives an expired lease, and obsolete tokens cannot affect recovery.</summary>
+    /// <summary>
+    ///     Renewal never shortens or revives an expired lease, and obsolete tokens cannot affect
+    ///     recovery.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Renewal_and_release_are_fenced_by_current_unexpired_ownership()
     {
@@ -62,7 +72,10 @@ public sealed class AnalysisQueueLeaseTests
         Assert.Equal(3, (await queue.ClaimNextAsync())!.Attempt);
     }
 
-    /// <summary>Interrupted legacy claims without lease metadata recover without a diagnostic snapshot.</summary>
+    /// <summary>
+    ///     Interrupted legacy claims without lease metadata recover without a diagnostic snapshot.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Legacy_claims_without_lease_metadata_can_recover()
     {
@@ -75,7 +88,11 @@ public sealed class AnalysisQueueLeaseTests
         Assert.Equal(fixture.DeploymentId, work.DeploymentId);
     }
 
-    /// <summary>Terminal results are never reclaimed, even if a legacy completion marker is missing.</summary>
+    /// <summary>
+    ///     Terminal results are never reclaimed, even if a legacy completion marker is missing.
+    /// </summary>
+    /// <param name="status">Analysis state under test.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(AiAnalysisStatus.Completed)]
     [InlineData(AiAnalysisStatus.Failed)]
@@ -89,7 +106,11 @@ public sealed class AnalysisQueueLeaseTests
         Assert.Null(await fixture.Queue(db).ClaimNextAsync());
     }
 
-    /// <summary>A future retry survives new connections and becomes eligible only when its durable deadline passes.</summary>
+    /// <summary>
+    ///     A future retry survives new connections and becomes eligible only when its durable deadline
+    ///     passes.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Retry_deadline_survives_connection_restart_and_concurrent_claims()
     {
@@ -117,7 +138,11 @@ public sealed class AnalysisQueueLeaseTests
         Assert.Equal(1, claim.Attempt);
     }
 
-    /// <summary>Concurrent cancellations through independent connections are idempotent and retire queue metadata atomically.</summary>
+    /// <summary>
+    ///     Concurrent cancellations through independent connections are idempotent and retire queue
+    ///     metadata atomically.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Independent_owner_cancellations_retire_work_once()
     {
@@ -144,7 +169,10 @@ public sealed class AnalysisQueueLeaseTests
         Assert.NotNull((await restarted.DeploymentAnalysisWorkItems.SingleAsync()).CompletedAt);
     }
 
-    /// <summary>Owns a disposable relational metadata file, with no provider or diagnostic storage access.</summary>
+    /// <summary>
+    ///     Owns a disposable relational metadata file, with no provider or diagnostic storage access.
+    /// </summary>
+    /// <param name="path">Request path used only to select a finite audit area.</param>
     private sealed class Fixture(string path) : IAsyncDisposable
     {
         /// <summary>Shared controlled UTC clock.</summary>
@@ -156,7 +184,10 @@ public sealed class AnalysisQueueLeaseTests
         /// <summary>Seeded deployment identity.</summary>
         public Guid DeploymentId { get; private set; }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture resources and removes its temporary database files.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public ValueTask DisposeAsync()
         {
             File.Delete(path);
@@ -165,7 +196,10 @@ public sealed class AnalysisQueueLeaseTests
             return ValueTask.CompletedTask;
         }
 
-        /// <summary>Creates an independent connection; pooling is disabled for deterministic file cleanup.</summary>
+        /// <summary>
+        ///     Creates an independent connection; pooling is disabled for deterministic file cleanup.
+        /// </summary>
+        /// <returns>An independent metadata context owned by the caller.</returns>
         public AutoMateDbContext NewDb()
         {
             return new QueueContext(new DbContextOptionsBuilder<AutoMateDbContext>()
@@ -173,13 +207,20 @@ public sealed class AnalysisQueueLeaseTests
                 .Options);
         }
 
-        /// <summary>Creates the production queue against this fixture clock.</summary>
+        /// <summary>
+        ///     Creates the production queue against this fixture clock.
+        /// </summary>
+        /// <param name="db">Fixture metadata context.</param>
+        /// <returns>The configured deployment analysis queue instance or response for this scenario.</returns>
         public DeploymentAnalysisQueue Queue(AutoMateDbContext db)
         {
             return new DeploymentAnalysisQueue(db, Clock, Options);
         }
 
-        /// <summary>Seeds metadata only, using the real model.</summary>
+        /// <summary>
+        ///     Seeds metadata only, using the real model.
+        /// </summary>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync()
         {
             var fixture = new Fixture(Path.Combine(Path.GetTempPath(),
@@ -216,24 +257,35 @@ public sealed class AnalysisQueueLeaseTests
         }
     }
 
-    /// <summary>Provides deterministic lease expiry without sleeping.</summary>
+    /// <summary>
+    ///     Provides deterministic lease expiry without sleeping.
+    /// </summary>
     private sealed class TestClock : TimeProvider
     {
         /// <summary>Current controlled UTC time.</summary>
         public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Returns the controlled UTC clock value.
+        /// </summary>
+        /// <returns>The fixture-controlled UTC time.</returns>
         public override DateTimeOffset GetUtcNow()
         {
             return Now;
         }
     }
 
-    /// <summary>SQLite-only representation of PostgreSQL timestamp ordering.</summary>
+    /// <summary>
+    ///     SQLite-only representation of PostgreSQL timestamp ordering.
+    /// </summary>
+    /// <param name="options">EF options for the fixture metadata database.</param>
     private sealed class QueueContext(DbContextOptions<AutoMateDbContext> options)
         : AutoMateDbContext(options, new EphemeralDataProtectionProvider())
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Adapts timestamp storage and metadata mappings for the SQLite fixture model.
+        /// </summary>
+        /// <param name="builder">EF builder receiving the fixture model mappings.</param>
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);

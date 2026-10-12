@@ -7,12 +7,22 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.ApplicationServices.Orchestration;
 
-/// <summary>Removes transient webhook and outbox metadata after the diagnostic retention window.</summary>
+/// <summary>
+///     Removes transient webhook and outbox metadata after the diagnostic retention window.
+/// </summary>
+/// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class CloudRunRetentionService(
     IServiceScopeFactory scopeFactory,
     ILogger<CloudRunRetentionService> logger) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Removes bounded expired cloud-control metadata under the configured retention policy.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromHours(1));

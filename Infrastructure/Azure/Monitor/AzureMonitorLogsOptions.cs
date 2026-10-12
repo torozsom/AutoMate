@@ -1,6 +1,8 @@
 namespace Infrastructure.Azure;
 
-/// <summary>OAuth and polling settings for Azure Monitor Logs runtime collection.</summary>
+/// <summary>
+///     OAuth and polling settings for Azure Monitor Logs runtime collection.
+/// </summary>
 public sealed class AzureMonitorLogsOptions
 {
     /// <summary>Configuration section name.</summary>
@@ -21,6 +23,7 @@ public sealed class AzureMonitorLogsOptions
     /// <summary>Maximum number of records returned for one source poll.</summary>
     public int BatchSize { get; set; } = 500;
 
+    /// <summary>Bounded ARM/query page count permitted during one collection poll.</summary>
     public int MaximumPagesPerPoll { get; set; } = 32;
 
     /// <summary>Overlap used to account for delayed log ingestion.</summary>

@@ -1,6 +1,8 @@
 namespace Application.Orchestration;
 
-/// <summary>Bounds GitHub Actions monitoring and untrusted log delivery work.</summary>
+/// <summary>
+///     Bounds GitHub Actions monitoring and untrusted log delivery work.
+/// </summary>
 public sealed class GitHubWorkflowMonitoringOptions
 {
     /// <summary>Configuration section for workflow monitoring limits.</summary>

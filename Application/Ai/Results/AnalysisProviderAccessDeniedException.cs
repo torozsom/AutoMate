@@ -2,7 +2,10 @@ using System.Net;
 
 namespace Application.Ai;
 
-/// <summary>Non-retryable provider denial carrying only finite classification and a validated correlation identifier.</summary>
+/// <summary>
+///     Non-retryable provider denial carrying only finite classification and a validated
+///     correlation identifier.
+/// </summary>
 public sealed class AnalysisProviderAccessDeniedException : HttpRequestException
 {
     /// <summary>Persisted finite reason used by both result rendering and worker audit.</summary>
@@ -12,7 +15,14 @@ public sealed class AnalysisProviderAccessDeniedException : HttpRequestException
     public const string Guidance =
         "The AI provider denied access. Ask the operator to check the provider credentials, model or deployment permissions, and network access before requesting another analysis.";
 
-    /// <summary>Creates safe metadata without retaining an error response body or its message.</summary>
+    /// <summary>
+    ///     Creates safe metadata without retaining an error response body or its message.
+    /// </summary>
+    /// <param name="provider">The provider identity; not a credential or endpoint.</param>
+    /// <param name="code">The recognized provider denial code; unrecognized values become unknown.</param>
+    /// <param name="requestId">
+    ///     The provider request correlation identifier; malformed values are discarded.
+    /// </param>
     public AnalysisProviderAccessDeniedException(string provider, string? code = null, string? requestId = null)
         : base("AI provider denied access. Check provider permissions and network access.", null,
             HttpStatusCode.Forbidden)

@@ -17,9 +17,30 @@ using Microsoft.Extensions.Logging;
 namespace Application.Orchestration;
 
 /// <summary>
-///     Orchestrates the process of deploying .NET projects locally by managing interactions with
-///     various services, including database, system scanning, project scanning, templating, and Docker.
+///     Orchestrates the process of deploying .NET projects locally by managing interactions
+///     with various services, including database, system scanning, project scanning,
+///     templating, and Docker.
 /// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="systemScanner">
+///     Provides the local system scanner service boundary used by this operation.
+/// </param>
+/// <param name="projectScanner">
+///     Provides the project scanner service boundary used by this operation.
+/// </param>
+/// <param name="templateService">Provides the templating service boundary used by this operation.</param>
+/// <param name="dockerService">Provides the docker service boundary used by this operation.</param>
+/// <param name="capabilities">Hosting-profile capability flags used to gate provider operations.</param>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="statusNotifier">Publishes deployment transitions to in-process subscribers.</param>
+/// <param name="localDiagnostics">
+///     Provides the local deployment diagnostics boundary used by this operation.
+/// </param>
 public sealed class LocalDeploymentOrchestrator(
     AutoMateDbContext dbContext,
     ILocalSystemScannerService systemScanner,
@@ -33,9 +54,7 @@ public sealed class LocalDeploymentOrchestrator(
     ILocalDeploymentDiagnostics localDiagnostics)
     : ILocalDeploymentOrchestrator
 {
-    /// <summary>
-    ///     Handles deployment status persistence and UI notifications.
-    /// </summary>
+    /// <summary>Handles deployment status persistence and UI notifications.</summary>
     private readonly DeploymentStatusUpdater _statusUpdater =
         new(dbContext, statusNotifier, logger, nameof(LocalDeploymentOrchestrator));
 
@@ -43,7 +62,9 @@ public sealed class LocalDeploymentOrchestrator(
     ///     Deploys a local .NET project by orchestrating the entire process.
     /// </summary>
     /// <param name="config">The configuration for the deployment.</param>
-    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation if needed.</param>
+    /// <param name="cancellationToken">
+    ///     A cancellation token that can be used to cancel the operation if needed.
+    /// </param>
     /// <returns>
     ///     A <see cref="Task" /> representing the asynchronous operation, with a result of type
     ///     <see cref="Deployment" />, which contains details of the deployment, such as status,
@@ -55,6 +76,7 @@ public sealed class LocalDeploymentOrchestrator(
     /// <exception cref="Exception">
     ///     Thrown if an unexpected error occurs during the deployment process.
     /// </exception>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
     public async Task<Deployment> DeployLocalProjectAsync(DeploymentConfigDto config,
         CancellationToken cancellationToken = default)
     {
@@ -139,7 +161,11 @@ public sealed class LocalDeploymentOrchestrator(
     /// <param name="projectId">The unique identifier of the project.</param>
     /// <param name="projectName">The name of the project.</param>
     /// <param name="csProjectPath">The path to the main C# project file.</param>
-    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation if needed.</param>
+    /// <param name="cancellationToken">
+    ///     A cancellation token that can be used to cancel the operation if needed.
+    /// </param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="InvalidOperationException">Docker Compose could not stop the deployment.</exception>
     public async Task StopDeploymentAsync(Guid projectId, string projectName, string csProjectPath,
         CancellationToken cancellationToken = default)
     {
@@ -211,12 +237,29 @@ public sealed class LocalDeploymentOrchestrator(
         }
     }
 
+    /// <summary>
+    ///     Rejects local deployment work when the selected hosting profile disables Docker
+    ///     operations.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     Local Docker deployments are disabled for this AutoMate instance.
+    /// </exception>
     private void EnsureLocalDeploymentEnabled()
     {
         if (!capabilities.LocalDeploymentsEnabled)
             throw new InvalidOperationException("Local Docker deployments are disabled for this AutoMate instance.");
     }
 
+    /// <summary>
+    ///     Rejects conflicting Compose identities or occupied local host ports before deployment
+    ///     side effects.
+    /// </summary>
+    /// <param name="config">The deployment configuration used by the operation.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="DeploymentResourceConflictException">
+    ///     Another project owns the Compose identity or the selected host port is unavailable.
+    /// </exception>
     private async Task ValidateLocalResourcesAsync(DeploymentConfigDto config, CancellationToken cancellationToken)
     {
         var composeName = DockerNameNormalizer.NormalizeProjectName(config.ProjectName);
@@ -251,12 +294,16 @@ public sealed class LocalDeploymentOrchestrator(
 
     /// <summary>
     ///     Executes the main steps of the deployment process, including locating the solution root,
-    ///     scanning the project for dependencies, generating necessary templates, and running Docker Compose.
+    ///     scanning the project for dependencies, generating necessary templates, and running
+    ///     Docker Compose.
     /// </summary>
     /// <param name="config"></param>
     /// <param name="csProject"></param>
-    /// <param name="deployment"></param>
-    /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation if needed.</param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="cancellationToken">
+    ///     A cancellation token that can be used to cancel the operation if needed.
+    /// </param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     /// <exception cref="InvalidOperationException"></exception>
     private async Task ExecuteDeploymentStepsAsync(DeploymentConfigDto config, CsProject csProject,
         Deployment deployment, CancellationToken cancellationToken)
@@ -317,7 +364,19 @@ public sealed class LocalDeploymentOrchestrator(
         await localDiagnostics.SetOperationAsync(config.ProjectId, deployment.Id, false, cancellationToken);
     }
 
-    /// <summary>Emits safe deployment phases without exposing source paths or letting diagnostics fail deployment work.</summary>
+    /// <summary>
+    ///     Emits safe deployment phases without exposing source paths or letting diagnostics fail
+    ///     deployment work.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="phase">The recorded cloud-run phase.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PublishPhaseAsync(Guid projectId, Guid deploymentId, string phase, string message,
         CancellationToken token, DeploymentDiagnosticSeverity severity = DeploymentDiagnosticSeverity.Information)
     {
@@ -337,8 +396,18 @@ public sealed class LocalDeploymentOrchestrator(
     }
 }
 
+/// <summary>
+///     Checks whether a local TCP port can be acquired without leaving a listener running.
+/// </summary>
 internal static class LocalHostPortAvailability
 {
+    /// <summary>
+    ///     Temporarily probes a requested local TCP port and releases the probe immediately.
+    /// </summary>
+    /// <param name="port">Host port checked for availability.</param>
+    /// <exception cref="DeploymentResourceConflictException">
+    ///     The requested local host port cannot be acquired safely.
+    /// </exception>
     public static void Check(int port)
     {
         try

@@ -7,7 +7,19 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Docker;
 
-/// <summary>Delivers each Docker observation live while sampling durable history at a separate cadence.</summary>
+/// <summary>
+///     Delivers each Docker observation live while sampling durable history at a separate
+///     cadence.
+/// </summary>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="live">Delivers redacted observations to authorized browser groups.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="viewers">Provides the deployment runtime viewers boundary used by this operation.</param>
+/// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+/// <param name="historySampleSeconds">Minimum cadence for persisting numeric history samples.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 internal sealed class DockerMetricDelivery(
     IDeploymentDiagnosticPublisher diagnostics,
     ILogStreamer live,
@@ -17,9 +29,22 @@ internal sealed class DockerMetricDelivery(
     int historySampleSeconds,
     ILogger logger)
 {
+    /// <summary>Earliest next durable metric sample time; live delivery remains independent.</summary>
     private DateTimeOffset _nextHistorySample;
 
-    /// <summary>Redacts before live delivery; the bounded publisher handles occasional durable samples separately.</summary>
+    /// <summary>
+    ///     Redacts before live delivery; the bounded publisher handles occasional durable samples
+    ///     separately.
+    /// </summary>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="container">Verified owned container identity used for observation routing.</param>
+    /// <param name="metrics">Recorded numeric samples or aggregate points.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
+    /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     internal async Task ObserveAsync(Guid projectId, Guid deploymentId, string container, DockerMetricsLine metrics,
         CancellationToken token)
     {

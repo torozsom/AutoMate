@@ -1,6 +1,8 @@
 namespace Domain.Entities;
 
-/// <summary>Shared GitHub installation cooldown after provider throttling.</summary>
+/// <summary>
+///     Shared GitHub installation cooldown after provider throttling.
+/// </summary>
 public sealed class CloudInstallationBudget
 {
     /// <summary>Installation whose API usage is paused.</summary>

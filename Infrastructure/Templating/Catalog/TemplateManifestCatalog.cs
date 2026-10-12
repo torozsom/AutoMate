@@ -7,21 +7,25 @@ namespace Infrastructure.Templating;
 /// <summary>
 ///     Loads and caches template manifest rules used by the templating service.
 /// </summary>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 internal sealed class TemplateManifestCatalog(ILogger logger)
 {
-    /// <summary>
-    ///     Synchronizes first-load access to the static manifest cache.
-    /// </summary>
+    /// <summary>Synchronizes first-load access to the static manifest cache.</summary>
     private static readonly SemaphoreSlim ManifestSemaphore = new(1, 1);
 
-    /// <summary>
-    ///     Process-wide cache of parsed template manifest rules.
-    /// </summary>
+    /// <summary>Process-wide cache of parsed template manifest rules.</summary>
     private static List<TemplateManifestRuleDto>? _cachedManifest;
 
     /// <summary>
     ///     Gets template manifest rules from cache or loads them from disk.
     /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the async selection with its documented bounds and ordering.</returns>
+    /// <exception cref="FileNotFoundException">
+    ///     The required deployment template manifest does not exist.
+    /// </exception>
     public async Task<IReadOnlyList<TemplateManifestRuleDto>> GetAsync(CancellationToken cancellationToken)
     {
         if (_cachedManifest != null)

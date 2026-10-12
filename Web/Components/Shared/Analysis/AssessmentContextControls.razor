@@ -1,8 +1,11 @@
-@namespace Web.Components.Shared
 @using System.Globalization
 @using Application.Abstractions.Ai
 @using Application.Ai
 @using Domain.Enums
+@*
+    Edits immutable analysis choices for sources, containers, metrics, focus and UTC time bounds.
+*@
+@namespace Web.Components.Shared
 <fieldset class="assessment-context" disabled="@Disabled">
     <legend class="h6">Assessment context</legend>
     <div class="assessment-options">
@@ -131,7 +134,11 @@
         AssessmentSources.GitHub, AssessmentSources.Azure, AssessmentSources.Deployment, AssessmentSources.Other
     ];
 
-    /// <summary>Owner-facing labels for the finite focus choices.</summary>
+    /// <summary>
+    ///     Owner-facing labels for the finite focus choices.
+    /// </summary>
+    /// <param name="kind">Assessment focus selected by the user.</param>
+    /// <returns>The display label for the selected assessment focus.</returns>
     public static string FocusLabel(AssessmentKind kind)
     {
         return kind switch
@@ -142,7 +149,11 @@
         };
     }
 
-    /// <summary>Owner-facing labels that distinguish application output from Azure platform events.</summary>
+    /// <summary>
+    ///     Owner-facing labels that distinguish application output from Azure platform events.
+    /// </summary>
+    /// <param name="source">Selected diagnostic source flag or JSON object.</param>
+    /// <returns>The display label for the selected diagnostic source.</returns>
     public static string SourceLabel(AssessmentSources source)
     {
         return source switch
@@ -153,19 +164,35 @@
         };
     }
 
-    /// <summary>Suppresses stale control events while the submission is frozen.</summary>
+    /// <summary>
+    ///     Suppresses stale control events while the submission is frozen.
+    /// </summary>
+    /// <param name="value">Replacement immutable assessment choices.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task Emit(AssessmentSelection value)
     {
         return Disabled ? Task.CompletedTask : OnChange.InvokeAsync(value);
     }
 
-    /// <summary>Changes emphasis without changing the persisted status supplied to the model.</summary>
+    /// <summary>
+    ///     Changes emphasis without changing the persisted status supplied to the model.
+    /// </summary>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
+    /// <exception cref="FormatException">The change value is not an integer focus identifier.</exception>
+    /// <exception cref="OverflowException">The supplied focus identifier exceeds the integer range.</exception>
     private Task KindChanged(ChangeEventArgs e)
     {
         return Emit(Selection with { Kind = (AssessmentKind)int.Parse(e.Value!.ToString()!) });
     }
 
-    /// <summary>Initializes UTC custom bounds or clears dates for a relative range.</summary>
+    /// <summary>
+    ///     Initializes UTC custom bounds or clears dates for a relative range.
+    /// </summary>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
+    /// <exception cref="FormatException">The change value is not an integer range identifier.</exception>
+    /// <exception cref="OverflowException">The supplied range identifier exceeds the integer range.</exception>
     private Task RangeChanged(ChangeEventArgs e)
     {
         var range = (AssessmentRange)int.Parse(e.Value!.ToString()!);
@@ -176,19 +203,33 @@
         });
     }
 
-    /// <summary>Changes one source flag independently of metrics.</summary>
+    /// <summary>
+    ///     Changes one source flag independently of metrics.
+    /// </summary>
+    /// <param name="source">Selected diagnostic source flag or JSON object.</param>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task SourceChanged(AssessmentSources source, ChangeEventArgs e)
     {
         return Emit(Selection with { Sources = (bool)e.Value! ? Selection.Sources | source : Selection.Sources & ~source });
     }
 
-    /// <summary>Enables or excludes numeric evidence independently of log selection.</summary>
+    /// <summary>
+    ///     Enables or excludes numeric evidence independently of log selection.
+    /// </summary>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task MetricsChanged(ChangeEventArgs e)
     {
         return Emit(Selection with { IncludeMetrics = (bool)e.Value! });
     }
 
-    /// <summary>Replaces all-channel selection with explicit recorded web/database channels.</summary>
+    /// <summary>
+    ///     Replaces all-channel selection with explicit recorded web/database channels.
+    /// </summary>
+    /// <param name="channel">Recorded log channel to select.</param>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task LogContainerChanged(string channel, ChangeEventArgs e)
     {
         return Emit(Selection with
@@ -198,13 +239,25 @@
         });
     }
 
-    /// <summary>Replaces all-container selection with explicit recorded metric identities.</summary>
+    /// <summary>
+    ///     Replaces all-container selection with explicit recorded metric identities.
+    /// </summary>
+    /// <param name="container">Recorded container identity to select.</param>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task MetricContainerChanged(string container, ChangeEventArgs e)
     {
         return Emit(Selection with { MetricContainers = Toggle(Selection.MetricContainers, MetricContainers, container, (bool)e.Value!) });
     }
 
-    /// <summary>Keeps null as all until an individual checkbox changes, then emits sorted identities.</summary>
+    /// <summary>
+    ///     Keeps null as all until an individual checkbox changes, then emits sorted identities.
+    /// </summary>
+    /// <param name="selected">Current explicit selection, or null for all available items.</param>
+    /// <param name="available">Current authorized selection catalog.</param>
+    /// <param name="name">Metric or configuration name to resolve.</param>
+    /// <param name="enabled">Whether to include the option.</param>
+    /// <returns>Distinct selected identities sorted with ordinal comparison.</returns>
     private static string[] Toggle(string[]? selected, IEnumerable<string> available, string name, bool enabled)
     {
         var values = new HashSet<string>(selected ?? available.ToArray(), StringComparer.Ordinal);
@@ -213,13 +266,21 @@
         return values.Order(StringComparer.Ordinal).ToArray();
     }
 
-    /// <summary>Formats an absolute UTC instant for an unlabeled-zone browser datetime control.</summary>
+    /// <summary>
+    ///     Formats an absolute UTC instant for an unlabeled-zone browser datetime control.
+    /// </summary>
+    /// <param name="value">Optional UTC time to format.</param>
+    /// <returns>UTC datetime-control text, or an empty string when the value is absent.</returns>
     private static string UtcValue(DateTimeOffset? value)
     {
         return value?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm") ?? "";
     }
 
-    /// <summary>Interprets the explicitly UTC-labeled input without applying local time conversion.</summary>
+    /// <summary>
+    ///     Interprets the explicitly UTC-labeled input without applying local time conversion.
+    /// </summary>
+    /// <param name="value">Raw change-event value to parse.</param>
+    /// <returns>The interpreted UTC timestamp, or null when parsing fails.</returns>
     private static DateTimeOffset? ParseUtc(object? value)
     {
         return DateTime.TryParse(value?.ToString(), CultureInfo.InvariantCulture,
@@ -228,13 +289,21 @@
             : null;
     }
 
-    /// <summary>Changes the custom UTC start; server admission validates the completed range.</summary>
+    /// <summary>
+    ///     Changes the custom UTC start; server admission validates the completed range.
+    /// </summary>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task StartChanged(ChangeEventArgs e)
     {
         return Emit(Selection with { Start = ParseUtc(e.Value) });
     }
 
-    /// <summary>Changes the custom UTC end; future and oversized ranges are rejected by admission.</summary>
+    /// <summary>
+    ///     Changes the custom UTC end; future and oversized ranges are rejected by admission.
+    /// </summary>
+    /// <param name="e">Browser change or keyboard event.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task EndChanged(ChangeEventArgs e)
     {
         return Emit(Selection with { End = ParseUtc(e.Value) });

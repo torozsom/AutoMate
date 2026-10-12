@@ -15,14 +15,17 @@ separate UI delivery port and is not a diagnostic persistence or analysis API.
   channel, and ordering contract.
 - `Events/IDeploymentDiagnosticPublisher.cs` — non-blocking ingestion boundary.
 - `Redaction/IDiagnosticRedactor.cs` — safe-copy redaction boundary.
-- `History/IDeploymentDiagnosticStore.cs` — redacted persistence and bounded context boundary shared by replay and analysis.
-- `Events/DeploymentTerminalLog.cs` — persisted terminal message and bounded history contracts with a durable order cursor.
+- `History/IDeploymentDiagnosticStore.cs` — redacted persistence and bounded context boundary shared by replay and
+  analysis.
+- `Events/DeploymentTerminalLog.cs` — persisted terminal message and bounded history contracts with a durable order
+  cursor.
 
 ## Related documentation
 
 - [Solution navigation map](../../../navigation.md)
 
-`Metrics/DeploymentTelemetry.cs` defines separate log/metric write/query ports, typed numeric samples, bounded history responses
+`Metrics/DeploymentTelemetry.cs` defines separate log/metric write/query ports, typed numeric samples, bounded history
+responses
 and owner-authorized preferences. History availability and cursor-advance flags distinguish delayed storage and
 omissions.
 
@@ -59,7 +62,8 @@ semantics.
 
 ## Metric exploration
 
-Metrics/MetricExploration.cs owns frozen UTC windows, per-container/deployment sufficient statistics, paginated numeric reads
+Metrics/MetricExploration.cs owns frozen UTC windows, per-container/deployment sufficient statistics, paginated numeric
+reads
 and private batch projections. The range policy is independent of AI context limits. See
 ../../../docs/metric-exploration.md.
 
@@ -72,8 +76,11 @@ mark Azure collector availability annotations so saved replay presents them outs
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Delivery/` — `Delivery/IDeploymentRuntimeViewers.cs`, `Delivery/ITelemetryGateway.cs`, `Delivery/TelemetryCapabilities.cs`.
-- `Events/` — `Events/DeploymentDiagnosticEvent.cs`, `Events/DeploymentTerminalLog.cs`, `Events/IDeploymentDiagnosticPublisher.cs`.
-- `History/` — `History/IDeploymentArchive.cs`, `History/IDeploymentDiagnosticStore.cs`, `History/TelemetryHistoryV2.cs`.
+- `Delivery/` — `Delivery/IDeploymentRuntimeViewers.cs`, `Delivery/ITelemetryGateway.cs`,
+  `Delivery/TelemetryCapabilities.cs`.
+- `Events/` — `Events/DeploymentDiagnosticEvent.cs`, `Events/DeploymentTerminalLog.cs`,
+  `Events/IDeploymentDiagnosticPublisher.cs`.
+- `History/` — `History/IDeploymentArchive.cs`, `History/IDeploymentDiagnosticStore.cs`,
+  `History/TelemetryHistoryV2.cs`.
 - `Metrics/` — `Metrics/DeploymentTelemetry.cs`, `Metrics/MetricExploration.cs`, `Metrics/ProjectTelemetryAnalytics.cs`.
 - `Redaction/` — `Redaction/DiagnosticRedaction.cs`, `Redaction/IDiagnosticRedactor.cs`.

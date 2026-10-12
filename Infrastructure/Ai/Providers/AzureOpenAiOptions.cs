@@ -2,10 +2,16 @@ using Application.Ai;
 
 namespace Infrastructure.Ai;
 
-/// <summary>Azure resource identity and protected API-key configuration; never used as result or telemetry data.</summary>
+/// <summary>
+///     Azure resource identity and protected API-key configuration; never used as result or
+///     telemetry data.
+/// </summary>
 public sealed class AzureOpenAiOptions
 {
-    /// <summary>Nested section reloads also invalidate the enclosing AI policy snapshot and cancel active transport.</summary>
+    /// <summary>
+    ///     Nested section reloads also invalidate the enclosing AI policy snapshot and cancel
+    ///     active transport.
+    /// </summary>
     public const string SectionName = "AiAnalysis:AzureOpenAi";
 
     /// <summary>Exact approved Azure OpenAI resource DNS label, without suffix or URL.</summary>
@@ -14,7 +20,12 @@ public sealed class AzureOpenAiOptions
     /// <summary>Resource key supplied through Web user-secrets or protected deployment configuration.</summary>
     public string? ApiKey { get; init; }
 
-    /// <summary>Approves only the configured public Azure resource's canonical HTTPS Responses v1 base URL.</summary>
+    /// <summary>
+    ///     Approves only the configured public Azure resource's canonical HTTPS Responses v1 base
+    ///     URL.
+    /// </summary>
+    /// <param name="settings">The analysis options whose bounds are validated.</param>
+    /// <returns>Whether the documented approves route condition holds.</returns>
     public bool ApprovesRoute(AiAnalysisOptions settings)
     {
         return settings.Provider == AzureOpenAiAnalysisProvider.ProviderName &&
@@ -24,7 +35,11 @@ public sealed class AzureOpenAiOptions
                settings.Endpoint == $"https://{ResourceName}.openai.azure.com/openai/v1/";
     }
 
-    /// <summary>Checks only local header-safe credential presence; performs no inference or credential I/O.</summary>
+    /// <summary>
+    ///     Checks only local header-safe credential presence; performs no inference or credential
+    ///     I/O.
+    /// </summary>
+    /// <returns>Whether the documented api key condition holds.</returns>
     public bool HasApiKey()
     {
         return ResponsesAnalysisTransport.IsValidApiKey(ApiKey);

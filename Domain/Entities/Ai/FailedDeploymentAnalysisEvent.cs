@@ -1,9 +1,15 @@
 namespace Domain.Entities;
 
-/// <summary>One durable metadata-only failure wakeup per deployment, retained until deployment deletion.</summary>
+/// <summary>
+///     One durable metadata-only failure wakeup per deployment, retained until deployment
+///     deletion.
+/// </summary>
 public sealed class FailedDeploymentAnalysisEvent
 {
-    /// <summary>Deployment identity and primary key; prevents repeated failures from creating another automatic request.</summary>
+    /// <summary>
+    ///     Deployment identity and primary key; prevents repeated failures from creating another
+    ///     automatic request.
+    /// </summary>
     public Guid DeploymentId { get; set; }
 
     /// <summary>Owning deployment; deletion removes the wakeup and its completion marker.</summary>

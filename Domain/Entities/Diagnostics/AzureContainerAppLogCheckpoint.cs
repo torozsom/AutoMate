@@ -11,7 +11,10 @@ public sealed class AzureContainerAppLogCheckpoint : BaseEntity
     /// <summary>Owning deployment.</summary>
     public Deployment Deployment { get; set; } = null!;
 
-    /// <summary>Logical source name: <c>console</c>, <c>system</c>, or a bounded <c>db-</c> resource hash.</summary>
+    /// <summary>
+    ///     Logical source name: <c>console</c>, <c>system</c>, or a bounded <c>db-</c> resource
+    ///     hash.
+    /// </summary>
     public string Source { get; set; } = string.Empty;
 
     /// <summary>Timestamp of the last delivered record.</summary>

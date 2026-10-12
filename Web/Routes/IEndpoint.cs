@@ -1,8 +1,8 @@
 namespace Web.Routes;
 
 /// <summary>
-///     An endpoint is a class that defines a set of routes for the application.
-///     It is responsible for mapping the routes to the appropriate endpoints in the request pipeline.
+///     An endpoint is a class that defines a set of routes for the application. It is responsible for
+///     mapping the routes to the appropriate endpoints in the request pipeline.
 /// </summary>
 public interface IEndpoint
 {

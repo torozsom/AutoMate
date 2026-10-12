@@ -7,20 +7,21 @@ using Web.Routes;
 namespace Web.Configs;
 
 /// <summary>
-///     Provides a centralized location for configuring the HTTP request pipeline and initializing infrastructure.
+///     Provides a centralized location for configuring the HTTP request pipeline and initializing
+///     infrastructure.
 /// </summary>
 public static class AppConfiguration
 {
     /// <summary>
-    ///     Provides a method to configure the HTTP request pipeline and initialize application infrastructure
-    ///     for the ASP.NET Core web application.
+    ///     Provides a method to configure the HTTP request pipeline and initialize application
+    ///     infrastructure for the ASP.NET Core web application.
     /// </summary>
     /// <param name="app">The WebApplication instance to configure.</param>
     extension(WebApplication app)
     {
         /// <summary>
-        ///     Configures the HTTP request pipeline for the ASP.NET Core web application.
-        ///     Defines the strict order of middleware components for routing, security, and endpoints.
+        ///     Configures the HTTP request pipeline for the ASP.NET Core web application. Defines the strict
+        ///     order of middleware components for routing, security, and endpoints.
         /// </summary>
         /// <returns>The original WebApplication for chaining.</returns>
         public WebApplication UseApplicationPipeline()
@@ -88,6 +89,7 @@ public static class AppConfiguration
         /// <summary>
         ///     Asynchronously initializes application infrastructure.
         /// </summary>
+        /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
         public async Task InitializeInfrastructureAsync()
         {
             // Testing database connectivity at startup.

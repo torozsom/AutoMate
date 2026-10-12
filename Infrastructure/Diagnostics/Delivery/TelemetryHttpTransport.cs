@@ -6,7 +6,12 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Bounds authenticated store requests without exposing response bodies or gateway credentials.</summary>
+/// <summary>
+///     Bounds authenticated store requests without exposing response bodies or gateway
+///     credentials.
+/// </summary>
+/// <param name="clients">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<TelemetryStorageOptions> options)
     : IDisposable
 {
@@ -19,14 +24,27 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
     /// <summary>Shared process-local query capacity.</summary>
     private readonly SemaphoreSlim _queries = new(options.Value.QueryConcurrency);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Releases owned resources and completes the documented service lifetime.
+    /// </summary>
     public void Dispose()
     {
         _queries.Dispose();
         _admission.Dispose();
     }
 
-    /// <summary>Sends a tenant-scoped request and limits decoded response size.</summary>
+    /// <summary>
+    ///     Sends a tenant-scoped request and limits decoded response size.
+    /// </summary>
+    /// <param name="uri">Validated provider endpoint URI.</param>
+    /// <param name="tenantId">The internal owner-account telemetry identity.</param>
+    /// <param name="payload">Serialized payload subject to bounded validation and redaction.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the owned parsed JSON response; the caller must dispose it.</returns>
+    /// <exception cref="TelemetryProviderException">
+    ///     The backend rejects the request or its required transport configuration is unavailable.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">Telemetry query exceeded its response budget.</exception>
     public async Task<JsonDocument> SendAsync(string uri, Guid tenantId, object? payload,
         CancellationToken cancellationToken)
     {
@@ -91,10 +109,15 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
     }
 }
 
-/// <summary>Safe provider failure containing only status and retry guidance.</summary>
+/// <summary>
+///     Safe provider failure containing only status and retry guidance.
+/// </summary>
+/// <param name="status">Recorded runtime state or finite HTTP response status.</param>
+/// <param name="retryAfter">Optional provider retry delay.</param>
 public sealed class TelemetryProviderException(int status, TimeSpan? retryAfter)
     : Exception($"Telemetry provider returned HTTP {status}.")
 {
+    /// <summary>HTTP status retained for finite provider failure classification.</summary>
     public int Status { get; } = status;
 
     /// <summary>Provider-requested delay, bounded by the worker.</summary>

@@ -1,6 +1,8 @@
 namespace Domain.Entities;
 
-/// <summary>Minimal verified webhook receipt used for replay protection and async processing.</summary>
+/// <summary>
+///     Minimal verified webhook receipt used for replay protection and async processing.
+/// </summary>
 public sealed class CloudWebhookDelivery : BaseEntity
 {
     /// <summary>GitHub delivery identifier, stable across redeliveries.</summary>

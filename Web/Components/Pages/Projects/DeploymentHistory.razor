@@ -1,3 +1,6 @@
+@*
+    Presents owner-authorized saved deployment output, selected metrics and inline AI analysis.
+*@
 @namespace Web.Components.Pages
 @page "/project/{ProjectId:guid}/deployment/{DeploymentId:guid}"
 @attribute [Authorize]
@@ -192,7 +195,10 @@
     /// <summary>Bounded current output page.</summary>
     private DeploymentTerminalHistory? _history;
 
+    /// <summary>Opaque cursor for the preceding saved log page.</summary>
     private string? _earlierCursor;
+
+    /// <summary>User-entered bounded history search text.</summary>
     private string _search = "";
 
     /// <summary>Bounded metric aggregates.</summary>
@@ -259,7 +265,11 @@
     /// <summary>Detached recorded observations, preserving counts and provenance.</summary>
     private IReadOnlyList<MetricObservation> _observations = [];
 
-    /// <summary>Loads a validated selection while retaining the saved terminal state.</summary>
+    /// <summary>
+    ///     Loads a validated selection while retaining the saved terminal state.
+    /// </summary>
+    /// <param name="range">Validated UTC metric window selected by the user.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task MetricRangeChangedAsync(MetricTimeRange range)
     {
         _requestedRange = range;
@@ -290,20 +300,33 @@
     /// <summary>Gap threshold consistent with the bounded history query interval.</summary>
     private TimeSpan ChartGap => new MetricTimeRange(_metricStart, _metricEnd).Interval + TimeSpan.FromSeconds(5);
 
-    /// <summary>Orders the selected container's observations for a metric.</summary>
+    /// <summary>
+    ///     Orders the selected container's observations for a metric.
+    /// </summary>
+    /// <param name="name">Metric or configuration name to resolve.</param>
+    /// <returns>Selected container metric points ordered by timestamp.</returns>
     private IEnumerable<DeploymentMetricPoint> Selected(string name)
     {
         return _metrics.Where(p => p.Container == _metricContainer && p.Name == name).OrderBy(p => p.Timestamp);
     }
 
-    /// <summary>Shows interval means or extrema, without claiming raw sample weighting.</summary>
+    /// <summary>
+    ///     Shows interval means or extrema, without claiming raw sample weighting.
+    /// </summary>
+    /// <param name="metric">Stored metric series name.</param>
+    /// <param name="peak">Whether to display the observed maximum instead of the mean.</param>
+    /// <returns>The formatted value, including the documented fallback when data is absent.</returns>
     private string Value(string metric, bool peak)
     {
         var points = Selected(metric).ToArray();
         return TelemetryPresentation.Format(points.Length == 0 ? null : peak ? points.Max(p => p.Maximum) : ObservedAverage(metric), metric);
     }
 
-    /// <summary>Raw samples are weighted by their recorded count; imported intervals stay separate.</summary>
+    /// <summary>
+    ///     Raw samples are weighted by their recorded count; imported intervals stay separate.
+    /// </summary>
+    /// <param name="metric">Stored metric series name.</param>
+    /// <returns>The sample-weighted mean, falling back to imported interval weighting; zero for an empty selection.</returns>
     private double ObservedAverage(string metric)
     {
         var points = _observations.Where(p => p.Container == _metricContainer && p.Metric == metric).ToArray();
@@ -312,7 +335,11 @@
         return selected.Sum(p => p.Sum) / Math.Max(1, selected.Sum(p => p.Samples > 0 ? p.Samples : p.ImportedIntervals));
     }
 
-    /// <summary>Adapts existing aggregates to the reusable presentation component.</summary>
+    /// <summary>
+    ///     Adapts existing aggregates to the reusable presentation component.
+    /// </summary>
+    /// <param name="metric">Stored metric series name.</param>
+    /// <returns>Observed chart points in timestamp order, without synthetic missing samples.</returns>
     private IReadOnlyList<TelemetryChartPoint> ChartPoints(string metric)
     {
         return Selected(metric).Select(p => new TelemetryChartPoint(p.Timestamp, p.Average, p.Minimum, p.Maximum)).ToArray();
@@ -321,7 +348,11 @@
     /// <summary>Preserves the selected page/channel across unchanged route parameters.</summary>
     private (Guid Project, Guid Deployment)? _loadedRoute;
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Loads the selected owned deployment and resets history, metrics and consent when the route
+    ///     changes.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedRoute == (ProjectId, DeploymentId)) return;
@@ -361,19 +392,29 @@
         if (_authorized) await LoadMetricsAsync();
     }
 
-    /// <summary>Requests the preceding cursor page without accumulating unbounded terminal memory.</summary>
+    /// <summary>
+    ///     Requests the preceding cursor page without accumulating unbounded terminal memory.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task EarlierAsync()
     {
         return LoadAsync(_earlierCursor);
     }
 
-    /// <summary>Returns to the most recent page.</summary>
+    /// <summary>
+    ///     Returns to the most recent page.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private Task LatestAsync()
     {
         return LoadAsync(null);
     }
 
-    /// <summary>Loads authorized bounded output and metric history.</summary>
+    /// <summary>
+    ///     Loads authorized bounded output and metric history.
+    /// </summary>
+    /// <param name="cursor">Opaque history position, or null to read the latest page.</param>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task LoadAsync(string? cursor)
     {
         _logLoad?.Cancel();
@@ -419,7 +460,10 @@
         }
     }
 
-    /// <summary>Restores the selected channel into xterm after its initialization.</summary>
+    /// <summary>
+    ///     Restores the selected channel into xterm after its initialization.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RenderTerminalAsync()
     {
         if (_terminal is null || _history is null) return;
@@ -428,7 +472,10 @@
         await _terminal.WriteAsync(output.Length > 0 ? output : "[No saved output in this terminal page.]\r\n");
     }
 
-    /// <summary>Loads a cancellable metric range without reading or clearing saved terminal output.</summary>
+    /// <summary>
+    ///     Loads a cancellable metric range without reading or clearing saved terminal output.
+    /// </summary>
+    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task LoadMetricsAsync()
     {
         _metricLoad?.Cancel();
@@ -504,7 +551,9 @@
         }
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Cancels outstanding history and metric reads and releases the page lifetime source.
+    /// </summary>
     public void Dispose()
     {
         _lifetime.Cancel();

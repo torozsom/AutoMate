@@ -9,13 +9,27 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Orchestration;
 
-/// <summary>Restores supervisors for current local deployments; supervisors enforce runtime collection interest.</summary>
+/// <summary>
+///     Restores supervisors for current local deployments; supervisors enforce runtime
+///     collection interest.
+/// </summary>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="diagnostics">
+///     Optional bounded redacted console exception sink, separate from exported telemetry.
+/// </param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class LocalRuntimeRecoveryService(
     IServiceScopeFactory scopes,
     ILocalDeploymentDiagnostics diagnostics,
     ILogger<LocalRuntimeRecoveryService> logger) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Restores missing local supervisors for eligible active deployments.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
@@ -37,7 +51,12 @@ public sealed class LocalRuntimeRecoveryService(
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Registers only missing supervisors for current local deployments, without starting idle runtime sources.</summary>
+    /// <summary>
+    ///     Registers only missing supervisors for current local deployments, without starting idle
+    ///     runtime sources.
+    /// </summary>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task RecoverOnceAsync(CancellationToken token)
     {
         await using var scope = scopes.CreateAsyncScope();

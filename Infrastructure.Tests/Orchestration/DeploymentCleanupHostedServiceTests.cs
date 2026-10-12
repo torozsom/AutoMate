@@ -12,10 +12,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Infrastructure.Tests.Orchestration;
 
-/// <summary>Docker startup reconciliation never changes remote Azure deployment status.</summary>
+/// <summary>
+///     Docker startup reconciliation never changes remote Azure deployment status.
+/// </summary>
 public sealed class DeploymentCleanupHostedServiceTests
 {
-    /// <summary>Cloud launch, running and stopped history survive restart; genuinely local state still reconciles.</summary>
+    /// <summary>
+    ///     Cloud launch, running and stopped history survive restart; genuinely local state still
+    ///     reconciles.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Startup_cleanup_does_not_fail_or_stop_azure_deployments()
     {
@@ -37,10 +43,13 @@ public sealed class DeploymentCleanupHostedServiceTests
                     Path = "fixture",
                     Application = new Domain.Entities.Application
                     {
-                        Name = "fixture", SourceType = source, SourcePathOrUrl = "fixture",
+                        Name = "fixture",
+                        SourceType = source,
+                        SourcePathOrUrl = "fixture",
                         User = new LocalUser
                         {
-                            Username = $"fixture-{source}-{status}", Email = $"fixture-{source}-{status}@example.test"
+                            Username = $"fixture-{source}-{status}",
+                            Email = $"fixture-{source}-{status}@example.test"
                         }
                     }
                 }
@@ -62,10 +71,24 @@ public sealed class DeploymentCleanupHostedServiceTests
         Assert.Equal(DeploymentStatus.Stopped, states[deployments[4].Id]);
     }
 
-    /// <summary>Represents an empty local Docker daemon; no Azure availability can be inferred from it.</summary>
+    /// <summary>
+    ///     Represents an empty local Docker daemon; no Azure availability can be inferred from it.
+    /// </summary>
     public class EmptyDocker : DispatchProxy
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="method">Reflected member or client method selected for invocation.</param>
+        /// <param name="args">
+        ///     Arguments for the selected fixture port or reflected component member; ignored by this
+        ///     fixture.
+        /// </param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             return method?.Name == nameof(IDockerService.GetRunningProjectNamesAsync)

@@ -1,3 +1,6 @@
+@*
+    Presents the owned current deployment, source-separated terminals, live metrics and analysis dialog.
+*@
 @namespace Web.Components.Pages
 @page "/project/{ProjectId:guid}"
 @using Domain.Entities
@@ -512,16 +515,29 @@
     private int _deploymentPage;
 
 
+    /// <summary>
+    ///     Chooses the console layout class for the project source.
+    /// </summary>
+    /// <param name="sourceType">Local or remote project source.</param>
+    /// <returns>The CSS classes for the selected state.</returns>
     private static string GetProjectSourceClass(SourceType sourceType)
     {
         return sourceType == SourceType.Remote ? "project-console-remote" : "project-console-local";
     }
 
+    /// <summary>
+    ///     Finds the first recorded web project in the current application.
+    /// </summary>
+    /// <returns>The first web project, or null when none is loaded.</returns>
     private CsProject? GetPrimaryWebProject()
     {
         return _app?.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
     }
 
+    /// <summary>
+    ///     Finds the newest deployment across the current application projects.
+    /// </summary>
+    /// <returns>The newest recorded deployment, or null when no deployment exists.</returns>
     private Deployment? GetLatestDeployment()
     {
         return _app?.CsProjects
@@ -529,6 +545,10 @@
             .MaxBy(deployment => deployment.CreatedAt);
     }
 
+    /// <summary>
+    ///     Selects up to six deployments in descending creation order.
+    /// </summary>
+    /// <returns>Up to six newest deployments, or an empty sequence when no application is loaded.</returns>
     private IEnumerable<Deployment> GetRecentDeployments()
     {
         return _app?.CsProjects
@@ -538,11 +558,21 @@
                ?? [];
     }
 
+    /// <summary>
+    ///     Formats an available timestamp for the project summary.
+    /// </summary>
+    /// <param name="timestamp">Recorded timestamp, if available.</param>
+    /// <returns>The formatted timestamp, or "Never" when absent.</returns>
     private static string FormatTimestamp(DateTimeOffset? timestamp)
     {
         return timestamp?.ToString("yyyy. MM. dd. HH:mm") ?? "Never";
     }
 
+    /// <summary>
+    ///     Uses the Azure revision or a shortened Docker identity for the summary.
+    /// </summary>
+    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
+    /// <returns>The recorded Azure revision, up to 12 Docker identity characters, or "None".</returns>
     private static string GetRevisionLabel(Deployment? deployment)
     {
         if (!string.IsNullOrWhiteSpace(deployment?.CloudContainerRevision))
@@ -556,11 +586,20 @@
         return "None";
     }
 
+    /// <summary>
+    ///     Chooses the provider label from the current project source.
+    /// </summary>
+    /// <returns>"Azure" for remote projects; otherwise "Docker".</returns>
     private string GetProviderLabel()
     {
         return _app?.SourceType == SourceType.Remote ? "Azure" : "Docker";
     }
 
+    /// <summary>
+    ///     Displays the configured Azure region or discovered local web port.
+    /// </summary>
+    /// <param name="configuration">Deployment settings or host configuration used by this operation.</param>
+    /// <returns>The recorded region or local endpoint, with a fixed pending-configuration label when unavailable.</returns>
     private string GetRegionOrEndpoint(Configuration? configuration)
     {
         if (_app?.SourceType == SourceType.Remote)
@@ -571,6 +610,12 @@
         return _webHostPort > 0 ? $"localhost:{_webHostPort}" : "Assigned during deploy";
     }
 
+    /// <summary>
+    ///     Chooses recorded URL, image or container metadata, with fixed guidance when no artifact
+    ///     exists.
+    /// </summary>
+    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
+    /// <returns>Recorded artifact metadata, or fixed pending/failure guidance.</returns>
     private static string GetDeploymentMeta(Deployment deployment)
     {
         if (!string.IsNullOrWhiteSpace(deployment.CloudAppUrl))

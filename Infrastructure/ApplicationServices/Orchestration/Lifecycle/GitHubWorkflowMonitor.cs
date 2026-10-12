@@ -13,7 +13,20 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Orchestration;
 
-/// <summary>Polls GitHub Actions workflow, job, and step state and publishes safe incremental diagnostics.</summary>
+/// <summary>
+///     Polls GitHub Actions workflow, job, and step state and publishes safe incremental
+///     diagnostics.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="gitHubService">Provides the git hub service boundary used by this operation.</param>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="options">The current validated options used by this operation.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 internal sealed class GitHubWorkflowMonitor(
     AutoMateDbContext dbContext,
     IGitHubService gitHubService,
@@ -38,7 +51,16 @@ internal sealed class GitHubWorkflowMonitor(
     /// <summary>Interval between GitHub workflow and job status requests.</summary>
     private readonly TimeSpan _workflowPollDelay = TimeSpan.FromSeconds(Math.Clamp(options.PollIntervalSeconds, 1, 60));
 
-    /// <summary>Collects one webhook-triggered snapshot without occupying a launch worker while waiting.</summary>
+    /// <summary>
+    ///     Collects one webhook-triggered snapshot without occupying a launch worker while waiting.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task ObserveWorkflowRunAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, CancellationToken cancellationToken)
     {
@@ -51,7 +73,20 @@ internal sealed class GitHubWorkflowMonitor(
             });
     }
 
-    /// <summary>Polls the matched run until terminal state, publishing progress before completed-run logs.</summary>
+    /// <summary>
+    ///     Polls the matched run until terminal state, publishing progress before completed-run
+    ///     logs.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="commitSha">Verified repository commit SHA.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>
+    ///     A task returning the normalized verified workflow-run metadata, or null when no value is
+    ///     available.
+    /// </returns>
     public async Task<GitHubWorkflowRunDto?> PollWorkflowRunAsync(CloudDeploymentRequestDto request,
         Deployment deployment, string commitSha, CancellationToken cancellationToken)
     {
@@ -144,7 +179,15 @@ internal sealed class GitHubWorkflowMonitor(
         return latestRun;
     }
 
-    /// <summary>Streams one cloud deployment preparation line through the diagnostic pipeline.</summary>
+    /// <summary>
+    ///     Streams one cloud deployment preparation line through the diagnostic pipeline.
+    /// </summary>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async ValueTask StreamBuildLogAsync(Guid deploymentId, Guid projectId, string message)
     {
         try
@@ -160,7 +203,16 @@ internal sealed class GitHubWorkflowMonitor(
         }
     }
 
-    /// <summary>Publishes changed run and job states, then fetches job text only for a completed run.</summary>
+    /// <summary>
+    ///     Publishes changed run and job states, then fetches job text only for a completed run.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task StreamRunAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, CancellationToken cancellationToken)
     {
@@ -214,7 +266,18 @@ internal sealed class GitHubWorkflowMonitor(
             await StreamJobAsync(request, deployment, workflow, run, job, cancellationToken);
     }
 
-    /// <summary>Publishes changed job/step states and defers log text until workflow completion.</summary>
+    /// <summary>
+    ///     Publishes changed job/step states and defers log text until workflow completion.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="workflow">Verified workflow metadata or its durable checkpoint.</param>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task StreamJobAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowCheckpoint workflow, GitHubWorkflowRunDto run, GitHubWorkflowJobDto job,
         CancellationToken cancellationToken)
@@ -266,7 +329,19 @@ internal sealed class GitHubWorkflowMonitor(
             await StreamJobLogAsync(request, deployment, run, job, checkpoint, cancellationToken);
     }
 
-    /// <summary>Publishes a bounded, redacted segment of a completed job log using its durable line checkpoint.</summary>
+    /// <summary>
+    ///     Publishes a bounded, redacted segment of a completed job log using its durable line
+    ///     checkpoint.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <param name="checkpoint">Durable source position used to avoid duplicate delivery.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task StreamJobLogAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, GitHubWorkflowJobDto job, GitHubWorkflowJobCheckpoint checkpoint,
         CancellationToken cancellationToken)
@@ -290,11 +365,18 @@ internal sealed class GitHubWorkflowMonitor(
         var previousCount = checkpoint.LastLogLineCount;
 
         // Hash the redacted representation so checkpoints never depend on secret-bearing source text.
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Masks a workflow line before it enters terminal or durable diagnostic delivery.
+        /// </summary>
+        /// <param name="line">One bounded source-output line to normalize and redact.</param>
+        /// <returns>The bounded normalized text with supported unsafe values removed.</returns>
         string RedactLine(string line)
         {
             return redactor.Redact(CreateEvent(deployment.Id, request.Config.ProjectId, line,
                 DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, attributes)).Event.Message;
         }
+#pragma warning restore CS1587
 
         var (prefixHash, prefixCount) = GitHubWorkflowLogNormalizer.HashWithCount(
             GitHubWorkflowLogNormalizer.EnumerateLines(download.Content).Take(previousCount).Select(RedactLine));
@@ -332,7 +414,17 @@ internal sealed class GitHubWorkflowMonitor(
         await _checkpoints.SaveAsync(cancellationToken);
     }
 
-    /// <summary>Fills missing post-run job output from the final archive without replaying checkpointed lines.</summary>
+    /// <summary>
+    ///     Fills missing post-run job output from the final archive without replaying checkpointed
+    ///     lines.
+    /// </summary>
+    /// <param name="request">
+    ///     Validated operation request containing the selected resource scope and metadata.
+    /// </param>
+    /// <param name="deployment">Tracked deployment metadata used for this exact launch or history scope.</param>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task ReconcileFinalLogsAsync(CloudDeploymentRequestDto request, Deployment deployment,
         GitHubWorkflowRunDto run, CancellationToken cancellationToken)
     {
@@ -422,7 +514,20 @@ internal sealed class GitHubWorkflowMonitor(
         await _checkpoints.SaveAsync(cancellationToken);
     }
 
-    /// <summary>Reports a job-log access failure without treating temporary unavailability as an error.</summary>
+    /// <summary>
+    ///     Reports a job-log access failure without treating temporary unavailability as an error.
+    /// </summary>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <param name="availability">
+    ///     A safe availability or coverage notice; null indicates no reported notice.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PublishLogAvailabilityAsync(Guid deploymentId, Guid projectId, GitHubWorkflowRunDto run,
         GitHubWorkflowJobDto job, GitHubWorkflowLogAvailability availability, CancellationToken cancellationToken)
     {
@@ -434,7 +539,12 @@ internal sealed class GitHubWorkflowMonitor(
             DeploymentDiagnosticKind.Annotation, severity, JobAttributes(run, job), cancellationToken);
     }
 
-    /// <summary>Builds non-secret workflow and job attributes for diagnostic correlation.</summary>
+    /// <summary>
+    ///     Builds non-secret workflow and job attributes for diagnostic correlation.
+    /// </summary>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="job">The admitted deployment operation; its payload must not be logged.</param>
+    /// <returns>The job attributes selection with its documented bounds and ordering.</returns>
     private static Dictionary<string, string> JobAttributes(GitHubWorkflowRunDto run, GitHubWorkflowJobDto job)
     {
         return new Dictionary<string, string>
@@ -448,7 +558,19 @@ internal sealed class GitHubWorkflowMonitor(
         };
     }
 
-    /// <summary>Creates and publishes a typed GitHub Actions diagnostic.</summary>
+    /// <summary>
+    ///     Creates and publishes a typed GitHub Actions diagnostic.
+    /// </summary>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="kind">Finite observation or assessment category used by this operation.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
+    /// <param name="attributes">Optional bounded, non-secret diagnostic attributes.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private ValueTask PublishAsync(Guid? deploymentId, Guid projectId, string message, DeploymentDiagnosticKind kind,
         DeploymentDiagnosticSeverity severity, IReadOnlyDictionary<string, string>? attributes,
         CancellationToken cancellationToken)
@@ -457,7 +579,19 @@ internal sealed class GitHubWorkflowMonitor(
             kind, severity, attributes), cancellationToken);
     }
 
-    /// <summary>Routes a GitHub Actions observation to the project build terminal with its source identity.</summary>
+    /// <summary>
+    ///     Routes a GitHub Actions observation to the project build terminal with its source
+    ///     identity.
+    /// </summary>
+    /// <param name="deploymentId">
+    ///     The deployment identity; null is used only where legacy observations permit it.
+    /// </param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="kind">Finite observation or assessment category used by this operation.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
+    /// <param name="attributes">Optional bounded, non-secret diagnostic attributes.</param>
+    /// <returns>The normalized deployment-correlated observation.</returns>
     private static DeploymentDiagnosticEvent CreateEvent(Guid? deploymentId, Guid projectId, string message,
         DeploymentDiagnosticKind kind, DeploymentDiagnosticSeverity severity,
         IReadOnlyDictionary<string, string>? attributes)
@@ -469,7 +603,12 @@ internal sealed class GitHubWorkflowMonitor(
             SourceIdentity: CreateSourceIdentity(kind, attributes));
     }
 
-    /// <summary>Maps workflow, job, and step diagnostics to stable component identities.</summary>
+    /// <summary>
+    ///     Maps workflow, job, and step diagnostics to stable component identities.
+    /// </summary>
+    /// <param name="kind">Finite observation or assessment category used by this operation.</param>
+    /// <param name="attributes">Optional bounded, non-secret diagnostic attributes.</param>
+    /// <returns>The deployment diagnostic source identity projection derived from the verified inputs.</returns>
     private static DeploymentDiagnosticSourceIdentity CreateSourceIdentity(DeploymentDiagnosticKind kind,
         IReadOnlyDictionary<string, string>? attributes)
     {
@@ -489,7 +628,11 @@ internal sealed class GitHubWorkflowMonitor(
             instanceId);
     }
 
-    /// <summary>Maps GitHub conclusions to terminal diagnostic severity.</summary>
+    /// <summary>
+    ///     Maps GitHub conclusions to terminal diagnostic severity.
+    /// </summary>
+    /// <param name="conclusion">Provider terminal workflow outcome, if available.</param>
+    /// <returns>The deployment diagnostic severity projection derived from the verified inputs.</returns>
     private static DeploymentDiagnosticSeverity SeverityFor(string? conclusion)
     {
         return conclusion?.ToLowerInvariant() switch
@@ -500,7 +643,11 @@ internal sealed class GitHubWorkflowMonitor(
         };
     }
 
-    /// <summary>Fingerprints state snapshots without persisting their display text.</summary>
+    /// <summary>
+    ///     Fingerprints state snapshots without persisting their display text.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The stable identity derived from the documented metadata or content.</returns>
     private static string Hash(string value)
     {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

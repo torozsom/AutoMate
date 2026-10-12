@@ -64,7 +64,13 @@ Compose project. Azure runtime recovery owns their verified resource/revision ma
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `CloudPreparation/` — `CloudPreparation/CloudCsProjectResolver.cs`, `CloudPreparation/CloudDeploymentDefaults.cs`, `CloudPreparation/CloudDeploymentOrchestrator.cs`, `CloudPreparation/CloudDeploymentRequestValidator.cs`, `CloudPreparation/CloudRepositorySecretBuilder.cs`, `CloudPreparation/OrchestrationNameNormalizer.cs`.
-- `CloudRuns/` — `CloudRuns/CloudDeploymentRunService.cs`, `CloudRuns/CloudDeploymentScheduler.cs`, `CloudRuns/CloudRunMetricsService.cs`, `CloudRuns/CloudRunMonitor.cs`, `CloudRuns/CloudRunMonitorService.cs`, `CloudRuns/CloudRunProcessor.cs`, `CloudRuns/CloudRunRetentionService.cs`, `CloudRuns/CloudRunSnapshot.cs`.
-- `Lifecycle/` — `Lifecycle/DeploymentCleanupHostedService.cs`, `Lifecycle/DeploymentSnapshotCapture.cs`, `Lifecycle/DeploymentStatusUpdater.cs`, `Lifecycle/GitHubWorkflowMonitor.cs`.
-- `Local/` — `Local/LocalDeploymentLogStreamManager.cs`, `Local/LocalDeploymentOrchestrator.cs`, `Local/LocalDockerTargets.cs`, `Local/LocalRuntimeRecoveryService.cs`.
+- `CloudPreparation/` — `CloudPreparation/CloudCsProjectResolver.cs`, `CloudPreparation/CloudDeploymentDefaults.cs`,
+  `CloudPreparation/CloudDeploymentOrchestrator.cs`, `CloudPreparation/CloudDeploymentRequestValidator.cs`,
+  `CloudPreparation/CloudRepositorySecretBuilder.cs`, `CloudPreparation/OrchestrationNameNormalizer.cs`.
+- `CloudRuns/` — `CloudRuns/CloudDeploymentRunService.cs`, `CloudRuns/CloudDeploymentScheduler.cs`,
+  `CloudRuns/CloudRunMetricsService.cs`, `CloudRuns/CloudRunMonitor.cs`, `CloudRuns/CloudRunMonitorService.cs`,
+  `CloudRuns/CloudRunProcessor.cs`, `CloudRuns/CloudRunRetentionService.cs`, `CloudRuns/CloudRunSnapshot.cs`.
+- `Lifecycle/` — `Lifecycle/DeploymentCleanupHostedService.cs`, `Lifecycle/DeploymentSnapshotCapture.cs`,
+  `Lifecycle/DeploymentStatusUpdater.cs`, `Lifecycle/GitHubWorkflowMonitor.cs`.
+- `Local/` — `Local/LocalDeploymentLogStreamManager.cs`, `Local/LocalDeploymentOrchestrator.cs`,
+  `Local/LocalDockerTargets.cs`, `Local/LocalRuntimeRecoveryService.cs`.

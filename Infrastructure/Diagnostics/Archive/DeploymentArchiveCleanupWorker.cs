@@ -7,13 +7,25 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Retries deletion of archived payloads after transactional metadata deletion.</summary>
+/// <summary>
+///     Retries deletion of archived payloads after transactional metadata deletion.
+/// </summary>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="archive">Provides permanent owner-scoped redacted deployment history.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class DeploymentArchiveCleanupWorker(
     IServiceScopeFactory scopes,
     IDeploymentArchive archive,
     ILogger<DeploymentArchiveCleanupWorker> logger) : BackgroundService
 {
-    /// <inheritdoc />
+    /// <summary>
+    ///     Processes durable archive-deletion outbox records after committed owner or project
+    ///     deletion.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
@@ -34,7 +46,12 @@ public sealed class DeploymentArchiveCleanupWorker(
         } while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    /// <summary>Removes at most one bounded batch; failed payload deletion leaves its durable outbox item for retry.</summary>
+    /// <summary>
+    ///     Removes at most one bounded batch; failed payload deletion leaves its durable outbox
+    ///     item for retry.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     public async Task ProcessOnceAsync(CancellationToken stoppingToken)
     {
         await using var scope = scopes.CreateAsyncScope();

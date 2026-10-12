@@ -14,7 +14,14 @@ using Npgsql;
 
 namespace Infrastructure.ApplicationServices.Orchestration;
 
-/// <summary>Authorizes and atomically admits a credential-free SaaS deployment.</summary>
+/// <summary>
+///     Authorizes and atomically admits a credential-free SaaS deployment.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
 public sealed class CloudDeploymentRunService(
     AutoMateDbContext dbContext,
     IGitHubAppCredentials githubApp,
@@ -24,7 +31,17 @@ public sealed class CloudDeploymentRunService(
     private static readonly Regex RegistryPattern = new(
         "^[a-z0-9][a-z0-9-]*\\.azurecr\\.io$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Creates or returns the request identified by the user's idempotency key.
+    /// </summary>
+    /// <param name="start">The owner-authorized cloud launch request and stable idempotency key.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the newly admitted or idempotently reused cloud-run receipt.</returns>
+    /// <exception cref="ArgumentException">A valid user, project, and idempotency key are required.</exception>
+    /// <exception cref="UnauthorizedAccessException">The cloud project is unavailable to this user.</exception>
+    /// <exception cref="InvalidOperationException">
+    ///     The repository does not match the selected project.
+    /// </exception>
     public async Task<CloudDeploymentReceipt> StartAsync(CloudDeploymentStart start,
         CancellationToken cancellationToken = default)
     {
@@ -79,7 +96,13 @@ public sealed class CloudDeploymentRunService(
         throw new InvalidOperationException("Cloud deployment admission could not be completed.");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Gets a run only if it belongs to the requesting user.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="runId">The durable cloud-run identity.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the owned run receipt, or null when no authorized run matches.</returns>
     public async Task<CloudDeploymentReceipt?> GetAsync(Guid userId, Guid runId,
         CancellationToken cancellationToken = default)
     {
@@ -88,7 +111,13 @@ public sealed class CloudDeploymentRunService(
         return run is null ? null : Receipt(run);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Finds the newest run for an authorized project, including its queued age.
+    /// </summary>
+    /// <param name="userId">The internal AutoMate user identity.</param>
+    /// <param name="projectId">The project identity used for authorization or correlation.</param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
+    /// <returns>A task returning the owned run receipt, or null when no authorized run matches.</returns>
     public async Task<CloudDeploymentReceipt?> GetLatestForProjectAsync(Guid userId, Guid projectId,
         CancellationToken cancellationToken = default)
     {
@@ -99,7 +128,18 @@ public sealed class CloudDeploymentRunService(
         return run is null ? null : Receipt(run);
     }
 
-    /// <summary>Checks the queue limit and persists the run and wakeup in one serializable transaction.</summary>
+    /// <summary>
+    ///     Checks the queue limit and persists the run and wakeup in one serializable transaction.
+    /// </summary>
+    /// <param name="start">Absolute observation-window start or owner-authorized cloud launch request.</param>
+    /// <param name="registry">Selected container registry server.</param>
+    /// <param name="installationId">The verified GitHub App installation identity.</param>
+    /// <param name="repositoryId">Verified numeric GitHub repository identity.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the safe current phase and timing of the owned cloud run.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     Your cloud deployment queue is full. Try again in about 30 seconds.
+    /// </exception>
     private async Task<CloudDeploymentReceipt> AdmitAsync(CloudDeploymentStart start, string registry,
         long installationId, long repositoryId, CancellationToken cancellationToken)
     {
@@ -146,13 +186,25 @@ public sealed class CloudDeploymentRunService(
         return Receipt(run);
     }
 
-    /// <summary>Projects a public receipt without exposing protected configuration.</summary>
+    /// <summary>
+    ///     Projects a public receipt without exposing protected configuration.
+    /// </summary>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <returns>The safe current phase and timing of the owned cloud run.</returns>
     private static CloudDeploymentReceipt Receipt(CloudDeploymentRun run)
     {
         return new CloudDeploymentReceipt(run.Id, run.Phase, run.CreatedAt, run.FailureReason);
     }
 
-    /// <summary>Prevents one idempotency key from silently representing a different target.</summary>
+    /// <summary>
+    ///     Prevents one idempotency key from silently representing a different target.
+    /// </summary>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="start">Absolute observation-window start or owner-authorized cloud launch request.</param>
+    /// <returns>The safe current phase and timing of the owned cloud run.</returns>
+    /// <exception cref="InvalidOperationException">
+    ///     The idempotency key belongs to a different deployment request.
+    /// </exception>
     private static CloudDeploymentReceipt ReceiptForSameRequest(CloudDeploymentRun run,
         CloudDeploymentStart start)
     {

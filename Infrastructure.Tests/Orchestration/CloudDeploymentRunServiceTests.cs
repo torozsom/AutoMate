@@ -13,10 +13,15 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Orchestration;
 
-/// <summary>Verifies SaaS admission authorization, idempotency, quota, and encrypted snapshots.</summary>
+/// <summary>
+///     Verifies SaaS admission authorization, idempotency, quota, and encrypted snapshots.
+/// </summary>
 public sealed class CloudDeploymentRunServiceTests
 {
-    /// <summary>Repeated submissions share one durable run and never persist a raw token.</summary>
+    /// <summary>
+    ///     Repeated submissions share one durable run and never persist a raw token.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Start_is_idempotent_and_stores_a_protected_token_free_snapshot()
     {
@@ -39,7 +44,10 @@ public sealed class CloudDeploymentRunServiceTests
         persisted.Should().NotContain("very-secret-value").And.NotContain("oauth-user-token");
     }
 
-    /// <summary>One account cannot fill another account's queue or submit to its project.</summary>
+    /// <summary>
+    ///     One account cannot fill another account's queue or submit to its project.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Admission_enforces_owner_and_per_user_queue_limit()
     {
@@ -55,7 +63,9 @@ public sealed class CloudDeploymentRunServiceTests
         await denied.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
-    /// <summary>Isolated SQLite fixture uses the production EF model and a shared data protector.</summary>
+    /// <summary>
+    ///     Isolated SQLite fixture uses the production EF model and a shared data protector.
+    /// </summary>
     private sealed class Fixture : IAsyncDisposable
     {
         /// <summary>Open in-memory connection used by all fixture queries.</summary>
@@ -70,14 +80,20 @@ public sealed class CloudDeploymentRunServiceTests
         /// <summary>Owned remote project.</summary>
         private Guid ProjectId { get; } = Guid.NewGuid();
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Releases owned fixture services, connections and background resources.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         public async ValueTask DisposeAsync()
         {
             await Db.DisposeAsync();
             await Connection.DisposeAsync();
         }
 
-        /// <summary>Creates a schema and a user-owned remote project.</summary>
+        /// <summary>
+        ///     Creates a schema and a user-owned remote project.
+        /// </summary>
+        /// <returns>A task returning a seeded fixture owning its database and dependencies.</returns>
         public static async Task<Fixture> CreateAsync()
         {
             var fixture = new Fixture();
@@ -88,48 +104,80 @@ public sealed class CloudDeploymentRunServiceTests
             await fixture.Db.Database.EnsureCreatedAsync();
             fixture.Db.Users.Add(new RemoteUser
             {
-                Id = fixture.UserId, AccountId = "123", Email = "user@example.test", Username = "user",
-                AzureRefreshToken = "refresh", AzureTenantId = "tenant", AzureSubscriptionId = "subscription"
+                Id = fixture.UserId,
+                AccountId = "123",
+                Email = "user@example.test",
+                Username = "user",
+                AzureRefreshToken = "refresh",
+                AzureTenantId = "tenant",
+                AzureSubscriptionId = "subscription"
             });
             fixture.Db.Applications.Add(new Domain.Entities.Application
             {
-                Id = fixture.ProjectId, UserId = fixture.UserId, Name = "web",
-                SourceType = SourceType.Remote, SourcePathOrUrl = "https://github.com/acme/web"
+                Id = fixture.ProjectId,
+                UserId = fixture.UserId,
+                Name = "web",
+                SourceType = SourceType.Remote,
+                SourcePathOrUrl = "https://github.com/acme/web"
             });
             await fixture.Db.SaveChangesAsync();
             return fixture;
         }
 
-        /// <summary>Builds a service with a one-item queue for quota verification.</summary>
+        /// <summary>
+        ///     Builds a service with a one-item queue for quota verification.
+        /// </summary>
+        /// <returns>The configured cloud deployment run service instance or response for this scenario.</returns>
         public CloudDeploymentRunService Service()
         {
             return new CloudDeploymentRunService(Db, new StubGitHubApp(),
                 Options.Create(new CloudSaasOptions { MaxQueuedPerUser = 1 }));
         }
 
-        /// <summary>Builds a valid request for the owned project.</summary>
+        /// <summary>
+        ///     Builds a valid request for the owned project.
+        /// </summary>
+        /// <param name="key">Fixed connection-status query key.</param>
+        /// <returns>The configured cloud deployment start instance or response for this scenario.</returns>
         public CloudDeploymentStart Start(string key)
         {
             return new CloudDeploymentStart(UserId, ProjectId, key, "acme", "web",
                 "oauth-user-token", new DeploymentConfigDto
                 {
-                    ProjectId = ProjectId, CloudRegistryName = "customer.azurecr.io",
+                    ProjectId = ProjectId,
+                    CloudRegistryName = "customer.azurecr.io",
                     EnvironmentName = "Production"
                 }, new ProjectMetadataDto(), "web", ".");
         }
     }
 
-    /// <summary>Offline GitHub App authorization stub.</summary>
+    /// <summary>
+    ///     Offline GitHub App authorization stub.
+    /// </summary>
     private sealed class StubGitHubApp : IGitHubAppCredentials
     {
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies fixed synthetic installation and repository identities.
+        /// </summary>
+        /// <param name="userAccessToken">
+        ///     The initiating user token used to verify repository access; ignored by this fixture.
+        /// </param>
+        /// <param name="owner">Capture provider or owner name used by the fixture; ignored by this fixture.</param>
+        /// <param name="repository">The GitHub repository name; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the grouped synthetic identities or fixture observations.</returns>
         public Task<(long InstallationId, long RepositoryId)> ResolveRepositoryAsync(string userAccessToken,
             string owner, string repository, CancellationToken cancellationToken)
         {
             return Task.FromResult((17L, 42L));
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Supplies a fixed synthetic installation token without contacting GitHub.
+        /// </summary>
+        /// <param name="installationId">The verified GitHub App installation identity; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the synthetic text produced for this scenario.</returns>
         public Task<string> CreateInstallationTokenAsync(long installationId,
             CancellationToken cancellationToken)
         {

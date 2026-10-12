@@ -1,5 +1,17 @@
 # Infrastructure Tests
 
+## Source documentation
+
+Test types, scenarios, constructors and private helpers use multiline XML summaries. Include matching parameter and
+type-parameter descriptions, return/completion semantics and confirmed escaping failures. Fakes describe their actual
+recording, ignored inputs, fixed responses and deliberate rejection paths rather than inheriting production promises.
+Fields and properties may use concise single-line summaries. Local functions also have XML comments, with narrowly
+scoped CS1587 suppression because C# does not emit their XML documentation. Tested exceptions inside assertion
+callbacks are scenario evidence rather than escaping method contracts.
+
+The complete review of both test projects and executable-code comparisons is recorded in the ignored
+`.artifacts/tests-doc-audit/report.md` verification artifact.
+
 Azure runtime tests verify database numeric persistence without terminal summaries. Azure AI tests cover finite
 rejection classifications, exact evidence, field bounds, incomplete/refused/malformed envelopes and compatible v2
 empty sections; worker fixtures verify safe persisted codes survive owner-authorized readback without partial output.
@@ -188,4 +200,6 @@ arbitrary provider response messages.
 
 ## Source organization
 
-See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard layouts.
+See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
+existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
+layouts.

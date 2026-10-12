@@ -1,6 +1,8 @@
 namespace Domain.Entities;
 
-/// <summary>Durable tenant delivery lease and loss accounting, without diagnostic payloads.</summary>
+/// <summary>
+///     Durable tenant delivery lease and loss accounting, without diagnostic payloads.
+/// </summary>
 public sealed class TelemetryTenantState : BaseEntity
 {
     /// <summary>Owner whose stream is serialized by this lease.</summary>

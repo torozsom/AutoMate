@@ -6,7 +6,8 @@ namespace Web.Components.Shared;
 internal static class GitHubRepositoryUrlParser
 {
     /// <summary>
-    ///     Attempts to extract the owner and repository name from HTTP(S), SSH, or path-like GitHub repository URLs.
+    ///     Extracts owner/name pairs from absolute, SSH or path-like repository references without
+    ///     validating the host.
     /// </summary>
     /// <param name="repositoryUrl">The repository URL or owner/name path saved for the application.</param>
     /// <param name="repository">The parsed repository reference when parsing succeeds.</param>

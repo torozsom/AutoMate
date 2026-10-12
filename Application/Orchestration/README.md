@@ -67,7 +67,10 @@ faults during host shutdown without changing admission limits or per-project ord
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
-- `Cloud/` — `Cloud/CloudDeploymentStart.cs`, `Cloud/CloudSaasOptions.cs`, `Cloud/GitHubWorkflowMonitoringOptions.cs`, `Cloud/ICloudDeploymentOrchestrator.cs`.
-- `Jobs/` — `Jobs/DeploymentConcurrencyOptions.cs`, `Jobs/DeploymentJob.cs`, `Jobs/DeploymentJobQueue.cs`, `Jobs/DeploymentJobWorker.cs`, `Jobs/IDeploymentJobQueue.cs`, `Jobs/QueuedDeploymentJob.cs`, `Jobs/DeploymentResourceConflictException.cs`.
+- `Cloud/` — `Cloud/CloudDeploymentStart.cs`, `Cloud/CloudSaasOptions.cs`, `Cloud/GitHubWorkflowMonitoringOptions.cs`,
+  `Cloud/ICloudDeploymentOrchestrator.cs`.
+- `Jobs/` — `Jobs/DeploymentConcurrencyOptions.cs`, `Jobs/DeploymentJob.cs`, `Jobs/DeploymentJobQueue.cs`,
+  `Jobs/DeploymentJobWorker.cs`, `Jobs/IDeploymentJobQueue.cs`, `Jobs/QueuedDeploymentJob.cs`,
+  `Jobs/DeploymentResourceConflictException.cs`.
 - `Local/` — `Local/ILocalDeploymentOrchestrator.cs`.
 - `Status/` — `Status/DeploymentStatusNotifier.cs`, `Status/IDeploymentStatusNotifier.cs`.

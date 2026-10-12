@@ -12,10 +12,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Ai;
 
-/// <summary>Azure-specific route/key/error checks plus the full shared Responses protocol contract.</summary>
+/// <summary>
+///     Azure-specific route/key/error checks plus the full shared Responses protocol contract.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProviderContractTests(true)
 {
-    /// <summary>Rejected Azure envelopes retain only finite classifications and never provider prose.</summary>
+    /// <summary>
+    ///     Rejected Azure envelopes retain only finite classifications and never provider prose.
+    /// </summary>
+    /// <param name="kind">Synthetic operation or response kind.</param>
+    /// <param name="reason">Expected finite rejection or failure reason.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("incomplete", AnalysisResultRejection.IncompleteOutput)]
     [InlineData("refusal", AnalysisResultRejection.Refusal)]
@@ -68,7 +76,10 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         Assert.DoesNotContain("private-value", error.ToString());
     }
 
-    /// <summary>Azure-supported descriptions teach strict server limits without unsupported schema keywords.</summary>
+    /// <summary>
+    ///     Azure-supported descriptions teach strict server limits without unsupported schema keywords.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task V2_empty_sections_are_valid_and_request_documents_server_limits()
     {
@@ -113,7 +124,10 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         Assert.Equal("No overview was recorded for the selected evidence.", result.Summary);
     }
 
-    /// <summary>Azure sends the deployment alias and preserves the returned model identity separately.</summary>
+    /// <summary>
+    ///     Azure sends the deployment alias and preserves the returned model identity separately.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Deployment_alias_and_actual_model_have_distinct_provenance()
     {
@@ -154,7 +168,13 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         Assert.Null(result.EstimatedCost);
     }
 
-    /// <summary>Nested key/resource reload cancels headers/body I/O and makes the following call unavailable.</summary>
+    /// <summary>
+    ///     Nested key/resource reload cancels headers/body I/O and makes the following call
+    ///     unavailable.
+    /// </summary>
+    /// <param name="readingBody">Whether to block response-body reading instead of the HTTP-header phase.</param>
+    /// <param name="setting">Option key overridden by the scenario.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(false, "ApiKey")]
     [InlineData(true, "ApiKey")]
@@ -193,7 +213,12 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         Assert.Equal(1, handler.Calls);
     }
 
-    /// <summary>Exact resource matching rejects credential-bearing, proxy, alternate-port and noncanonical URLs.</summary>
+    /// <summary>
+    ///     Exact resource matching rejects credential-bearing, proxy, alternate-port and noncanonical
+    ///     URLs.
+    /// </summary>
+    /// <param name="endpoint">Parsed HTTP(S) collector endpoint, or null when invalid or absent.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("https://other.openai.azure.com/openai/v1/")]
     [InlineData("http://automate-test.openai.azure.com/openai/v1/")]
@@ -214,7 +239,13 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() => provider.AnalyzeAsync(Request()));
     }
 
-    /// <summary>A direct OpenAI key cannot satisfy missing/unsafe Azure credentials or an invalid resource identity.</summary>
+    /// <summary>
+    ///     A direct OpenAI key cannot satisfy missing/unsafe Azure credentials or an invalid resource
+    ///     identity.
+    /// </summary>
+    /// <param name="key">Fixed connection-status query key.</param>
+    /// <param name="resource">Recorded resource name for these metric samples.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData(null, "automate-test")]
     [InlineData("", "automate-test")]
@@ -236,7 +267,14 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
                      AzureOpenAiAnalysisProvider.ReadOptions(configuration).ApprovesRoute(settings));
     }
 
-    /// <summary>Azure numeric rate-limit codes require a server retry hint; unknown/quota envelopes remain terminal.</summary>
+    /// <summary>
+    ///     Azure numeric rate-limit codes require a server retry hint; unknown/quota envelopes remain
+    ///     terminal.
+    /// </summary>
+    /// <param name="code">Synthetic fixed provider code or HTTP status representation.</param>
+    /// <param name="hint">Whether the request supplies the optional provider hint.</param>
+    /// <param name="transient">Whether to inject a transient failure.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("429", true, true)]
     [InlineData("429", false, false)]
@@ -268,7 +306,12 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         Assert.Equal(1, calls);
     }
 
-    /// <summary>Creates isolated protected configuration with a deliberately different direct-provider key.</summary>
+    /// <summary>
+    ///     Creates isolated protected configuration with a deliberately different direct-provider key.
+    /// </summary>
+    /// <param name="key">Fixed connection-status query key.</param>
+    /// <param name="resource">Recorded resource name for these metric samples.</param>
+    /// <returns>The configured iconfiguration root instance or response for this scenario.</returns>
     private static IConfigurationRoot Configuration(string? key = "test-key", string? resource = "automate-test")
     {
         return new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -279,7 +322,14 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         }).Build();
     }
 
-    /// <summary>Constructs the real Azure adapter with synthetic transport and explicit metadata authorization.</summary>
+    /// <summary>
+    ///     Constructs the real Azure adapter with synthetic transport and explicit metadata
+    ///     authorization.
+    /// </summary>
+    /// <param name="client">Fixture HTTP or Docker client.</param>
+    /// <param name="configuration">Deployment settings or host configuration used by this operation.</param>
+    /// <param name="settings">Synthetic provider or telemetry settings, optionally using fixture defaults.</param>
+    /// <returns>The configured Azure open ai analysis provider instance or response for this scenario.</returns>
     private static AzureOpenAiAnalysisProvider CreateProvider(HttpClient client, IConfiguration configuration,
         AiAnalysisOptions settings)
     {
@@ -287,7 +337,10 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
             AnalysisResultTests.Validator(), new DiagnosticRedactor(), new AnalysisEgressPolicyTests.Authorizer());
     }
 
-    /// <summary>Produces a scoped request without reading deployment data.</summary>
+    /// <summary>
+    ///     Produces a scoped request without reading deployment data.
+    /// </summary>
+    /// <returns>The configured llm analysis request instance or response for this scenario.</returns>
     private static LlmAnalysisRequest Request()
     {
         return new LlmAnalysisRequest("Build failed.", [], Guid.NewGuid());

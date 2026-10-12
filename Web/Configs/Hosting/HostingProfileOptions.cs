@@ -10,12 +10,14 @@ public sealed class HostingProfileOptions
     /// <summary>The configuration section name.</summary>
     public const string SectionName = "HostingProfile";
 
-    /// <summary>
-    ///     Gets or sets the profile name. Supported values are <c>SelfHosted</c> and <c>SaaS</c>.
-    /// </summary>
+    /// <summary>Gets or sets the profile name. Supported values are <c>SelfHosted</c> and <c>SaaS</c>.</summary>
     public string Mode { get; init; } = "SelfHosted";
 
-    /// <summary>Creates the server-enforced deployment capabilities for the selected profile.</summary>
+    /// <summary>
+    ///     Creates the server-enforced deployment capabilities for the selected profile.
+    /// </summary>
+    /// <returns>Server-enforced capability flags for the configured hosting profile.</returns>
+    /// <exception cref="InvalidOperationException">Required host or OAuth configuration is missing.</exception>
     public IDeploymentCapabilities ToCapabilities()
     {
         return Mode.Trim().ToUpperInvariant() switch

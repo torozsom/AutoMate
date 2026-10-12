@@ -49,5 +49,7 @@ resource-level Stopped state; the explicit start resumes it without changing sca
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
 
 - `Catalog/` — `Catalog/TemplateManifestCatalog.cs`, `Catalog/TemplatePaths.cs`, `Catalog/TemplateRuleMatcher.cs`.
-- `Models/` — `Models/CloudDeploymentSecretNames.cs`, `Models/TemplateModelFactory.cs`, `Models/TemplateNameNormalizer.cs`.
-- `Rendering/` — `Rendering/ScribanTemplateRenderer.cs`, `Rendering/TemplateFileWriter.cs`, `Rendering/TemplatingService.cs`.
+- `Models/` — `Models/CloudDeploymentSecretNames.cs`, `Models/TemplateModelFactory.cs`,
+  `Models/TemplateNameNormalizer.cs`.
+- `Rendering/` — `Rendering/ScribanTemplateRenderer.cs`, `Rendering/TemplateFileWriter.cs`,
+  `Rendering/TemplatingService.cs`.

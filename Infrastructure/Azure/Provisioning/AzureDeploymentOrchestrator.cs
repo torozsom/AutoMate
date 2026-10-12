@@ -7,13 +7,15 @@ namespace Infrastructure.Azure;
 /// <summary>
 ///     Uses Azure Resource Manager to prepare OIDC trust for GitHub Actions cloud deployments.
 /// </summary>
+/// <param name="httpClientFactory">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class AzureDeploymentOrchestrator(
     IHttpClientFactory httpClientFactory,
     ILogger<AzureDeploymentOrchestrator> logger) : IAzureDeploymentOrchestrator
 {
-    /// <summary>
-    ///     Handles direct ARM calls for managed identity federated credentials.
-    /// </summary>
+    /// <summary>Handles direct ARM calls for managed identity federated credentials.</summary>
     private readonly AzureFederatedCredentialService _federatedCredentialService =
         new(httpClientFactory, logger);
 
@@ -26,12 +28,21 @@ public sealed class AzureDeploymentOrchestrator(
     private readonly AzureResourceProviderRegistrar _resourceProviderRegistrar =
         new(httpClientFactory, logger);
 
-    /// <summary>
-    ///     Assigns resource-group permissions to the managed identity used by GitHub Actions.
-    /// </summary>
+    /// <summary>Assigns resource-group permissions to the managed identity used by GitHub Actions.</summary>
     private readonly AzureRoleAssignmentService _roleAssignmentService = new(httpClientFactory);
 
-    /// <inheritdoc />
+    /// <summary>
+    ///     Ensures a user-assigned managed identity and federated credential exist for the GitHub
+    ///     repository branch.
+    /// </summary>
+    /// <param name="credentials">The connected user's Azure credentials.</param>
+    /// <param name="config">The cloud deployment configuration.</param>
+    /// <param name="repositoryOwner">The GitHub repository owner.</param>
+    /// <param name="repositoryName">The GitHub repository name.</param>
+    /// <param name="branchName">The branch that will run the workflow.</param>
+    /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
+    /// <returns>A task returning oIDC login values to store as GitHub repository secrets.</returns>
+    /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
     public async Task<AzureOidcSetupResultDto> EnsureFederatedIdentityAsync(AzureCloudCredentialsDto credentials,
         DeploymentConfigDto config, string repositoryOwner, string repositoryName, string branchName,
         CancellationToken cancellationToken = default)

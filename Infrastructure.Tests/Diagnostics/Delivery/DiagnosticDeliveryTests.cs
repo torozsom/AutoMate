@@ -10,10 +10,18 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Tests.Diagnostics;
 
-/// <summary>Verifies sink deadlines, durable confirmations and later-event recovery without database payload writes.</summary>
+/// <summary>
+///     Verifies sink deadlines, durable confirmations and later-event recovery without database
+///     payload writes.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class DiagnosticDeliveryTests
 {
-    /// <summary>A stalled write or provider cancellation is isolated from later redacted output.</summary>
+    /// <summary>
+    ///     A stalled write or provider cancellation is isolated from later redacted output.
+    /// </summary>
+    /// <param name="failure">Failure flag or failure mode injected by the fixture.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Theory]
     [InlineData("storage-timeout")]
     [InlineData("delivery-timeout")]
@@ -43,7 +51,11 @@ public sealed class DiagnosticDeliveryTests
         }
     }
 
-    /// <summary>Only durable storage confirmation advances a collector cursor, regardless of live delivery success.</summary>
+    /// <summary>
+    ///     Only durable storage confirmation advances a collector cursor, regardless of live delivery
+    ///     success.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Durable_ingestion_retains_confirmation_when_live_delivery_times_out()
     {
@@ -64,7 +76,11 @@ public sealed class DiagnosticDeliveryTests
         Assert.Single(store.Saved);
     }
 
-    /// <summary>Host shutdown cancels the pending write instead of reporting it as a recoverable storage outage.</summary>
+    /// <summary>
+    ///     Host shutdown cancels the pending write instead of reporting it as a recoverable storage
+    ///     outage.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Durable_ingestion_propagates_caller_cancellation()
     {
@@ -78,7 +94,11 @@ public sealed class DiagnosticDeliveryTests
         Assert.Empty(store.Saved);
     }
 
-    /// <summary>The asynchronous dispatcher restores the collector's trace instead of creating an unrelated root.</summary>
+    /// <summary>
+    ///     The asynchronous dispatcher restores the collector's trace instead of creating an unrelated
+    ///     root.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Dispatch_activity_retains_the_ingestion_trace()
     {
@@ -117,7 +137,11 @@ public sealed class DiagnosticDeliveryTests
         }
     }
 
-    /// <summary>Overflow annotations must not reuse the persisted event identity or metric payload they follow.</summary>
+    /// <summary>
+    ///     Overflow annotations must not reuse the persisted event identity or metric payload they
+    ///     follow.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Overflow_marker_has_an_independent_durable_identity()
     {
@@ -144,7 +168,12 @@ public sealed class DiagnosticDeliveryTests
         }
     }
 
-    /// <summary>Creates scoped store access without registering EF or a PostgreSQL diagnostic sink.</summary>
+    /// <summary>
+    ///     Creates scoped store access without registering EF or a PostgreSQL diagnostic sink.
+    /// </summary>
+    /// <param name="store">Controlled persistence sink.</param>
+    /// <param name="live">Controlled live-delivery sink.</param>
+    /// <returns>The configured fixture dependency provider, owned by the caller.</returns>
     private static ServiceProvider Services(TestStore store, TestLive live)
     {
         return new ServiceCollection().AddSingleton<IDeploymentDiagnosticStore>(store)
@@ -153,7 +182,11 @@ public sealed class DiagnosticDeliveryTests
                 { Backend = "LokiMimir", DeliveryMode = "DiskGateway" })).BuildServiceProvider();
     }
 
-    /// <summary>Uses short production-supported deadlines for failure scenarios.</summary>
+    /// <summary>
+    ///     Uses short production-supported deadlines for failure scenarios.
+    /// </summary>
+    /// <param name="services">Fixture dependency provider.</param>
+    /// <returns>The configured deployment diagnostic publisher instance or response for this scenario.</returns>
     private static DeploymentDiagnosticPublisher Publisher(ServiceProvider services)
     {
         return new DeploymentDiagnosticPublisher(new DiagnosticRedactor(),
@@ -162,7 +195,10 @@ public sealed class DiagnosticDeliveryTests
             NullLogger<DeploymentDiagnosticPublisher>.Instance, services.GetRequiredService<IServiceScopeFactory>());
     }
 
-    /// <summary>Builds non-sensitive routing metadata; each test assigns its untrusted message separately.</summary>
+    /// <summary>
+    ///     Builds non-sensitive routing metadata; each test assigns its untrusted message separately.
+    /// </summary>
+    /// <returns>The configured deployment diagnostic event instance or response for this scenario.</returns>
     private static DeploymentDiagnosticEvent Event()
     {
         return new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(), DeploymentDiagnosticSource.DockerCompose,
@@ -170,7 +206,9 @@ public sealed class DiagnosticDeliveryTests
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
     }
 
-    /// <summary>Simulates storage failure once and retains only confirmed, safe events.</summary>
+    /// <summary>
+    ///     Simulates storage failure once and retains only confirmed, safe events.
+    /// </summary>
     private sealed class TestStore : IDeploymentDiagnosticStore
     {
         /// <summary>Next storage failure scenario.</summary>
@@ -189,7 +227,15 @@ public sealed class DiagnosticDeliveryTests
         public TaskCompletionSource<DeploymentDiagnosticEvent> Marker { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records persistence and trace observations while optionally injecting timeout or
+        ///     cancellation.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="channel">Recorded log channel to select; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A task returning the fixture count or ordering position.</returns>
+        /// <exception cref="OperationCanceledException">Cancellation is requested or deliberately injected by the fixture.</exception>
         public async Task<long> PersistAsync(DeploymentDiagnosticEvent e, string? channel,
             CancellationToken token = default)
         {
@@ -204,27 +250,57 @@ public sealed class DiagnosticDeliveryTests
             return Saved.Count;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects read recent because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deploymentId">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotImplementedException">This port member is not implemented by the fixture.</exception>
         public Task<DeploymentTerminalHistory> ReadRecentAsync(Guid projectId, Guid deploymentId, int limit,
             CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects read after because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="deploymentId">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="cursor">Opaque history position, or null to read the latest page; ignored by this fixture.</param>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotImplementedException">This port member is not implemented by the fixture.</exception>
         public Task<DeploymentTerminalHistory> ReadAfterAsync(Guid projectId, Guid deploymentId, long cursor, int limit,
             CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects delete expired because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotImplementedException">This port member is not implemented by the fixture.</exception>
         public Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Rejects build context because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="deploymentId">Synthetic deployment identity; ignored by this fixture.</param>
+        /// <param name="maximumCharacters">The maximum permitted text length; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotImplementedException">This port member is not implemented by the fixture.</exception>
         public Task<string> BuildContextAsync(Guid deploymentId, int maximumCharacters,
             CancellationToken cancellationToken = default)
         {
@@ -232,7 +308,9 @@ public sealed class DiagnosticDeliveryTests
         }
     }
 
-    /// <summary>Simulates a slow transport write that cooperates with cancellation.</summary>
+    /// <summary>
+    ///     Simulates a slow transport write that cooperates with cancellation.
+    /// </summary>
     private sealed class TestLive : ILogStreamer
     {
         /// <summary>Whether the next terminal write stalls until canceled.</summary>
@@ -244,7 +322,13 @@ public sealed class DiagnosticDeliveryTests
         /// <summary>Signals successful delivery of the event after the simulated failure.</summary>
         public TaskCompletionSource Recovered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Records terminal delivery and optionally stalls until cancellation to exercise recovery.
+        /// </summary>
+        /// <param name="log">Source-aware redacted terminal record.</param>
+        /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <returns>A pending operation that completes through cancellation rather than producing a value.</returns>
+        /// <exception cref="OperationCanceledException">The caller cancellation or fixture deadline ends the pending operation.</exception>
         public async Task StreamTerminalLogAsync(DeploymentTerminalLog log, CancellationToken token = default)
         {
             if (StallNext)
@@ -257,13 +341,29 @@ public sealed class DiagnosticDeliveryTests
             if (log.Message == "password=[REDACTED]") Recovered.TrySetResult();
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live stream terminal notice work.
+        /// </summary>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="message">
+        ///     Display message; secret-bearing provider text must not be supplied; ignored by this fixture.
+        /// </param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task StreamTerminalNoticeAsync(Guid project, string message, CancellationToken token = default)
         {
             return Task.CompletedTask;
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        ///     Completes immediately without executing live stream container metrics work.
+        /// </summary>
+        /// <param name="project">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="container">Recorded container identity to select; ignored by this fixture.</param>
+        /// <param name="cpu">Provider CPU display value; ignored by this fixture.</param>
+        /// <param name="memory">Provider memory display value; ignored by this fixture.</param>
+        /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>An already completed task; this fixture performs no work.</returns>
         public Task StreamContainerMetricsAsync(Guid project, string container, string cpu, string memory,
             CancellationToken token = default)
         {

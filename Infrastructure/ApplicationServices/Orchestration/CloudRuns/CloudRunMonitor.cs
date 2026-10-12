@@ -16,7 +16,29 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.ApplicationServices.Orchestration;
 
-/// <summary>Applies verified workflow events and reconciles runs without occupying launch slots.</summary>
+/// <summary>
+///     Applies verified workflow events and reconciles runs without occupying launch slots.
+/// </summary>
+/// <param name="dbContext">
+///     Application metadata context used for ownership, leases and persisted state.
+/// </param>
+/// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+/// <param name="github">Provides the git hub service boundary used by this operation.</param>
+/// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+/// <param name="monitoringOptions">
+///     Provides the configured limits and endpoint settings for this service.
+/// </param>
+/// <param name="azureStreamer">
+///     Provides the azure container app runtime streamer boundary used by this operation.
+/// </param>
+/// <param name="azureCredentials">
+///     Resolves current scoped Azure authorization without logging credentials.
+/// </param>
+/// <param name="statusNotifier">Publishes deployment transitions to in-process subscribers.</param>
+/// <param name="loggerFactory">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class CloudRunMonitor(
     AutoMateDbContext dbContext,
     IGitHubAppCredentials githubApp,
@@ -29,14 +51,21 @@ public sealed class CloudRunMonitor(
     IDeploymentStatusNotifier statusNotifier,
     ILoggerFactory loggerFactory)
 {
-    /// <summary>Collects normalized GitHub job diagnostics using the existing redacted pipeline.</summary>
+    /// <summary>
+    ///     Collects normalized GitHub job diagnostics using the existing redacted pipeline.
+    /// </summary>
+    /// <returns>The git hub workflow monitor projection derived from the verified inputs.</returns>
     private GitHubWorkflowMonitor CreateWorkflowMonitor()
     {
         return new GitHubWorkflowMonitor(dbContext, github, diagnostics, redactor,
             monitoringOptions.Value, loggerFactory.CreateLogger<GitHubWorkflowMonitor>());
     }
 
-    /// <summary>Claims and processes one verified webhook receipt.</summary>
+    /// <summary>
+    ///     Claims and processes one verified webhook receipt.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning whether the documented process next delivery async condition holds.</returns>
     public async Task<bool> ProcessNextDeliveryAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -129,7 +158,13 @@ public sealed class CloudRunMonitor(
         }
     }
 
-    /// <summary>Shares a provider cooldown with every worker and monitor replica.</summary>
+    /// <summary>
+    ///     Shares a provider cooldown with every worker and monitor replica.
+    /// </summary>
+    /// <param name="installationId">The verified GitHub App installation identity.</param>
+    /// <param name="retryAt">UTC time when the next bounded attempt becomes eligible.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task PauseInstallationAsync(long installationId, DateTimeOffset retryAt,
         CancellationToken cancellationToken)
     {
@@ -145,7 +180,11 @@ public sealed class CloudRunMonitor(
                                                               """, cancellationToken);
     }
 
-    /// <summary>Rechecks one stale run in case its webhook was missed or arrived early.</summary>
+    /// <summary>
+    ///     Rechecks one stale run in case its webhook was missed or arrived early.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning whether the documented reconcile next async condition holds.</returns>
     public async Task<bool> ReconcileNextAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -208,7 +247,13 @@ public sealed class CloudRunMonitor(
         }
     }
 
-    /// <summary>Applies a workflow state transition and persists its redacted diagnostics.</summary>
+    /// <summary>
+    ///     Applies a workflow state transition and persists its redacted diagnostics.
+    /// </summary>
+    /// <param name="run">Verified cloud control record or provider workflow-run metadata.</param>
+    /// <param name="workflow">Verified workflow metadata or its durable checkpoint.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task ApplyWorkflowAsync(CloudDeploymentRun run, GitHubWorkflowRunDto workflow,
         CancellationToken cancellationToken)
     {

@@ -10,7 +10,16 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Azure;
 
-/// <summary>Supervises ACA console/event HTTP streams independently of historical queries and metric polling.</summary>
+/// <summary>
+///     Supervises ACA console/event HTTP streams independently of historical queries and metric
+///     polling.
+/// </summary>
+/// <param name="clients">Configured HTTP transport used for bounded provider requests.</param>
+/// <param name="publisher">Accepts normalized observations for redaction and durable delivery.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="discoveryInterval">Bounded interval between verified replica discovery attempts.</param>
 internal sealed class AzureContainerAppLiveLogs(
     IHttpClientFactory clients,
     IDeploymentDiagnosticPublisher publisher,
@@ -20,7 +29,10 @@ internal sealed class AzureContainerAppLiveLogs(
     /// <summary>Stable ACA version shared with the existing resource-state adapter.</summary>
     private const string ApiVersion = "2024-03-01";
 
-    /// <summary>Replica reconciliation cadence; tests can accelerate it without altering HTTP or cancellation semantics.</summary>
+    /// <summary>
+    ///     Replica reconciliation cadence; tests can accelerate it without altering HTTP or
+    ///     cancellation semantics.
+    /// </summary>
     private readonly TimeSpan _discoveryInterval = discoveryInterval ?? TimeSpan.FromSeconds(15);
 
     /// <summary>Cancelled supervisors awaiting deterministic shutdown.</summary>
@@ -29,7 +41,12 @@ internal sealed class AzureContainerAppLiveLogs(
     /// <summary>One supervised stream inventory per registered deployment.</summary>
     private readonly ConcurrentDictionary<Guid, Session> _sessions = new();
 
-    /// <summary>Renews the polling owner's permission to collect; a stalled or lost lease expires live connections.</summary>
+    /// <summary>
+    ///     Renews the polling owner's permission to collect; a stalled or lost lease expires live
+    ///     connections.
+    /// </summary>
+    /// <param name="target">Verified Azure app, revision and collector lifetime metadata.</param>
+    /// <param name="hostToken">Signals host shutdown.</param>
     internal void Update(AzureLiveLogTarget target, CancellationToken hostToken)
     {
         while (_retired.TryTake(out var retired))
@@ -60,7 +77,11 @@ internal sealed class AzureContainerAppLiveLogs(
         session.Task = RunAsync(session);
     }
 
-    /// <summary>Cancels collection immediately when its project/deployment is retired or another host owns the lease.</summary>
+    /// <summary>
+    ///     Cancels collection immediately when its project/deployment is retired or another host
+    ///     owns the lease.
+    /// </summary>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
     internal void Remove(Guid deployment)
     {
         if (!_sessions.TryRemove(deployment, out var session)) return;
@@ -68,21 +89,34 @@ internal sealed class AzureContainerAppLiveLogs(
         _retired.Add(RetireAsync(session));
     }
 
-    /// <summary>Disposes a session only after its supervisor and all readers have observed cancellation.</summary>
+    /// <summary>
+    ///     Disposes a session only after its supervisor and all readers have observed cancellation.
+    /// </summary>
+    /// <param name="session">Supervised collector session and its owned lifetime.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private static async Task RetireAsync(Session session)
     {
         await session.Task;
         session.Cancellation.Dispose();
     }
 
-    /// <summary>Observes every connection task before the hosted coordinator finishes shutdown.</summary>
+    /// <summary>
+    ///     Observes every connection task before the hosted coordinator finishes shutdown.
+    /// </summary>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task StopAsync()
     {
         foreach (var id in _sessions.Keys) Remove(id);
         await Task.WhenAll(_retired);
     }
 
-    /// <summary>Historical rows with exact replica/time/text identity can reuse a recent durable live acknowledgement.</summary>
+    /// <summary>
+    ///     Historical rows with exact replica/time/text identity can reuse a recent durable live
+    ///     acknowledgement.
+    /// </summary>
+    /// <param name="deployment">The exact deployment identity or tracked metadata for this operation.</param>
+    /// <param name="record">Normalized Azure event with its original timestamp and ingestion cursor.</param>
+    /// <returns>Whether the documented was confirmed live condition holds.</returns>
     internal bool WasConfirmedLive(Guid deployment, AzureMonitorLogRecord record)
     {
         return record.ReplicaName.Length > 0 && _sessions.TryGetValue(deployment, out var session) &&
@@ -90,7 +124,16 @@ internal sealed class AzureContainerAppLiveLogs(
                    record.RevisionName, record.ContainerName, record.ReplicaName, record.Stream));
     }
 
-    /// <summary>Does not infer equivalence when Azure changes timestamps or omits the replica identity.</summary>
+    /// <summary>
+    ///     Does not infer equivalence when Azure changes timestamps or omits the replica identity.
+    /// </summary>
+    /// <param name="time">The observation timestamp to assign to a UTC bucket.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="revision">Exact verified Azure revision identity.</param>
+    /// <param name="container">Verified owned container identity used for observation routing.</param>
+    /// <param name="replica">Verified Container App replica identity.</param>
+    /// <param name="stream">The typed diagnostic output stream.</param>
+    /// <returns>The stable identity derived from the documented metadata or content.</returns>
     private static string ConsoleFingerprint(DateTimeOffset time, string message, string revision,
         string container, string replica, string stream)
     {
@@ -98,7 +141,12 @@ internal sealed class AzureContainerAppLiveLogs(
             $"{time:O}\n{revision}\n{container}\n{replica}\n{stream}\n{message}")));
     }
 
-    /// <summary>Reconciles replica changes and independently retries completed/failed streams every fifteen seconds.</summary>
+    /// <summary>
+    ///     Reconciles replica changes and independently retries completed/failed streams every
+    ///     fifteen seconds.
+    /// </summary>
+    /// <param name="session">Supervised collector session and its owned lifetime.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task RunAsync(Session session)
     {
         var connections = new Dictionary<string, Connection>(StringComparer.Ordinal);
@@ -170,7 +218,14 @@ internal sealed class AzureContainerAppLiveLogs(
         }
     }
 
-    /// <summary>Enumerates only the verified revision and uses Azure's event endpoint as the trusted stream origin.</summary>
+    /// <summary>
+    ///     Enumerates only the verified revision and uses Azure's event endpoint as the trusted
+    ///     stream origin.
+    /// </summary>
+    /// <param name="target">Verified Azure app, revision and collector lifetime metadata.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the discover async selection with its documented bounds and ordering.</returns>
+    /// <exception cref="InvalidOperationException">ACA did not return a trusted stream endpoint.</exception>
     internal async Task<IReadOnlyList<AzureLiveLogEndpoint>> DiscoverAsync(AzureLiveLogTarget target,
         CancellationToken cancellationToken)
     {
@@ -221,7 +276,14 @@ internal sealed class AzureContainerAppLiveLogs(
         return endpoints;
     }
 
-    /// <summary>Refreshes ACA credentials for each reconnect and never blocks polling on the streaming response body.</summary>
+    /// <summary>
+    ///     Refreshes ACA credentials for each reconnect and never blocks polling on the streaming
+    ///     response body.
+    /// </summary>
+    /// <param name="session">Supervised collector session and its owned lifetime.</param>
+    /// <param name="endpoint">Verified provider endpoint selected for this operation.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task FollowAsync(Session session, AzureLiveLogEndpoint endpoint, CancellationToken cancellationToken)
     {
         try
@@ -301,9 +363,15 @@ internal sealed class AzureContainerAppLiveLogs(
     }
 
     /// <summary>
-    ///     Reads bounded newline JSON records as they arrive; console payload text is not interpreted as platform
-    ///     metadata.
+    ///     Reads bounded newline JSON records as they arrive; console payload text is not
+    ///     interpreted as platform metadata.
     /// </summary>
+    /// <param name="endpoint">Verified provider endpoint selected for this operation.</param>
+    /// <param name="accessToken">The provider access token; never include it in diagnostics.</param>
+    /// <param name="receive">Callback receiving bounded normalized live records.</param>
+    /// <param name="connected">Callback invoked after the live stream connects.</param>
+    /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     internal async Task ReadAsync(AzureLiveLogEndpoint endpoint, string accessToken,
         Func<AzureLiveLogRecord, Task> receive, Func<Task> connected, CancellationToken cancellationToken)
     {
@@ -344,7 +412,14 @@ internal sealed class AzureContainerAppLiveLogs(
         if (!overflow && TryParse(line.ToString(), endpoint.System, out var last)) await receive(last!);
     }
 
-    /// <summary>Accepts the ACA JSON envelope while retaining provider time, stderr and platform severity.</summary>
+    /// <summary>
+    ///     Accepts the ACA JSON envelope while retaining provider time, stderr and platform
+    ///     severity.
+    /// </summary>
+    /// <param name="line">One bounded source-output line to normalize and redact.</param>
+    /// <param name="system">Whether this endpoint or record represents platform/system output.</param>
+    /// <param name="record">Provider observation or retained diagnostic record to process.</param>
+    /// <returns>True when validation or acquisition succeeds; otherwise false.</returns>
     internal static bool TryParse(string line, bool system, out AzureLiveLogRecord? record)
     {
         record = null;
@@ -382,7 +457,14 @@ internal sealed class AzureContainerAppLiveLogs(
         }
     }
 
-    /// <summary>Preserves replica identity for retry deduplication and routes known database containers explicitly.</summary>
+    /// <summary>
+    ///     Preserves replica identity for retry deduplication and routes known database containers
+    ///     explicitly.
+    /// </summary>
+    /// <param name="target">Verified Azure app, revision and collector lifetime metadata.</param>
+    /// <param name="endpoint">Verified provider endpoint selected for this operation.</param>
+    /// <param name="record">Provider observation or retained diagnostic record to process.</param>
+    /// <returns>The normalized deployment-correlated observation.</returns>
     internal static DeploymentDiagnosticEvent CreateEvent(AzureLiveLogTarget target, AzureLiveLogEndpoint endpoint,
         AzureLiveLogRecord record)
     {
@@ -403,17 +485,23 @@ internal sealed class AzureContainerAppLiveLogs(
                 ["replica"] = endpoint.Replica,
                 ["container"] = endpoint.Container
             }, SourceIdentity: new DeploymentDiagnosticSourceIdentity(endpoint.System
-                    ?
-                    DeploymentDiagnosticComponent.Revision
-                    :
-                    database
+                    ? DeploymentDiagnosticComponent.Revision
+                    : database
                         ? DeploymentDiagnosticComponent.Database
                         : DeploymentDiagnosticComponent.Container,
                 record.Stream, endpoint.Key),
             EventId: new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint))[..16]));
     }
 
-    /// <summary>Uses ARM credentials only on the fixed management origin and disposes responses before returning metadata.</summary>
+    /// <summary>
+    ///     Uses ARM credentials only on the fixed management origin and disposes responses before
+    ///     returning metadata.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
+    /// <param name="method">HTTP method used for the bounded provider request.</param>
+    /// <param name="ct">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning the owned parsed JSON response; the caller must dispose it.</returns>
     private async Task<JsonDocument> ArmAsync(string path, string token, HttpMethod method, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(method,
@@ -426,7 +514,16 @@ internal sealed class AzureContainerAppLiveLogs(
         return await JsonDocument.ParseAsync(body, cancellationToken: ct);
     }
 
-    /// <summary>Publishes bounded per-source status guidance through redaction into the Azure System terminal.</summary>
+    /// <summary>
+    ///     Publishes bounded per-source status guidance through redaction into the Azure System
+    ///     terminal.
+    /// </summary>
+    /// <param name="session">Supervised collector session and its owned lifetime.</param>
+    /// <param name="key">Stable lookup or configuration key.</param>
+    /// <param name="message">The message supplied to the operation.</param>
+    /// <param name="ct">Cancels the underlying operation when observed.</param>
+    /// <param name="severity">The normalized severity used to rank a context group.</param>
+    /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task NoticeAsync(Session session, string key, string message, CancellationToken ct,
         DeploymentDiagnosticSeverity severity = DeploymentDiagnosticSeverity.Warning)
     {
@@ -451,7 +548,12 @@ internal sealed class AzureContainerAppLiveLogs(
         }
     }
 
-    /// <summary>Translates failures without exposing request URLs, bearer tokens or provider response bodies.</summary>
+    /// <summary>
+    ///     Translates failures without exposing request URLs, bearer tokens or provider response
+    ///     bodies.
+    /// </summary>
+    /// <param name="error">Original failure to classify without persisting arbitrary exception text.</param>
+    /// <returns>The failure message derived from the validated input.</returns>
     private static string FailureMessage(Exception error)
     {
         return error is HttpRequestException
@@ -462,7 +564,12 @@ internal sealed class AzureContainerAppLiveLogs(
             : "ACA live logs are temporarily unavailable; AutoMate will reconnect automatically. Historical collection continues.";
     }
 
-    /// <summary>Restricts bearer forwarding to public ACA development endpoints with TLS and no embedded credentials.</summary>
+    /// <summary>
+    ///     Restricts bearer forwarding to public ACA development endpoints with TLS and no embedded
+    ///     credentials.
+    /// </summary>
+    /// <param name="uri">Validated provider endpoint URI.</param>
+    /// <returns>Whether the documented trusted endpoint condition holds.</returns>
     internal static bool TrustedEndpoint(Uri uri)
     {
         return uri.Scheme == Uri.UriSchemeHttps && uri.Port == 443 &&
@@ -470,7 +577,14 @@ internal sealed class AzureContainerAppLiveLogs(
                uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0;
     }
 
-    /// <summary>Reads only string-valued envelope metadata, leaving container payloads opaque.</summary>
+    /// <summary>
+    ///     Reads only string-valued envelope metadata, leaving container payloads opaque.
+    /// </summary>
+    /// <param name="element">
+    ///     JSON value to validate or normalize without retaining arbitrary provider prose.
+    /// </param>
+    /// <param name="name">The recorded display name or fixed metric identity.</param>
+    /// <returns>The string derived from the validated input.</returns>
     private static string String(JsonElement element, string name)
     {
         return element.ValueKind == JsonValueKind.Object &&
@@ -479,7 +593,11 @@ internal sealed class AzureContainerAppLiveLogs(
             : "";
     }
 
-    /// <summary>Owns one deployment's lifetime, latest credentials and bounded confirmed-delivery cache.</summary>
+    /// <summary>
+    ///     Owns one deployment's lifetime, latest credentials and bounded confirmed-delivery cache.
+    /// </summary>
+    /// <param name="target">Verified Azure app, revision and collector lifetime metadata.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
     private sealed class Session(AzureLiveLogTarget target, CancellationToken token)
     {
         /// <summary>Immutable ownership/credential snapshot atomically renewed by the polling coordinator.</summary>
@@ -497,18 +615,42 @@ internal sealed class AzureContainerAppLiveLogs(
         /// <summary>Recent confirmed event identities suppress reconnect tail duplication.</summary>
         public ConcurrentDictionary<Guid, byte> Delivered { get; } = new();
 
-        /// <summary>Exact console identities shared with delayed historical reads after durable live acknowledgement.</summary>
+        /// <summary>
+        ///     Exact console identities shared with delayed historical reads after durable live
+        ///     acknowledgement.
+        /// </summary>
         public ConcurrentDictionary<string, byte> ConfirmedConsole { get; } = new();
 
         /// <summary>Insertion order bounds the retry cache to 4,096 records.</summary>
         public ConcurrentQueue<(Guid Id, string? Fingerprint)> Order { get; } = new();
     }
 
-    /// <summary>One independently cancellable HTTP reader in the currently verified inventory.</summary>
+    /// <summary>
+    ///     One independently cancellable HTTP reader in the currently verified inventory.
+    /// </summary>
+    /// <param name="Cancellation">
+    ///     Owns cancellation of the supervised work and must be disposed by its owner.
+    /// </param>
+    /// <param name="Task">Owned operation to await while preserving its completion or failure.</param>
     private sealed record Connection(CancellationTokenSource Cancellation, Task Task);
 }
 
-/// <summary>Immutable credentials and ownership scope refreshed only after a successful coordinator lease claim.</summary>
+/// <summary>
+///     Immutable credentials and ownership scope refreshed only after a successful coordinator
+///     lease claim.
+/// </summary>
+/// <param name="ProjectId">The project identity used for authorization or correlation.</param>
+/// <param name="DeploymentId">
+///     The deployment identity; null is used only where legacy observations permit it.
+/// </param>
+/// <param name="ResourceId">Verified Azure resource identity used to scope provider reads.</param>
+/// <param name="Revision">Exact verified Azure revision identity.</param>
+/// <param name="AccessToken">The provider access token; never include it in diagnostics.</param>
+/// <param name="LeaseUntil">The UTC expiry of the current lease.</param>
+/// <param name="IncludeAppEvents">Whether the query includes Container App event observations.</param>
+/// <param name="DatabaseContainers">
+///     Verified database container identities attached to this deployment target.
+/// </param>
 internal sealed record AzureLiveLogTarget(
     Guid ProjectId,
     Guid DeploymentId,
@@ -519,10 +661,24 @@ internal sealed record AzureLiveLogTarget(
     bool IncludeAppEvents,
     IReadOnlySet<string> DatabaseContainers);
 
-/// <summary>Verified ACA stream address and exact replica/container identity.</summary>
+/// <summary>
+///     Verified ACA stream address and exact replica/container identity.
+/// </summary>
+/// <param name="Key">Stable lookup or configuration key.</param>
+/// <param name="Uri">Validated provider endpoint URI.</param>
+/// <param name="System">Whether this endpoint or record represents platform/system output.</param>
+/// <param name="Replica">Verified Container App replica identity.</param>
+/// <param name="Container">Verified owned container identity used for observation routing.</param>
 internal sealed record AzureLiveLogEndpoint(string Key, Uri Uri, bool System, string Replica, string Container);
 
-/// <summary>Normalized live envelope; provider timestamp and application text remain separate.</summary>
+/// <summary>
+///     Normalized live envelope; provider timestamp and application text remain separate.
+/// </summary>
+/// <param name="Timestamp">The provider observation timestamp, if known.</param>
+/// <param name="Message">The message supplied to the operation.</param>
+/// <param name="Revision">Exact verified Azure revision identity.</param>
+/// <param name="Stream">The typed diagnostic output stream.</param>
+/// <param name="Severity">The normalized severity used to rank a context group.</param>
 internal sealed record AzureLiveLogRecord(
     DateTimeOffset Timestamp,
     string Message,

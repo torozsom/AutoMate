@@ -4,10 +4,18 @@ using Application.Abstractions.Diagnostics;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Converts provider display values to explicit numeric units without filling missing values.</summary>
+/// <summary>
+///     Converts provider display values to explicit numeric units without filling missing
+///     values.
+/// </summary>
 internal static partial class DeploymentMetricNormalizer
 {
-    /// <summary>Docker percent represents CPU core usage times one hundred and can exceed 100.</summary>
+    /// <summary>
+    ///     Docker percent represents CPU core usage times one hundred and can exceed 100.
+    /// </summary>
+    /// <param name="cpu">Provider CPU display value.</param>
+    /// <param name="memory">Provider memory display value.</param>
+    /// <returns>The docker selection with its documented bounds and ordering.</returns>
     internal static IReadOnlyList<DeploymentMetricSample> Docker(string cpu, string memory)
     {
         var result = new List<DeploymentMetricSample>();
@@ -22,7 +30,11 @@ internal static partial class DeploymentMetricNormalizer
         return result;
     }
 
-    /// <summary>Parses Docker decimal/binary byte units, preserving their distinction.</summary>
+    /// <summary>
+    ///     Parses Docker decimal/binary byte units, preserving their distinction.
+    /// </summary>
+    /// <param name="value">The value to normalize, redact or validate.</param>
+    /// <returns>The observed finite numeric aggregate, or null when no value is available.</returns>
     private static double? Bytes(string value)
     {
         var match = BytePattern().Match(value.Trim());
@@ -46,7 +58,10 @@ internal static partial class DeploymentMetricNormalizer
         return double.IsFinite(bytes) && bytes >= 0 ? bytes : null;
     }
 
-    /// <summary>Accepts only explicit, known byte suffixes.</summary>
+    /// <summary>
+    ///     Accepts only explicit, known byte suffixes.
+    /// </summary>
+    /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
     [GeneratedRegex(@"^(\d+(?:\.\d+)?)\s*([A-Za-z]+)$", RegexOptions.CultureInvariant)]
     private static partial Regex BytePattern();
 }

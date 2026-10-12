@@ -11,10 +11,16 @@ using Xunit;
 
 namespace Web.Tests;
 
-/// <summary>Real controls and numeric alternatives preserve UTC validation and independent pagination.</summary>
+/// <summary>
+///     Real controls and numeric alternatives preserve UTC validation and independent pagination.
+/// </summary>
 public sealed class MetricExplorationRenderingTests
 {
-    /// <summary>All chart choices are present and numeric rows are bounded independently of plotted evidence.</summary>
+    /// <summary>
+    ///     All chart choices are present and numeric rows are bounded independently of plotted
+    ///     evidence.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Picker_and_statistics_render_all_ranges_and_paginate_without_limiting_charts()
     {
@@ -43,7 +49,10 @@ public sealed class MetricExplorationRenderingTests
         });
     }
 
-    /// <summary>Custom UTC validation rejects future/short windows; five-minute windows publish once.</summary>
+    /// <summary>
+    ///     Custom UTC validation rejects future/short windows; five-minute windows publish once.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
     [Fact]
     public async Task Custom_validation_and_lifetime_clipping_publish_only_valid_frozen_ranges()
     {
@@ -80,22 +89,42 @@ public sealed class MetricExplorationRenderingTests
         Assert.Equal(lifetimeEnd.AddYears(-5), published[1].Start);
         Assert.Contains("truncated", (string)Get("_notice")!);
 
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Updates the selected fixture component member through reflection.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        /// <param name="value">Fixture member value to assign.</param>
         void Set(string name, object value)
         {
             typeof(MetricRangePicker).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(picker,
                 value);
         }
+#pragma warning restore CS1587
 
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Reads the selected private fixture component field through reflection.
+        /// </summary>
+        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        /// <returns>The selected private field value, which may be null.</returns>
         object? Get(string name)
         {
             return typeof(MetricRangePicker).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(picker);
         }
+#pragma warning restore CS1587
 
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Invokes the private range-application handler on the fixture picker.
+        /// </summary>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         Task Apply()
         {
             return (Task)typeof(MetricRangePicker).GetMethod("ApplyAsync",
                 BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(picker, null)!;
         }
+#pragma warning restore CS1587
     }
 }

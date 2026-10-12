@@ -8,6 +8,8 @@ internal static class DockerPortParser
     /// <summary>
     ///     Extracts the first host port from Docker CLI port output.
     /// </summary>
+    /// <param name="output">Output stream classification or normalized process output.</param>
+    /// <returns>The numeric position, count or status described by this operation.</returns>
     public static int ParseHostPort(string output)
     {
         if (string.IsNullOrWhiteSpace(output))

@@ -5,14 +5,15 @@ namespace Infrastructure.Scanner;
 /// </summary>
 internal static class DotEnvLineParser
 {
-    /// <summary>
-    ///     Optional export prefix accepted in .env files.
-    /// </summary>
+    /// <summary>Optional export prefix accepted in .env files.</summary>
     private const string ExportPrefix = "export ";
 
     /// <summary>
     ///     Parses a non-empty, non-comment .env line into a key-value pair.
     /// </summary>
+    /// <param name="line">One bounded source-output line to normalize and redact.</param>
+    /// <param name="variable">Environment-variable entry; its value can contain a secret.</param>
+    /// <returns>True when validation or acquisition succeeds; otherwise false.</returns>
     public static bool TryParse(string line, out KeyValuePair<string, string> variable)
     {
         variable = default;

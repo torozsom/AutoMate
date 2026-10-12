@@ -1,3 +1,6 @@
+@*
+    Presents a recorded metadata value and an optional browser clipboard action.
+*@
 @namespace Web.Components.Shared
 @inject IJSRuntime JS
 <tr>
@@ -37,7 +40,10 @@
     /// <summary>Clipboard availability guidance.</summary>
     private bool _failed;
 
-    /// <summary>Copies explicit metadata through the local browser API.</summary>
+    /// <summary>
+    ///     Copies explicit metadata through the local browser API.
+    /// </summary>
+    /// <returns>A task completing after copying or setting local clipboard-failure feedback.</returns>
     private async Task CopyAsync()
     {
         try

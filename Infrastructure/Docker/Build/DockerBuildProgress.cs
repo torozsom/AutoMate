@@ -7,16 +7,19 @@ namespace Infrastructure.Docker;
 /// <summary>
 ///     Tracks Docker image build progress and records whether Docker reported a build error.
 /// </summary>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
+/// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
 internal sealed class DockerBuildProgress(ILogger logger, IDiagnosticRedactor redactor) : IProgress<JSONMessage>
 {
-    /// <summary>
-    ///     Indicates whether any Docker build progress message contained an error.
-    /// </summary>
+    /// <summary>Indicates whether any Docker build progress message contained an error.</summary>
     public bool HasError { get; private set; }
 
     /// <summary>
     ///     Handles one Docker build progress message from Docker.DotNet.
     /// </summary>
+    /// <param name="message">The message supplied to the operation.</param>
     public void Report(JSONMessage message)
     {
         if (!string.IsNullOrEmpty(message.Stream))
@@ -39,7 +42,11 @@ internal sealed class DockerBuildProgress(ILogger logger, IDiagnosticRedactor re
         HasError = true;
     }
 
-    /// <summary>Redacts SDK text before it reaches the host logger.</summary>
+    /// <summary>
+    ///     Redacts SDK text before it reaches the host logger.
+    /// </summary>
+    /// <param name="text">The diagnostic context or text being processed.</param>
+    /// <returns>The bounded normalized text with supported unsafe values removed.</returns>
     private string Safe(string text)
     {
         return redactor.Redact(new DeploymentDiagnosticEvent(Guid.Empty, null,

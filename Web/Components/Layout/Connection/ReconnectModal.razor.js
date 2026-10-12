@@ -1,13 +1,21 @@
-// Set up event handlers
+// Own reconnect controls for the mounted Blazor recovery dialog.
+/** Mounted dialog receiving framework reconnect state events. */
 const reconnectModal = document.getElementById("components-reconnect-modal");
 reconnectModal.addEventListener("components-reconnect-state-changed", handleReconnectStateChanged);
 
+/** User action for reconnecting the current circuit. */
 const retryButton = document.getElementById("components-reconnect-button");
 retryButton.addEventListener("click", retry);
 
+/** User action for resuming a paused circuit. */
 const resumeButton = document.getElementById("components-resume-button");
 resumeButton.addEventListener("click", resume);
 
+/**
+ * Updates the modal for Blazor reconnect transitions and reloads rejected circuits.
+ * @param {CustomEvent} event - Reconnect event with a state in its detail.
+ * @returns {void} No value.
+ */
 function handleReconnectStateChanged(event) {
     if (event.detail.state === "show") {
         reconnectModal.showModal();
@@ -20,6 +28,11 @@ function handleReconnectStateChanged(event) {
     }
 }
 
+/**
+ * Attempts reconnect, then circuit resume; unreachable servers rearm a visibility retry.
+ * @returns {Promise<void>} Resolves after the attempt; handled connection failures wait for visibility or
+ *     another retry.
+ */
 async function retry() {
     document.removeEventListener("visibilitychange", retryWhenDocumentBecomesVisible);
 
@@ -45,6 +58,11 @@ async function retry() {
     }
 }
 
+/**
+ * Attempts circuit resume and shows fixed failure state when the attempt fails.
+ * @returns {Promise<void>} Resolves after resume or reload is requested; connection failures are handled in the
+ *     modal.
+ */
 async function resume() {
     try {
         const successful = await Blazor.resumeCircuit();
@@ -56,6 +74,10 @@ async function resume() {
     }
 }
 
+/**
+ * Retries reconnect only when this document becomes visible.
+ * @returns {Promise<void>} Resolves after any visibility-triggered reconnect attempt.
+ */
 async function retryWhenDocumentBecomesVisible() {
     if (document.visibilityState === "visible") {
         await retry();

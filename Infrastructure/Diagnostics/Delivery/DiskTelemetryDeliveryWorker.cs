@@ -6,15 +6,29 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Diagnostics;
 
-/// <summary>Delivery never holds a database transaction or falls back to a database payload queue.</summary>
+/// <summary>
+///     Delivery never holds a database transaction or falls back to a database payload queue.
+/// </summary>
+/// <param name="spool">Private single-writer immutable segment store.</param>
+/// <param name="scopes">Creates independent scopes for concurrent background work.</param>
+/// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+/// <param name="logger">
+///     Receives reviewed operational events without diagnostic payloads or credentials.
+/// </param>
 public sealed class DiskTelemetryDeliveryWorker(
     DiskTelemetrySpool spool,
     IServiceScopeFactory scopes,
     IOptions<TelemetryStorageOptions> options,
     ILogger<DiskTelemetryDeliveryWorker> logger) : BackgroundService
 {
+    /// <summary>Per-segment bounded retry count and next eligible attempt time.</summary>
     private readonly Dictionary<string, (int Failures, DateTimeOffset RetryAt)> _retries = new();
 
+    /// <summary>
+    ///     Delivers pending immutable segments and confirms query visibility before removal.
+    /// </summary>
+    /// <param name="stoppingToken">Signals host shutdown.</param>
+    /// <returns>A task representing the supervised service lifetime and cleanup.</returns>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
@@ -49,6 +63,10 @@ public sealed class DiskTelemetryDeliveryWorker(
         }
     }
 
+    /// <summary>
+    ///     Schedules bounded backoff for a segment whose durable delivery has not been confirmed.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
     private void ScheduleRetry(string path)
     {
         var failures = _retries.TryGetValue(path, out var previous) ? Math.Min(previous.Failures + 1, 8) : 1;
@@ -56,7 +74,13 @@ public sealed class DiskTelemetryDeliveryWorker(
         TelemetryStorageMetrics.Retries.Add(1);
     }
 
-    /// <summary>Reclaims a segment only when all permitted events are queryable or explicitly recorded as lost.</summary>
+    /// <summary>
+    ///     Reclaims a segment only when all permitted events are queryable or explicitly recorded
+    ///     as lost.
+    /// </summary>
+    /// <param name="path">Filesystem or provider entry path used by this operation.</param>
+    /// <param name="token">Cancels the underlying operation when observed.</param>
+    /// <returns>A task returning whether the documented deliver async condition holds.</returns>
     public async Task<bool> DeliverAsync(string path, CancellationToken token)
     {
         var events = spool.ReadSegment(path);
