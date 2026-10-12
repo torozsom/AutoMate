@@ -38,12 +38,19 @@ public sealed class DockerMetricDeliveryTests
 
         live.Values.Should().HaveCount(61);
         live.Values.Last().Cpu.Should().Be("60%");
+        live.Snapshots.Should().HaveCount(61);
+        live.Snapshots.Should().OnlyContain(snapshot => snapshot.ProjectId == project &&
+            snapshot.DeploymentId == deployment && snapshot.ResourceName == "web");
+        live.Snapshots.Last().Timestamp.Should().Be(clock.Now.AddSeconds(-1));
+        live.Snapshots.Last().Samples.Single(p => p.Unit == "cores").Value.Should().Be(0.6);
+        live.Snapshots.Last().Samples.Single(p => p.Name == "automate_memory_used_bytes").Value.Should().Be(104857600);
         history.Events.Should().HaveCount(2);
         history.Events.Last().Metrics!.Single(p => p.Unit == "cores").Value.Should().Be(0.6);
         viewers.Remove("owner");
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("80%", "100MiB / 200MiB"),
             CancellationToken.None);
         live.Values.Should().HaveCount(62);
+        live.Snapshots.Should().HaveCount(62);
         history.Events.Should().HaveCount(2);
     }
 
@@ -70,6 +77,8 @@ public sealed class DockerMetricDeliveryTests
         live.Values.Should().ContainSingle();
         live.Values.Single().Cpu.Should().Be("2%");
         live.Values.Single().Memory.Should().NotContain("private-value");
+        live.Snapshots.Should().HaveCount(2);
+        live.Snapshots.Last().Samples.Should().OnlyContain(sample => double.IsFinite(sample.Value));
         history.Events.Should().ContainSingle();
     }
 
@@ -122,6 +131,21 @@ public sealed class DockerMetricDeliveryTests
 
         /// <summary>Captured compatibility CPU/memory values.</summary>
         public List<(string Cpu, string Memory)> Values { get; } = [];
+
+        /// <summary>Typed observations consumed by pages after saved metric recovery.</summary>
+        public List<DeploymentRuntimeMetricSnapshot> Snapshots { get; } = [];
+
+        /// <summary>Captures each redacted typed observation independently of durable history admission.</summary>
+        /// <param name="snapshot">Provider-timestamped numeric observation with deployment ownership.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture transport.</param>
+        /// <returns>An already completed task after recording the observation.</returns>
+        public Task StreamDeploymentMetricsAsync(DeploymentRuntimeMetricSnapshot snapshot,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Snapshots.Add(snapshot);
+            return Task.CompletedTask;
+        }
 
         /// <summary>
         ///     Captures metric display values and optionally fails the next live-delivery call.

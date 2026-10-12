@@ -16,6 +16,37 @@ namespace Web.Tests;
 /// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class ProjectDetailsMetricRecoveryTests
 {
+    /// <summary>Second-by-second local observations replace restored typed history and survive delayed replay.</summary>
+    [Fact]
+    public void Local_live_metrics_refresh_typed_state_every_second_after_history_recovery()
+    {
+        var page = new ProjectDetails();
+        var apply = typeof(ProjectDetails).GetMethod("ApplyTypedMetrics",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var restored = DateTimeOffset.Parse("2026-10-12T10:00:00Z");
+        var state = (Dictionary<string, Dictionary<string, DeploymentMetricPoint>>)typeof(ProjectDetails)
+            .GetField("_typedMetrics", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(page)!;
+        void Receive(DateTimeOffset timestamp, double cores, double bytes) => apply.Invoke(page,
+        [
+            "web", new[]
+            {
+                new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", timestamp, cores, cores, cores),
+                new DeploymentMetricPoint("web", "automate_memory_used_bytes", "bytes", timestamp, bytes, bytes, bytes)
+            }
+        ]);
+        Receive(restored, 0.1, 104857600);
+        for (var second = 1; second <= 5; second++)
+        {
+            Receive(restored.AddSeconds(second), second / 10d, 104857600 + second * 1048576);
+            Assert.Equal(second / 10d, state["web"]["automate_cpu_usage_cores"].Average);
+            Assert.Equal(restored.AddSeconds(second), state["web"]["automate_cpu_usage_cores"].Timestamp);
+            Assert.Equal(104857600 + second * 1048576, state["web"]["automate_memory_used_bytes"].Average);
+        }
+        Receive(restored, 0.1, 104857600);
+        Assert.Equal(0.5, state["web"]["automate_cpu_usage_cores"].Average);
+        Assert.Equal(restored.AddSeconds(5), state["web"]["automate_memory_used_bytes"].Timestamp);
+    }
+
     /// <summary>
     ///     Older recovery data cannot replace a newer RU observation or fabricate Cosmos CPU/memory.
     /// </summary>

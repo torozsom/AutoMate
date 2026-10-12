@@ -65,6 +65,12 @@ internal sealed class DockerMetricDelivery(
         var startedAt = Stopwatch.GetTimestamp();
         try
         {
+            // Recovered typed history takes precedence in the UI. Keep that same state fresh for every stats tick.
+            if (safe.Metrics is { Count: > 0 } samples)
+                await live.StreamDeploymentMetricsAsync(new DeploymentRuntimeMetricSnapshot(projectId, deploymentId,
+                    safe.TerminalChannel.Target!,
+                    safe.SourceIdentity?.Component ?? DeploymentDiagnosticComponent.Container,
+                    safe.TimestampUtc, samples), token);
             await live.StreamContainerMetricsAsync(projectId, container, safe.Attributes!["cpu"],
                 safe.Attributes["memory"], token);
             AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(safe));

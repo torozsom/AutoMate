@@ -50,6 +50,11 @@ percent /
 does not resend sampled Docker metrics, avoiding stale values overwriting newer live observations. Collectors are
 cancelled on host shutdown.
 
+Every Docker observation sends both typed deployment metrics and the compatibility CPU/memory callback. Typed live
+delivery updates the same state populated by saved-history recovery, so restoring a snapshot cannot freeze local
+utilization at the durable sampling cadence. Provider timestamps, deployment identity, numeric units and redaction
+are preserved. Azure polling and durable local history sampling remain independent of this live delivery path.
+
 ## Local diagnostic coverage
 
 `DockerDiagnosticCollector` uses the supported Docker SDK event callback API and verified immutable container IDs.
