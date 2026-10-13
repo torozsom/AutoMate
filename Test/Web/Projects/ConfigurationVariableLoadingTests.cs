@@ -2,7 +2,6 @@ using System.Reflection;
 using Application.Abstractions.Scanning;
 using Domain.DTO;
 using Web.Components.Shared;
-using Xunit;
 
 namespace Test.Web;
 

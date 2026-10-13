@@ -28,7 +28,7 @@ public sealed class DeploymentJobWorkerTests
     [Fact]
     public async Task Independent_stops_progress_while_the_first_stop_is_waiting()
     {
-        await using var harness = new Harness();
+        await using var harness = new Harness(new DeploymentConcurrencyOptions { MaxLocalStops = 4 });
         harness.Tracker.HoldStops = true;
         var projects = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToArray();
         foreach (var (project, index) in projects.Select((project, index) => (project, index)))
@@ -134,6 +134,46 @@ public sealed class DeploymentJobWorkerTests
         var started = await harness.ReadStartsAsync(projects.Length);
         started.Select(item => item.ProjectId).Should().BeEquivalentTo(projects);
         started.Should().OnlyContain(item => item.Kind == "local");
+    }
+
+    /// <summary>Default local lanes admit every independent operation without a count ceiling.</summary>
+    [Theory]
+    [InlineData(3, false)]
+    [InlineData(5, false)]
+    [InlineData(10, false)]
+    [InlineData(3, true)]
+    [InlineData(5, true)]
+    [InlineData(10, true)]
+    public async Task Default_local_lanes_are_uncapped(int count, bool stop)
+    {
+        await using var harness = new Harness(new DeploymentConcurrencyOptions());
+        harness.Tracker.HoldStops = true;
+        var projects = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToArray();
+        for (var index = 0; index < count; index++)
+            await harness.Queue.EnqueueAsync(stop
+                ? new StopLocalDeploymentJob(projects[index], $"stop-{index}", "project.csproj")
+                : Local(projects[index], $"build-{index}", 18800 + index));
+        await harness.Worker.StartAsync(CancellationToken.None);
+        var started = await harness.ReadStartsAsync(count);
+        started.Select(item => item.ProjectId).Should().BeEquivalentTo(projects);
+    }
+
+    /// <summary>An explicit stop cap retains queued accounting while other local lanes continue.</summary>
+    [Fact]
+    public async Task Applies_optional_stop_limit()
+    {
+        await using var harness = new Harness(new DeploymentConcurrencyOptions { MaxLocalStops = 1 });
+        harness.Tracker.HoldStops = true;
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var build = Guid.NewGuid();
+        await harness.Queue.EnqueueAsync(new StopLocalDeploymentJob(first, "first", "first.csproj"));
+        await harness.Queue.EnqueueAsync(new StopLocalDeploymentJob(second, "second", "second.csproj"));
+        await harness.Queue.EnqueueAsync(Local(build, "build", 18830));
+        await harness.Worker.StartAsync(CancellationToken.None);
+        var started = await harness.ReadStartsAsync(2);
+        started.Select(item => item.ProjectId).Should().BeEquivalentTo([first, build]);
+        harness.Queue.GetProjectState(second).QueuedStops.Should().Be(1);
     }
 
     /// <summary>

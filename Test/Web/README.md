@@ -9,7 +9,8 @@ summaries. XML comments on local functions have narrowly scoped CS1587 suppressi
 Browser and JavaScript test classes, methods and callbacks use typed multiline JSDoc. These descriptions preserve
 assertions, synthetic fixtures, test selection and explicit external-service opt-in requirements.
 
-The complete source coverage and unchanged-code checks for the original test projects (before consolidation) are recorded in the ignored
+The complete source coverage and unchanged-code checks for the original test projects (before consolidation) are
+recorded in the ignored
 `.artifacts/tests-doc-audit/report.md` verification artifact.
 
 Terminal presentation tests keep operational database records (including request RU charge) visible while suppressing
@@ -180,7 +181,8 @@ Folders group related files while retaining the module's layer namespaces under 
 ## Source organization
 
 See the [solution folder map](../../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
-layer namespaces under Test.Infra, Test.App and Test.Web. Generated build outputs and third-party assets retain their standard
+layer namespaces under Test.Infra, Test.App and Test.Web. Generated build outputs and third-party assets retain their
+standard
 layouts.
 
 ## Engineering refinement regressions
@@ -189,8 +191,11 @@ ScopedApplicationOperationsTests verifies overlap, independent scopes, exception
 CloudDeploymentAdmissionTests checks exact payload/profile routing at application ports; connection preparation tests
 cover lookup order, page-specific early exits and obsolete Dashboard fencing. ProjectTerminalReplayStateTests exercises
 cursor/deduplication limits without private component reflection. Metric display tests preserve legacy track formatting.
-Rendering fixtures explicitly register scoped application ports now that components no longer retain circuit EF services.
+Rendering fixtures explicitly register scoped application ports now that components no longer retain circuit EF
+services.
 
-Browser test dependencies are pinned in Browser/package.json and its lockfile. See [browser verification](Browser/README.md)
-for fixture generation, Chromium/Edge setup and the original-revision 200% zoom overflow finding. The console audit stays
+Browser test dependencies are pinned in Browser/package.json and its lockfile.
+See [browser verification](Browser/README.md)
+for fixture generation, Chromium/Edge setup and the original-revision 200% zoom overflow finding. The console audit
+stays
 visible in CI without changing layout behavior; section/navigation/focus checks remain blocking.

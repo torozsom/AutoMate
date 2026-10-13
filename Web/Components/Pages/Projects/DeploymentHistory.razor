@@ -12,7 +12,6 @@
 @using Microsoft.AspNetCore.Authorization
 @implements IDisposable
 @inject AuthenticationStateProvider Authentication
-@inject IUserService Users
 @inject IServiceScopeFactory ServiceScopes
 @inject ILogger<DeploymentHistory> Logger
 
@@ -366,7 +365,9 @@
         _requestedRange = null;
         _channel = "";
         _authorized = false;
-        var owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication, Users);
+        await using var ownerScope = ServiceScopes.CreateAsyncScope();
+        var owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication,
+            ownerScope.ServiceProvider.GetRequiredService<IUserService>());
         if (selection != (ProjectId, DeploymentId) || _lifetime.IsCancellationRequested) return;
         _owner = owner;
         _deployment = null;
@@ -382,7 +383,10 @@
                 _start = _deployment.CreatedAt;
                 _end = _deployment.Status == DeploymentStatus.Running ? DateTimeOffset.UtcNow : _deployment.UpdatedAt;
                 if (_end <= _start) _end = _start.AddMinutes(1);
-                var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>().GetAppByIdAsync(ProjectId, _owner, _lifetime.Token);
+                var app = scope.ServiceProvider.GetService<IProjectActionQuery>() is { } metadata
+                    ? await metadata.GetAsync(ProjectId, _owner, _lifetime.Token)
+                    : await scope.ServiceProvider.GetRequiredService<IApplicationService>()
+                        .GetAppByIdAsync(ProjectId, _owner, _lifetime.Token);
                 if (selection != (ProjectId, DeploymentId) || _lifetime.IsCancellationRequested) return;
                 _aiConsented = app?.CsProjects.FirstOrDefault(p => p.Id == _deployment.CsProjectId)?.Configuration?.AiDiagnosticEgressConsented == true;
             }

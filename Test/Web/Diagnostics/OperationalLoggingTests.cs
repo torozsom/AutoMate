@@ -29,7 +29,6 @@ using OpenTelemetry;
 using OpenTelemetry.Logs;
 using Web.Configs;
 using Web.Routes.Endpoints.Auth;
-using Xunit;
 
 namespace Test.Web;
 

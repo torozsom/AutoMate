@@ -43,7 +43,7 @@ try {
     [Environment]::SetEnvironmentVariable('AUTOMATE_AI_TEST_DB',
         "Host=127.0.0.1;Port=$port;Database=automate_ai_verification;Username=postgres;Password=$password;Include Error Detail=false", 'Process')
     Write-Host 'Running workspace SQL projections on disposable PostgreSQL.'
-    & dotnet test (Join-Path $repository 'Infrastructure.Tests/Infrastructure.Tests.csproj') --no-restore `
+    & dotnet test (Join-Path $repository 'Test/Test.csproj') --no-restore `
         --filter 'FullyQualifiedName~WorkspaceQueryTests'
     if ($LASTEXITCODE -ne 0) { throw 'Isolated workspace PostgreSQL verification failed.' }
 }

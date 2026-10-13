@@ -10,6 +10,52 @@ namespace Test.Infra.Azure;
 /// </summary>
 public sealed class AzureManagedDatabaseClientTests
 {
+    /// <summary>Dedicated database apps need explicit component tags and use their own revision metrics.</summary>
+    [Fact]
+    public async Task Dedicated_database_app_requires_component_association_and_uses_its_own_revision()
+    {
+        var project = Guid.NewGuid();
+        const string group = "/subscriptions/sub/resourceGroups/rg";
+        const string databaseId = group + "/providers/Microsoft.App/containerApps/database";
+        var client = new AzureManagedDatabaseClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/resources"))
+                return DelegateHttpMessageHandler.Json($$$"""
+                                                          {"value":[{"id":"{{{databaseId}}}","name":"database","type":"Microsoft.App/containerApps",
+                                                          "tags":{"automate-project-id":"{{{project:N}}}","automate-container-app":"web",
+                                                          "automate-database-component":"postgres","automate-database-provider":"PostgreSQL"}}]}
+                                                          """);
+            if (request.RequestUri.AbsolutePath.EndsWith("/metrics"))
+            {
+                Assert.Contains("revisionName eq 'database-revision'",
+                    Uri.UnescapeDataString(request.RequestUri.Query));
+                Assert.DoesNotContain("web-revision", request.RequestUri.Query);
+                return DelegateHttpMessageHandler.Json("""
+                                                       {"value":[{"name":{"value":"UsageNanoCores"},"timeseries":[
+                                                       {"data":[{"timeStamp":"2026-10-13T10:00:00Z","average":100000000}]},
+                                                       {"data":[{"timeStamp":"2026-10-13T10:00:00Z","average":200000000}]}]}]}
+                                                       """);
+            }
+
+            return DelegateHttpMessageHandler.Json("""
+                                                   {"properties":{"latestReadyRevisionName":"database-revision",
+                                                   "managedEnvironmentId":"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/managedEnvironments/env"}}
+                                                   """);
+        })));
+        Assert.Empty(await client.DiscoverAsync(group + "/providers/Microsoft.App/containerApps/web", project, "web",
+            "token", default));
+        Assert.Empty(await client.DiscoverAsync(group + "/providers/Microsoft.App/containerApps/web", project, "web",
+            "token", default,
+            new HashSet<string> { "unrelated" }));
+        var database = Assert.Single(await client.DiscoverAsync(group + "/providers/Microsoft.App/containerApps/web",
+            project, "web", "token", default,
+            new HashSet<string> { "postgres" }));
+        Assert.Equal("PostgreSQL", database.Provider);
+        Assert.Equal("database-revision", database.ContainerAppRevision);
+        var observation = Assert.Single(await client.MetricObservationsAsync(database, "token", default));
+        Assert.Equal(0.3, Assert.Single(observation.Samples).Value, 6);
+    }
+
     /// <summary>
     ///     SQL child databases require explicit enumeration and their own matching ownership tags.
     /// </summary>

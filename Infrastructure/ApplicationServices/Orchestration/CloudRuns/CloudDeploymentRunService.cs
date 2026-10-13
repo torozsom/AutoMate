@@ -31,6 +31,27 @@ public sealed class CloudDeploymentRunService(
     private static readonly Regex RegistryPattern = new(
         "^[a-z0-9][a-z0-9-]*\\.azurecr\\.io$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
+    /// <summary>Samples deadlines and transitions at their original decision points.</summary>
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    /// <summary>
+    ///     Uses an explicit execution clock while retaining the original constructor and system-clock defaults.
+    /// </summary>
+    /// <param name="dbContext">
+    ///     Application metadata context used for ownership, leases and persisted state.
+    /// </param>
+    /// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+    /// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="clock">The execution clock for the existing lease, retry and completion decisions.</param>
+    public CloudDeploymentRunService(AutoMateDbContext dbContext,
+        IGitHubAppCredentials githubApp,
+        IOptions<CloudSaasOptions> options,
+        TimeProvider clock)
+        : this(dbContext, githubApp, options)
+    {
+        _clock = clock;
+    }
+
     /// <summary>
     ///     Creates or returns the request identified by the user's idempotency key.
     /// </summary>
@@ -176,7 +197,7 @@ public sealed class CloudDeploymentRunService(
             WorkflowFileName = DeploymentDefaults.CloudWorkflowFileName,
             RegistryServer = registry,
             SnapshotJson = snapshot,
-            NextAttemptAt = DateTimeOffset.UtcNow
+            NextAttemptAt = _clock.GetUtcNow()
         };
         dbContext.CloudDeploymentRuns.Add(run);
         dbContext.CloudRunOutbox.Add(new CloudRunOutbox { RunId = run.Id });

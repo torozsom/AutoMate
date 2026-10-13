@@ -57,8 +57,11 @@ public sealed class DeploymentCleanupHostedServiceTests
         await db.SaveChangesAsync();
         var docker = DispatchProxy.Create<IDockerService, EmptyDocker>();
         await using (var operationDb = new AutoMateDbContext(options, protector))
+        {
             await new DeploymentReconciliation(operationDb, docker,
                 NullLogger<DeploymentCleanupHostedService>.Instance).RunAsync(CancellationToken.None);
+        }
+
         await using var check = new AutoMateDbContext(options, protector);
         var states = await check.Deployments.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.Status);
         foreach (var cloud in deployments.Take(3)) Assert.Equal(cloud.Status, states[cloud.Id]);

@@ -51,6 +51,50 @@ public sealed class CloudRunMonitor(
     IDeploymentStatusNotifier statusNotifier,
     ILoggerFactory loggerFactory)
 {
+    /// <summary>Samples deadlines and transitions at their original decision points.</summary>
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    /// <summary>
+    ///     Uses an explicit execution clock while retaining the original constructor and system-clock defaults.
+    /// </summary>
+    /// <param name="dbContext">
+    ///     Application metadata context used for ownership, leases and persisted state.
+    /// </param>
+    /// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+    /// <param name="github">Provides the git hub service boundary used by this operation.</param>
+    /// <param name="diagnostics">Accepts normalized observations for redaction and durable delivery.</param>
+    /// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
+    /// <param name="monitoringOptions">
+    ///     Provides the configured limits and endpoint settings for this service.
+    /// </param>
+    /// <param name="azureStreamer">
+    ///     Provides the azure container app runtime streamer boundary used by this operation.
+    /// </param>
+    /// <param name="azureCredentials">
+    ///     Resolves current scoped Azure authorization without logging credentials.
+    /// </param>
+    /// <param name="statusNotifier">Publishes deployment transitions to in-process subscribers.</param>
+    /// <param name="loggerFactory">
+    ///     Receives reviewed operational events without diagnostic payloads or credentials.
+    /// </param>
+    /// <param name="clock">The execution clock for the existing lease, retry and completion decisions.</param>
+    public CloudRunMonitor(AutoMateDbContext dbContext,
+        IGitHubAppCredentials githubApp,
+        IGitHubService github,
+        IDeploymentDiagnosticPublisher diagnostics,
+        IDiagnosticRedactor redactor,
+        IOptions<GitHubWorkflowMonitoringOptions> monitoringOptions,
+        IAzureContainerAppRuntimeStreamer azureStreamer,
+        AzureArmCredentialsProvider azureCredentials,
+        IDeploymentStatusNotifier statusNotifier,
+        ILoggerFactory loggerFactory,
+        TimeProvider clock)
+        : this(dbContext, githubApp, github, diagnostics, redactor, monitoringOptions, azureStreamer, azureCredentials,
+            statusNotifier, loggerFactory)
+    {
+        _clock = clock;
+    }
+
     /// <summary>
     ///     Collects normalized GitHub job diagnostics using the existing redacted pipeline.
     /// </summary>
@@ -68,7 +112,7 @@ public sealed class CloudRunMonitor(
     /// <returns>A task returning whether the documented process next delivery async condition holds.</returns>
     public async Task<bool> ProcessNextDeliveryAsync(CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _clock.GetUtcNow();
         var delivery = await dbContext.CloudWebhookDeliveries
             .Where(item => item.ProcessedAt == null && (item.LeaseUntil == null || item.LeaseUntil < now))
             .OrderBy(item => item.CreatedAt).FirstOrDefaultAsync(cancellationToken);
@@ -136,7 +180,7 @@ public sealed class CloudRunMonitor(
                 }
             }
 
-            delivery.ProcessedAt = DateTimeOffset.UtcNow;
+            delivery.ProcessedAt = _clock.GetUtcNow();
             AutoMateTelemetry.CloudWebhookLag.Record((delivery.ProcessedAt.Value - delivery.CreatedAt)
                 .TotalMilliseconds);
             delivery.LeaseOwner = null;
@@ -153,7 +197,7 @@ public sealed class CloudRunMonitor(
                                                                      item.LeaseOwner == owner)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.LeaseOwner, (Guid?)null)
                         .SetProperty(item => item.LeaseUntil,
-                            DateTimeOffset.UtcNow.AddSeconds(15)), cancellationToken);
+                            _clock.GetUtcNow().AddSeconds(15)), cancellationToken);
             }
         }
     }
@@ -172,7 +216,7 @@ public sealed class CloudRunMonitor(
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                                                               INSERT INTO cloud_installation_budgets
                                                                   (installation_id, paused_until, updated_at, throttle_count)
-                                                              VALUES ({installationId}, {retryAt}, {DateTimeOffset.UtcNow}, 1)
+                                                              VALUES ({installationId}, {retryAt}, {_clock.GetUtcNow()}, 1)
                                                               ON CONFLICT (installation_id) DO UPDATE SET
                                                                   paused_until = GREATEST(cloud_installation_budgets.paused_until, EXCLUDED.paused_until),
                                                                   updated_at = EXCLUDED.updated_at,
@@ -187,7 +231,7 @@ public sealed class CloudRunMonitor(
     /// <returns>A task returning whether the documented reconcile next async condition holds.</returns>
     public async Task<bool> ReconcileNextAsync(CancellationToken cancellationToken)
     {
-        var now = DateTimeOffset.UtcNow;
+        var now = _clock.GetUtcNow();
         var run = await dbContext.CloudDeploymentRuns
             .Where(item => (item.Phase == CloudRunPhase.AwaitingWorkflow ||
                             item.Phase == CloudRunPhase.WorkflowRunning) &&
@@ -283,7 +327,7 @@ public sealed class CloudRunMonitor(
             cancellationToken);
         if (workflow.Status == "completed")
         {
-            run.CompletedAt = DateTimeOffset.UtcNow;
+            run.CompletedAt = _clock.GetUtcNow();
             run.Phase = workflow.Conclusion == "success" ? CloudRunPhase.Succeeded : CloudRunPhase.Failed;
             run.SnapshotJson = null;
             deployment.Status = workflow.Conclusion == "success" ? DeploymentStatus.Running : DeploymentStatus.Failed;

@@ -1,8 +1,8 @@
-using Web.Services;
 using System.Reflection;
 using System.Security.Claims;
 using Application.Abstractions.Hosting;
 using Application.Data.Apps;
+using Application.Data.Users;
 using Application.Orchestration;
 using Domain.DTO;
 using Domain.Enums;
@@ -18,7 +18,7 @@ using Microsoft.JSInterop;
 using Web.Components.Layout;
 using Web.Components.Pages;
 using Web.Components.Shared;
-using Xunit;
+using Web.Services;
 
 namespace Test.Web;
 
@@ -59,10 +59,10 @@ public sealed class ConsoleRenderingTests
             if (!services.Any(s => s.ServiceType == property.PropertyType))
                 services.AddSingleton(property.PropertyType,
                     DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
-        if (!services.Any(registration => registration.ServiceType == typeof(global::Application.Data.Users.IUserService)))
-            services.AddSingleton(DispatchProxy.Create<global::Application.Data.Users.IUserService, EmptyPort>());
-        if (!services.Any(registration => registration.ServiceType == typeof(global::Application.Data.Apps.IApplicationService)))
-            services.AddSingleton(DispatchProxy.Create<global::Application.Data.Apps.IApplicationService, EmptyPort>());
+        if (!services.Any(registration => registration.ServiceType == typeof(IUserService)))
+            services.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
+        if (!services.Any(registration => registration.ServiceType == typeof(IApplicationService)))
+            services.AddSingleton(DispatchProxy.Create<IApplicationService, EmptyPort>());
         services.AddScoped<ScopedApplicationOperations>().AddScoped<ConnectedCloudDeploymentAdmission>();
         using var provider = services.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(provider, provider.GetRequiredService<ILoggerFactory>());

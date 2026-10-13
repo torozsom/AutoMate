@@ -89,6 +89,7 @@ public sealed class ConsoleExceptionDiagnostics(
                 {
                     text.Append("AI provider: ").Append(denied.Provider).AppendLine();
                     text.Append("Provider code: ").Append(denied.Code).AppendLine();
+                    text.Append("Provider denial reason: ").Append(denied.Reason).AppendLine();
                     if (denied.RequestId is { } requestId)
                         text.Append("Provider request ID: ").Append(requestId).AppendLine();
                 }

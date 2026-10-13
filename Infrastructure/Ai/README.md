@@ -148,7 +148,7 @@ the updated Web host. Analysis metadata and validated result guidance remain in 
 context snapshot buffer or PostgreSQL telemetry fallback is introduced. Loki/Mimir and the disk gateway keep their
 current responsibilities. The migration was scaffolded and its SQL/model verified; it has not been applied to a live DB.
 
-Tests in `Infrastructure.Tests/Ai` use fake HTTP envelopes and SQLite metadata. They cover shape/size limits, all text
+Tests in `Test/Infra/Ai` use fake HTTP envelopes and SQLite metadata. They cover shape/size limits, all text
 fields, actual model/usage, invalid/partial/refusal responses, unannounced body sizes, safe failures, cancellation,
 redacted persistence, legacy readback and ownership. Hosting-profile tests resolve the new ports with AI disabled.
 No tests make a real LLM request. Supported masking, queue/admission/cancellation and operational controls are
@@ -540,6 +540,19 @@ response messages and context are discarded. The worker persists fixed guidance 
 endpoint/credential resource pairing, model/deployment permissions and network restrictions; retain existing egress
 consent, operator approvals and spending reservations.
 
+Recognized Azure firewall/private endpoint and blocked-resource phrases become finite `network_access_denied` or
+`resource_blocked` console classifications; other denial prose becomes `unknown`. Inspection remains bounded and
+memory-only. Raw response text is never retained, exported or persisted; permanent failure/no-retry behavior is
+unchanged.
+
+The October 13 investigation verified a ready deployment, matching endpoint and matching resource key, then reproduced a
+firewall/network
+HTTP 403 through a read-only models request without inference or customer data. Correct the operator's Azure OpenAI
+selected-network rule for the host's approved outbound address, or use approved private endpoint DNS/routing. Keep
+default-deny; do not enable unrestricted public access. This external setting must be corrected before inference can
+succeed.
+See [Microsoft's HTTP 403 troubleshooting](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/troubleshoot-errors).
+
 ## Folder organization
 
 Folders group related files while retaining the module's existing .NET namespaces and public contracts.
@@ -552,3 +565,12 @@ Folders group related files while retaining the module's existing .NET namespace
   `Processing/FailedDeploymentAnalysisDispatcher.cs`.
 - `Providers/` — `Providers/AnalysisProviderCatalog.cs`, `Providers/AzureOpenAiAnalysisProvider.cs`,
   `Providers/AzureOpenAiOptions.cs`, `Providers/OpenAiAnalysisProvider.cs`, `Providers/ResponsesAnalysisTransport.cs`.
+
+## Processing responsibility
+
+`Processing/DeploymentAnalysisWorker.cs` owns slots, operation scopes, heartbeats, cancellation and release.
+`Processing/DeploymentAnalysisProcessor.cs` owns the leased workflow and fenced result/retry persistence. Dependencies
+are explicit; policy, context, budget, provider and validation boundaries remain deferred until their original gates.
+In particular, disabled, empty, stale or budget-denied work cannot construct a provider. Worker logging categories,
+audit outcomes and processing spans remain unchanged. Each processor uses the same operation context as its claim;
+renewal and release continue to use independent scopes.

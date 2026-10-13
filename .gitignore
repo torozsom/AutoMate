@@ -3,6 +3,7 @@ obj/
 .env
 **/.env
 /packages/
+**/node_modules/
 riderModule.iml
 /_ReSharper.Caches/
 .*
@@ -12,6 +13,14 @@ riderModule.iml
 !deploy/**/.env.example
 # Local telemetry certificates, credentials, and isolated test artifacts.
 .telemetry/
+
+# Reviewed engineering policy and verification workflow; other local dotfiles remain private.
+!.editorconfig
+!.github/
+.github/*
+!.github/workflows/
+.github/workflows/*
+!.github/workflows/verify.yml
 
 # Local documentation is deliberately excluded from version control.
 /docs/

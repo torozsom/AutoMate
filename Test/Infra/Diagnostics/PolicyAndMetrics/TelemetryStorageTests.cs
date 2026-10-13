@@ -4,8 +4,8 @@ using System.Text.Json;
 using Application.Abstractions.Diagnostics;
 using FluentAssertions;
 using Infrastructure.Diagnostics;
-using Test.Infra.TestSupport;
 using Microsoft.Extensions.Options;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.Diagnostics;
 

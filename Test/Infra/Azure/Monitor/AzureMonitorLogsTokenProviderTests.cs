@@ -2,12 +2,12 @@ using System.Net;
 using Domain.Entities;
 using Infrastructure.Azure;
 using Infrastructure.Data;
-using Test.Infra.TestSupport;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.Azure;
 

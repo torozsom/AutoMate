@@ -9,7 +9,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Web.Components.Shared;
-using Xunit;
 
 namespace Test.Web;
 

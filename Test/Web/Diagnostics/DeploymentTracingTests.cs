@@ -7,7 +7,6 @@ using Infrastructure.Observability;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Web.Observability;
-using Xunit;
 
 namespace Test.Web;
 

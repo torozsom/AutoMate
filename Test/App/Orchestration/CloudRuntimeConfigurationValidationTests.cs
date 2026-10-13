@@ -1,6 +1,5 @@
 using Application.Orchestration;
 using Domain.DTO;
-using Xunit;
 
 namespace Test.App.Orchestration;
 
@@ -37,11 +36,14 @@ public sealed class CloudRuntimeConfigurationValidationTests
     {
         var config = new DeploymentConfigDto
         {
-            Databases = [new DatabaseConfigDto
-            {
-                DbType = "PostgreSQL", ConnectionStringName = "Main", DbName = "app",
-                DbUser = "appowner", DbPassword = "Synthetic8"
-            }]
+            Databases =
+            [
+                new DatabaseConfigDto
+                {
+                    DbType = "PostgreSQL", ConnectionStringName = "Main", DbName = "app",
+                    DbUser = "appowner", DbPassword = "Synthetic8"
+                }
+            ]
         };
         Assert.Equal(valid, CloudRuntimeConfigurationValidation.Validate(config, [key]) is null);
         Assert.NotNull(CloudRuntimeConfigurationValidation.Validate(config, ["APP", "app"]));

@@ -9,7 +9,8 @@ Fields and properties may use concise single-line summaries. Local functions als
 scoped CS1587 suppression because C# does not emit their XML documentation. Tested exceptions inside assertion
 callbacks are scenario evidence rather than escaping method contracts.
 
-The complete review of the original test projects (before consolidation) and executable-code comparisons is recorded in the ignored
+The complete review of the original test projects (before consolidation) and executable-code comparisons is recorded in
+the ignored
 `.artifacts/tests-doc-audit/report.md` verification artifact.
 
 Azure runtime tests verify database numeric persistence without terminal summaries. Azure AI tests cover finite
@@ -76,7 +77,8 @@ and `AUTOMATE_DOCKER_SMOKE_IMAGE=busybox:1.37` (or another already-present image
 lifecycle/stdout/stderr collection, redaction and exclusion of an unrelated container. The test creates no ports/volumes
 and cleans up only its disposable container IDs. Supervision tests use SQLite for deployment/consent metadata only.
 
-`Ai/ContextAndResults/AnalysisResultTests`, `OpenAiAnalysisProviderTests` and `AnalysisPersistenceTests` verify bounded result validation,
+`Ai/ContextAndResults/AnalysisResultTests`, `OpenAiAnalysisProviderTests` and `AnalysisPersistenceTests` verify bounded
+result validation,
 central redaction, safe HTTP/error handling, real SQLite metadata persistence, legacy safety and authorized retrieval.
 All credentials/envelopes are synthetic and no LLM request is made.
 
@@ -202,7 +204,8 @@ arbitrary provider response messages.
 ## Source organization
 
 See the [solution folder map](../../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
-layer namespaces under Test.Infra, Test.App and Test.Web. Generated build outputs and third-party assets retain their standard
+layer namespaces under Test.Infra, Test.App and Test.Web. Generated build outputs and third-party assets retain their
+standard
 layouts.
 
 ## Engineering refinement regressions

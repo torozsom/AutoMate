@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Application.Auth;
 using Microsoft.AspNetCore.Components;
+using Web.Services;
 
 namespace Web.Components.Pages;
 
@@ -14,9 +15,9 @@ public partial class RegistryForm : ComponentBase
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
 
-    /// <summary>Local registration and email-verification contract.</summary>
+    /// <summary>Isolates each authentication operation from the interactive circuit context.</summary>
     [Inject]
-    private IAuthService AuthService { get; set; } = null!;
+    private ScopedApplicationOperations Operations { get; set; } = null!;
 
     /// <summary>Reviewed operational logger for the component.</summary>
     [Inject]
@@ -59,11 +60,8 @@ public partial class RegistryForm : ComponentBase
 
         try
         {
-            var success = await AuthService.RegisterAsync(
-                Model.Username,
-                Model.Email,
-                Model.Password,
-                GenerateVerificationLink);
+            var success = await Operations.RunAsync<IAuthService, bool>(auth => auth.RegisterAsync(
+                Model.Username, Model.Email, Model.Password, GenerateVerificationLink));
 
             if (!success)
             {

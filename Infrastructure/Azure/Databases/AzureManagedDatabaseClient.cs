@@ -19,10 +19,12 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
     /// <param name="appName">Application name used for deployment artifacts.</param>
     /// <param name="token">Scoped provider or verification token; never include it in diagnostics.</param>
     /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
+    /// <param name="databaseComponents">Recorded component suffixes required to associate dedicated database apps.</param>
     /// <returns>A task returning the discover async selection with its documented bounds and ordering.</returns>
     /// <exception cref="InvalidOperationException">Database inventory exceeds the collection limit.</exception>
     internal async Task<IReadOnlyList<AzureManagedDatabase>> DiscoverAsync(string appResourceId, Guid projectId,
-        string appName, string token, CancellationToken cancellationToken)
+        string appName, string token, CancellationToken cancellationToken,
+        IReadOnlySet<string>? databaseComponents = null)
     {
         var group = appResourceId[..appResourceId.IndexOf("/providers/", StringComparison.OrdinalIgnoreCase)];
         var resources = await ListAsync(group + "/resources?api-version=2021-04-01", group, token, cancellationToken);
@@ -44,7 +46,33 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
                 !tags.TryGetProperty("automate-container-app", out var app) || app.GetString() != appName) continue;
             var id = resource.GetProperty("id").GetString()!;
             if (!id.StartsWith(group + "/providers/", StringComparison.OrdinalIgnoreCase)) continue;
+            if (result.Any(database =>
+                    string.Equals(database.ResourceId, id, StringComparison.OrdinalIgnoreCase))) continue;
             var type = resource.GetProperty("type").GetString()!.ToLowerInvariant();
+            if (type == "microsoft.app/containerapps")
+            {
+                // Dedicated database apps require explicit component association, never a name heuristic.
+                if (string.Equals(id, appResourceId, StringComparison.OrdinalIgnoreCase) ||
+                    !tags.TryGetProperty("automate-database-component", out var component) ||
+                    databaseComponents?.Contains(component.GetString() ?? string.Empty) != true ||
+                    !tags.TryGetProperty("automate-database-provider", out var provider) ||
+                    provider.GetString() is not ("PostgreSQL" or "MySQL" or "SQLServer" or "Redis" or "MongoDB"))
+                    continue;
+                if (result.Count == 100)
+                    throw new InvalidOperationException("Database inventory exceeds the collection limit.");
+                var client = new AzureContainerAppClient(httpClientFactory);
+                var state = await client.GetStateAsync(id, token, cancellationToken);
+                if (string.IsNullOrWhiteSpace(state?.LatestRevision))
+                    throw new InvalidOperationException("Associated database app has no verified ready revision.");
+                var logScope = string.IsNullOrWhiteSpace(state.ManagedEnvironmentId)
+                    ? null
+                    : await client.GetEnvironmentLogScopeAsync(state.ManagedEnvironmentId, token, cancellationToken);
+                var name = resource.GetProperty("name").GetString()!;
+                result.Add(new AzureManagedDatabase(id, name, "UsageNanoCores,WorkingSetBytes", provider.GetString(),
+                    state.LatestRevision, logScope));
+                continue;
+            }
+
             var metrics = type switch
             {
                 "microsoft.dbforpostgresql/flexibleservers" or "microsoft.dbformysql/flexibleservers" =>
@@ -97,15 +125,21 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
                           database.MetricNames == "NormalizedRUConsumption"
             ? "Maximum"
             : "Average";
+        var revisionFilter = database.ContainerAppRevision is { } revision
+            ? "&$filter=" + Uri.EscapeDataString("revisionName eq '" +
+                                                 revision.Replace("'", "''", StringComparison.Ordinal) +
+                                                 "' and podName eq '*'")
+            : string.Empty;
         using var document = await GetAsync(database.ResourceId +
                                             "/providers/microsoft.insights/metrics?api-version=2023-10-01&metricnames=" +
                                             database.MetricNames +
                                             "&timespan=" +
                                             Uri.EscapeDataString(
                                                 $"{end.AddMinutes(-5).UtcDateTime:O}/{end.UtcDateTime:O}") +
-                                            "&interval=PT1M&aggregation=" + aggregation,
+                                            "&interval=PT1M&aggregation=" + aggregation + revisionFilter,
             token, cancellationToken);
-        return AzureMetricObservations.Parse(document.RootElement, aggregation, false);
+        return AzureMetricObservations.Parse(document.RootElement, aggregation,
+            database.ContainerAppRevision is not null);
     }
 
     /// <summary>
@@ -164,10 +198,31 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
 /// <param name="ResourceId">Verified Azure resource identity used to scope provider reads.</param>
 /// <param name="Name">The recorded display name or fixed metric identity.</param>
 /// <param name="MetricNames">Fixed metric-series names requested from the provider.</param>
-internal sealed record AzureManagedDatabase(string ResourceId, string Name, string MetricNames)
+/// <param name="ConfiguredProvider">Explicit provider association for a dedicated database Container App.</param>
+/// <param name="ContainerAppRevision">Ready revision read from the associated app, never borrowed from the web app.</param>
+/// <param name="LogScope">ARM-resolved log environment for a dedicated database app.</param>
+internal sealed record AzureManagedDatabase(
+    string ResourceId,
+    string Name,
+    string MetricNames,
+    string? ConfiguredProvider = null,
+    string? ContainerAppRevision = null,
+    AzureContainerAppLogScope? LogScope = null)
 {
+    /// <summary>Matches the resource's verified type to the recorded deployment provider composition.</summary>
+    internal string Provider => ConfiguredProvider ?? ResourceId.ToLowerInvariant() switch
+    {
+        var id when id.Contains("/microsoft.dbforpostgresql/", StringComparison.Ordinal) => "PostgreSQL",
+        var id when id.Contains("/microsoft.dbformysql/", StringComparison.Ordinal) => "MySQL",
+        var id when id.Contains("/microsoft.sql/", StringComparison.Ordinal) => "SQLServer",
+        var id when id.Contains("/microsoft.cache/", StringComparison.Ordinal) => "Redis",
+        var id when id.Contains("/microsoft.documentdb/", StringComparison.Ordinal) => "MongoDB",
+        _ => "unknown"
+    };
+
     /// <summary>Operational logs exist without requiring opt-in audit or slow-query categories.</summary>
     internal bool HasOperationalLogs =>
+        ContainerAppRevision is not null ||
         ResourceId.Contains("/Microsoft.DocumentDB/", StringComparison.OrdinalIgnoreCase) ||
         ResourceId.Contains("/Microsoft.DBforPostgreSQL/", StringComparison.OrdinalIgnoreCase) ||
         ResourceId.Contains("/Microsoft.Sql/", StringComparison.OrdinalIgnoreCase);

@@ -6,10 +6,10 @@ using Application.Abstractions.Ai;
 using Application.Ai;
 using Infrastructure.Ai;
 using Infrastructure.Diagnostics;
-using Test.Infra.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.Ai;
 

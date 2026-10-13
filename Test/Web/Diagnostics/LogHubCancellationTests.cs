@@ -14,7 +14,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Web.Hubs;
-using Xunit;
 
 namespace Test.Web;
 

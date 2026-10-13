@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Xunit;
 
 namespace Test.Infra;
 
@@ -33,7 +32,11 @@ public sealed class ProjectDetailsQueryTests
         {
             Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local,
             User = new LocalUser { Username = "owner", Email = "owner@example.invalid" },
-            CsProjects = [new CsProject { Name = "web", IsWebProject = true, Configuration = new() { DotNetVersion = "10.0" } }]
+            CsProjects =
+            [
+                new CsProject
+                    { Name = "web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } }
+            ]
         };
         db.Applications.Add(app);
         await db.SaveChangesAsync();
@@ -45,10 +48,14 @@ public sealed class ProjectDetailsQueryTests
             {
                 CsProjectId = app.CsProjects.Single().Id,
                 Status = DeploymentStatus.Stopped,
-                Outcome = (index % 3) switch { 0 => DeploymentOutcome.Succeeded, 1 => DeploymentOutcome.Failed, _ => DeploymentOutcome.Unknown }
+                Outcome = (index % 3) switch
+                {
+                    0 => DeploymentOutcome.Succeeded, 1 => DeploymentOutcome.Failed, _ => DeploymentOutcome.Unknown
+                }
             });
             await db.SaveChangesAsync();
         }
+
         db.ChangeTracker.Clear();
         var query = new ProjectDetailsQuery(db);
         var page = Assert.IsType<ProjectDetailsReadModel>(await query.ReadAsync(app.Id, app.UserId, 0));
@@ -84,7 +91,8 @@ public sealed class ProjectDetailsQueryTests
         {
             base.OnModelCreating(builder);
             foreach (var property in builder.Model.GetEntityTypes().SelectMany(entity => entity.GetProperties())
-                         .Where(property => property.ClrType == typeof(DateTimeOffset) || property.ClrType == typeof(DateTimeOffset?)))
+                         .Where(property =>
+                             property.ClrType == typeof(DateTimeOffset) || property.ClrType == typeof(DateTimeOffset?)))
                 property.SetValueConverter(new DateTimeOffsetToBinaryConverter());
         }
     }
@@ -96,10 +104,14 @@ public sealed class ProjectDetailsQueryTests
     {
         /// <summary>The selected synthetic UTC instant.</summary>
         public DateTimeOffset Now { get; set; } = new(2026, 10, 13, 0, 0, 0, TimeSpan.Zero);
+
         /// <summary>
         ///     Returns the current synthetic time.
         /// </summary>
         /// <returns>The fixture UTC instant.</returns>
-        public override DateTimeOffset GetUtcNow() => Now;
+        public override DateTimeOffset GetUtcNow()
+        {
+            return Now;
+        }
     }
 }

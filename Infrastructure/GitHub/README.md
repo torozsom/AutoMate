@@ -46,7 +46,7 @@ URLs and output are excluded. Existing retry, checkpoint and progress-then-compl
 
 API/cache operational logs omit repository/branch/secret names and exception bodies. Cache failures retain API fallback;
 cancellation and return contracts stay unchanged. Real SDK export regressions in
-Web.Tests/Diagnostics/OperationalLoggingTests.cs
+Test/Web/Diagnostics/OperationalLoggingTests.cs
 verify sensitive failure text never enters attributes or exception exports.
 
 ## Folder organization

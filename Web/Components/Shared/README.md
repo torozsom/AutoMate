@@ -16,3 +16,11 @@ Related files are grouped by responsibility. Existing .NET namespaces and public
   `Projects/WorkflowBadge.razor`, `Projects/GitHubRepositoryReference.cs`, `Projects/GitHubRepositoryUrlParser.cs`.
 - `Workspace/` — `Workspace/KpiCard.razor`, `Workspace/ProjectInventoryTable.razor`,
   `Workspace/WorkspaceOverviewPanel.razor`, `Workspace/WorkspaceOverviewView.razor`.
+
+## Application policy and scope boundaries
+
+ConfigurationForm delegates its existing cloud validation rules and first-error precedence to
+Application.Orchestration.CloudRuntimeConfigurationValidation. The form still owns binding, local port validation,
+default-name editing and deployment confirmation. Provider/template validation remains separate and unchanged.
+TelemetryPreferences resolves owner and history dependencies within a fresh operation scope instead of sharing circuit
+EF services. Its existing loading, selection and failure messages are unchanged.

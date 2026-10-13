@@ -32,18 +32,6 @@ public sealed class CloudDeploymentRunServiceTests
     }
 
     /// <summary>
-    ///     Returns a fixed synthetic UTC instant for admission eligibility.
-    /// </summary>
-    private sealed class AdmissionClock : TimeProvider
-    {
-        /// <summary>
-        ///     Supplies the selected fixture execution time.
-        /// </summary>
-        /// <returns>The stable synthetic UTC instant.</returns>
-        public override DateTimeOffset GetUtcNow() => new(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
-    }
-
-    /// <summary>
     ///     Repeated submissions share one durable run and never persist a raw token.
     /// </summary>
     /// <returns>A task completing when the scenario and its assertions finish.</returns>
@@ -86,6 +74,21 @@ public sealed class CloudDeploymentRunServiceTests
         var foreign = fixture.Start("foreign") with { UserId = Guid.NewGuid() };
         var denied = async () => await fixture.Service().StartAsync(foreign);
         await denied.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    /// <summary>
+    ///     Returns a fixed synthetic UTC instant for admission eligibility.
+    /// </summary>
+    private sealed class AdmissionClock : TimeProvider
+    {
+        /// <summary>
+        ///     Supplies the selected fixture execution time.
+        /// </summary>
+        /// <returns>The stable synthetic UTC instant.</returns>
+        public override DateTimeOffset GetUtcNow()
+        {
+            return new DateTimeOffset(2030, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        }
     }
 
     /// <summary>

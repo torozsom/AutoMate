@@ -4,17 +4,18 @@ Deployment orchestration contracts, job queue primitives, and status notificatio
 In SaaS mode, `ICloudDeploymentRunService` admits authorized, idempotent cloud runs into PostgreSQL; its receipt
 exposes queued age and cloud phase without credentials. `CloudSaasOptions` controls cluster admission. Cloud workflow
 monitoring is separate from the launch lease. See [SaaS operations](../../docs/saas-cloud-deployments.md).
-The in-process scheduler admits a CPU-aware number of local Docker builds (at least two) and four cloud deployments
-concurrently by default.
-Up to four independent stop operations may run beside builds, so a slow stop does not block every other project.
+The in-process scheduler leaves independent local Docker builds and stops uncapped by default; Docker governs host
+resource usage. Four cloud deployments may run concurrently by default.
 Jobs for the same project stay ordered without occupying a lane while waiting;
 local jobs also wait for a conflicting Compose name or host port, and cloud jobs sharing a repository branch stay
 ordered.
 The queue accepts at most 100 waiting jobs and rejects excess requests with a clear error. It remains in memory, so
 queued jobs are lost if the AutoMate host exits.
 
-Self-hosted operators can set `DeploymentConcurrency:MaxLocalBuilds` to `-1` for the CPU-aware default, `0` for no
-AutoMate build cap, or an explicit limit from 1–1024. Docker still consumes host CPU, memory, disk, and AutoMate
+Self-hosted operators can set `DeploymentConcurrency:MaxLocalBuilds` to `0` (the default) for no AutoMate build cap,
+`-1` for the opt-in CPU-aware policy, or an explicit limit from 1–1024. `MaxLocalStops` defaults to `0` (uncapped)
+and accepts an optional limit from 1–1024. Both settings require a host restart. Docker still consumes host CPU, memory,
+disk, and AutoMate
 log/diagnostic resources for every active build. `MaxCloudDeployments` accepts 1–16 and `MaxQueuedJobs` accepts
 1–1000. Use environment variables with `DeploymentConcurrency__` prefixes when appropriate.
 Only job type, project ID, lane, and timing are logged; queued credentials are never included in scheduler telemetry.
@@ -23,8 +24,9 @@ persisted deployment-status records distinguish accepted requests from running o
 
 Self-hosted cloud jobs obtain fresh Azure ARM credentials when execution starts, rather than reusing the login token
 captured when queued. Preparation failures are saved as redacted deployment output. Cloud application status remains
-Starting until the workflow succeeds. Local runtime collectors resume after host restart for opted-in or actively
-viewed deployments; live viewing and background history consent are independent.
+Starting until the workflow succeeds. Local runtime collectors resume automatically after host restart for active
+deployments, independently of browser
+viewing and legacy preference flags. AI diagnostic egress still requires separate current consent.
 
 ## Source inventory
 
@@ -35,8 +37,8 @@ viewed deployments; live viewing and background history consent are independent.
 - `Jobs/QueuedDeploymentJob.cs`
 - `Cloud/CloudDeploymentStart.cs`
 - `Cloud/CloudSaasOptions.cs`
-- `Cloud/CloudDeploymentStart.cs`
-- `Cloud/CloudSaasOptions.cs`
+- `Cloud/CloudDeploymentAdmission.cs`
+- `Cloud/CloudRuntimeConfigurationValidation.cs`
 - `Status/DeploymentStatusNotifier.cs`
 - `Cloud/ICloudDeploymentOrchestrator.cs`
 - `Jobs/IDeploymentJobQueue.cs`
@@ -74,3 +76,13 @@ Folders group related files while retaining the module's existing .NET namespace
   `Jobs/DeploymentResourceConflictException.cs`.
 - `Local/` — `Local/ILocalDeploymentOrchestrator.cs`.
 - `Status/` — `Status/DeploymentStatusNotifier.cs`, `Status/IDeploymentStatusNotifier.cs`.
+
+## Deployment admission and validation
+
+`Cloud/CloudDeploymentAdmission.cs` owns profile-specific request assembly behind existing queue/run ports.
+Its request is memory-only and secret-bearing; it must never be logged. The confirmed mutable configuration is retained
+for compatibility, so callers must not mutate it after admission. SaaS keys remain page-owned and are cleared only after
+successful admission. Deployment metadata and template defaults are unchanged.
+
+`Cloud/CloudRuntimeConfigurationValidation.cs` owns the existing form rules and first-error ordering. It is independent
+of rendering and does not strengthen provider validation or add new server-side rejection rules.

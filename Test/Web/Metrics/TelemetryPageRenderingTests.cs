@@ -1,4 +1,3 @@
-using Web.Services;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text.Json;
@@ -22,7 +21,7 @@ using Microsoft.JSInterop;
 using Web.Components.Layout;
 using Web.Components.Pages;
 using Web.Components.Shared;
-using Xunit;
+using Web.Services;
 
 namespace Test.Web;
 
@@ -57,10 +56,10 @@ public sealed class TelemetryPageRenderingTests
             if (!registrations.Any(r => r.ServiceType == property.PropertyType))
                 registrations.AddSingleton(property.PropertyType,
                     DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
-        if (!registrations.Any(registration => registration.ServiceType == typeof(global::Application.Data.Users.IUserService)))
-            registrations.AddSingleton(DispatchProxy.Create<global::Application.Data.Users.IUserService, EmptyPort>());
-        if (!registrations.Any(registration => registration.ServiceType == typeof(global::Application.Data.Apps.IApplicationService)))
-            registrations.AddSingleton(DispatchProxy.Create<global::Application.Data.Apps.IApplicationService, EmptyPort>());
+        if (!registrations.Any(registration => registration.ServiceType == typeof(IUserService)))
+            registrations.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
+        if (!registrations.Any(registration => registration.ServiceType == typeof(IApplicationService)))
+            registrations.AddSingleton(DispatchProxy.Create<IApplicationService, EmptyPort>());
         registrations.AddScoped<ScopedApplicationOperations>().AddScoped<ConnectedCloudDeploymentAdmission>();
         using var services = registrations.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());

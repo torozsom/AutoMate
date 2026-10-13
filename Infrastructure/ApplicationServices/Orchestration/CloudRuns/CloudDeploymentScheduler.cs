@@ -22,6 +22,27 @@ public sealed class CloudDeploymentScheduler(
     IOptions<CloudSaasOptions> options,
     ILogger<CloudDeploymentScheduler> logger) : BackgroundService
 {
+    /// <summary>Samples deadlines and transitions at their original decision points.</summary>
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    /// <summary>
+    ///     Uses an explicit execution clock while retaining the original constructor and system-clock defaults.
+    /// </summary>
+    /// <param name="scopeFactory">Creates independent scopes for concurrent background work.</param>
+    /// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="logger">
+    ///     Receives reviewed operational events without diagnostic payloads or credentials.
+    /// </param>
+    /// <param name="clock">The execution clock for the existing lease, retry and completion decisions.</param>
+    public CloudDeploymentScheduler(IServiceScopeFactory scopeFactory,
+        IOptions<CloudSaasOptions> options,
+        ILogger<CloudDeploymentScheduler> logger,
+        TimeProvider clock)
+        : this(scopeFactory, options, logger)
+    {
+        _clock = clock;
+    }
+
     /// <summary>
     ///     Claims durable cloud launches within shared admission and lease limits.
     /// </summary>
@@ -128,7 +149,7 @@ public sealed class CloudDeploymentScheduler(
                     .Where(item => item.Id == runId && item.LeaseOwner == leaseOwner &&
                                    item.Phase == CloudRunPhase.Preparing)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.LeaseUntil,
-                        DateTimeOffset.UtcNow.AddMinutes(2)), cancellationToken);
+                        _clock.GetUtcNow().AddMinutes(2)), cancellationToken);
                 if (updated == 0)
                 {
                     await runCancellation.CancelAsync();

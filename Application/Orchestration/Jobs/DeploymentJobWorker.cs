@@ -11,7 +11,7 @@ using Microsoft.Extensions.Options;
 namespace Application.Orchestration;
 
 /// <summary>
-///     Admits independent deployment jobs into bounded local and cloud lanes.
+///     Admits independent deployment jobs with optional local caps and bounded cloud capacity.
 /// </summary>
 /// <param name="queue">The bounded deployment-operation queue consumed by the worker.</param>
 /// <param name="scopeFactory">
@@ -44,6 +44,11 @@ public sealed class DeploymentJobWorker(
 
     /// <summary>Clamped scheduler waiting-list capacity.</summary>
     private readonly int _pendingLimit = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
+
+    /// <summary>Optional operator stop capacity; Docker governs resource usage by default.</summary>
+    private readonly int _stopLimit = options.Value.MaxLocalStops == 0
+        ? int.MaxValue
+        : Math.Clamp(options.Value.MaxLocalStops, 1, 1_024);
 
     /// <summary>
     ///     Consumes queued work, admits nonconflicting operations and awaits active jobs during
@@ -166,7 +171,7 @@ public sealed class DeploymentJobWorker(
         {
             LocalDeploymentJob => running.Count(item => item.Queued.Job is LocalDeploymentJob) < _localLimit,
             CloudDeploymentJob => running.Count(item => item.Queued.Job is CloudDeploymentJob) < _cloudLimit,
-            StopLocalDeploymentJob => running.Count(item => item.Queued.Job is StopLocalDeploymentJob) < 4,
+            StopLocalDeploymentJob => running.Count(item => item.Queued.Job is StopLocalDeploymentJob) < _stopLimit,
             _ => false
         };
     }

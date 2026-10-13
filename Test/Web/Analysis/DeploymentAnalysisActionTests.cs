@@ -6,7 +6,6 @@ using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Web.Components.Shared;
-using Xunit;
 
 namespace Test.Web;
 

@@ -34,3 +34,17 @@ same.
 
 ReceiveDeploymentMetrics is additive to the legacy CPU/memory callback. RealTimeLogStreamer validates fixed
 metric names/units, finite nonnegative values and bounded redacted resource names before authorized group delivery.
+
+## Application operation and presentation state boundaries
+
+`ScopedApplicationOperations` creates and asynchronously disposes a fresh scope for each independent application
+operation. Repository saves can overlap across rows without sharing a circuit-owned EF context. Exceptions and
+cancellation propagate to the existing page handlers.
+
+`ConnectedCloudDeploymentAdmission` preserves Azure-before-GitHub connection lookup order and the distinct Dashboard
+owner-fence/early-exit rules. `CloudDeploymentPreparation` exposes readiness and admission, never credential properties.
+Ready admissions call the Application CloudDeploymentAdmission boundary in another operation scope.
+
+`ProjectTerminalReplayState` owns renderer-local buffering, order deduplication, cursor confirmation and overflow state.
+The existing 512 buffered-event and 2,000 live-identity bounds, negative live-only orders and replay acceptance remain
+unchanged. SignalR, rendering and subscription lifetimes remain owned by the page.

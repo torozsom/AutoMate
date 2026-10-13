@@ -35,21 +35,6 @@ internal static class CloudDeploymentPageDefaults
 
 
     /// <summary>
-    ///     Creates metadata for a remote repository deployment that has no local checkout to scan.
-    /// </summary>
-    /// <returns>The minimal metadata model expected by cloud deployment orchestration.</returns>
-    internal static ProjectMetadataDto CreateRemoteProjectMetadata()
-    {
-        return new ProjectMetadataDto
-        {
-            TargetFramework = "net10.0",
-            DotNetVersion = "10.0",
-            IsWebProject = true
-        };
-    }
-
-
-    /// <summary>
     ///     Normalizes a name for page defaults; provisioning performs provider-specific validation.
     /// </summary>
     /// <param name="value">The project name to normalize.</param>

@@ -13,7 +13,7 @@ namespace Infrastructure.Diagnostics;
 ///     Checksummed immutable per-event segments on the telemetry volume, retained until owner
 ///     deletion.
 /// </summary>
-public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposable
+public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploymentAssessmentArchive, IDisposable
 {
     /// <summary>Serializes writes, queries and deletion within the volume's single-writer host.</summary>
     private readonly SemaphoreSlim _gate = new(1);

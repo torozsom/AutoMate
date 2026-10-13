@@ -5,10 +5,10 @@ using Application.Abstractions.Ai;
 using Application.Ai;
 using Infrastructure.Ai;
 using Infrastructure.Diagnostics;
-using Test.Infra.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.Ai;
 
@@ -18,6 +18,29 @@ namespace Test.Infra.Ai;
 /// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProviderContractTests(true)
 {
+    /// <summary>Firewall denials retain a fixed reason without retaining provider prose or secrets.</summary>
+    [Theory]
+    [InlineData("Access denied due to Virtual Network/Firewall rules. password=private", "network_access_denied")]
+    [InlineData("Traffic is not from an approved private endpoint.", "network_access_denied")]
+    [InlineData("The resource has been temporarily blocked.", "resource_blocked")]
+    [InlineData("private arbitrary provider prose", "unknown")]
+    public async Task Azure_denial_keeps_only_safe_classification(string message, string reason)
+    {
+        using var handler = new DelegateHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new { error = new { code = "403", message } }))
+        });
+        using var client = new HttpClient(handler);
+        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
+            endpoint: "https://automate-test.openai.azure.com/openai/v1/");
+        var error = await Assert.ThrowsAsync<AnalysisProviderAccessDeniedException>(() =>
+            CreateProvider(client, Configuration(), settings).AnalyzeAsync(Request()));
+        Assert.Equal(reason, error.Reason);
+        Assert.Equal("403", error.Code);
+        Assert.DoesNotContain("private", error.ToString());
+        Assert.Null(error.InnerException);
+    }
+
     /// <summary>
     ///     Rejected Azure envelopes retain only finite classifications and never provider prose.
     /// </summary>

@@ -5,7 +5,6 @@ using Domain.DTO;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Web.Services;
-using Xunit;
 
 namespace Test.Web;
 
@@ -43,9 +42,10 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
                 Assert.Equal(owner, args![0]);
                 return Task.FromResult(hasAzure ? new AzureCloudCredentialsDto() : null);
             }
+
             Assert.Equal(nameof(IUserService.GetUserDetailsFromIdentifierAsync), method.Name);
             Assert.Equal(owner.ToString(), args![0]);
-            return Task.FromResult((owner, hasGitHub ? "synthetic-token" : (string?)null, false));
+            return Task.FromResult((owner, hasGitHub ? "synthetic-token" : null, false));
         };
         await using var provider = new ServiceCollection().AddSingleton(users).BuildServiceProvider();
         var operations = new ScopedApplicationOperations(provider.GetRequiredService<IServiceScopeFactory>());
@@ -55,7 +55,8 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
         Assert.Equal(nameof(IUserService.GetAzureCloudCredentialsAsync), calls[0]);
         Assert.Equal(ownerFence && !hasAzure ? 1 : 2, calls.Count);
         if (expected != CloudConnectionState.Ready)
-            await Assert.ThrowsAsync<InvalidOperationException>(() => preparation.StartAsync(new(), "owner", "repo", "app", null));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                preparation.StartAsync(new DeploymentConfigDto(), "owner", "repo", "app", null));
     }
 
     /// <summary>
@@ -69,7 +70,7 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
         ((OperationalLoggingTests.PortProxy)users).Call = (method, _) =>
         {
             Assert.Equal(nameof(IUserService.GetAzureCloudCredentialsAsync), method!.Name);
-            return Task.FromResult<AzureCloudCredentialsDto?>(new());
+            return Task.FromResult<AzureCloudCredentialsDto?>(new AzureCloudCredentialsDto());
         };
         await using var provider = new ServiceCollection().AddSingleton(users).BuildServiceProvider();
         var operations = new ScopedApplicationOperations(provider.GetRequiredService<IServiceScopeFactory>());
@@ -89,8 +90,11 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
         ///     Returns the same owner claim used by the existing page resolver.
         /// </summary>
         /// <returns>The synthetic authenticated circuit state.</returns>
-        public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(
-            new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
-                [new Claim(ClaimTypes.NameIdentifier, owner.ToString())], "fixture"))));
+        public override Task<AuthenticationState> GetAuthenticationStateAsync()
+        {
+            return Task.FromResult(
+                new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, owner.ToString())], "fixture"))));
+        }
     }
 }

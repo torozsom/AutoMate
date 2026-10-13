@@ -84,3 +84,10 @@ Folders group related files while retaining the module's existing .NET namespace
   `History/TelemetryHistoryV2.cs`.
 - `Metrics/` — `Metrics/DeploymentTelemetry.cs`, `Metrics/MetricExploration.cs`, `Metrics/ProjectTelemetryAnalytics.cs`.
 - `Redaction/` — `Redaction/DiagnosticRedaction.cs`, `Redaction/IDiagnosticRedactor.cs`.
+
+## Explicit assessment archive capability
+
+`History/IDeploymentAssessmentArchive.cs` guarantees filtering before bounded archive evidence/metric reads.
+The current disk and gateway adapters implement it. Assessment consumers prefer this focused capability; older
+`IDeploymentArchive` adapters retain their documented throwing or post-limit filtering defaults and existing fallback
+handling. No private telemetry protocol, limit or unsupported-backend behavior changes.

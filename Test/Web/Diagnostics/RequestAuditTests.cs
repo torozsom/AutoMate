@@ -4,7 +4,6 @@ using Infrastructure.Observability;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Web.Observability;
-using Xunit;
 
 namespace Test.Web;
 

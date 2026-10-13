@@ -1,7 +1,6 @@
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Xunit;
 
 namespace Test.Infra;
 

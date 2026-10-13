@@ -34,8 +34,15 @@
             </section>
             @if (_globalErrorMessage is { } error)
             {
-                <div class="alert alert-danger" role="alert">@error <button class="btn-close" @onclick="ClearMessages"
-                                                                            aria-label="Dismiss"></button>
+                <div class="alert alert-danger" role="alert">@error
+                    @if (_inventoryReadFailed)
+                    {
+                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="RefreshAppsAsync">Try
+                            again
+                        </button>
+                    }
+                    <button class="btn-close" @onclick="ClearMessages"
+                            aria-label="Dismiss"></button>
                 </div>
             }
             @if (_globalSuccessMessage is { } success)

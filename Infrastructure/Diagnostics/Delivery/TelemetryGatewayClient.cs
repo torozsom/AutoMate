@@ -18,7 +18,7 @@ public sealed class TelemetryGatewayClient(
     IHttpClientFactory clients,
     IOptions<TelemetryStorageOptions> options,
     TelemetryGatewayCompatibility compatibility)
-    : ITelemetryGateway, IDeploymentArchive
+    : ITelemetryGateway, IDeploymentArchive, IDeploymentAssessmentArchive
 {
     /// <summary>
     ///     Returns a private owner-authorized page of numeric deployment partitions.

@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Xunit;
 
 namespace Test.Infra;
 
@@ -42,6 +41,7 @@ public sealed class AuthServiceTests
             Assert.Empty(await db.Users.ToListAsync());
             return;
         }
+
         var user = Assert.IsType<LocalUser>(await db.Users.SingleAsync());
         Assert.Equal("owner@example.invalid", user.Email);
         Assert.Equal(clock.Now.AddHours(24), user.VerificationTokenExpiry);
@@ -64,6 +64,7 @@ public sealed class AuthServiceTests
     {
         /// <summary>The number of persisted accounts when delivery started.</summary>
         public int AccountsDuringDelivery { get; private set; }
+
         /// <summary>
         ///     Observes the account before returning the selected transport outcome.
         /// </summary>
@@ -88,10 +89,14 @@ public sealed class AuthServiceTests
     {
         /// <summary>The selected synthetic UTC instant.</summary>
         public DateTimeOffset Now { get; set; } = new(2026, 10, 13, 0, 0, 0, TimeSpan.Zero);
+
         /// <summary>
         ///     Returns the current synthetic time.
         /// </summary>
         /// <returns>The fixture UTC instant.</returns>
-        public override DateTimeOffset GetUtcNow() => Now;
+        public override DateTimeOffset GetUtcNow()
+        {
+            return Now;
+        }
     }
 }

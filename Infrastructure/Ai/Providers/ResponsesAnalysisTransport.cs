@@ -261,12 +261,14 @@ internal sealed class ResponsesAnalysisTransport(
             [v2 ? "overview" : "summary"] = new { type = "string", description = "At most 4096 characters." },
             ["recommendedSteps"] = new
             {
-                type = "array", description = "0-10 items; at most 2048 characters each.",
+                type = "array",
+                description = "0-10 items; at most 2048 characters each.",
                 items = new { type = "string" }
             },
             ["evidenceReferences"] = new
             {
-                type = "array", description = "0-20 exact supplied IDs; at most 512 characters each.",
+                type = "array",
+                description = "0-20 exact supplied IDs; at most 512 characters each.",
                 items = new { type = "string" }
             }
         };
@@ -274,7 +276,8 @@ internal sealed class ResponsesAnalysisTransport(
             foreach (var name in new[] { "observations", "metricsAssessment", "potentialIssues", "limitations" })
                 properties[name] = new
                 {
-                    type = "array", description = "0-6 items; at most 768 characters each.",
+                    type = "array",
+                    description = "0-6 items; at most 768 characters each.",
                     items = new { type = "string" }
                 };
         return new { type = "object", additionalProperties = false, properties, required = properties.Keys.ToArray() };
@@ -359,6 +362,7 @@ internal sealed class ResponsesAnalysisTransport(
         string provider, CancellationToken deadline, CancellationToken caller)
     {
         string? code = null;
+        string? reason = null;
         var requestId =
             response.Headers.TryGetValues(provider == "azure-openai" ? "apim-request-id" : "x-request-id", out var ids)
                 ? ids.FirstOrDefault()
@@ -367,9 +371,22 @@ internal sealed class ResponsesAnalysisTransport(
         {
             var bytes = await ReadBoundedAsync(response.Content, deadline, 8192);
             using var body = JsonDocument.Parse(bytes);
-            if (body.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object &&
-                error.TryGetProperty("code", out var value) && value.ValueKind == JsonValueKind.String)
-                code = value.GetString();
+            if (body.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+            {
+                if (error.TryGetProperty("code", out var value) && value.ValueKind == JsonValueKind.String)
+                    code = value.GetString();
+                if (provider == AzureOpenAiAnalysisProvider.ProviderName &&
+                    error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String)
+                {
+                    var text = message.GetString() ?? string.Empty;
+                    reason = text.Contains("Virtual Network/Firewall", StringComparison.OrdinalIgnoreCase) ||
+                             text.Contains("approved private endpoint", StringComparison.OrdinalIgnoreCase)
+                        ? "network_access_denied"
+                        : text.Contains("resource has been temporarily blocked", StringComparison.OrdinalIgnoreCase)
+                            ? "resource_blocked"
+                            : null;
+                }
+            }
         }
         catch (Exception error) when (error is JsonException or InvalidAnalysisResultException or IOException ||
                                       (error is OperationCanceledException && !caller.IsCancellationRequested))
@@ -377,7 +394,7 @@ internal sealed class ResponsesAnalysisTransport(
             // Malformed, oversized or timed-out denial bodies still represent the original permanent 403.
         }
 
-        return new AnalysisProviderAccessDeniedException(provider, code, requestId);
+        return new AnalysisProviderAccessDeniedException(provider, code, requestId, reason);
     }
 
     /// <summary>

@@ -40,7 +40,8 @@ public sealed class DockerMetricDeliveryTests
         live.Values.Last().Cpu.Should().Be("60%");
         live.Snapshots.Should().HaveCount(61);
         live.Snapshots.Should().OnlyContain(snapshot => snapshot.ProjectId == project &&
-            snapshot.DeploymentId == deployment && snapshot.ResourceName == "web");
+                                                        snapshot.DeploymentId == deployment &&
+                                                        snapshot.ResourceName == "web");
         live.Snapshots.Last().Timestamp.Should().Be(clock.Now.AddSeconds(-1));
         live.Snapshots.Last().Samples.Single(p => p.Unit == "cores").Value.Should().Be(0.6);
         live.Snapshots.Last().Samples.Single(p => p.Name == "automate_memory_used_bytes").Value.Should().Be(104857600);

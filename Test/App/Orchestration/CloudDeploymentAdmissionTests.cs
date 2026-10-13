@@ -3,7 +3,6 @@ using Application.Abstractions.Hosting;
 using Application.Orchestration;
 using Domain.DTO;
 using Domain.Enums;
-using Xunit;
 
 namespace Test.App.Orchestration;
 
@@ -102,6 +101,9 @@ public sealed class CloudDeploymentAdmissionTests
         /// <param name="method">The invoked contract method.</param>
         /// <param name="args">The supplied contract arguments.</param>
         /// <returns>The scenario's configured response.</returns>
-        protected override object? Invoke(MethodInfo? method, object?[]? args) => Call(method, args);
+        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        {
+            return Call(method, args);
+        }
     }
 }

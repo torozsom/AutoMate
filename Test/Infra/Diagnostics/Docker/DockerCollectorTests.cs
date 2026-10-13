@@ -444,6 +444,71 @@ public sealed class DockerCollectorTests
         }
     }
 
+    /// <summary>Ten independent Compose projects start and stop concurrently through AutoMate's real CLI adapter.</summary>
+    [DockerSmokeFact]
+    public async Task Real_compose_starts_and_stops_ten_independent_projects()
+    {
+        var prefix = "automate-concurrent-test-" + Guid.NewGuid().ToString("N");
+        var projects = Enumerable.Range(0, 10).Select(index =>
+            (Name: prefix + "-" + index, Directory: Path.Combine(Path.GetTempPath(), prefix + "-" + index),
+                Project: Guid.NewGuid(), Deployment: Guid.NewGuid())).ToArray();
+        var publisher = new RecordingPublisher();
+        var cli = new DockerCli(new DockerOptions(), publisher, NullLogger.Instance, 60, new UnusedLive(),
+            new DiagnosticRedactor(), new DeploymentRuntimeViewers(TimeProvider.System), TimeProvider.System);
+        using var client = new DockerClientConfiguration(new Uri(OperatingSystem.IsWindows()
+            ? "npipe://./pipe/docker_engine"
+            : "unix:///var/run/docker.sock")).CreateClient();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var image = Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE_IMAGE") ?? "busybox:1.37";
+        try
+        {
+            foreach (var project in projects)
+            {
+                Directory.CreateDirectory(project.Directory);
+                await File.WriteAllTextAsync(Path.Combine(project.Directory, "docker-compose.yml"), $$"""
+                      services:
+                        web:
+                          image: "{{image}}"
+                          container_name: "{{project.Name}}"
+                          command: ["sh", "-c", "sleep 600"]
+                          labels:
+                            io.automate.owner: "AutoMate"
+                            io.automate.project: "{{project.Project:N}}"
+                            io.automate.deployment: "${AUTOMATE_DEPLOYMENT_ID:-unassigned}"
+                      """, deadline.Token);
+            }
+
+            var started = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
+                project.Name, project.Project, project.Deployment, deadline.Token, "up", "-d")));
+            Assert.All(started, Assert.True);
+            foreach (var project in projects)
+            {
+                var container = await client.Containers.InspectContainerAsync(project.Name, deadline.Token);
+                Assert.True(container.State.Running);
+                Assert.Equal(project.Deployment.ToString("N"), container.Config.Labels["io.automate.deployment"]);
+            }
+
+            var stopped = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
+                project.Name, project.Project, project.Deployment, deadline.Token, "down")));
+            Assert.All(stopped, Assert.True);
+        }
+        finally
+        {
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            var cleaned = await Task.WhenAll(projects
+                .Where(project => File.Exists(Path.Combine(project.Directory, "docker-compose.yml")))
+                .Select(project => cli.RunComposeAsync(project.Directory, project.Name, project.Project,
+                    project.Deployment, cleanup.Token, "down")));
+            Assert.All(cleaned, Assert.True);
+            foreach (var project in projects)
+            {
+                var file = Path.Combine(project.Directory, "docker-compose.yml");
+                if (File.Exists(file)) File.Delete(file);
+                if (Directory.Exists(project.Directory)) Directory.Delete(project.Directory);
+            }
+        }
+    }
+
     /// <summary>
     ///     Accepts source cancellation while still observing every task fault.
     /// </summary>

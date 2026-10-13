@@ -10,7 +10,6 @@ using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Web.Hubs;
 using Web.Services;
-using Xunit;
 
 namespace Test.Web;
 

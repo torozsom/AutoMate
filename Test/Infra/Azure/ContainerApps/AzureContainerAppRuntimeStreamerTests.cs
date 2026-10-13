@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Application.Abstractions.Azure;
 using Application.Abstractions.Diagnostics;
 using Domain.DTO;
@@ -10,13 +11,13 @@ using FluentAssertions;
 using Infrastructure.Azure;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
-using Test.Infra.TestSupport;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.Azure;
 
@@ -373,12 +374,24 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                                                            {"value":[{"name":{"value":"cpu_percent"},"timeseries":[{"data":[{"timeStamp":"2026-10-10T10:01:00Z","average":42}]}]},
                                                            {"name":{"value":"memory_percent"},"timeseries":[{"data":[{"timeStamp":"2026-10-10T10:01:00Z","average":65}]}]}]}
                                                            """);
+                using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+                var query = body.RootElement.GetProperty("query").GetString()!;
+                var lowerBound = Regex.Match(query,
+                    @"IngestedAt >= datetime\(([^)]+)\)").Groups[1].Value;
+                Assert.True(DateTimeOffset.Parse(lowerBound) <= DateTimeOffset.UtcNow.AddHours(-23),
+                    "Initial database collection must recover quiet startup events preceding web readiness.");
                 return DelegateHttpMessageHandler.Json(RecordsJson("database line", "system", "AzureDiagnostics"));
             }
 
             // An ARM transport failure must not prevent either console or DB log collection.
             if (request.RequestUri.AbsolutePath.Contains("containerApps/app/providers/microsoft.insights"))
+            {
+                Assert.Contains(publisher.Events, e =>
+                    e.SourceIdentity?.Component == DeploymentDiagnosticComponent.Database &&
+                    e.Kind == DeploymentDiagnosticKind.Metric);
                 throw new HttpRequestException("synthetic provider detail");
+            }
+
             return Respond(request);
         });
         using var streamer = new AzureContainerAppRuntimeStreamer(publisher, new SuccessfulTokenProvider(),

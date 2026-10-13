@@ -131,7 +131,9 @@ public sealed class DeploymentAnalysisContextBuilder(
             {
                 points = archive is null
                     ? await metrics.ReadAssessmentAsync(query, token)
-                    : await archive.ReadAssessmentMetricsAsync(query, token);
+                    : archive is IDeploymentAssessmentArchive selectedArchive
+                        ? await selectedArchive.ReadAssessmentMetricsAsync(query, token)
+                        : await archive.ReadAssessmentMetricsAsync(query, token);
                 if (archive is not null && points.Count == 0)
                     points = await metrics.ReadAssessmentAsync(query, token);
             }

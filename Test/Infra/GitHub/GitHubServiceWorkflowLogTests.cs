@@ -3,9 +3,9 @@ using System.Net;
 using Domain.Enums;
 using FluentAssertions;
 using Infrastructure.GitHub;
-using Test.Infra.TestSupport;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging.Abstractions;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.GitHub;
 

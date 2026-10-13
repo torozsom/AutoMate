@@ -5,8 +5,8 @@ using System.Text;
 using System.Text.Json;
 using Application.Abstractions.Diagnostics;
 using Infrastructure.Azure;
-using Test.Infra.TestSupport;
 using Microsoft.Extensions.Logging.Abstractions;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.Azure;
 

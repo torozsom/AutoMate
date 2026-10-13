@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Web.Services;
-using Xunit;
 
 namespace Test.Web;
 
@@ -25,13 +24,16 @@ public sealed class ScopedApplicationOperationsTests
         ///     Starts a scope that stays active until the fixture releases both overlapping operations.
         /// </summary>
         /// <returns>The operation-owned probe after asynchronous scope disposal.</returns>
-        Task<Probe> Start() => operations.RunAsync<Probe, Probe>(async probe =>
+        Task<Probe> Start()
         {
-            probes.Add(probe);
-            await release.Task;
-            Assert.False(probe.Disposed);
-            return probe;
-        });
+            return operations.RunAsync<Probe, Probe>(async probe =>
+            {
+                probes.Add(probe);
+                await release.Task;
+                Assert.False(probe.Disposed);
+                return probe;
+            });
+        }
 #pragma warning restore CS1587
         var first = Start();
         var second = Start();
@@ -51,7 +53,8 @@ public sealed class ScopedApplicationOperationsTests
     {
         await using var provider = new ServiceCollection().AddScoped<Probe>().BuildServiceProvider();
         var operations = new ScopedApplicationOperations(provider.GetRequiredService<IServiceScopeFactory>());
-        foreach (var exception in new Exception[] { new InvalidOperationException("fixture"), new OperationCanceledException() })
+        foreach (var exception in new Exception[]
+                     { new InvalidOperationException("fixture"), new OperationCanceledException() })
         {
             Probe? captured = null;
             var actual = await Record.ExceptionAsync(() => operations.RunAsync<Probe, bool>(probe =>

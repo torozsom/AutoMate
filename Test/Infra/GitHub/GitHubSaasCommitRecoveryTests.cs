@@ -1,11 +1,11 @@
 using System.Net;
 using FluentAssertions;
 using Infrastructure.GitHub;
-using Test.Infra.TestSupport;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Test.Infra.TestSupport;
 
 namespace Test.Infra.GitHub;
 

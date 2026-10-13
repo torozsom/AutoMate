@@ -1,7 +1,6 @@
 using System.Reflection;
 using Domain.Enums;
 using Web.Components.Pages;
-using Xunit;
 
 namespace Test.Web;
 

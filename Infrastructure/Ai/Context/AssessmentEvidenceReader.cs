@@ -34,7 +34,9 @@ internal static class AssessmentEvidenceReader
         if (archive is not null)
             try
             {
-                var page = await archive.ReadAssessmentAsync(query, token);
+                var page = archive is IDeploymentAssessmentArchive selectedArchive
+                    ? await selectedArchive.ReadAssessmentAsync(query, token)
+                    : await archive.ReadAssessmentAsync(query, token);
                 foreach (var entry in page.Events)
                     if (entry.TenantId == query.Tenant && entry.Event.ProjectId == query.Project &&
                         entry.Event.DeploymentId == query.Deployment &&

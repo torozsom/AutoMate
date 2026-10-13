@@ -1,5 +1,9 @@
 # Self-hosted AutoMate
 
+Independent local builds and stops are uncapped by default. Operators may explicitly set
+`DeploymentConcurrency__MaxLocalBuilds` or `DeploymentConcurrency__MaxLocalStops` to a positive cap; zero means
+uncapped. Waiting queue capacity and conflicting project/Compose/port ordering remain enforced. Restart after changes.
+
 1. Copy `.env.example` to `.env`, set unique database passwords and OAuth credentials, then set `PROJECTS_ROOT` to the
    only host directory AutoMate may scan and deploy. In the AutoMate UI this directory appears as `/workspace`.
 2. Configure the GitHub and Microsoft OAuth callback URLs for this installation (for example

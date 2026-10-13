@@ -6,8 +6,7 @@
 *@
 @namespace Web.Components.Shared
 @inject AuthenticationStateProvider Authentication
-@inject IUserService Users
-@inject IDeploymentHistoryService History
+@inject IServiceScopeFactory ServiceScopes
 
 @if (_preferences is not null)
 {
@@ -61,8 +60,12 @@ else if (_error is not null)
         _preferences = null;
         try
         {
-            _owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication, Users);
-            if (_owner != Guid.Empty) _preferences = await History.GetPreferencesAsync(_owner, ProjectId);
+            await using var scope = ServiceScopes.CreateAsyncScope();
+            _owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication,
+                scope.ServiceProvider.GetRequiredService<IUserService>());
+            if (_owner != Guid.Empty)
+                _preferences = await scope.ServiceProvider
+                    .GetRequiredService<IDeploymentHistoryService>().GetPreferencesAsync(_owner, ProjectId);
             _error = null;
         }
         catch (Exception)

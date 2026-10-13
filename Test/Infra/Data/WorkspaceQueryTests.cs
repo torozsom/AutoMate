@@ -5,11 +5,12 @@ using Domain.Enums;
 using Infrastructure.ApplicationServices.Data.Apps;
 using Infrastructure.Data;
 using Infrastructure.Diagnostics;
-using Test.Infra.Ai;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Test.Infra.Ai;
 
 namespace Test.Infra;
 
@@ -29,8 +30,8 @@ public sealed class WorkspaceQueryTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.Db();
-        var legacy = await new Application.Data.Apps.ApplicationService(db,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<Application.Data.Apps.ApplicationService>.Instance)
+        var legacy = await new ApplicationService(db,
+                NullLogger<ApplicationService>.Instance)
             .GetAppByIdAsync(fixture.PrimaryProject, fixture.Owner);
         var newest = legacy!.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt)!;
         var tied = new Deployment { CsProjectId = newest.CsProjectId, Status = DeploymentStatus.Stopped };
@@ -39,12 +40,13 @@ public sealed class WorkspaceQueryTests
         await db.Deployments.Where(d => d.Id == tied.Id).ExecuteUpdateAsync(update =>
             update.SetProperty(d => d.CreatedAt, newest.CreatedAt));
         db.ChangeTracker.Clear();
-        legacy = await new Application.Data.Apps.ApplicationService(db,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<Application.Data.Apps.ApplicationService>.Instance)
+        legacy = await new ApplicationService(db,
+                NullLogger<ApplicationService>.Instance)
             .GetAppByIdAsync(fixture.PrimaryProject, fixture.Owner);
         var expected = legacy!.CsProjects.SelectMany(p => p.Deployments).ToArray();
         var query = new ProjectDetailsQuery(db);
-        var view = Assert.IsType<ProjectDetailsReadModel>(await query.ReadAsync(fixture.PrimaryProject, fixture.Owner, 0));
+        var view = Assert.IsType<ProjectDetailsReadModel>(await query.ReadAsync(fixture.PrimaryProject, fixture.Owner,
+            0));
         Assert.Equal(expected.Length, view.Summary.Total);
         Assert.Equal(expected.Count(d => d.Outcome == DeploymentOutcome.Succeeded), view.Summary.Succeeded);
         Assert.Equal(expected.Count(d => d.Outcome == DeploymentOutcome.Failed), view.Summary.Failed);

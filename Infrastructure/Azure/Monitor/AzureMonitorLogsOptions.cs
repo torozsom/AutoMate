@@ -32,6 +32,9 @@ public sealed class AzureMonitorLogsOptions
     /// <summary>Initial lookback when a checkpoint does not yet exist.</summary>
     public TimeSpan InitialLookback { get; set; } = TimeSpan.FromMinutes(10);
 
+    /// <summary>Quiet managed databases can emit startup events long before the web deployment becomes ready.</summary>
+    public TimeSpan DatabaseInitialLookback { get; set; } = TimeSpan.FromHours(24);
+
     /// <summary>Age after which a delivered record is reported as delayed ingestion.</summary>
     public TimeSpan FreshnessWarningAge { get; set; } = TimeSpan.FromMinutes(5);
 }

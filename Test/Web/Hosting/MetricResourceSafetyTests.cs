@@ -13,7 +13,6 @@ using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using Web.Observability;
-using Xunit;
 
 namespace Test.Web;
 

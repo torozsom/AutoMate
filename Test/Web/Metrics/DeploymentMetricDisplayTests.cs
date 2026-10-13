@@ -1,7 +1,6 @@
 using Application.Abstractions.Diagnostics;
 using Web.Components.Pages;
 using Web.Components.Shared;
-using Xunit;
 
 namespace Test.Web;
 

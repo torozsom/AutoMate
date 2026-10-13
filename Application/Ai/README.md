@@ -1,5 +1,10 @@
 # AI result policy
 
+`AnalysisProviderAccessDeniedException` retains provider/code/request ID and a finite `Reason` (`network_access_denied`,
+`resource_blocked`, or `unknown`) without response prose. Its persisted failure code remains `provider_access_denied`;
+denial is permanent and does not gain retries. Authored guidance identifies credential pairing and Azure host network
+access as operator checks. See [provider access denial](../../Infrastructure/Ai/README.md#provider-access-denial).
+
 Invalid results carry a finite `AnalysisResultRejection` category and fixed `invalid_response_*` code. Categories
 cover incomplete output, refusal, malformed envelope/JSON, schema, field limits, provenance, evidence and response size.
 The exception contains no provider payload. Legacy `invalid_response` stays readable. Exact authored guidance identifies
@@ -25,7 +30,8 @@ context limits (each 1–131,072) and result retention (1–90 days) independent
 tokenizer or cost estimate; shared cost reservations are separately enforced by IAnalysisBudgetGuard.
 
 `AnalysisResultValidator` implements the Application-owned `IAnalysisResultValidator` port. Every provider response is
-untrusted until validation succeeds. The current result contract is version 1: a non-empty summary up to 4,096
+untrusted until validation succeeds. The legacy result contract is version 1 (production structured assessments use
+version 2): a non-empty summary up to 4,096
 characters,
 at most 10 non-empty steps up to 2,048 characters each, and at most 20 non-empty evidence references up to 512
 characters

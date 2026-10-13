@@ -24,7 +24,6 @@ using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Web.Configs;
-using Xunit;
 
 namespace Test.Web;
 

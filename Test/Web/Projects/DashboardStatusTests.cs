@@ -11,7 +11,6 @@ using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Web.Components.Pages;
-using Xunit;
 
 namespace Test.Web;
 

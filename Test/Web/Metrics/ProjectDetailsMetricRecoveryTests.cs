@@ -5,7 +5,6 @@ using Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Web.Components.Pages;
-using Xunit;
 
 namespace Test.Web;
 
@@ -26,14 +25,21 @@ public sealed class ProjectDetailsMetricRecoveryTests
         var restored = DateTimeOffset.Parse("2026-10-12T10:00:00Z");
         var state = (Dictionary<string, Dictionary<string, DeploymentMetricPoint>>)typeof(ProjectDetails)
             .GetField("_typedMetrics", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(page)!;
-        void Receive(DateTimeOffset timestamp, double cores, double bytes) => apply.Invoke(page,
-        [
-            "web", new[]
-            {
-                new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", timestamp, cores, cores, cores),
-                new DeploymentMetricPoint("web", "automate_memory_used_bytes", "bytes", timestamp, bytes, bytes, bytes)
-            }
-        ]);
+
+        void Receive(DateTimeOffset timestamp, double cores, double bytes)
+        {
+            apply.Invoke(page,
+            [
+                "web", new[]
+                {
+                    new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", timestamp, cores, cores,
+                        cores),
+                    new DeploymentMetricPoint("web", "automate_memory_used_bytes", "bytes", timestamp, bytes, bytes,
+                        bytes)
+                }
+            ]);
+        }
+
         Receive(restored, 0.1, 104857600);
         for (var second = 1; second <= 5; second++)
         {
@@ -42,6 +48,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
             Assert.Equal(restored.AddSeconds(second), state["web"]["automate_cpu_usage_cores"].Timestamp);
             Assert.Equal(104857600 + second * 1048576, state["web"]["automate_memory_used_bytes"].Average);
         }
+
         Receive(restored, 0.1, 104857600);
         Assert.Equal(0.5, state["web"]["automate_cpu_usage_cores"].Average);
         Assert.Equal(restored.AddSeconds(5), state["web"]["automate_memory_used_bytes"].Timestamp);

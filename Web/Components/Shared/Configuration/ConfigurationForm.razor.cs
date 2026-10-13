@@ -1,5 +1,6 @@
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
+using Application.Orchestration;
 using Domain.Defaults;
 using Domain.DTO;
 using Microsoft.AspNetCore.Components;
@@ -184,183 +185,16 @@ public partial class ConfigurationForm : ComponentBase
 
 
     /// <summary>
-    ///     Validates cloud database and environment settings and records the first actionable field
-    ///     error.
+    ///     Applies the existing application validation policy and retains the first authored form error.
     /// </summary>
-    /// <returns>True when all settings pass validation; otherwise false with the first field error saved for display.</returns>
+    /// <returns>Whether the cloud settings satisfy the existing form rules.</returns>
     private bool ValidateCloudRuntimeConfiguration()
     {
-        var connectionStringEnvNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var database in Config.Databases)
-        {
-            if (!IsSupportedDatabaseEngine(database.DbType))
-            {
-                _validationMessage =
-                    $"Database engine '{database.DbType}' is not supported for Azure deployments.";
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(database.ConnectionStringName) ||
-                !IsValidConfigurationKeySegment(database.ConnectionStringName))
-            {
-                _validationMessage =
-                    "Database connection string names may contain only letters, numbers, and underscores.";
-                return false;
-            }
-
-            if (!connectionStringEnvNames.Add($"ConnectionStrings__{database.ConnectionStringName.Trim()}"))
-            {
-                _validationMessage =
-                    $"Connection string name '{database.ConnectionStringName}' is used more than once.";
-                return false;
-            }
-
-            if (!string.Equals(database.DbType, "Redis", StringComparison.OrdinalIgnoreCase) &&
-                string.IsNullOrWhiteSpace(database.DbName))
-            {
-                _validationMessage = "Database name is required for every non-Redis database.";
-                return false;
-            }
-
-            if (RequiresDatabaseLogin(database.DbType) && string.IsNullOrWhiteSpace(database.DbUser))
-            {
-                _validationMessage = "PostgreSQL, MySQL, and SQL Server databases require an administrator username.";
-                return false;
-            }
-
-            if (RequiresDatabaseLogin(database.DbType) && !IsValidDatabaseAdministrator(database.DbUser))
-            {
-                _validationMessage =
-                    "Database administrator usernames may contain only letters and numbers, must start with a letter, and cannot use common reserved names.";
-                return false;
-            }
-
-            if (RequiresDatabaseLogin(database.DbType) && string.IsNullOrWhiteSpace(database.DbPassword))
-            {
-                _validationMessage = "PostgreSQL, MySQL, and SQL Server databases require an administrator password.";
-                return false;
-            }
-
-            if (RequiresDatabaseLogin(database.DbType) && !IsStrongEnoughDatabasePassword(database.DbPassword))
-            {
-                _validationMessage =
-                    "Database passwords must be at least 8 characters and include uppercase, lowercase, and numeric characters.";
-                return false;
-            }
-        }
-
-        var customEnvKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var envVar in _envVars.Where(envVar => !string.IsNullOrWhiteSpace(envVar.Key)))
-        {
-            var key = envVar.Key.Trim();
-            if (!IsValidEnvironmentVariableName(key))
-            {
-                _validationMessage =
-                    "Environment variable names may contain only letters, numbers, and underscores, and cannot start with a number.";
-                return false;
-            }
-
-            if (!customEnvKeys.Add(key))
-            {
-                _validationMessage = $"Environment variable '{key}' is defined more than once.";
-                return false;
-            }
-
-            if (connectionStringEnvNames.Contains(key))
-            {
-                _validationMessage =
-                    $"Environment variable '{key}' is already generated from the database configuration.";
-                return false;
-            }
-        }
-
-        return true;
+        var error = CloudRuntimeConfigurationValidation.Validate(Config, _envVars.Select(item => item.Key));
+        if (error is null) return true;
+        _validationMessage = error;
+        return false;
     }
-
-
-    /// <summary>
-    ///     Checks the finite catalog of supported database engine names.
-    /// </summary>
-    /// <param name="dbType">Configured database engine name.</param>
-    /// <returns>True for PostgreSQL, MySQL, SQL Server, MongoDB or Redis after trimming and case normalization.</returns>
-    private static bool IsSupportedDatabaseEngine(string dbType)
-    {
-        return dbType.Trim().ToLowerInvariant() switch
-        {
-            "postgresql" or "mysql" or "sqlserver" or "mongodb" or "redis" => true,
-            _ => false
-        };
-    }
-
-
-    /// <summary>
-    ///     Checks whether the engine requires administrator credentials.
-    /// </summary>
-    /// <param name="dbType">Configured database engine name.</param>
-    /// <returns>True for PostgreSQL, MySQL or SQL Server; otherwise false.</returns>
-    private static bool RequiresDatabaseLogin(string dbType)
-    {
-        return dbType.Trim().ToLowerInvariant() is "postgresql" or "mysql" or "sqlserver";
-    }
-
-
-    /// <summary>
-    ///     Checks a nonempty connection-key segment for letters, digits and underscores.
-    /// </summary>
-    /// <param name="value">Input text to validate, normalize or format.</param>
-    /// <returns>True for a nonempty trimmed sequence of letters, digits and underscores.</returns>
-    private static bool IsValidConfigurationKeySegment(string value)
-    {
-        return !string.IsNullOrWhiteSpace(value) &&
-               value.Trim().All(c => char.IsLetterOrDigit(c) || c == '_');
-    }
-
-
-    /// <summary>
-    ///     Checks administrator syntax and rejects reserved account names.
-    /// </summary>
-    /// <param name="value">Input text to validate, normalize or format.</param>
-    /// <returns>True for a nonreserved alphanumeric account name beginning with a letter.</returns>
-    private static bool IsValidDatabaseAdministrator(string value)
-    {
-        var trimmed = value.Trim();
-        string[] reservedNames = ["admin", "administrator", "root", "guest", "public", "sa"];
-
-        return trimmed.Length > 0 &&
-               char.IsLetter(trimmed[0]) &&
-               trimmed.All(char.IsLetterOrDigit) &&
-               !reservedNames.Contains(trimmed, StringComparer.OrdinalIgnoreCase);
-    }
-
-
-    /// <summary>
-    ///     Checks the minimum length and uppercase, lowercase and numeric requirements.
-    /// </summary>
-    /// <param name="value">Input text to validate, normalize or format.</param>
-    /// <returns>True for at least eight characters containing uppercase, lowercase and numeric characters.</returns>
-    private static bool IsStrongEnoughDatabasePassword(string value)
-    {
-        return value.Length >= 8 &&
-               value.Any(char.IsUpper) &&
-               value.Any(char.IsLower) &&
-               value.Any(char.IsDigit);
-    }
-
-
-    /// <summary>
-    ///     Checks the environment-variable identifier syntax.
-    /// </summary>
-    /// <param name="value">Input text to validate, normalize or format.</param>
-    /// <returns>True for a nonempty letter/underscore-led name containing only letters, digits and underscores.</returns>
-    private static bool IsValidEnvironmentVariableName(string value)
-    {
-        var trimmed = value.Trim();
-        return trimmed.Length > 0 &&
-               (char.IsLetter(trimmed[0]) || trimmed[0] == '_') &&
-               trimmed.All(c => char.IsLetterOrDigit(c) || c == '_');
-    }
-
 
     /// <summary>
     ///     Updates empty or previously generated resource names while preserving explicit user edits.
