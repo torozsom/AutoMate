@@ -218,10 +218,10 @@ public sealed class WorkspaceQueryTests
             Assert.Equal(60, overview.Resources.Single(p => p.Metric == "automate_cpu_usage_cores").Samples);
             var consent = new MetricExplorationService(db, port,
                 Options.Create(new TelemetryStorageOptions
-                    { ManagedService = true, ManagedDataProcessingApproved = true }), TimeProvider.System);
+                { ManagedService = true, ManagedDataProcessingApproved = true }), TimeProvider.System);
             var privateReader = new ArchiveMetricBatchReader(db, disk,
                 Options.Create(new TelemetryStorageOptions
-                    { ManagedService = true, ManagedDataProcessingApproved = true }));
+                { ManagedService = true, ManagedDataProcessingApproved = true }));
             Assert.NotEmpty(
                 (await privateReader.ReadAsync(
                     new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject), default)).Items);
@@ -502,11 +502,11 @@ public sealed class WorkspaceQueryTests
                     SourcePathOrUrl = "private"
                 };
                 var component = new CsProject
-                    { Name = "Web", Path = "web.csproj", IsWebProject = true, Application = apps[0] };
+                { Name = "Web", Path = "web.csproj", IsWebProject = true, Application = apps[0] };
                 var successful = new Deployment
-                    { CsProject = component, Status = DeploymentStatus.Stopped, Outcome = DeploymentOutcome.Succeeded };
+                { CsProject = component, Status = DeploymentStatus.Stopped, Outcome = DeploymentOutcome.Succeeded };
                 var failed = new Deployment
-                    { CsProject = component, Status = DeploymentStatus.Failed, Outcome = DeploymentOutcome.Failed };
+                { CsProject = component, Status = DeploymentStatus.Failed, Outcome = DeploymentOutcome.Failed };
                 var component2 = new CsProject { Name = "Worker", Path = "worker.csproj", Application = apps[0] };
                 var starting = new Deployment { CsProject = component2, Status = DeploymentStatus.Starting };
                 apps[1].Name = "No duration";

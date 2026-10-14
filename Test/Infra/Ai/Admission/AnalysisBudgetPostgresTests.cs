@@ -303,7 +303,7 @@ public sealed class AnalysisBudgetPostgresTests
         public AutoMateDbContext Db(bool fullModel = false)
         {
             var builder = new NpgsqlConnectionStringBuilder(connectionString)
-                { SearchPath = schema, Pooling = false, Timeout = 10, CommandTimeout = 30 };
+            { SearchPath = schema, Pooling = false, Timeout = 10, CommandTimeout = 30 };
             var options = new DbContextOptionsBuilder<AutoMateDbContext>()
                 .UseNpgsql(builder.ToString(),
                     settings => settings.MigrationsHistoryTable("__EFMigrationsHistory", schema))
@@ -360,7 +360,7 @@ public sealed class AnalysisBudgetPostgresTests
                 var lease = Guid.NewGuid();
                 var until = DateTimeOffset.UtcNow.AddMinutes(10);
                 db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem
-                    { Analysis = analysis, LeaseId = lease, LeaseUntil = until });
+                { Analysis = analysis, LeaseId = lease, LeaseUntil = until });
                 return new Work(analysis.Id, Deployments[index], lease, until, 1);
             }).ToArray();
             await db.SaveChangesAsync();
@@ -388,7 +388,7 @@ public sealed class AnalysisBudgetPostgresTests
                     ? "20261005104851_AddFailedDeploymentAnalysisEvents"
                     : null);
                 var owners = Enumerable.Range(0, 2).Select(index => new LocalUser
-                    { Username = "fixture-" + index, Email = $"{index}@example.invalid" }).ToArray();
+                { Username = "fixture-" + index, Email = $"{index}@example.invalid" }).ToArray();
                 var deployments = Enumerable.Range(0, 8).Select(index => new Deployment
                 {
                     CsProject = new CsProject
@@ -396,7 +396,7 @@ public sealed class AnalysisBudgetPostgresTests
                         Name = "fixture",
                         Path = "fixture.csproj",
                         Configuration = new Configuration
-                            { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
+                        { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
                         Application = new Domain.Entities.Application
                         {
                             Name = "fixture",

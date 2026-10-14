@@ -155,13 +155,13 @@ public sealed class ProjectDetailsNotificationTests
                 }
 
                 return new ProjectDetailsReadModel(new Domain.Entities.Application
-                    {
-                        Id = project,
-                        UserId = owner,
-                        Name = "fixture",
-                        SourcePathOrUrl = "https://github.com/example/fixture",
-                        SourceType = SourceType.Remote
-                    },
+                {
+                    Id = project,
+                    UserId = owner,
+                    Name = "fixture",
+                    SourcePathOrUrl = "https://github.com/example/fixture",
+                    SourceType = SourceType.Remote
+                },
                     new ProjectDeploymentSummary(0, 0, 0, 0, null), []);
             }
             finally

@@ -107,14 +107,14 @@ public sealed class DeploymentAnalysisService(
         var deployment = await dbContext.Deployments.AsNoTracking().Where(d => d.Id == deploymentId &&
                                                                                d.CsProject!.Application.UserId ==
                                                                                ownerId).Select(d => new
-        {
-            d.Status,
-            d.CreatedAt,
-            d.UpdatedAt,
-            d.AiAssessmentPreferencesJson,
-            d.ConfigurationSnapshotJson,
-            Project = d.CsProject!.AppId
-        }).SingleOrDefaultAsync(token);
+                                                                               {
+                                                                                   d.Status,
+                                                                                   d.CreatedAt,
+                                                                                   d.UpdatedAt,
+                                                                                   d.AiAssessmentPreferencesJson,
+                                                                                   d.ConfigurationSnapshotJson,
+                                                                                   Project = d.CsProject!.AppId
+                                                                               }).SingleOrDefaultAsync(token);
         if (deployment is null) return null;
         var now = clock.GetUtcNow();
         var selection = AssessmentSelection.Read(deployment.AiAssessmentPreferencesJson);

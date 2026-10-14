@@ -646,7 +646,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
 
         if (app is { SourceType: SourceType.Local } && app.CsProjects.FirstOrDefault(csp => csp.IsWebProject) is
-                { } csProject)
+            { } csProject)
         {
             var config = await ProjectScanner.AnalyzeDependenciesAsync(app, csProject, token);
             if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;

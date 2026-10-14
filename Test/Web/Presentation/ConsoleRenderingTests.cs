@@ -52,13 +52,13 @@ public sealed class ConsoleRenderingTests
                      typeof(Dashboard), typeof(GitHubRepos), typeof(LocalGitRepos), typeof(MainLayout), typeof(NavMenu),
                      typeof(ConfigurationForm), typeof(RegistryForm), typeof(WorkspaceOverviewPanel)
                  })
-        foreach (var property in type
-                     .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
-                                 !p.PropertyType.IsGenericType))
-            if (!services.Any(s => s.ServiceType == property.PropertyType))
-                services.AddSingleton(property.PropertyType,
-                    DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
+            foreach (var property in type
+                         .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                         .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
+                                     !p.PropertyType.IsGenericType))
+                if (!services.Any(s => s.ServiceType == property.PropertyType))
+                    services.AddSingleton(property.PropertyType,
+                        DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
         if (!services.Any(registration => registration.ServiceType == typeof(IUserService)))
             services.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
         if (!services.Any(registration => registration.ServiceType == typeof(IApplicationService)))
@@ -71,7 +71,10 @@ public sealed class ConsoleRenderingTests
         Directory.CreateDirectory(directory);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
             Path.Combine(directory, "bootstrap.css"), true);
-        File.Copy(Path.Combine(root, "Web", "obj", "Debug", "net10.0", "scopedcss", "bundle", "Web.styles.css"),
+        var configuration = typeof(ConsoleRenderingTests).Assembly
+            .GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration
+            ?? throw new InvalidOperationException("The test assembly must declare its build configuration.");
+        File.Copy(Path.Combine(root, "Web", "obj", configuration, "net10.0", "scopedcss", "bundle", "Web.styles.css"),
             Path.Combine(directory, "Web.styles.css"), true);
         foreach (var (name, type, authenticated) in new[]
                  {
@@ -89,7 +92,7 @@ public sealed class ConsoleRenderingTests
             var html = await renderer.Dispatcher.InvokeAsync(async () =>
                 (await renderer.RenderComponentAsync<PreviewRoot>(
                     ParameterView.FromDictionary(new Dictionary<string, object?>
-                        { [nameof(PreviewRoot.Page)] = type }))).ToHtmlString());
+                    { [nameof(PreviewRoot.Page)] = type }))).ToHtmlString());
             if (name == "overview")
             {
                 Assert.Contains("Success rate", html);

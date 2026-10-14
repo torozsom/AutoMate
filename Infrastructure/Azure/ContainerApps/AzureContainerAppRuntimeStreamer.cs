@@ -641,7 +641,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 var azure = await credentials.GetAsync(d.UserId, token);
                 _targets.TryAdd(d.Id, new ContainerAppStreamTarget(d.AppId, d.Id, d.UserId, d.CloudResourceId!,
                         d.CloudContainerAppName!, azure)
-                    { ExpectedRevision = d.CloudContainerRevision });
+                { ExpectedRevision = d.CloudContainerRevision });
             }
             catch (Exception ex) when (ex is not OperationCanceledException || !token.IsCancellationRequested)
             {

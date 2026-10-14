@@ -69,7 +69,7 @@ public sealed class TelemetryGatewayCompatibilityTests
     public async Task Failed_probe_is_classified_safely(int status, string body, TelemetryCompatibilityFailure expected)
     {
         using var handler = new DelegateHttpMessageHandler(_ => new HttpResponseMessage((HttpStatusCode)status)
-            { Content = new StringContent(body) });
+        { Content = new StringContent(body) });
         using var compatibility = new TelemetryGatewayCompatibility(new StubHttpClientFactory(handler), Settings(),
             NullLogger<TelemetryGatewayCompatibility>.Instance);
         var error = await Assert.ThrowsAsync<TelemetryCompatibilityException>(() => compatibility.EnsureAsync(default));
@@ -123,6 +123,6 @@ public sealed class TelemetryGatewayCompatibilityTests
     private static IOptions<TelemetryStorageOptions> Settings()
     {
         return Options.Create(new TelemetryStorageOptions
-            { GatewayUrl = "https://telemetry.example.invalid", GatewayToken = "synthetic-private-credential" });
+        { GatewayUrl = "https://telemetry.example.invalid", GatewayToken = "synthetic-private-credential" });
     }
 }

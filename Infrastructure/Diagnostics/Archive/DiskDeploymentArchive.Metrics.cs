@@ -160,7 +160,8 @@ public sealed partial class DiskDeploymentArchive
                 {
                     Samples = previous.Samples + value.Samples,
                     ImportedIntervals = previous.ImportedIntervals + value.ImportedIntervals,
-                    Sum = previous.Sum + value.Sum, Minimum = Math.Min(previous.Minimum, value.Minimum),
+                    Sum = previous.Sum + value.Sum,
+                    Minimum = Math.Min(previous.Minimum, value.Minimum),
                     Maximum = Math.Max(previous.Maximum, value.Maximum)
                 };
             }

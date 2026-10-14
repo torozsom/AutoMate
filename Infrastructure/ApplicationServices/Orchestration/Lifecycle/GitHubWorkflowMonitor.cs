@@ -466,7 +466,7 @@ internal sealed class GitHubWorkflowMonitor(
                     $"GitHub Actions final archive did not contain a stable entry for job {checkpoint.JobName}.\r\n",
                     DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning,
                     new Dictionary<string, string>
-                        { ["workflow.run_id"] = run.Id.ToString(CultureInfo.InvariantCulture) },
+                    { ["workflow.run_id"] = run.Id.ToString(CultureInfo.InvariantCulture) },
                     cancellationToken);
                 continue;
             }

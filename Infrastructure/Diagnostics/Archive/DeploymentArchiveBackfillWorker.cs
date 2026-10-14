@@ -78,7 +78,7 @@ public sealed class DeploymentArchiveBackfillWorker(
         var projects = await db.Deployments.AsNoTracking()
             .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id).Skip(_offset).Take(20)
             .Select(d => new
-                { d.Id, d.CreatedAt, Project = d.CsProject!.AppId, Tenant = d.CsProject.Application.UserId })
+            { d.Id, d.CreatedAt, Project = d.CsProject!.AppId, Tenant = d.CsProject.Application.UserId })
             .ToArrayAsync(token);
         _offset = projects.Length < 20 ? 0 : _offset + projects.Length;
         foreach (var deployment in projects)

@@ -163,7 +163,7 @@ public sealed class DeploymentAnalysisEndpointTests
             Results.Text(antiforgery.GetAndStoreTokens(context).RequestToken!));
         await app.StartAsync();
         using var client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() })
-            { BaseAddress = new Uri(app.Urls.Single()) };
+        { BaseAddress = new Uri(app.Urls.Single()) };
         if (authenticated) client.DefaultRequestHeaders.Add("Fixture-Owner", owner.ToString());
         var requestToken = await client.GetStringAsync("/fixture-token");
         if (csrf) client.DefaultRequestHeaders.Add("RequestVerificationToken", requestToken);

@@ -50,12 +50,12 @@ public sealed class TelemetryPageRenderingTests
             .AddSingleton(DispatchProxy.Create<IDeploymentAnalysisService, FixtureAssessments>())
             .AddSingleton<NavigationManager, FixtureNavigation>();
         foreach (var componentType in new[] { typeof(ProjectDetails), typeof(MainLayout), typeof(NavMenu) })
-        foreach (var property in componentType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
-                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
-                                 !p.PropertyType.IsGenericType))
-            if (!registrations.Any(r => r.ServiceType == property.PropertyType))
-                registrations.AddSingleton(property.PropertyType,
-                    DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
+            foreach (var property in componentType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
+                         .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
+                                     !p.PropertyType.IsGenericType))
+                if (!registrations.Any(r => r.ServiceType == property.PropertyType))
+                    registrations.AddSingleton(property.PropertyType,
+                        DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
         if (!registrations.Any(registration => registration.ServiceType == typeof(IUserService)))
             registrations.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
         if (!registrations.Any(registration => registration.ServiceType == typeof(IApplicationService)))
@@ -182,7 +182,7 @@ public sealed class TelemetryPageRenderingTests
         protected override Task OnInitializedAsync()
         {
             var project = new CsProject
-                { Name = "Web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } };
+            { Name = "Web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } };
             var app = new Domain.Entities.Application
             {
                 Name = "History demo",

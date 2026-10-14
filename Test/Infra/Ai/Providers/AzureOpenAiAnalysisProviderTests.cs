@@ -313,7 +313,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
             var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
             {
                 Content = new StringContent(JsonSerializer.Serialize(new
-                    { error = new { code, message = "password=private-value" } }))
+                { error = new { code, message = "password=private-value" } }))
             };
             if (hint) response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
             return response;
