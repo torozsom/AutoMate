@@ -99,7 +99,7 @@ internal sealed class DockerDiagnosticCollector(
             {
                 using var subscription = CancellationTokenSource.CreateLinkedTokenSource(token);
                 var pending = Channel.CreateBounded<DeploymentDiagnosticEvent>(new BoundedChannelOptions(256)
-                    { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
+                { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
                 var omitted = 0;
                 var receiver = ReceiveAsync();
                 if (!ready)

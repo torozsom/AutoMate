@@ -85,7 +85,7 @@ public sealed class TelemetryHostSafetyTests
 
         var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("private-category");
         using (logger.BeginScope(new Dictionary<string, object?>
-                   { ["Authorization"] = token, ["DeploymentId"] = Guid.NewGuid() }))
+        { ["Authorization"] = token, ["DeploymentId"] = Guid.NewGuid() }))
         {
             logger.LogError(new InvalidOperationException("password=private-exception"), "private-message {Url}",
                 "https://private-host.invalid");

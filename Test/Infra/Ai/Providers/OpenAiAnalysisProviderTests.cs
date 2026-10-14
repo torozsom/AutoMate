@@ -400,7 +400,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         {
             calls++;
             return new HttpResponseMessage(HttpStatusCode.BadRequest)
-                { Content = new StringContent("password=private-value", Encoding.UTF8) };
+            { Content = new StringContent("password=private-value", Encoding.UTF8) };
         });
         using var client = new HttpClient(handler);
         var error = await Assert.ThrowsAsync<HttpRequestException>(() =>
@@ -453,7 +453,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         {
             calls++;
             var response = new HttpResponseMessage((HttpStatusCode)status)
-                { Content = new StringContent("password=private-value") };
+            { Content = new StringContent("password=private-value") };
             response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
             return response;
         });
@@ -523,7 +523,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
             _ => JsonSerializer.Serialize(new { error = new { code, message = "password=private-value" } })
         };
         using var handler = new DelegateHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.TooManyRequests)
-            { Content = new StringContent(body) });
+        { Content = new StringContent(body) });
         using var client = new HttpClient(handler);
         var error = await Record.ExceptionAsync(() => Provider(client).AnalyzeAsync(Request("safe")));
         if (transient) Assert.IsType<TransientAnalysisProviderException>(error);

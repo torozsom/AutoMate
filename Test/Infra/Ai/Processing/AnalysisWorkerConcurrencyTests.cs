@@ -325,7 +325,7 @@ public sealed class AnalysisWorkerConcurrencyTests
                 Path = "web.csproj",
                 Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
                 Application = new Domain.Entities.Projects.Application
-                    { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
+                { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
             };
             for (var i = 0; i < count; i++)
                 db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem

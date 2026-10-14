@@ -538,7 +538,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             RuntimeDiagnosticsEnabled = true
         };
         var deployment = new Deployment
-            { CsProject = new CsProject { Application = project, Name = "Web", Path = "Web.csproj" } };
+        { CsProject = new CsProject { Application = project, Name = "Web", Path = "Web.csproj" } };
         db.Deployments.Add(deployment);
         await db.SaveChangesAsync();
         return (owner.Id, project.Id, deployment.Id);

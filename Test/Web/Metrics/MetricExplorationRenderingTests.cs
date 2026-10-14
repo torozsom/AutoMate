@@ -59,10 +59,10 @@ public sealed class MetricExplorationRenderingTests
         var published = new List<MetricTimeRange>();
         var picker = new MetricRangePicker();
         ParameterView.FromDictionary(new Dictionary<string, object?>
-            {
-                ["Changed"] =
+        {
+            ["Changed"] =
                     EventCallback.Factory.Create(published, (MetricTimeRange r) => published.Add(r))
-            })
+        })
             .SetParameterProperties(picker);
         var end = DateTimeOffset.UtcNow.AddMinutes(-1).UtcDateTime;
         Set("_choice", "custom");

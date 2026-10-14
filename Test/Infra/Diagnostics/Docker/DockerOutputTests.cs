@@ -114,7 +114,7 @@ public sealed class DockerOutputTests
     {
         var target = Target();
         var labels = new Dictionary<string, string>
-            { ["com.docker.compose.project"] = target.ComposeProject, ["com.docker.compose.service"] = "web" };
+        { ["com.docker.compose.project"] = target.ComposeProject, ["com.docker.compose.service"] = "web" };
         Assert.True(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels, true));
         Assert.False(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels));
         Assert.Null(DockerDiagnosticNormalizer.Daemon(target, Event(labels, "start")));

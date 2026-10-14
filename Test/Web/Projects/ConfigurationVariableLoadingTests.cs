@@ -82,7 +82,7 @@ public sealed class ConfigurationVariableLoadingTests
         var form = new ConfigurationForm();
         typeof(ConfigurationForm).GetProperty("ProjectPath")!.SetValue(form, "C:/selected/Web.csproj");
         typeof(ConfigurationForm).GetProperty("Config")!.SetValue(form, new DeploymentConfigDto
-            { ExposedPort = 12345, CustomEnvVars = new Dictionary<string, string> { ["EXISTING"] = "edited" } });
+        { ExposedPort = 12345, CustomEnvVars = new Dictionary<string, string> { ["EXISTING"] = "edited" } });
         typeof(ConfigurationForm).GetProperty("ProjectScanner", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(form, scanner);
         typeof(ConfigurationForm).GetMethod("OnInitialized", BindingFlags.Instance | BindingFlags.NonPublic)!

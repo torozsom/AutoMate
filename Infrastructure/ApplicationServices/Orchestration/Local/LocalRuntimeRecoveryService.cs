@@ -69,7 +69,7 @@ public sealed class LocalRuntimeRecoveryService(
                                                      newer.CreatedAt > d.CreatedAt))
             .Include(d => d.CsProject!).ThenInclude(p => p.Application)
             .OrderBy(d => d.Id);
-        for (var offset = 0;; offset += 100)
+        for (var offset = 0; ; offset += 100)
         {
             var deployments = await query.Skip(offset).Take(100).ToListAsync(token);
             foreach (var deployment in deployments)

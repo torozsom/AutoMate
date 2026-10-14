@@ -31,7 +31,7 @@ public sealed class AnalysisConsentTests
         await db.Database.EnsureCreatedAsync();
         var owner = new LocalUser { Username = "fixture", Email = "fixture@example.invalid" };
         var app = new Domain.Entities.Projects.Application
-            { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote, User = owner };
+        { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote, User = owner };
         var selected = new CsProject { Application = app };
         var sibling = new CsProject { Application = app };
         db.CsProjects.AddRange(selected, sibling);
@@ -70,7 +70,7 @@ public sealed class AnalysisConsentTests
         await db.Database.EnsureCreatedAsync();
         var owner = new LocalUser { Username = "fixture", Email = "fixture@example.invalid" };
         var app = new Domain.Entities.Projects.Application
-            { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local, User = owner };
+        { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local, User = owner };
         var other = new CsProject
         {
             Application = app,
@@ -114,7 +114,7 @@ public sealed class AnalysisConsentTests
         await db.Database.EnsureCreatedAsync();
         var owner = new LocalUser { Username = "fixture", Email = "fixture@example.invalid" };
         var app = new Domain.Entities.Projects.Application
-            { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local, User = owner };
+        { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local, User = owner };
         var selected = new CsProject
         {
             Application = app,

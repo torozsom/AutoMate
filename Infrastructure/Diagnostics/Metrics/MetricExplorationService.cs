@@ -132,10 +132,10 @@ public sealed class MetricExplorationService(
 
         var allowed = new HashSet<Guid>();
         foreach (var projects in rows.Values.Select(p => p.Project).Distinct().Chunk(500))
-        foreach (var id in await db.Applications.AsNoTracking().Where(p => projects.Contains(p.Id) &&
-                                                                           p.UserId == query.Owner)
-                     .Select(p => p.Id).ToListAsync(token))
-            allowed.Add(id);
+            foreach (var id in await db.Applications.AsNoTracking().Where(p => projects.Contains(p.Id) &&
+                                                                               p.UserId == query.Owner)
+                         .Select(p => p.Id).ToListAsync(token))
+                allowed.Add(id);
         if (query.Project is { } selectedProject && !await db.Applications.AnyAsync(p =>
                 p.Id == selectedProject && p.UserId == query.Owner, token))
             throw new UnauthorizedAccessException("Metric access denied.");
