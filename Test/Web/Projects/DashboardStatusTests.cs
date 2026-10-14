@@ -2,17 +2,21 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using Application.Abstractions.Hosting;
 using Application.Data.Apps;
-using Application.Orchestration;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Orchestration.Jobs;
+using Application.Orchestration.Status;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Web.Components.Pages;
+using Test.Web.Diagnostics;
+using Dashboard = Web.Components.Pages.Workspace.Dashboard;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Exercises background deployment notifications against a real renderer dispatcher.
@@ -40,7 +44,7 @@ public sealed class DashboardStatusTests
     {
         var owner = Guid.NewGuid();
         var id = Guid.NewGuid();
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
         {
             Id = id,
             UserId = owned ? owner : Guid.NewGuid(),
@@ -62,7 +66,7 @@ public sealed class DashboardStatusTests
             Assert.Equal(nameof(IApplicationService.GetAppByIdAsync), method!.Name);
             Assert.Equal(id, args![0]);
             Assert.Equal(owner, args[1]);
-            return Task.FromResult<Domain.Entities.Application?>(app);
+            return Task.FromResult<Domain.Entities.Projects.Application?>(app);
         };
         var capabilities = DispatchProxy.Create<IDeploymentCapabilities, OperationalLoggingTests.PortProxy>();
         ((OperationalLoggingTests.PortProxy)capabilities).Call = (_, _) => localEnabled;
@@ -128,7 +132,7 @@ public sealed class DashboardStatusTests
         await using var renderer = new TestRenderer(services);
         var component = new FixtureDashboard();
         var deployment = new Deployment { Status = DeploymentStatus.Starting };
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
         {
             Id = Guid.NewGuid(),
             Name = "fixture",
@@ -136,7 +140,7 @@ public sealed class DashboardStatusTests
             SourcePathOrUrl = "fixture",
             CsProjects = [new CsProject { Deployments = [deployment] }]
         };
-        Set("_apps", new List<Domain.Entities.Application> { app });
+        Set("_apps", new List<Domain.Entities.Projects.Application> { app });
         var states =
             (ConcurrentDictionary<Guid, bool>)typeof(Dashboard).GetField("_deployingStates",
                 BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(component)!;
@@ -186,7 +190,7 @@ public sealed class DashboardStatusTests
         var owner = Guid.NewGuid();
         var project = Guid.NewGuid();
         var deployment = new Deployment { Status = DeploymentStatus.Starting };
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
         {
             Id = project,
             Name = "fixture",
@@ -214,7 +218,7 @@ public sealed class DashboardStatusTests
         using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
         await using var renderer = new TestRenderer(services);
         var component = new FixtureDashboard();
-        Set("_apps", new List<Domain.Entities.Application> { app });
+        Set("_apps", new List<Domain.Entities.Projects.Application> { app });
         Set("_inventory", initial);
         Set("_currentUserId", owner);
         Property("ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());

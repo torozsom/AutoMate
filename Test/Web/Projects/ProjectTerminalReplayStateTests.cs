@@ -1,6 +1,6 @@
 using Web.Services;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Characterizes replay acceptance at the extracted state boundary without inspecting component fields.

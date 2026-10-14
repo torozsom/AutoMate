@@ -1,14 +1,19 @@
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Ai.Results;
 using Application.Diagnostics;
-using Domain.Enums;
+using Domain.Enums.Ai;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Processing;
 
 /// <summary>
 ///     Executes one leased analysis with explicit dependencies; deferred boundaries preserve admission-before-provider

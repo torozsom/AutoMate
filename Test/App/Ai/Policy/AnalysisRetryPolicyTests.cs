@@ -1,4 +1,4 @@
-using Application.Ai;
+using Application.Ai.Policy;
 
 namespace Test.App.Ai.Policy;
 

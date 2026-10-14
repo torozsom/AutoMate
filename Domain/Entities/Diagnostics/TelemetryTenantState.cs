@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Diagnostics;
 
 /// <summary>
 ///     Durable tenant delivery lease and loss accounting, without diagnostic payloads.

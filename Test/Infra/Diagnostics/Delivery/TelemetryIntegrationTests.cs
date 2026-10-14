@@ -1,20 +1,32 @@
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Context;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Projects;
 using FluentAssertions;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Runtime;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Test.Infra.Diagnostics.PolicyAndMetrics;
 using Xunit.Abstractions;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Delivery;
 
 /// <summary>
 ///     Real PostgreSQL/Loki/Mimir acceptance tests against the isolated Compose override.
@@ -517,7 +529,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
         await db.Database.MigrateAsync();
         var owner = new LocalUser { Username = "test", Email = $"{Guid.NewGuid():N}@example.invalid" };
-        var project = new Domain.Entities.Application
+        var project = new Domain.Entities.Projects.Application
         {
             User = owner,
             Name = "Sample",

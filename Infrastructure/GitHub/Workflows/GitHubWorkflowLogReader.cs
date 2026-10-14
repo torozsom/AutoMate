@@ -1,8 +1,8 @@
 using System.IO.Compression;
 using System.Text;
-using Domain.DTO;
+using Domain.DTO.GitHub;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Workflows;
 
 /// <summary>
 ///     Reads GitHub Actions job logs and named workflow archive entries.

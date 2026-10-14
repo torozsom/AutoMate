@@ -1,11 +1,12 @@
 using System.Reflection;
-using Application.Abstractions.Ai;
-using Domain.Enums;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Domain.Enums.Ai;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Web.Components.Shared;
 
-namespace Test.Web;
+namespace Test.Web.Analysis;
 
 /// <summary>
 ///     Verifies the shared presenter rather than the previous page-specific polling implementation.

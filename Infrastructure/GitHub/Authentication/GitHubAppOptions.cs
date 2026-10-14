@@ -1,4 +1,4 @@
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Authentication;
 
 /// <summary>
 ///     GitHub App credentials supplied by the SaaS secret provider.

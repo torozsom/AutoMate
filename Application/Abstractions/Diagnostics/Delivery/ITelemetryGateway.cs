@@ -1,4 +1,7 @@
-namespace Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+
+namespace Application.Abstractions.Diagnostics.Delivery;
 
 /// <summary>
 ///     Durable ingestion and pending reads, independent of the queue technology.

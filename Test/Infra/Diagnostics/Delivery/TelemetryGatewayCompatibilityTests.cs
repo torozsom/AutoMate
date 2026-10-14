@@ -1,12 +1,14 @@
 using System.Net;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Delivery;
 
 /// <summary>
 ///     Verifies private protocol compatibility independently of tenant history and external

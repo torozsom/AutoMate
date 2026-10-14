@@ -1,7 +1,8 @@
-using Domain.DTO;
+using Domain.DTO.Templating;
+using Infrastructure.Templating.Catalog;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Rendering;
 
 /// <summary>
 ///     Writes generated template files to disk with output path safety checks.

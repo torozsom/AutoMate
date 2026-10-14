@@ -1,6 +1,7 @@
-using Application.Abstractions.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Metrics;
 
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.History;
 
 /// <summary>
 ///     Guarantees filtered archive assessment reads independently of the wider legacy archive compatibility surface.

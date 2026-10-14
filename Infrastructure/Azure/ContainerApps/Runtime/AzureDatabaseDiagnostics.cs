@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
 using System.Text;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Diagnostics;
+using Infrastructure.Azure.Databases;
+using Infrastructure.Azure.Monitor;
 using Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps.Runtime;
 
 /// <summary>
 ///     Collects owned managed-database metrics and durable log checkpoints separately from web runtime supervision.

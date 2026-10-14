@@ -1,7 +1,7 @@
-using Application.Abstractions.Diagnostics;
-using Web.Components.Shared;
+using Application.Abstractions.Diagnostics.Metrics;
+using Web.Components.Shared.Metrics;
 
-namespace Test.Web;
+namespace Test.Web.Metrics;
 
 /// <summary>
 ///     Resource display must retain small values and actual sample weighting.

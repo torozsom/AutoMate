@@ -1,12 +1,13 @@
 using System.Reflection;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
-using Web.Components.Pages;
+using Domain.DTO.Deployment;
+using Domain.Entities.Projects;
+using Domain.Enums.Projects;
+using Test.Web.Diagnostics;
+using Dashboard = Web.Components.Pages.Workspace.Dashboard;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Checks deployment preparation failures at the real component boundary.
@@ -33,7 +34,7 @@ public sealed class DeploymentFailurePrivacyTests
             .SetValue(component, scanner);
         type.GetProperty("DeploymentCapabilities", BindingFlags.NonPublic | BindingFlags.Instance)!
             .SetValue(component, capabilities);
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
         {
             Name = "fixture",
             SourceType = SourceType.Local,

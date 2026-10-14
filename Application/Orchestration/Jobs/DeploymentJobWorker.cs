@@ -2,13 +2,16 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Hosting;
 using Application.Diagnostics;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Application.Orchestration.Local;
+using Application.Orchestration.Status;
+using Domain.Enums.Deployments;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Jobs;
 
 /// <summary>
 ///     Admits independent deployment jobs with optional local caps and bounded cloud capacity.

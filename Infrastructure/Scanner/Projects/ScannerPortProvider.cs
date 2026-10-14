@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Projects;
 
 /// <summary>
 ///     Allocates available local ports for generated local deployment configurations.

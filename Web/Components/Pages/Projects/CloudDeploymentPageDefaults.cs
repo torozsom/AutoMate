@@ -1,7 +1,7 @@
 using Domain.Defaults;
-using Domain.DTO;
+using Domain.DTO.Deployment;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Projects;
 
 /// <summary>
 ///     Creates UI-layer default values used when deploying saved GitHub repositories without a local
@@ -14,7 +14,7 @@ internal static class CloudDeploymentPageDefaults
     /// </summary>
     /// <param name="app">The saved AutoMate application representing the remote repository.</param>
     /// <returns>A deployment configuration with the same defaults used by the dashboard and project detail pages.</returns>
-    internal static DeploymentConfigDto CreateConfiguration(Domain.Entities.Application app)
+    internal static DeploymentConfigDto CreateConfiguration(Domain.Entities.Projects.Application app)
     {
         var resourceName = ToAzureResourceName(app.Name);
 

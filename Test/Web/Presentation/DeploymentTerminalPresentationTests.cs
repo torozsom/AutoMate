@@ -1,7 +1,7 @@
-using Application.Abstractions.Diagnostics;
-using Web.Components.Shared;
+using Application.Abstractions.Diagnostics.Events;
+using Web.Components.Shared.Console;
 
-namespace Test.Web;
+namespace Test.Web.Presentation;
 
 /// <summary>
 ///     Checks equal live/history text treatment without relying on terminal colors.

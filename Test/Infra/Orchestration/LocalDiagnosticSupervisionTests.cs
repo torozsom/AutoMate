@@ -1,11 +1,14 @@
 using System.Collections.Concurrent;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
 using Application.Abstractions.Docker;
-using Application.Orchestration;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using Infrastructure.ApplicationServices.Orchestration.Local;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Runtime;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -221,7 +224,7 @@ public sealed class LocalDiagnosticSupervisionTests
                     {
                         Name = "web",
                         Path = "web.csproj",
-                        Application = new Domain.Entities.Application
+                        Application = new Domain.Entities.Projects.Application
                         {
                             Id = target.ProjectId,
                             Name = "sample",

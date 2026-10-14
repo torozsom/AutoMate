@@ -1,4 +1,4 @@
-namespace Application.Ai;
+namespace Application.Ai.Policy;
 
 /// <summary>
 ///     Safe transient signal carrying only a bounded numeric server delay, never an error body

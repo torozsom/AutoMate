@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text;
 using System.Text.Json;
-using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -13,8 +12,9 @@ using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using Web.Observability;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Web;
+namespace Test.Web.Hosting;
 
 /// <summary>
 ///     Verifies resource and metric policy at real SDK and OTLP serialization boundaries.

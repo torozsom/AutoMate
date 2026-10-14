@@ -1,4 +1,9 @@
-using Domain.Entities;
+using Domain.Entities.Ai;
+using Domain.Entities.Cloud;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -51,7 +56,7 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
     {
         ConfigureUserHierarchy(modelBuilder.Entity<User>());
         ConfigureRemoteUser(modelBuilder.Entity<RemoteUser>());
-        ConfigureApplication(modelBuilder.Entity<Domain.Entities.Application>());
+        ConfigureApplication(modelBuilder.Entity<Domain.Entities.Projects.Application>());
         ConfigureCsProject(modelBuilder.Entity<CsProject>());
         ConfigureCloudDeploymentRuns(modelBuilder);
         ConfigureGitHubWorkflowCheckpoints(modelBuilder);
@@ -95,7 +100,7 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
         run.HasIndex(item => new { item.UserId, item.LaunchStartedAt });
         run.HasIndex(item => new { item.RepositoryId, item.BranchName, item.EnvironmentName, item.CreatedAt });
         run.HasIndex(item => new { item.ProjectId, item.CreatedAt });
-        run.HasOne<Domain.Entities.Application>().WithMany().HasForeignKey(item => item.ProjectId)
+        run.HasOne<Domain.Entities.Projects.Application>().WithMany().HasForeignKey(item => item.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
         run.HasOne<User>().WithMany().HasForeignKey(item => item.UserId)
             .OnDelete(DeleteBehavior.Cascade);
@@ -164,7 +169,7 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
     ///     Configures application naming constraints and child C# project ownership.
     /// </summary>
     /// <param name="entity">EF mapping builder for the documented entity hierarchy and relationships.</param>
-    private static void ConfigureApplication(EntityTypeBuilder<Domain.Entities.Application> entity)
+    private static void ConfigureApplication(EntityTypeBuilder<Domain.Entities.Projects.Application> entity)
     {
         entity.Property(a => a.Name).HasMaxLength(ApplicationNameMaxLength).IsRequired();
         entity.Property(a => a.RuntimeDiagnosticsEnabled).HasDefaultValue(true);

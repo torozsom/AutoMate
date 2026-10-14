@@ -1,20 +1,25 @@
 using System.Text.Json;
 using Application.Abstractions.Azure;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.GitHub;
 using Application.Diagnostics;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Azure;
+using Application.Orchestration.Cloud;
+using Application.Orchestration.Status;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Domain.DTO.GitHub;
+using Domain.Entities.Cloud;
+using Domain.Enums.Deployments;
+using Infrastructure.ApplicationServices.Orchestration.Lifecycle;
+using Infrastructure.Azure.Identity;
 using Infrastructure.Data;
-using Infrastructure.GitHub;
+using Infrastructure.GitHub.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Applies verified workflow events and reconciles runs without occupying launch slots.

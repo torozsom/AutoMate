@@ -1,9 +1,9 @@
-using Application.Abstractions.Ai;
-using Application.Ai;
-using Domain.Enums;
+using Application.Abstractions.Ai.Policy;
+using Application.Ai.Policy;
+using Domain.Enums.Ai;
 using Microsoft.Extensions.Options;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Admission;
 
 /// <summary>
 ///     Credential-free approval fixtures and fail-closed geography/category policy coverage.

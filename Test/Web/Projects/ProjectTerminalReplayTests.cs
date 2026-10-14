@@ -1,9 +1,11 @@
 using System.Reflection;
-using Domain.Entities;
-using Domain.Enums;
-using Web.Components.Pages;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using ProjectDetails = Web.Components.Pages.Projects.ProjectDetails;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Checks active-only replay and delayed-reply fences without a live SignalR connection.
@@ -26,7 +28,7 @@ public sealed class ProjectTerminalReplayTests
         var deployment = new Deployment { Status = status };
         var page = new ProjectDetails();
         typeof(ProjectDetails).GetProperty("ProjectId")!.SetValue(page, project);
-        Set(page, "_app", new Domain.Entities.Application
+        Set(page, "_app", new Domain.Entities.Projects.Application
         {
             Id = project,
             Name = "fixture",

@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Infrastructure.Azure;
+using Infrastructure.Azure.Monitor;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.Monitor;
 
 /// <summary>
 ///     Verifies native timestamps, dimension aggregation, gaps and Cosmos units.

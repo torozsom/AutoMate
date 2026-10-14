@@ -1,8 +1,10 @@
 using System.Reflection;
 using Application.Abstractions.Hosting;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Application.Orchestration.Jobs;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Domain.Enums.Deployments;
 
 namespace Test.App.Orchestration;
 

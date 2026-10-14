@@ -1,17 +1,18 @@
 using System.Reflection;
 using Application.Abstractions.Hosting;
 using Application.Data.Apps;
-using Application.Orchestration;
-using Domain.Enums;
+using Application.Orchestration.Jobs;
+using Application.Orchestration.Status;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Web.Components.Pages;
+using ProjectDetails = Web.Components.Pages.Projects.ProjectDetails;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>Exercises overlapping metadata reads and notification faults on a real Blazor dispatcher.</summary>
 public sealed class ProjectDetailsNotificationTests
@@ -154,7 +155,7 @@ public sealed class ProjectDetailsNotificationTests
                     Pending = null;
                 }
 
-                return new ProjectDetailsReadModel(new Domain.Entities.Application
+                return new ProjectDetailsReadModel(new Domain.Entities.Projects.Application
                     {
                         Id = project,
                         UserId = owner,

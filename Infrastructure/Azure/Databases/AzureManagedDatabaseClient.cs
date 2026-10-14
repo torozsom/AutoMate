@@ -1,8 +1,10 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
+using Infrastructure.Azure.ContainerApps;
+using Infrastructure.Azure.Monitor;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Databases;
 
 /// <summary>
 ///     Discovers only AutoMate-tagged databases in a deployment's resource group and reads

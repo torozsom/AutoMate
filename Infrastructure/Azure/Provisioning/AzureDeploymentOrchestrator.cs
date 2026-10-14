@@ -1,8 +1,10 @@
 using Application.Abstractions.Azure;
-using Domain.DTO;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Infrastructure.Azure.Identity;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Provisioning;
 
 /// <summary>
 ///     Uses Azure Resource Manager to prepare OIDC trust for GitHub Actions cloud deployments.

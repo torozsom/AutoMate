@@ -1,4 +1,4 @@
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Monitor;
 
 /// <summary>
 ///     OAuth and polling settings for Azure Monitor Logs runtime collection.

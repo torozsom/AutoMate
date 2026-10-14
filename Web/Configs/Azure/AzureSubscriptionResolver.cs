@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 
-namespace Web.Configs;
+namespace Web.Configs.Azure;
 
 /// <summary>
 ///     Resolves Azure subscription IDs for connected Azure accounts.

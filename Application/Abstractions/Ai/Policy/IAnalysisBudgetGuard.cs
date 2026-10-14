@@ -1,6 +1,7 @@
-using Application.Ai;
+using Application.Abstractions.Ai.Execution;
+using Application.Ai.Policy;
 
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Policy;
 
 /// <summary>
 ///     Durably gates provider attempts by current ownership, shared concurrency and

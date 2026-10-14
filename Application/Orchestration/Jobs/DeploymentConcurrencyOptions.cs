@@ -1,4 +1,4 @@
-namespace Application.Orchestration;
+namespace Application.Orchestration.Jobs;
 
 /// <summary>
 ///     Per-process limits for the in-memory deployment scheduler.

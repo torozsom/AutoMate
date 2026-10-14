@@ -1,17 +1,25 @@
-using Application.Abstractions.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Projects;
 using FluentAssertions;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Runtime;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Delivery;
 
 /// <summary>
 ///     Verifies live viewing is scoped, expiring, bounded, and saves replay independently of
@@ -77,7 +85,7 @@ public sealed class RuntimeViewingTests
         await using var db = new AutoMateDbContext(new DbContextOptionsBuilder<AutoMateDbContext>()
             .UseSqlite(connection).Options, new EphemeralDataProtectionProvider());
         await db.Database.EnsureCreatedAsync();
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
         {
             Name = "sample",
             SourcePathOrUrl = "C:/sample",

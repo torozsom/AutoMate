@@ -1,7 +1,10 @@
 using Application.Abstractions.Hosting;
-using Domain.DTO;
+using Application.Orchestration.Jobs;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Cloud;
 
 /// <summary>
 ///     Carries verified connection inputs for one cloud admission; credentials must never enter diagnostics.

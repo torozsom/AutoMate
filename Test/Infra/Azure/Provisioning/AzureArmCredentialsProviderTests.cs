@@ -1,7 +1,8 @@
 using System.Net;
-using Domain.Entities;
+using Domain.Entities.Users;
 using FluentAssertions;
-using Infrastructure.Azure;
+using Infrastructure.Azure.Identity;
+using Infrastructure.Azure.Monitor;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -9,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.Provisioning;
 
 /// <summary>
 ///     Verifies launches obtain current ARM credentials instead of reusing an expired login token.

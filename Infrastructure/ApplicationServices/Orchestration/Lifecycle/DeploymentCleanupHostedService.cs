@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 
 /// <summary>
 ///     A hosted service that runs at application startup to clean up any deployments that are

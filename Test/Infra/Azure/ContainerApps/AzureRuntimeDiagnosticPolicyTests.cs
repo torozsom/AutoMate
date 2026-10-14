@@ -1,8 +1,9 @@
-using Application.Abstractions.Diagnostics;
-using Domain.DTO;
-using Infrastructure.Azure;
+using Application.Abstractions.Diagnostics.Events;
+using Domain.DTO.Azure;
+using Infrastructure.Azure.ContainerApps.Runtime;
+using Infrastructure.Azure.Monitor;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.ContainerApps;
 
 /// <summary>Protects database terminal routing and source-specific availability reporting.</summary>
 public sealed class AzureRuntimeDiagnosticPolicyTests

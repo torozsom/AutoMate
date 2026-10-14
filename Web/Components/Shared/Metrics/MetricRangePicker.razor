@@ -1,8 +1,8 @@
-@using Application.Abstractions.Diagnostics
+@using Application.Abstractions.Diagnostics.Metrics
 @*
     Selects relative or explicit frozen UTC windows and validates range bounds before publication.
 *@
-@namespace Web.Components.Shared
+@namespace Web.Components.Shared.Metrics
 <div class="metric-range-picker">
     <label for="@(_id + "-period")">Period (UTC)
         <select id="@(_id + "-period")" class="form-select" value="@_choice" @onchange="ChooseAsync">

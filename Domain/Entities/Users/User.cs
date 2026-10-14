@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Projects;
+
+namespace Domain.Entities.Users;
 
 /// <summary>
 ///     Represents a user of the application.

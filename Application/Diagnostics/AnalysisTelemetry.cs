@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Results;
 
 namespace Application.Diagnostics;
 
@@ -152,7 +152,7 @@ public static class AnalysisTelemetry
     ///     A task returning the supplied operation's result, preserving its exception and
     ///     cancellation semantics.
     /// </returns>
-    /// <exception cref="Application.Ai.AnalysisProviderUnavailableException">
+    /// <exception cref="AnalysisProviderUnavailableException">
     ///     The supplied operation reports that current policy prevents provider execution.
     /// </exception>
     /// <exception cref="OperationCanceledException">The supplied operation observes cancellation.</exception>

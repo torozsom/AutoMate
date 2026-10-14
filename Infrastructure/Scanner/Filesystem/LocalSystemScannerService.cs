@@ -1,8 +1,9 @@
 using Application.Abstractions.Scanning;
-using Domain.DTO;
+using Domain.DTO.Projects;
+using Infrastructure.Scanner.Projects;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Filesystem;
 
 /// <summary>
 ///     Scans local directories for Git repositories that contain .NET solution or project

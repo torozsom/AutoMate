@@ -1,7 +1,8 @@
 using System.Text;
 using System.Text.Json;
+using Application.Ai.Policy;
 
-namespace Application.Ai;
+namespace Application.Ai.Context;
 
 /// <summary>
 ///     Consistent context limits, including conservative provider-input token accounting.

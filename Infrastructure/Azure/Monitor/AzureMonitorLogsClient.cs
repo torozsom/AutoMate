@@ -4,7 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Monitor;
 
 /// <summary>
 ///     Queries Azure Monitor Logs through its resource-scoped data-plane API.

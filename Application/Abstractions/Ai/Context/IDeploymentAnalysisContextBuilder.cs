@@ -1,6 +1,6 @@
-using Application.Ai;
+using Application.Ai.Context;
 
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Context;
 
 /// <summary>
 ///     Builds redacted, bounded, in-memory evidence context without persisting diagnostic

@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
 
 /// <summary>
 ///     Normalizes deployment names used by Docker Compose, containers, image tags, and cloud

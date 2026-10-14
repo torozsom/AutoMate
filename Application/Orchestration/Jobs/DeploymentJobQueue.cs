@@ -4,7 +4,7 @@ using Application.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Jobs;
 
 /// <summary>
 ///     Channel-backed deployment job queue with bounded capacity to avoid unbounded server

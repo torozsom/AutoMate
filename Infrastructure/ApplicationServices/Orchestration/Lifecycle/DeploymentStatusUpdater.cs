@@ -1,10 +1,11 @@
-using Domain.Entities;
-using Domain.Enums;
+using Application.Orchestration.Status;
+using Domain.Entities.Deployments;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 
 /// <summary>
 ///     Persists deployment status transitions and notifies interested UI subscribers.

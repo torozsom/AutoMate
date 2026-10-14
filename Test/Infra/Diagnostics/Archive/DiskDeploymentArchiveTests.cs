@@ -1,9 +1,14 @@
-using Application.Abstractions.Diagnostics;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Archive;
 
 /// <summary>
 ///     Exercises permanent archive durability, isolation, redaction and bounded replay without

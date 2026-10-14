@@ -1,13 +1,14 @@
-using Application.Data.Apps;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Projects;
+using Infrastructure.ApplicationServices.Data.Apps;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Admission;
 
 /// <summary>
 ///     Verifies exact-project consent persistence and authorization without diagnostic payload
@@ -29,7 +30,7 @@ public sealed class AnalysisConsentTests
         await using var db = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
         await db.Database.EnsureCreatedAsync();
         var owner = new LocalUser { Username = "fixture", Email = "fixture@example.invalid" };
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
             { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Remote, User = owner };
         var selected = new CsProject { Application = app };
         var sibling = new CsProject { Application = app };
@@ -68,7 +69,7 @@ public sealed class AnalysisConsentTests
         await using var db = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
         await db.Database.EnsureCreatedAsync();
         var owner = new LocalUser { Username = "fixture", Email = "fixture@example.invalid" };
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
             { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local, User = owner };
         var other = new CsProject
         {
@@ -112,7 +113,7 @@ public sealed class AnalysisConsentTests
         await using var db = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
         await db.Database.EnsureCreatedAsync();
         var owner = new LocalUser { Username = "fixture", Email = "fixture@example.invalid" };
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
             { Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local, User = owner };
         var selected = new CsProject
         {

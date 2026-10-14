@@ -1,6 +1,7 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Data.Apps;
-using Domain.Enums;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

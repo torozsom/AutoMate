@@ -1,13 +1,16 @@
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Projects;
 using FluentAssertions;
-using Infrastructure.Azure;
+using Infrastructure.Azure.ContainerApps;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.ContainerApps;
 
 /// <summary>
 ///     Verifies durable Azure log cursor identity and checkpoint persistence.
@@ -38,7 +41,7 @@ public sealed class AzureContainerAppLogCheckpointStoreTests
                 {
                     Name = "Web",
                     Path = "Web/Web.csproj",
-                    Application = new Domain.Entities.Application
+                    Application = new Domain.Entities.Projects.Application
                     {
                         Name = "Sample",
                         SourceType = SourceType.Remote,

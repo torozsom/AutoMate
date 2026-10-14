@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace Application.Ai;
+namespace Application.Ai.Results;
 
 /// <summary>
 ///     Non-retryable provider denial carrying only finite classification and a validated

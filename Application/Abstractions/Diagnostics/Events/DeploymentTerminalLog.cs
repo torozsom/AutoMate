@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Events;
 
 /// <summary>
 ///     A redacted terminal message; positive IDs are durable cursors and negative IDs identify

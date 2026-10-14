@@ -4,20 +4,26 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Application.Abstractions.Azure;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Diagnostics;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.DTO.Azure;
+using Domain.Entities.Deployments;
+using Domain.Enums.Deployments;
+using Infrastructure.Azure.ContainerApps.Runtime;
+using Infrastructure.Azure.Databases;
+using Infrastructure.Azure.Identity;
+using Infrastructure.Azure.Monitor;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps;
 
 /// <summary>
 ///     Host-managed coordinator for Azure Container Apps state, metrics, console output, and

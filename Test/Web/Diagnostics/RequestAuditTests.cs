@@ -1,11 +1,11 @@
 using System.Security.Claims;
-using Infrastructure.Diagnostics;
 using Infrastructure.Observability;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Web.Observability;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Web;
+namespace Test.Web.Diagnostics;
 
 /// <summary>
 ///     Verifies safe request audit boundaries for successful, rejected and failed operations.

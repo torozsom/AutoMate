@@ -1,18 +1,25 @@
-using Application.Ai;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Ai;
+using Application.Ai.Policy;
+using Domain.Entities.Ai;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Ai;
+using Domain.Enums.Projects;
+using Infrastructure.Ai.Admission;
+using Infrastructure.Ai.Processing;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
-using Work = Application.Abstractions.Ai.DeploymentAnalysisWorkItem;
+using Test.Infra.Ai.ContextAndResults;
+using Test.Infra.Ai.Processing;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
+using Work = Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Admission;
 
 /// <summary>
 ///     Executes real ordered migrations and shared admission/reservation locks in disposable
@@ -397,7 +404,7 @@ public sealed class AnalysisBudgetPostgresTests
                         Path = "fixture.csproj",
                         Configuration = new Configuration
                             { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
-                        Application = new Domain.Entities.Application
+                        Application = new Domain.Entities.Projects.Application
                         {
                             Name = "fixture",
                             SourcePathOrUrl = "fixture",

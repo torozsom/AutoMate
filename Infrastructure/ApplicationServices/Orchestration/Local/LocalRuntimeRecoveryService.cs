@@ -1,13 +1,14 @@
 using Application.Abstractions.Docker;
 using Application.Abstractions.Scanning;
-using Domain.Enums;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Local;
 
 /// <summary>
 ///     Restores supervisors for current local deployments; supervisors enforce runtime

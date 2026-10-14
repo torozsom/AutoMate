@@ -1,4 +1,4 @@
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Identity;
 
 /// <summary>
 ///     Derived Azure OIDC setup names and claims used throughout one provisioning operation.

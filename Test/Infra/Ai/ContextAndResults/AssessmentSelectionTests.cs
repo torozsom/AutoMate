@@ -1,14 +1,20 @@
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Domain.Enums;
-using Infrastructure.Ai;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Ai.Results;
+using Domain.Enums.Deployments;
+using Infrastructure.Ai.Providers;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.ContextAndResults;
 
 /// <summary>
 ///     Verifies status focus, fixed request bounds, typed source separation and the v2 privacy

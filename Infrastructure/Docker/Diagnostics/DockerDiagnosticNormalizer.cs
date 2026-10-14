@@ -2,11 +2,11 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Docker.DotNet.Models;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Diagnostics;
 
 /// <summary>
 ///     Validates explicit ownership and normalizes daemon/Compose observations without

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Web.Services;
 
-namespace Test.Web;
+namespace Test.Web.Hosting;
 
 /// <summary>
 ///     Verifies independent operation lifetimes without relying on component private members.

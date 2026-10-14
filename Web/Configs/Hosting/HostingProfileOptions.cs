@@ -1,6 +1,6 @@
 using Application.Abstractions.Hosting;
 
-namespace Web.Configs;
+namespace Web.Configs.Hosting;
 
 /// <summary>
 ///     Selects which deployment capabilities are exposed by this AutoMate installation.

@@ -1,9 +1,11 @@
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Ai.Context;
+using Application.Ai.Results;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.ContextAndResults;
 
 /// <summary>
 ///     Verifies selection, serialized budget accounting and exact evidence grounding with synthetic

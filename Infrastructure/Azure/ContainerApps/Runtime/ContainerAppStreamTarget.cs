@@ -1,6 +1,7 @@
-using Domain.DTO;
+using Domain.DTO.Azure;
+using Infrastructure.Azure.Databases;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps.Runtime;
 
 /// <summary>
 ///     Holds verified resource identity, collector cursors and current runtime observations.

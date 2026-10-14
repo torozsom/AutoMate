@@ -2,11 +2,14 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
 using Application.Data.Apps;
 using Application.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
@@ -15,7 +18,7 @@ using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Web.Hubs;
 
-namespace Test.Web;
+namespace Test.Web.Diagnostics;
 
 /// <summary>
 ///     Distinguishes expected subscription disconnects from genuine provider cancellation.
@@ -115,7 +118,7 @@ public sealed class LogHubCancellationTests
         CancellationTokenSource disconnected, bool disconnectDuringReplay)
     {
         var deployment = new Deployment { Id = Guid.NewGuid() };
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
         {
             Id = Guid.NewGuid(),
             Name = "test",
@@ -123,7 +126,8 @@ public sealed class LogHubCancellationTests
             SourcePathOrUrl = "test",
             CsProjects = [new CsProject { Deployments = [deployment] }]
         };
-        var applications = Stub<IApplicationService>((_, _) => Task.FromResult<Domain.Entities.Application?>(app));
+        var applications =
+            Stub<IApplicationService>((_, _) => Task.FromResult<Domain.Entities.Projects.Application?>(app));
         var diagnostics = Stub<IDeploymentDiagnosticStore>((_, _) =>
         {
             if (disconnectDuringReplay) disconnected.Cancel();

@@ -1,10 +1,16 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Redaction;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Metrics;
 
 /// <summary>
 ///     Combines full UTC-day statistics with exact archived boundary observations without

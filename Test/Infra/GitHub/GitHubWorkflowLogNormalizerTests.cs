@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Infrastructure.GitHub;
+using GitHubWorkflowLogNormalizer = Infrastructure.GitHub.Workflows.GitHubWorkflowLogNormalizer;
 
 namespace Test.Infra.GitHub;
 

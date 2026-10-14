@@ -1,5 +1,11 @@
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Ai;
+using Domain.Entities.Cloud;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +45,7 @@ public class AutoMateDbContext(
     public DbSet<User> Users => Set<User>();
 
     /// <summary>Gets or sets the collection of Application entities in the database.</summary>
-    public DbSet<Domain.Entities.Application> Applications => Set<Domain.Entities.Application>();
+    public DbSet<Domain.Entities.Projects.Application> Applications => Set<Domain.Entities.Projects.Application>();
 
     /// <summary>Gets or sets the collection of CsProject entities in the database.</summary>
     public DbSet<CsProject> CsProjects => Set<CsProject>();

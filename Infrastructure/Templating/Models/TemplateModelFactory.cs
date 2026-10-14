@@ -1,6 +1,8 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
+using Infrastructure.Templating.Catalog;
 
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Models;
 
 /// <summary>
 ///     Builds the anonymous Scriban model consumed by AutoMate deployment templates.

@@ -1,8 +1,8 @@
 using System.Reflection;
-using Domain.Enums;
-using Web.Components.Pages;
+using Domain.Enums.Projects;
+using ProjectDetails = Web.Components.Pages.Projects.ProjectDetails;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Cloud projects must never enter the local filesystem/Docker stop path.
@@ -20,7 +20,7 @@ public sealed class ProjectDetailsStopTests
         var component = new ProjectDetails();
         var type = typeof(ProjectDetails);
         type.GetField("_app", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(component,
-            new Domain.Entities.Application
+            new Domain.Entities.Projects.Application
             {
                 Name = "Cloud app",
                 SourceType = SourceType.Remote,

@@ -1,4 +1,6 @@
-namespace Application.Abstractions.Ai;
+using Application.Ai.Results;
+
+namespace Application.Abstractions.Ai.Results;
 
 /// <summary>
 ///     Common validation/redaction boundary for provider output before persistence or
@@ -12,7 +14,7 @@ public interface IAnalysisResultValidator
     /// </summary>
     /// <param name="response">The untrusted structured analysis response to validate.</param>
     /// <returns>An independent fully validated and redacted result; no partial output is accepted.</returns>
-    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="InvalidAnalysisResultException">
     ///     The response or value violates the supported result, text or provenance contract.
     /// </exception>
     LlmAnalysisResponse Validate(LlmAnalysisResponse response);

@@ -2,13 +2,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Application.Abstractions.GitHub;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Cloud;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
+using Infrastructure.GitHub.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Webhooks;
 
 /// <summary>
 ///     Authenticates GitHub events and persists only correlation metadata.

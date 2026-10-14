@@ -1,13 +1,13 @@
 using System.Net;
 using System.Text.Json;
-using Application.Abstractions.Ai;
+using Application.Abstractions.Ai.Execution;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Web.Configs;
+using Web.Configs.Hosting;
 
-namespace Test.Web;
+namespace Test.Web.Analysis;
 
 /// <summary>
 ///     Exercises real health middleware, HTTP status codes, liveness isolation and finite readiness

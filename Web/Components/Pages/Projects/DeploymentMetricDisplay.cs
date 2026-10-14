@@ -1,7 +1,7 @@
 using System.Globalization;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Projects;
 
 /// <summary>
 ///     Formats the most recent typed observations for the project page's existing metric cards.

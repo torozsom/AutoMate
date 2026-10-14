@@ -1,4 +1,4 @@
-namespace Application.Ai;
+namespace Application.Ai.Policy;
 
 /// <summary>
 ///     Validates shared limit snapshots and converts exact eight-decimal monetary allowances to

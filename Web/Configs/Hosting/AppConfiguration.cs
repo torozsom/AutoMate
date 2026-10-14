@@ -4,7 +4,7 @@ using Web.Hubs;
 using Web.Observability;
 using Web.Routes;
 
-namespace Web.Configs;
+namespace Web.Configs.Hosting;
 
 /// <summary>
 ///     Provides a centralized location for configuring the HTTP request pipeline and initializing

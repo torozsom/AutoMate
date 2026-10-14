@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Metrics;
 
 /// <summary>
 ///     Converts provider display values to explicit numeric units without filling missing

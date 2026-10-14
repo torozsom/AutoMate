@@ -1,4 +1,4 @@
-using Domain.Entities;
+using Domain.Entities.Deployments;
 
 namespace Application.Data.Apps;
 

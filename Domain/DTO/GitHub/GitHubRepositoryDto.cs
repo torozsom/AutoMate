@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Domain.DTO;
+namespace Domain.DTO.GitHub;
 
 /// <summary>
 ///     Represents the subset of GitHub repository metadata AutoMate needs for repository

@@ -1,10 +1,12 @@
 using Application.Abstractions.Docker;
-using Domain.Enums;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 
 /// <summary>
 ///     Reconciles verified local deployments against Docker while leaving remote Azure history unchanged.

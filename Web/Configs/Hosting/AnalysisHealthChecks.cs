@@ -1,8 +1,8 @@
-using Application.Abstractions.Ai;
+using Application.Abstractions.Ai.Execution;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-namespace Web.Configs;
+namespace Web.Configs.Hosting;
 
 /// <summary>
 ///     Maps safe Application readiness to host health without provider requests or exception

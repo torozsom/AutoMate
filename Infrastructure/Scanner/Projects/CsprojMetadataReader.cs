@@ -1,7 +1,7 @@
 using System.Xml.Linq;
-using Domain.DTO;
+using Domain.DTO.Projects;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Projects;
 
 /// <summary>
 ///     Reads deployment-relevant metadata from SDK-style C# project files.

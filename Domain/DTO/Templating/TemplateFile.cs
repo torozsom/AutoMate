@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Templating;
 
 /// <summary>
 ///     Represents a generated template file ready to be written to disk or committed to a

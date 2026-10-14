@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Diagnostics;
 
 /// <summary>
 ///     Retained daily sufficient statistics for recorded container metrics and observed log

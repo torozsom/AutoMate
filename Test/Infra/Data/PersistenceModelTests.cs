@@ -2,7 +2,7 @@ using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
-namespace Test.Infra;
+namespace Test.Infra.Data;
 
 /// <summary>
 ///     Verifies the extracted mappings still match the checked-in PostgreSQL model without contacting a database.

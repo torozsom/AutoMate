@@ -1,12 +1,13 @@
 using Application.Abstractions.GitHub;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Domain.DTO;
+using Domain.DTO.GitHub;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Web.Components.Pages.Identity;
 using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Repositories;
 
 /// <summary>
 ///     The GitHubRepos component is responsible for retrieving and displaying a list of GitHub

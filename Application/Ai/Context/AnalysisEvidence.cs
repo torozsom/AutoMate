@@ -1,6 +1,7 @@
-using Application.Abstractions.Ai;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Results;
 
-namespace Application.Ai;
+namespace Application.Ai.Context;
 
 /// <summary>
 ///     Rejects fabricated or excluded evidence before provider return and result persistence.
@@ -16,7 +17,7 @@ public static class AnalysisEvidence
     ///     Exact selected evidence references; null leaves membership validation to the caller.
     /// </param>
     /// <returns>The original response after exact evidence membership has been verified.</returns>
-    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="InvalidAnalysisResultException">
     ///     A response cites a reference outside the supplied evidence catalog.
     /// </exception>
     public static LlmAnalysisResponse Validate(LlmAnalysisResponse response, IReadOnlyList<string>? allowed)

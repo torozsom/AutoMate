@@ -3,16 +3,18 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Application.Abstractions.GitHub;
 using Application.Diagnostics;
-using Application.Orchestration;
+using Application.Orchestration.Cloud;
 using Domain.Defaults;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Cloud;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Authorizes and atomically admits a credential-free SaaS deployment.

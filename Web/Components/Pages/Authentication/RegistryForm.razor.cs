@@ -3,7 +3,7 @@ using Application.Auth;
 using Microsoft.AspNetCore.Components;
 using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Authentication;
 
 /// <summary>
 ///     The RegistryForm component is responsible for handling the registration process for new users.

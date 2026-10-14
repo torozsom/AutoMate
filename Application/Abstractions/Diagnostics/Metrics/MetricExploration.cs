@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Metrics;
 
 /// <summary>
 ///     Absolute half-open UTC window shared by chart and statistics requests.

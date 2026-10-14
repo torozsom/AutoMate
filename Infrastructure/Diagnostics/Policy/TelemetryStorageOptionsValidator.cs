@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Policy;
 
 /// <summary>
 ///     Provides safe, setting-specific startup errors for incomplete telemetry configuration.

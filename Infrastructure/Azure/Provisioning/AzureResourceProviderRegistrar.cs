@@ -1,10 +1,11 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Domain.DTO;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Provisioning;
 
 /// <summary>
 ///     Ensures Azure resource providers required by the selected deployment configuration are

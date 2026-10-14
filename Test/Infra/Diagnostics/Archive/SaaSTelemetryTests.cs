@@ -1,13 +1,24 @@
 using System.Reflection;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Application.Data.Apps;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Ai;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Ai.Policy;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using Infrastructure.Ai.Context;
+using Infrastructure.ApplicationServices.Data.Apps;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Runtime;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +27,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Test.Infra.Diagnostics.PolicyAndMetrics;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Archive;
 
 /// <summary>
 ///     Verifies private-gateway history, aggregation, authorization and cleanup using controlled
@@ -503,7 +516,7 @@ public sealed class SaaSTelemetryTests
             f.Db = f.NewDb();
             await f.Db.Database.EnsureCreatedAsync();
             var user = new LocalUser { Username = "test", Email = "test@example.invalid" };
-            var project = new Domain.Entities.Application
+            var project = new Domain.Entities.Projects.Application
             {
                 Name = "test",
                 User = user,

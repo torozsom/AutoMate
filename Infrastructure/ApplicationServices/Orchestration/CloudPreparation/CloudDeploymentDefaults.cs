@@ -1,7 +1,7 @@
 using Domain.Defaults;
-using Domain.DTO;
+using Domain.DTO.Deployment;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
 
 /// <summary>
 ///     Applies default Azure resource names for cloud deployment configuration.

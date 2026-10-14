@@ -1,6 +1,7 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Storage;
 
 /// <summary>
 ///     Snapshots and redacts store-bound batches before serialization, including direct adapter

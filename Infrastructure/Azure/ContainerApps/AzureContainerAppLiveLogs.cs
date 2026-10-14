@@ -5,10 +5,12 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Infrastructure.Azure.Monitor;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps;
 
 /// <summary>
 ///     Supervises ACA console/event HTTP streams independently of historical queries and metric

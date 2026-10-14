@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Docker.DotNet.Models;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Runtime;
 
 /// <summary>
 ///     Creates Docker.DotNet container creation parameter objects from AutoMate deployment

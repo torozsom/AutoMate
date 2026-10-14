@@ -1,9 +1,9 @@
 @using System.Text.Json
-@using Domain.Entities
+@using Domain.Entities.Deployments
 @*
     Presents recorded launch settings with safe links and explicitly selected metadata copying.
 *@
-@namespace Web.Components.Shared
+@namespace Web.Components.Shared.Configuration
 @if (Deployment is not null)
 {
     var snapshot = Snapshot;

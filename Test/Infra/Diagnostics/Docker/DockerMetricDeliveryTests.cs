@@ -1,11 +1,13 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Abstractions.Logging;
 using FluentAssertions;
-using Infrastructure.Diagnostics;
-using Infrastructure.Docker;
+using Infrastructure.Diagnostics.Runtime;
+using Infrastructure.Docker.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Docker;
 
 /// <summary>
 ///     Verifies Docker live refresh is independent of durable metric sampling and delivery

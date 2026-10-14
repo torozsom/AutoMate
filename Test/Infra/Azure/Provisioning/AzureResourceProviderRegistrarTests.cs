@@ -1,10 +1,11 @@
 using System.Net;
-using Domain.DTO;
-using Infrastructure.Azure;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Infrastructure.Azure.Provisioning;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.Provisioning;
 
 /// <summary>
 ///     Ensures diagnostics provider readiness precedes deployment and safe failures do not leak

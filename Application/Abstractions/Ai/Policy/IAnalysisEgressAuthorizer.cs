@@ -1,6 +1,6 @@
-using Domain.Enums;
+using Domain.Enums.Ai;
 
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Policy;
 
 /// <summary>
 ///     Rechecks operator policy and current deployment-owner consent without retaining

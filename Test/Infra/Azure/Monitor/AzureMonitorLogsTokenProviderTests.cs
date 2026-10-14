@@ -1,6 +1,6 @@
 using System.Net;
-using Domain.Entities;
-using Infrastructure.Azure;
+using Domain.Entities.Users;
+using Infrastructure.Azure.Monitor;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.Monitor;
 
 /// <summary>
 ///     Verifies fixed consent guidance without exposing provider response messages.

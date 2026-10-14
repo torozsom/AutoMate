@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Processing;
 
 /// <summary>
 ///     Recovers transactional failure wakeups without using UI notifications or diagnostic

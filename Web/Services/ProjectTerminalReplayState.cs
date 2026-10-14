@@ -1,4 +1,4 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 
 namespace Web.Services;
 

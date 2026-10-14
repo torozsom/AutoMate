@@ -5,14 +5,29 @@ using System.Diagnostics.Metrics;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Ai.Results;
+using Domain.Entities.Ai;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Ai;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using Infrastructure.Ai.Admission;
+using Infrastructure.Ai.Context;
+using Infrastructure.Ai.Processing;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Policy;
 using Infrastructure.Observability;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -21,9 +36,11 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using DeploymentAnalysisWorkItem = Domain.Entities.DeploymentAnalysisWorkItem;
+using Test.Infra.Ai.Admission;
+using DeploymentAnalysisWorkItem = Domain.Entities.Ai.DeploymentAnalysisWorkItem;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.ContextAndResults;
 
 /// <summary>
 ///     Verifies real metadata persistence and authorized safe readback without contacting a
@@ -1299,7 +1316,7 @@ public sealed class AnalysisPersistenceTests
         ///     A task returning the configured application.abstractions.ai.deployment analysis work item
         ///     result, or null when the fixture supplies no value.
         /// </returns>
-        public Task<Application.Abstractions.Ai.DeploymentAnalysisWorkItem?> ClaimNextAsync(
+        public Task<Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem?> ClaimNextAsync(
             CancellationToken token = default)
         {
             return inner.ClaimNextAsync(token);
@@ -1312,7 +1329,7 @@ public sealed class AnalysisPersistenceTests
         /// <param name="work">Claimed fixture work or work-item selection.</param>
         /// <param name="token">Cancellation token for the fixture operation.</param>
         /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
-        public async Task<bool> RenewAsync(Application.Abstractions.Ai.DeploymentAnalysisWorkItem work,
+        public async Task<bool> RenewAsync(Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem work,
             CancellationToken token = default)
         {
             var owned = success && await inner.RenewAsync(work, token);
@@ -1326,7 +1343,7 @@ public sealed class AnalysisPersistenceTests
         /// <param name="work">Claimed fixture work or work-item selection.</param>
         /// <param name="token">Cancellation token for the fixture operation.</param>
         /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
-        public Task<bool> ReleaseAsync(Application.Abstractions.Ai.DeploymentAnalysisWorkItem work,
+        public Task<bool> ReleaseAsync(Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem work,
             CancellationToken token = default)
         {
             return inner.ReleaseAsync(work, token);
@@ -1511,7 +1528,7 @@ public sealed class AnalysisPersistenceTests
                     Name = "web",
                     Path = "web.csproj",
                     Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
-                    Application = new Domain.Entities.Application
+                    Application = new Domain.Entities.Projects.Application
                     {
                         Name = "sample",
                         SourcePathOrUrl = "C:/sample",

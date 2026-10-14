@@ -3,16 +3,20 @@ using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Enums;
+using Application.Orchestration.Jobs;
+using Application.Orchestration.Status;
+using Domain.DTO.Deployment;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
-using Web.Components.Shared;
+using Web.Components.Pages.Identity;
+using Web.Components.Pages.Projects;
+using Web.Components.Shared.Projects;
 using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Workspace;
 
 /// <summary>
 ///     Represents a dashboard component that displays user-specific project data. This component is
@@ -31,7 +35,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     private readonly HashSet<Guid> _preparingStops = [];
 
     /// <summary>Current owner project inventory, or null before loading.</summary>
-    private List<Domain.Entities.Application>? _apps;
+    private List<Domain.Entities.Projects.Application>? _apps;
 
     /// <summary>Tenant identity entered for Azure account connection.</summary>
     private string _azureTenantId = string.Empty;
@@ -88,7 +92,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     private string _search = "";
 
     /// <summary>Saved remote project selected for deployment.</summary>
-    private Domain.Entities.Application? _selectedCloudApp;
+    private Domain.Entities.Projects.Application? _selectedCloudApp;
 
     /// <summary>Local project directory supplied to variable discovery.</summary>
     private string? _selectedProjectPath;
@@ -409,7 +413,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app"></param>
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
-    private async Task DeployAppAsync(Domain.Entities.Application app)
+    private async Task DeployAppAsync(Domain.Entities.Projects.Application app)
     {
         ClearMessages();
 
@@ -583,7 +587,8 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <param name="owner">The captured initiating owner.</param>
     /// <param name="token">The existing page-lifetime token.</param>
     /// <returns>The owned current metadata, or null for an inaccessible project.</returns>
-    private static Task<Domain.Entities.Application?> ReadActionProjectAsync(IServiceProvider services, Guid project,
+    private static Task<Domain.Entities.Projects.Application?> ReadActionProjectAsync(IServiceProvider services,
+        Guid project,
         Guid owner, CancellationToken token)
     {
         return services.GetService<IProjectActionQuery>() is { } query
@@ -664,7 +669,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>True during admission, for disabled local deployments, or when a remote project lacks an Azure connection.</returns>
-    private bool IsDeployDisabled(Domain.Entities.Application app)
+    private bool IsDeployDisabled(Domain.Entities.Projects.Application app)
     {
         return IsDeploying(app.Id) ||
                (app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled) ||
@@ -677,7 +682,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>Fixed Azure-connection guidance for a disconnected remote project; otherwise the deployment label.</returns>
-    private string GetDeployButtonTitle(Domain.Entities.Application app)
+    private string GetDeployButtonTitle(Domain.Entities.Projects.Application app)
     {
         return app.SourceType == SourceType.Remote && !_isAzureConnected
             ? "Connect to Azure to deploy GitHub projects."
@@ -690,7 +695,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>Default deployment settings for the saved remote repository.</returns>
-    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Projects.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }
@@ -721,7 +726,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>The newest recorded deployment status, or null when no deployment exists.</returns>
-    private static DeploymentStatus? GetLatestStatus(Domain.Entities.Application app)
+    private static DeploymentStatus? GetLatestStatus(Domain.Entities.Projects.Application app)
     {
         return app.CsProjects
             .SelectMany(c => c.Deployments)

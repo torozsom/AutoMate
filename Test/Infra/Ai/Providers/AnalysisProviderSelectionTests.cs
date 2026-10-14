@@ -1,9 +1,10 @@
-using Application.Abstractions.Ai;
-using Application.Ai;
-using Infrastructure.Ai;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Results;
+using Infrastructure.Ai.Providers;
 using Microsoft.Extensions.DependencyInjection;
+using Test.Infra.Ai.Admission;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Providers;
 
 /// <summary>
 ///     Credential-free registry routing and fail-closed configuration tests, independent of

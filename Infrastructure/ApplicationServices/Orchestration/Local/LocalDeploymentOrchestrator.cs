@@ -1,20 +1,27 @@
 using System.Net;
 using System.Net.Sockets;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Abstractions.Templating;
 using Application.Diagnostics;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Orchestration.Jobs;
+using Application.Orchestration.Local;
+using Application.Orchestration.Status;
+using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
+using Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 using Infrastructure.Data;
-using Infrastructure.Docker;
+using Infrastructure.Docker.Compose;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Local;
 
 /// <summary>
 ///     Orchestrates the process of deploying .NET projects locally by managing interactions

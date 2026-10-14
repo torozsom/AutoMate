@@ -1,8 +1,11 @@
 using System.Reflection;
 using Application.Abstractions.Docker;
-using Application.Orchestration;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -40,7 +43,7 @@ public sealed class DeploymentCleanupHostedServiceTests
                 {
                     Name = "web",
                     Path = "fixture",
-                    Application = new Domain.Entities.Application
+                    Application = new Domain.Entities.Projects.Application
                     {
                         Name = "fixture",
                         SourceType = source,

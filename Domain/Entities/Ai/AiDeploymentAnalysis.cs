@@ -1,6 +1,7 @@
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Enums.Ai;
 
-namespace Domain.Entities;
+namespace Domain.Entities.Ai;
 
 /// <summary>
 ///     Stores the status and redacted result of one requested deployment analysis.

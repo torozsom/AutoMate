@@ -4,7 +4,6 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Application.Diagnostics;
-using Infrastructure.Diagnostics;
 using Infrastructure.Observability;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -15,9 +14,11 @@ using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Trace;
+using Test.Web.Diagnostics;
 using Web.Observability;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Web;
+namespace Test.Web.Hosting;
 
 /// <summary>
 ///     Exercises policy at actual provider/export boundaries with adversarial untrusted metadata.

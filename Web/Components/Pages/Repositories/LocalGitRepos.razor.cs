@@ -2,13 +2,14 @@ using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Domain.DTO;
+using Domain.DTO.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
+using Web.Components.Pages.Identity;
 using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Repositories;
 
 /// <summary>
 ///     The LocalGitRepos component is responsible for displaying a list of local Git projects that

@@ -2,7 +2,7 @@
 
 using Microsoft.EntityFrameworkCore.Migrations;
 
-namespace Infrastructure.Migrations;
+namespace Infrastructure.Migrations.AnalysisResults;
 
 /// <summary>
 ///     EF schema migration and target-model metadata for Add Deployment Diagnostics And Ai

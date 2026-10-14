@@ -1,7 +1,10 @@
-using Application.Ai;
-using Domain.Enums;
+using Application.Abstractions.Ai.Context;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Ai.Results;
+using Domain.Enums.Ai;
 
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Results;
 
 /// <summary>
 ///     Already-redacted diagnostic context, retained only in memory for provider invocation.

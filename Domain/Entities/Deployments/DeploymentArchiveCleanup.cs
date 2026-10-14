@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Deployments;
 
 /// <summary>
 ///     Durable deletion work that survives deletion of its project or owner.

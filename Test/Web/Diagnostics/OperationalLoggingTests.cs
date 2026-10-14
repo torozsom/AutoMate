@@ -4,15 +4,17 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
 using Application.Abstractions.Logging;
 using Application.Auth;
 using Application.Diagnostics;
-using Application.Orchestration;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Diagnostics;
-using Infrastructure.GitHub;
+using Application.Orchestration.Status;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.GitHub.Api;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -27,10 +29,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
-using Web.Configs;
+using Web.Configs.Observability;
 using Web.Routes.Endpoints.Auth;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Web;
+namespace Test.Web.Diagnostics;
 
 /// <summary>
 ///     Checks real SDK exports and framework authorization responses without contacting a

@@ -3,16 +3,17 @@ using System.Security.Claims;
 using System.Threading.Channels;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Application.Orchestration;
+using Application.Orchestration.Status;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Web.Components.Shared;
+using Test.Web.Presentation;
+using Web.Components.Shared.Workspace;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Exercises identity changes and disposal against actual asynchronous overview read lifetime.

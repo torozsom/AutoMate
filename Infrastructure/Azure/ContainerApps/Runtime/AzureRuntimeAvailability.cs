@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Diagnostics;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps.Runtime;
 
 /// <summary>
 ///     Owns deployment/source outage deduplication and recovery counters for one runtime coordinator.

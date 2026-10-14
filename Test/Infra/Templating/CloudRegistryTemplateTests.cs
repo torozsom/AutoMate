@@ -1,6 +1,7 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
 using FluentAssertions;
-using Infrastructure.Templating;
+using Infrastructure.Templating.Rendering;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Test.Infra.Templating;

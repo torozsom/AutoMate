@@ -1,4 +1,4 @@
-namespace Application.Ai;
+namespace Application.Ai.Policy;
 
 /// <summary>
 ///     Finite owner-visible skip reasons; provider errors and configuration text never become

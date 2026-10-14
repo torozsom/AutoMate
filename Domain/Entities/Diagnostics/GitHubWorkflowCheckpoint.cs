@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Deployments;
+
+namespace Domain.Entities.Diagnostics;
 
 /// <summary>
 ///     Stores durable, non-sensitive progress for one GitHub Actions workflow run.

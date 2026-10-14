@@ -3,9 +3,12 @@ using System.Security.Claims;
 using Application.Abstractions.Hosting;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Enums;
+using Application.Orchestration.Jobs;
+using Domain.DTO.Deployment;
+using Domain.DTO.GitHub;
+using Domain.DTO.Projects;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
@@ -17,10 +20,18 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Web.Components.Layout;
 using Web.Components.Pages;
-using Web.Components.Shared;
+using Web.Components.Pages.Authentication;
+using Web.Components.Shared.Configuration;
+using Web.Components.Shared.Metrics;
+using Web.Components.Shared.Workspace;
 using Web.Services;
+using Dashboard = Web.Components.Pages.Workspace.Dashboard;
+using GitHubRepos = Web.Components.Pages.Repositories.GitHubRepos;
+using LocalGitRepos = Web.Components.Pages.Repositories.LocalGitRepos;
+using LoginForm = Web.Components.Pages.Authentication.LoginForm;
+using RegistryForm = Web.Components.Pages.Authentication.RegistryForm;
 
-namespace Test.Web;
+namespace Test.Web.Presentation;
 
 /// <summary>
 ///     Renders real console surfaces with clearly identified metadata fixtures and no external

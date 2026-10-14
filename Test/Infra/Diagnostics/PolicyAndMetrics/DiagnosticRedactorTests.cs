@@ -1,12 +1,14 @@
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Diagnostics;
 using FluentAssertions;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Delivery;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.PolicyAndMetrics;
 
 /// <summary>
 ///     Verifies credential masking, terminal-control removal and bounded diagnostic metadata.

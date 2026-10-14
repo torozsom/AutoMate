@@ -1,13 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
 using Application.Abstractions.Email;
-using Domain.Entities;
+using Application.Auth;
+using Domain.Entities.Users;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Auth;
+namespace Infrastructure.ApplicationServices.Auth;
 
 /// <summary>
 ///     Service implementation for handling user authentication, registration, and email

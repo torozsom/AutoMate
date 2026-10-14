@@ -1,4 +1,6 @@
-namespace Infrastructure.Docker;
+using Infrastructure.Docker.Cli;
+
+namespace Infrastructure.Docker.Diagnostics;
 
 /// <summary>
 ///     Parsed CPU and memory values from one Docker stats output line.

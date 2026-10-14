@@ -1,12 +1,14 @@
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Ai.Context;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Context;
 
 /// <summary>
 ///     Merges bounded selected archive/legacy/backend evidence without retaining unfiltered

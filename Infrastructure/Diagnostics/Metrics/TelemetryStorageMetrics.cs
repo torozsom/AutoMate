@@ -1,6 +1,6 @@
 using System.Diagnostics.Metrics;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Metrics;
 
 /// <summary>
 ///     Low-cardinality operational measurements for specialized storage.

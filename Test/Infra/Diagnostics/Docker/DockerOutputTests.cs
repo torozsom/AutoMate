@@ -1,10 +1,11 @@
 using System.Text;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Docker.DotNet.Models;
-using Infrastructure.Docker;
+using Infrastructure.Docker.Diagnostics;
+using DockerDiagnosticNormalizer = Infrastructure.Docker.Diagnostics.DockerDiagnosticNormalizer;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Docker;
 
 /// <summary>
 ///     Verifies stream parsing, strict ownership and confirmed overlap without contacting Docker.

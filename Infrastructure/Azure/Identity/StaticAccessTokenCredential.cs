@@ -1,6 +1,6 @@
 using Azure.Core;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Identity;
 
 /// <summary>
 ///     Adapts an already-issued OAuth access token for Azure SDK calls during the current

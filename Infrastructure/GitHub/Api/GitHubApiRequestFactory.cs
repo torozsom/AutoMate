@@ -1,6 +1,6 @@
 using System.Net.Http.Headers;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Api;
 
 /// <summary>
 ///     Creates authenticated GitHub REST API requests with consistent headers and URI escaping.

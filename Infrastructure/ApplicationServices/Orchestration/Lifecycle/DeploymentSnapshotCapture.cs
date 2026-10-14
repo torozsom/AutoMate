@@ -1,10 +1,10 @@
 using System.Text.Json;
-using Domain.DTO;
-using Domain.Entities;
+using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 
 /// <summary>
 ///     Captures an explicit whitelist of non-secret launch settings once per deployment.

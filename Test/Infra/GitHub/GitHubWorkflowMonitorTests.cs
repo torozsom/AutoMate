@@ -1,12 +1,19 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.GitHub;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Domain.DTO.Deployment;
+using Domain.DTO.GitHub;
+using Domain.DTO.Templating;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.GitHub;
+using Domain.Enums.Projects;
 using FluentAssertions;
+using Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -47,7 +54,7 @@ public sealed class GitHubWorkflowMonitorTests
             {
                 Name = "Web",
                 Path = "Web/Web.csproj",
-                Application = new Domain.Entities.Application
+                Application = new Domain.Entities.Projects.Application
                 {
                     Name = "Sample",
                     SourceType = SourceType.Remote,

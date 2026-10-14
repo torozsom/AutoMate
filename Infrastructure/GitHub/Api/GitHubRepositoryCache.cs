@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Domain.DTO;
+using Domain.DTO.GitHub;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Api;
 
 /// <summary>
 ///     Handles distributed cache reads and writes for authenticated GitHub repository lists.

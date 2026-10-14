@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Environment;
 
 /// <summary>
 ///     Extracts environment variables from common .NET project configuration files.

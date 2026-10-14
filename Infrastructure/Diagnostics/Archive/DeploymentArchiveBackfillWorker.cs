@@ -1,16 +1,20 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
-using Domain.Entities;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Domain.Entities.Diagnostics;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Archive;
 
 /// <summary>
 ///     Imports bounded pages of still-retained diagnostics, with crash-safe per-deployment

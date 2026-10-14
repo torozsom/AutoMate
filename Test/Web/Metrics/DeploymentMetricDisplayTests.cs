@@ -1,8 +1,8 @@
-using Application.Abstractions.Diagnostics;
-using Web.Components.Pages;
-using Web.Components.Shared;
+using Application.Abstractions.Diagnostics.Metrics;
+using Web.Components.Pages.Projects;
+using Web.Components.Shared.Metrics;
 
-namespace Test.Web;
+namespace Test.Web.Metrics;
 
 /// <summary>
 ///     Verifies restored metric cards preserve numeric units and missing observations.

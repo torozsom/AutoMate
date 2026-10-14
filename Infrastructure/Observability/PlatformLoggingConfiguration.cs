@@ -1,10 +1,10 @@
-using Application.Abstractions.Diagnostics;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Diagnostics.Redaction;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
 namespace Infrastructure.Observability;
 

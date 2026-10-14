@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Web.Configs;
+namespace Web.Configs.Azure;
 
 /// <summary>
 ///     Reads values from JWT payloads without validating the token.

@@ -1,8 +1,8 @@
-using Application.Abstractions.Ai;
-using Application.Ai;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Results;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.ContextAndResults;
 
 /// <summary>
 ///     Checks the provider-neutral safe-result boundary independently of transport and persistence.

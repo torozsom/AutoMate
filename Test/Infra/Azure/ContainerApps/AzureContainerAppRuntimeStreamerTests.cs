@@ -3,14 +3,21 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Azure;
-using Application.Abstractions.Diagnostics;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using FluentAssertions;
-using Infrastructure.Azure;
+using Infrastructure.Azure.ContainerApps;
+using Infrastructure.Azure.Monitor;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Runtime;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +26,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.ContainerApps;
 
 /// <summary>
 ///     Verifies isolated Azure runtime source collection and durable acknowledgement using
@@ -488,7 +495,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             {
                 Name = "Web",
                 Path = "Web/Web.csproj",
-                Application = new Domain.Entities.Application
+                Application = new Domain.Entities.Projects.Application
                 {
                     Name = "Sample",
                     SourceType = SourceType.Remote,

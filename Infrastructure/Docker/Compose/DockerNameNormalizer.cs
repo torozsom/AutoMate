@@ -1,4 +1,6 @@
-namespace Infrastructure.Docker;
+using Infrastructure.Docker.Cli;
+
+namespace Infrastructure.Docker.Compose;
 
 /// <summary>
 ///     Normalizes external names into Docker-compatible identifiers.

@@ -2,14 +2,19 @@ using System.Reflection;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Abstractions.Hosting;
-using Application.Ai;
+using Application.Ai.Context;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Ai;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Forms;
@@ -18,12 +23,15 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
+using Test.Web.Presentation;
 using Web.Components.Layout;
 using Web.Components.Pages;
-using Web.Components.Shared;
+using Web.Components.Shared.Configuration;
+using Web.Components.Shared.Metrics;
 using Web.Services;
+using ProjectDetails = Web.Components.Pages.Projects.ProjectDetails;
 
-namespace Test.Web;
+namespace Test.Web.Metrics;
 
 /// <summary>
 ///     Renders both actual telemetry surfaces with explicit provider fixtures and no external
@@ -183,7 +191,7 @@ public sealed class TelemetryPageRenderingTests
         {
             var project = new CsProject
                 { Name = "Web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } };
-            var app = new Domain.Entities.Application
+            var app = new Domain.Entities.Projects.Application
             {
                 Name = "History demo",
                 CreatedAt = DateTimeOffset.UtcNow.AddDays(-20),

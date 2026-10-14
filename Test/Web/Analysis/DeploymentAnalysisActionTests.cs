@@ -1,13 +1,17 @@
 using System.Reflection;
-using Application.Abstractions.Ai;
+using Application.Abstractions.Ai.Execution;
 using Application.Data.Apps;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Ai;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Test.Web.Diagnostics;
 using Web.Components.Shared;
 
-namespace Test.Web;
+namespace Test.Web.Analysis;
 
 /// <summary>
 ///     Exercises real owner consent/cancel handlers with controlled Application ports.
@@ -186,7 +190,7 @@ public sealed class DeploymentAnalysisActionTests
         {
             Deployment = new Deployment { CsProjectId = Selected.Id, Status = DeploymentStatus.Failed };
             Selected.Deployments.Add(Deployment);
-            App = new Domain.Entities.Application
+            App = new Domain.Entities.Projects.Application
             {
                 Name = "fixture",
                 SourceType = SourceType.Local,
@@ -227,7 +231,7 @@ public sealed class DeploymentAnalysisActionTests
         public Deployment Deployment { get; }
 
         /// <summary>Owner application.</summary>
-        public Domain.Entities.Application App { get; }
+        public Domain.Entities.Projects.Application App { get; }
 
         /// <summary>Safe page feedback.</summary>
         public string Message => (string)Get("_message")!;

@@ -1,12 +1,16 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Ai.Results;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Providers;
 
 /// <summary>
 ///     Shared bounded Responses protocol for the explicitly registered OpenAI and Azure OpenAI

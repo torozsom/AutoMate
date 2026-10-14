@@ -1,8 +1,8 @@
-using Domain.Entities;
+using Domain.Entities.Diagnostics;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps;
 
 /// <summary>
 ///     Persists Azure Container Apps log cursors without retaining log content.

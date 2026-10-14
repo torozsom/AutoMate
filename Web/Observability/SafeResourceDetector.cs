@@ -1,4 +1,4 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Redaction;
 using OpenTelemetry.Resources;
 
 namespace Web.Observability;

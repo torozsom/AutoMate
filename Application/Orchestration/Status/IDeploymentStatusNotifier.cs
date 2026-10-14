@@ -1,6 +1,6 @@
-using Domain.Enums;
+using Domain.Enums.Deployments;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Status;
 
 /// <summary>
 ///     Publishes deployment status transitions to in-process subscribers.

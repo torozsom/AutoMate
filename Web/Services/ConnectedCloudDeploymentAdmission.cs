@@ -1,8 +1,9 @@
 using Application.Data.Users;
-using Application.Orchestration;
-using Domain.DTO;
+using Application.Orchestration.Cloud;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
 using Microsoft.AspNetCore.Components.Authorization;
-using Web.Components.Pages;
+using Web.Components.Pages.Identity;
 
 namespace Web.Services;
 

@@ -1,5 +1,5 @@
-using Application.Orchestration;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -7,7 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Runs short SaaS launch tasks and renews their database leases across host instances.

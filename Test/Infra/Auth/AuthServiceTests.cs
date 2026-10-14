@@ -1,6 +1,6 @@
 using Application.Abstractions.Email;
-using Application.Auth;
-using Domain.Entities;
+using Domain.Entities.Users;
+using Infrastructure.ApplicationServices.Auth;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -8,7 +8,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Test.Infra;
+namespace Test.Infra.Auth;
 
 /// <summary>
 ///     Characterizes registration compensation, verification boundaries and local login at the real service boundary.

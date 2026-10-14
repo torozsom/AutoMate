@@ -1,4 +1,4 @@
-namespace Application.Ai;
+namespace Application.Ai.Policy;
 
 /// <summary>
 ///     Configures analysis admission, provider egress, bounded execution and result retention

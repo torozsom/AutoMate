@@ -1,14 +1,15 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
-using Web.Components.Shared;
+using Test.Web.Presentation;
+using Web.Components.Shared.Metrics;
 
-namespace Test.Web;
+namespace Test.Web.Metrics;
 
 /// <summary>
 ///     Real controls and numeric alternatives preserve UTC validation and independent pagination.

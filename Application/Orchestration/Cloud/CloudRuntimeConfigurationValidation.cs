@@ -1,6 +1,6 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Cloud;
 
 /// <summary>
 ///     Preserves cloud form validation rules and first-error precedence independently of rendering and provider

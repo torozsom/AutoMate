@@ -1,8 +1,11 @@
-using Application.Abstractions.Diagnostics;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.PolicyAndMetrics;
 
 /// <summary>
 ///     Exercises window limits and durable metric lookup recovery without cloud calls.

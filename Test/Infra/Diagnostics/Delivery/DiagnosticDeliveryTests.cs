@@ -1,14 +1,17 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Delivery;
 
 /// <summary>
 ///     Verifies sink deadlines, durable confirmations and later-event recovery without database

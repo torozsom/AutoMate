@@ -2,13 +2,13 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using Application.Diagnostics;
-using Infrastructure.Diagnostics;
 using Infrastructure.Observability;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Web.Observability;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Web;
+namespace Test.Web.Diagnostics;
 
 /// <summary>
 ///     Checks real SDK span export, parentage and privacy without contacting a collector.

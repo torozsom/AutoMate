@@ -1,12 +1,14 @@
 using System.Reflection;
 using System.Security.Claims;
 using Application.Data.Users;
-using Domain.DTO;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using Test.Web.Diagnostics;
 using Web.Services;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Characterizes the two deployment pages' connection ordering and owner-fence differences at the new boundary.

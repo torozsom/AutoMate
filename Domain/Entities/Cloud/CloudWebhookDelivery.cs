@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Cloud;
 
 /// <summary>
 ///     Minimal verified webhook receipt used for replay protection and async processing.

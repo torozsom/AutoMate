@@ -1,4 +1,6 @@
-namespace Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+
+namespace Application.Abstractions.Diagnostics.Redaction;
 
 /// <summary>
 ///     Applies the shared text policy to every string in terminal transport/history

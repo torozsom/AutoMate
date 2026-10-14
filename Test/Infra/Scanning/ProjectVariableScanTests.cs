@@ -1,7 +1,7 @@
-using Infrastructure.Scanner;
+using Infrastructure.Scanner.Projects;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Test.Infra;
+namespace Test.Infra.Scanning;
 
 /// <summary>
 ///     Verifies filesystem failures remain distinguishable from successfully scanned empty

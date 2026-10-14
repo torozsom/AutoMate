@@ -4,12 +4,18 @@
 @namespace Web.Components.Pages
 @page "/project/{ProjectId:guid}/deployment/{DeploymentId:guid}"
 @attribute [Authorize]
-@using Application.Abstractions.Diagnostics
+@using Application.Abstractions.Diagnostics.Events
+@using Application.Abstractions.Diagnostics.Metrics
 @using Application.Data.Apps
 @using Application.Data.Users
-@using Domain.Entities
-@using Domain.Enums
+@using Domain.Entities.Deployments
+@using Domain.Enums.Deployments
 @using Microsoft.AspNetCore.Authorization
+@using Web.Components.Pages.Identity
+@using Web.Components.Shared.Configuration
+@using Web.Components.Shared.Console
+@using Web.Components.Shared.Metrics
+@using Web.Components.Shared.Projects
 @implements IDisposable
 @inject AuthenticationStateProvider Authentication
 @inject IServiceScopeFactory ServiceScopes

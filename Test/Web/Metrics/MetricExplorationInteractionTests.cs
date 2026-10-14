@@ -1,13 +1,13 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
-using Web.Components.Shared;
+using Web.Components.Shared.Metrics;
 
-namespace Test.Web;
+namespace Test.Web.Metrics;
 
 #pragma warning disable BL0006 // Actual renderer exercises server event callbacks, without a browser fixture shim.
 /// <summary>

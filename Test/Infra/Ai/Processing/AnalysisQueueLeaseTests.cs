@@ -1,18 +1,24 @@
-using Application.Abstractions.Ai;
-using Application.Ai;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Ai;
+using Application.Abstractions.Ai.Execution;
+using Application.Ai.Policy;
+using Domain.Entities.Ai;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Ai;
+using Domain.Enums.Projects;
+using Infrastructure.Ai.Processing;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Logging.Abstractions;
-using DeploymentAnalysisWorkItem = Application.Abstractions.Ai.DeploymentAnalysisWorkItem;
-using WorkEntity = Domain.Entities.DeploymentAnalysisWorkItem;
+using Test.Infra.Ai.Admission;
+using Test.Infra.Ai.ContextAndResults;
+using DeploymentAnalysisWorkItem = Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem;
+using WorkEntity = Domain.Entities.Ai.DeploymentAnalysisWorkItem;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Processing;
 
 /// <summary>
 ///     Uses independent relational connections to verify atomic acquisition, recovery and lease
@@ -240,7 +246,7 @@ public sealed class AnalysisQueueLeaseTests
                     {
                         Name = "web",
                         Path = "web.csproj",
-                        Application = new Domain.Entities.Application
+                        Application = new Domain.Entities.Projects.Application
                         {
                             Name = "sample",
                             SourcePathOrUrl = "C:/sample",

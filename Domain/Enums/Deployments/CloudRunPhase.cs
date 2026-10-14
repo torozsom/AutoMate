@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.Deployments;
 
 /// <summary>
 ///     Durable progress of a SaaS cloud deployment request.

@@ -1,4 +1,4 @@
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Models;
 
 /// <summary>
 ///     Normalizes names used in generated Docker, Azure, and Container Apps resources.

@@ -1,6 +1,9 @@
 using System.Diagnostics;
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Policy;
 using Application.Diagnostics;
 using Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,7 +11,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Processing;
 
 /// <summary>
 ///     Processes queued diagnoses in bounded independent scopes; every slot retains lease

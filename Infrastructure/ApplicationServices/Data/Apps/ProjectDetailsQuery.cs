@@ -1,6 +1,6 @@
 using System.Data;
 using Application.Data.Apps;
-using Domain.Enums;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,7 +19,8 @@ public sealed class ProjectDetailsQuery(AutoMateDbContext db) : IProjectDetailsQ
     /// <param name="owner">The owner used by the entire metadata graph read.</param>
     /// <param name="token">Cancels the database operation.</param>
     /// <returns>The detached current graph, or null for an inaccessible application.</returns>
-    public Task<Domain.Entities.Application?> GetAsync(Guid project, Guid owner, CancellationToken token = default)
+    public Task<Domain.Entities.Projects.Application?> GetAsync(Guid project, Guid owner,
+        CancellationToken token = default)
     {
         return db.Applications.AsNoTracking().Where(a => a.Id == project && a.UserId == owner)
             .Include(a => a.CsProjects).ThenInclude(c => c.Configuration)

@@ -3,12 +3,14 @@ using System.IO.Pipelines;
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
-using Infrastructure.Azure;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Infrastructure.Azure.ContainerApps;
+using Infrastructure.Azure.Monitor;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.ContainerApps;
 
 /// <summary>
 ///     Exercises incremental ACA HTTP reading, ownership boundaries and stream supervision without

@@ -1,5 +1,5 @@
 using System.Reflection;
-using Infrastructure.ApplicationServices.Orchestration;
+using Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 namespace Test.Infra.Orchestration;
 

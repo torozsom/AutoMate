@@ -1,5 +1,5 @@
-using Application.Orchestration;
-using Domain.DTO;
+using Application.Orchestration.Cloud;
+using Domain.DTO.Deployment;
 
 namespace Test.App.Orchestration;
 

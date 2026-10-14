@@ -1,16 +1,22 @@
 using System.Runtime.InteropServices;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
 using Docker.DotNet;
 using Docker.DotNet.Models;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Docker.Build;
+using Infrastructure.Docker.Cli;
+using Infrastructure.Docker.Compose;
+using Infrastructure.Docker.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Runtime;
 
 /// <summary>
 ///     Coordinates Docker daemon operations used by local deployments and runtime log

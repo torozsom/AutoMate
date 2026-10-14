@@ -2,8 +2,9 @@ using System.Text.Json;
 using Application.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OAuth;
+using Web.Configs.Azure;
 
-namespace Web.Configs;
+namespace Web.Configs.Hosting;
 
 /// <summary>
 ///     Links provider account tickets while preserving AutoMate's existing authentication cookie and token exchange order.

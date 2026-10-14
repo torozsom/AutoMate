@@ -1,4 +1,5 @@
-using Domain.DTO;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
 
 namespace Application.Abstractions.Azure;
 

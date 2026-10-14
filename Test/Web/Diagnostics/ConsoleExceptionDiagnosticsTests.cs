@@ -1,14 +1,14 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text;
-using Infrastructure.Diagnostics;
 using Infrastructure.Observability;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Web;
+namespace Test.Web.Diagnostics;
 
 /// <summary>
 ///     Console-only exception snapshots remain bounded and detached from the ordinary provider

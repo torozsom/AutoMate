@@ -4,14 +4,18 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Application.Abstractions.GitHub;
 using Domain.Defaults;
-using Domain.DTO;
-using Domain.Enums;
+using Domain.DTO.GitHub;
+using Domain.DTO.Templating;
+using Domain.Enums.GitHub;
+using Infrastructure.GitHub.Authentication;
+using Infrastructure.GitHub.Secrets;
+using Infrastructure.GitHub.Workflows;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using Octokit;
 using ProductHeaderValue = Octokit.ProductHeaderValue;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Api;
 
 /// <summary>
 ///     Coordinates GitHub repository, secret, workflow, and log operations for AutoMate

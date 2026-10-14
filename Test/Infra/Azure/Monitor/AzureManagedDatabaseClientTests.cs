@@ -1,9 +1,9 @@
 using System.Text.Json;
 using FluentAssertions;
-using Infrastructure.Azure;
+using Infrastructure.Azure.Databases;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.Monitor;
 
 /// <summary>
 ///     Guards database discovery against collecting unrelated resources in a shared group.

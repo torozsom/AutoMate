@@ -1,12 +1,14 @@
-using Application.Abstractions.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
+using Domain.Entities.Deployments;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Metrics;
 
 /// <summary>
 ///     Authorizes project access before returning bounded metric projections and SQL deployment

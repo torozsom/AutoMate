@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.Projects;
 
 /// <summary>
 ///     Defines the types of applications that can be created and deployed, including Web API,

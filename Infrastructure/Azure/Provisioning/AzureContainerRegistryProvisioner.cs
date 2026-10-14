@@ -2,9 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Domain.DTO;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Provisioning;
 
 /// <summary>
 ///     Ensures a customer-owned Basic ACR exists in the deployment resource group.

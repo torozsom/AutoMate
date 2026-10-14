@@ -1,7 +1,8 @@
 using System.Net;
 using System.Net.Sockets;
-using Application.Orchestration;
+using Application.Orchestration.Jobs;
 using FluentAssertions;
+using Infrastructure.ApplicationServices.Orchestration.Local;
 
 namespace Test.Infra.Orchestration;
 

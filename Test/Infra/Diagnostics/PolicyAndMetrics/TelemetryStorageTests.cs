@@ -1,13 +1,18 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using FluentAssertions;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.Options;
 using Test.Infra.TestSupport;
+using DeploymentMetricNormalizer = Infrastructure.Diagnostics.Metrics.DeploymentMetricNormalizer;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.PolicyAndMetrics;
 
 /// <summary>
 ///     Credential-free storage protocol, quota configuration, and numeric-unit regression tests.

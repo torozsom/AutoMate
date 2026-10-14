@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Events;
 
 /// <summary>
 ///     Accepts normalized deployment observations for redaction, telemetry, bounded buffering,

@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 using System.Reflection;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Web.Components.Shared;
+using Web.Components.Shared.Metrics;
 
-namespace Test.Web;
+namespace Test.Web.Metrics;
 
 /// <summary>
 ///     Analytics queries must not share the parent Blazor circuit's scoped database services.

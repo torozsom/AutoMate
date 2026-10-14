@@ -1,4 +1,4 @@
-namespace Web.Components.Shared;
+namespace Web.Components.Shared.Projects;
 
 /// <summary>
 ///     Identifies a GitHub repository by owner and repository name.

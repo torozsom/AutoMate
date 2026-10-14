@@ -1,10 +1,12 @@
 using Application.Abstractions.GitHub;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using FluentAssertions;
-using Infrastructure.ApplicationServices.Orchestration;
+using Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -140,7 +142,7 @@ public sealed class CloudDeploymentRunServiceTests
                 AzureTenantId = "tenant",
                 AzureSubscriptionId = "subscription"
             });
-            fixture.Db.Applications.Add(new Domain.Entities.Application
+            fixture.Db.Applications.Add(new Domain.Entities.Projects.Application
             {
                 Id = fixture.ProjectId,
                 UserId = fixture.UserId,

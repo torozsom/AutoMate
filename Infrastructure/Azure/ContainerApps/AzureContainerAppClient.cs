@@ -1,8 +1,9 @@
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Infrastructure.Azure.Monitor;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps;
 
 /// <summary>
 ///     Reads Azure Container Apps availability and metrics through Azure Resource Manager REST

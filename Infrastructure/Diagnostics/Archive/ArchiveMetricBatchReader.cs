@@ -1,9 +1,11 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Archive;
 
 /// <summary>
 ///     Resolves private batch scopes in SQL; callers cannot supply an unauthorized partition

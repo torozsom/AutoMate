@@ -1,4 +1,6 @@
-namespace Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+
+namespace Application.Abstractions.Diagnostics.History;
 
 /// <summary>
 ///     Reads and expires redacted legacy diagnostics and builds bounded compatibility context.

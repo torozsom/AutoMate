@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Users;
+
+namespace Domain.Entities.Ai;
 
 /// <summary>
 ///     Durable admission or conservative attempt charge independent of project, deployment and

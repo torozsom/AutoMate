@@ -1,4 +1,6 @@
-namespace Domain.DTO;
+using Domain.DTO.Deployment;
+
+namespace Domain.DTO.Azure;
 
 /// <summary>
 ///     Describes one Azure Container Apps deployment to monitor after its workflow succeeds.

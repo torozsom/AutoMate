@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Components;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Errors;
 
 /// <summary>
 ///     Represents an error page component in a Blazor application.

@@ -1,7 +1,8 @@
-using Application.Ai;
-using Domain.Enums;
+using Application.Abstractions.Ai.Context;
+using Application.Ai.Context;
+using Domain.Enums.Ai;
 
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Execution;
 
 /// <summary>
 ///     Owner-authorized safe result and optional provenance/usage; unknown legacy metadata

@@ -1,4 +1,5 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 
 namespace Web.Hubs;
 

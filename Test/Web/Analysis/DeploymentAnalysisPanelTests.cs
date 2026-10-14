@@ -1,8 +1,9 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Ai;
-using Application.Ai;
-using Domain.Enums;
+using Application.Abstractions.Ai.Execution;
+using Application.Ai.Policy;
+using Application.Ai.Results;
+using Domain.Enums.Ai;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,7 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Web.Components.Shared;
 
-namespace Test.Web;
+namespace Test.Web.Analysis;
 
 /// <summary>
 ///     Renders actual analysis markup to verify state guidance, safe text, stale-result exclusion
@@ -249,7 +250,7 @@ public sealed class DeploymentAnalysisPanelTests
     public class ConsentPort : DispatchProxy
     {
         /// <summary>Configuration returned by authorized readback.</summary>
-        public Domain.Entities.Application? Saved { get; set; }
+        public Domain.Entities.Projects.Application? Saved { get; set; }
 
         /// <summary>Exact application, owner, project and consent passed by the page.</summary>
         public (Guid App, Guid Owner, Guid Project, bool Consent) Target { get; private set; }

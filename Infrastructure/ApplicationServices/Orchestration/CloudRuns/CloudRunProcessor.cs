@@ -4,19 +4,21 @@ using System.Net;
 using System.Text.Json;
 using Application.Abstractions.GitHub;
 using Application.Diagnostics;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Azure;
+using Application.Orchestration.Cloud;
+using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
+using Domain.Enums.Deployments;
+using Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
+using Infrastructure.ApplicationServices.Orchestration.Lifecycle;
+using Infrastructure.Azure.Identity;
 using Infrastructure.Data;
-using Infrastructure.GitHub;
+using Infrastructure.GitHub.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Claims SaaS launches with cluster-wide admission and executes a short launch phase.

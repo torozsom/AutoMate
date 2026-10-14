@@ -1,8 +1,12 @@
 using Application.Abstractions.Templating;
-using Domain.DTO;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
+using Domain.DTO.Templating;
+using Infrastructure.Templating.Catalog;
+using Infrastructure.Templating.Models;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Rendering;
 
 /// <summary>
 ///     Coordinates Scriban template generation for local Docker and cloud deployment assets.

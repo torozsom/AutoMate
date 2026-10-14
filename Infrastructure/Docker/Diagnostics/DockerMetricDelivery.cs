@@ -1,11 +1,15 @@
 using System.Diagnostics;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Delivery;
 using Microsoft.Extensions.Logging;
+using DeploymentMetricNormalizer = Infrastructure.Diagnostics.Metrics.DeploymentMetricNormalizer;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Diagnostics;
 
 /// <summary>
 ///     Delivers each Docker observation live while sampling durable history at a separate

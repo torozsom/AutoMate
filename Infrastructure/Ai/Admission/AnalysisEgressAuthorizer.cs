@@ -1,12 +1,13 @@
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Domain.Enums;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Policy;
+using Domain.Enums.Ai;
+using Infrastructure.Ai.Providers;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Admission;
 
 /// <summary>
 ///     Reads fresh metadata for each gate; never trusts cached consent or caller-supplied

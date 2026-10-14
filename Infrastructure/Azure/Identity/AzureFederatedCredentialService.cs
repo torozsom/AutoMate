@@ -4,7 +4,7 @@ using System.Text.Json;
 using Azure.ResourceManager.ManagedServiceIdentities;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Identity;
 
 /// <summary>
 ///     Creates and verifies Azure managed identity federated credentials for GitHub Actions

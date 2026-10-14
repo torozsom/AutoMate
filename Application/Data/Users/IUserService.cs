@@ -1,4 +1,4 @@
-using Domain.DTO;
+using Domain.DTO.Azure;
 
 namespace Application.Data.Users;
 

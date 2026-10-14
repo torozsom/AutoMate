@@ -3,7 +3,7 @@
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
-namespace Infrastructure.Migrations;
+namespace Infrastructure.Migrations.Identity;
 
 /// <summary>
 ///     EF schema migration and target-model metadata for Initial.

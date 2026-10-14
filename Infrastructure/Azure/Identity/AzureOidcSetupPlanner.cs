@@ -1,9 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
 using Azure.ResourceManager.ManagedServiceIdentities;
-using Domain.DTO;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Identity;
 
 /// <summary>
 ///     Builds deterministic Azure identity names and GitHub OIDC claims for cloud deployments.

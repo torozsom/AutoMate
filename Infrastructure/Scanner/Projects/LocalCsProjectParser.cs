@@ -1,8 +1,8 @@
 using System.Xml.Linq;
-using Domain.DTO;
+using Domain.DTO.Projects;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Projects;
 
 /// <summary>
 ///     Parses local C# project files discovered during repository scans.

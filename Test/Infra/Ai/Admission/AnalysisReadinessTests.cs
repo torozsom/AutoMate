@@ -1,7 +1,9 @@
 using System.Data.Common;
-using Application.Abstractions.Ai;
-using Application.Ai;
-using Infrastructure.Ai;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Policy;
+using Infrastructure.Ai.Admission;
+using Infrastructure.Ai.Providers;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -9,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Admission;
 
 /// <summary>
 ///     Verifies local policy, credential reload and real read-only queue/schema access without

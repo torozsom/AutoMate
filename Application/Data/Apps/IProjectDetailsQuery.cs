@@ -1,4 +1,4 @@
-using Domain.Entities;
+using Domain.Entities.Deployments;
 
 namespace Application.Data.Apps;
 
@@ -27,7 +27,7 @@ public sealed record ProjectDeploymentSummary(
 /// <param name="Summary">Server-side aggregates over the complete owned history.</param>
 /// <param name="History">The selected six-row history page in existing creation/identity order.</param>
 public sealed record ProjectDetailsReadModel(
-    Domain.Entities.Application Project,
+    Domain.Entities.Projects.Application Project,
     ProjectDeploymentSummary Summary,
     IReadOnlyList<Deployment> History);
 
@@ -60,5 +60,5 @@ public interface IProjectActionQuery
     /// <param name="owner">The internal owner used by the database read.</param>
     /// <param name="token">Cancels the metadata read.</param>
     /// <returns>The detached metadata graph, or null for an inaccessible application.</returns>
-    Task<Domain.Entities.Application?> GetAsync(Guid project, Guid owner, CancellationToken token = default);
+    Task<Domain.Entities.Projects.Application?> GetAsync(Guid project, Guid owner, CancellationToken token = default);
 }

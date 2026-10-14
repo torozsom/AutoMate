@@ -1,15 +1,19 @@
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Events;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Projects;
 using FluentAssertions;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Archive;
 
 /// <summary>
 ///     Verifies retained diagnostic replay and rejection of new legacy payload writes.
@@ -220,7 +224,7 @@ public sealed class DeploymentDiagnosticReplayTests
             {
                 Name = "Web",
                 Path = "Web/Web.csproj",
-                Application = new Domain.Entities.Application
+                Application = new Domain.Entities.Projects.Application
                 {
                     Id = projectId,
                     Name = "Sample",

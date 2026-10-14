@@ -1,11 +1,12 @@
 using System.Text.Json;
-using Domain.DTO;
-using Domain.Entities;
+using Domain.DTO.Azure;
+using Domain.Entities.Users;
+using Infrastructure.Azure.Monitor;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Identity;
 
 /// <summary>
 ///     Refreshes Azure Resource Manager credentials when a cloud launch starts.

@@ -1,5 +1,6 @@
-using Application.Abstractions.Diagnostics;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Metrics;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 
 namespace Application.Data.Apps;
 

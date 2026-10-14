@@ -1,14 +1,16 @@
-using Application.Abstractions.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
+using Domain.Entities.Diagnostics;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Metrics;
 
 /// <summary>
 ///     Runs on the single telemetry service, not every web replica; retries replace daily

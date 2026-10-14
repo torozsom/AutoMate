@@ -1,17 +1,18 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Diagnostics;
-using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
 using Web.Hubs;
 using Web.Services;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Web;
+namespace Test.Web.Diagnostics;
 
 /// <summary>
 ///     Verifies that deadlines cancel real transport writes while retaining browser callback

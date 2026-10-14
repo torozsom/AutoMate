@@ -1,6 +1,6 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Runtime;
 
 /// <summary>
 ///     Bounds process-local live collection leases; stores no log content or credentials.

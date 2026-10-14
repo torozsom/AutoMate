@@ -1,9 +1,9 @@
 using System.Reflection;
 using Application.Abstractions.Scanning;
-using Domain.DTO;
-using Web.Components.Shared;
+using Domain.DTO.Deployment;
+using Web.Components.Shared.Configuration;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Exercises the actual deployment form's scan/merge behavior without external project or cloud

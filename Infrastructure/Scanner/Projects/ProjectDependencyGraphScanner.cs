@@ -1,6 +1,6 @@
-using Domain.DTO;
+using Domain.DTO.Projects;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Projects;
 
 /// <summary>
 ///     Walks project references from a root .csproj file and combines referenced project

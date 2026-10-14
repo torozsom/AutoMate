@@ -1,8 +1,9 @@
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Domain.Enums.Deployments;
 
-namespace Application.Ai;
+namespace Application.Ai.Context;
 
 /// <summary>
 ///     Owner-selected focus; Automatic is resolved from persisted runtime status at collection

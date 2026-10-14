@@ -2,10 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using FluentAssertions;
-using Infrastructure.Azure;
+using Infrastructure.Azure.Monitor;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.Monitor;
 
 /// <summary>
 ///     Verifies Azure diagnostic query scoping, parsing and ingestion-cursor behavior using

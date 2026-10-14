@@ -1,16 +1,20 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Ai;
-using Infrastructure.Ai;
-using Infrastructure.Diagnostics;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Ai.Results;
+using Infrastructure.Ai.Providers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Test.Infra.Ai.Admission;
+using Test.Infra.Ai.ContextAndResults;
 using Test.Infra.TestSupport;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Providers;
 
 /// <summary>
 ///     Azure-specific route/key/error checks plus the full shared Responses protocol contract.

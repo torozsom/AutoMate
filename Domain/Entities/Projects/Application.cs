@@ -1,6 +1,7 @@
-using Domain.Enums;
+using Domain.Entities.Users;
+using Domain.Enums.Projects;
 
-namespace Domain.Entities;
+namespace Domain.Entities.Projects;
 
 /// <summary>
 ///     Represents a project created by a user, containing information about the project's

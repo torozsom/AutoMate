@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Environment;
 
 /// <summary>
 ///     Flattens JSON configuration into double-underscore separated keys.

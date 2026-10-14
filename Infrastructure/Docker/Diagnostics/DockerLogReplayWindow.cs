@@ -1,7 +1,7 @@
 using System.Globalization;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Diagnostics;
 
 /// <summary>
 ///     Deduplicates bounded timestamp overlap by occurrence, preserving identical legitimate

@@ -1,8 +1,8 @@
-using Domain.Enums;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
 using Npgsql;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Processing;
 
 /// <summary>
 ///     Opt-in execution of the exact production PostgreSQL trigger in a disposable schema, without

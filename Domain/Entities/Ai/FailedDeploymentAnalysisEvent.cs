@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Deployments;
+
+namespace Domain.Entities.Ai;
 
 /// <summary>
 ///     One durable metadata-only failure wakeup per deployment, retained until deployment

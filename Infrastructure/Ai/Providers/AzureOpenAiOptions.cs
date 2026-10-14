@@ -1,6 +1,6 @@
-using Application.Ai;
+using Application.Ai.Policy;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Providers;
 
 /// <summary>
 ///     Azure resource identity and protected API-key configuration; never used as result or

@@ -1,19 +1,25 @@
 using System.Data.Common;
-using Application.Ai;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Ai;
+using Application.Ai.Policy;
+using Domain.Entities.Ai;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Ai;
+using Domain.Enums.Projects;
+using Infrastructure.Ai.Admission;
+using Infrastructure.Ai.Processing;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Logging.Abstractions;
-using Work = Application.Abstractions.Ai.DeploymentAnalysisWorkItem;
+using Test.Infra.Ai.ContextAndResults;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
+using Work = Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Admission;
 
 /// <summary>
 ///     Independent relational connections exercise cross-project quotas, rolling rate and reserved
@@ -403,7 +409,7 @@ public sealed class AnalysisBudgetTests
                     Name = "fixture",
                     Path = "fixture.csproj",
                     Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
-                    Application = new Domain.Entities.Application
+                    Application = new Domain.Entities.Projects.Application
                     {
                         Name = "fixture",
                         SourcePathOrUrl = "fixture",

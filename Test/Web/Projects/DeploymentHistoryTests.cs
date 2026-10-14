@@ -1,12 +1,14 @@
 using System.Reflection;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
 using Web.Components.Pages;
-using Web.Components.Shared;
+using Web.Components.Shared.Console;
+using Web.Components.Shared.Metrics;
 
-namespace Test.Web;
+namespace Test.Web.Projects;
 
 /// <summary>
 ///     Checks history loading independently of provider availability and browser layout.

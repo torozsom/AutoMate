@@ -6,7 +6,7 @@ using Application.Auth;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Caching.Distributed;
-using Web.Configs;
+using Web.Configs.Azure;
 
 namespace Web.Routes.Endpoints.Auth;
 

@@ -1,4 +1,4 @@
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Policy;
 
 /// <summary>
 ///     Specialized storage configuration; secrets must come from environment or a secret store.

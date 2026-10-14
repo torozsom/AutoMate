@@ -1,9 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
-using Application.Abstractions.Diagnostics;
-using Domain.Entities;
+using Application.Abstractions.Diagnostics.Events;
+using Domain.Entities.Diagnostics;
+using Infrastructure.Azure.Monitor;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps.Runtime;
 
 /// <summary>
 ///     Maps Azure source identity, event hashes and checkpoint ordering independently of polling and scope lifetimes.

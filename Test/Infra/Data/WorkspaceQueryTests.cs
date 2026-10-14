@@ -1,18 +1,29 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Data.Apps;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Cloud;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Infrastructure.ApplicationServices.Data.Apps;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Npgsql;
-using Test.Infra.Ai;
+using Test.Infra.Ai.Processing;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra;
+namespace Test.Infra.Data;
 
 /// <summary>
 ///     Runs production SQL projections in owned disposable PostgreSQL schemas, without provider
@@ -487,14 +498,14 @@ public sealed class WorkspaceQueryTests
                 await db.Database.MigrateAsync();
                 var owner = new LocalUser { Username = "owner", Email = "owner@example.invalid" };
                 var other = new LocalUser { Username = "other", Email = "other@example.invalid" };
-                var apps = Enumerable.Range(0, 23).Select(index => new Domain.Entities.Application
+                var apps = Enumerable.Range(0, 23).Select(index => new Domain.Entities.Projects.Application
                 {
                     Name = index == 0 ? "API service" : $"Project {index:00}",
                     User = owner,
                     SourceType = index == 0 ? SourceType.Remote : SourceType.Local,
                     SourcePathOrUrl = "fixture"
                 }).ToArray();
-                var outsider = new Domain.Entities.Application
+                var outsider = new Domain.Entities.Projects.Application
                 {
                     Name = "Private outsider",
                     User = other,

@@ -11,7 +11,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Telemetry;
 
-namespace Test.Web;
+namespace Test.Web.Hosting;
 
 /// <summary>
 ///     Exercises the production private-host composition and authentication over loopback without

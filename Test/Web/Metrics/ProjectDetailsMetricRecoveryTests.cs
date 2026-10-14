@@ -1,12 +1,14 @@
 using System.Reflection;
-using Application.Abstractions.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Metrics;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Web.Components.Pages;
+using ProjectDetails = Web.Components.Pages.Projects.ProjectDetails;
 
-namespace Test.Web;
+namespace Test.Web.Metrics;
 
 /// <summary>
 ///     Verifies that pending metric reads cannot update a closed page or report expected disposal
@@ -98,7 +100,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
     {
         var page = new ProjectDetails();
         var deployment = new Deployment { Status = DeploymentStatus.Running };
-        Field(page, "_app", new Domain.Entities.Application
+        Field(page, "_app", new Domain.Entities.Projects.Application
         {
             Name = "fixture",
             SourcePathOrUrl = "fixture",
@@ -127,7 +129,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         var logger = new RecordingLogger();
         var page = new ProjectDetails();
         var deployment = new Deployment { Status = DeploymentStatus.Running };
-        Field(page, "_app", new Domain.Entities.Application
+        Field(page, "_app", new Domain.Entities.Projects.Application
         {
             Name = "fixture",
             SourcePathOrUrl = "fixture",

@@ -3,8 +3,8 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Execution;
+using Application.Ai.Context;
 using Application.Data.Users;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Web.Routes.Endpoints;
 
-namespace Test.Web;
+namespace Test.Web.Analysis;
 
 /// <summary>
 ///     Exercises the real DELETE/cancel routes, authorization middleware and antiforgery validator

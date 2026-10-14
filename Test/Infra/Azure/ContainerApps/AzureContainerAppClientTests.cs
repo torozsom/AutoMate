@@ -1,8 +1,8 @@
 using FluentAssertions;
-using Infrastructure.Azure;
+using Infrastructure.Azure.ContainerApps;
 using Test.Infra.TestSupport;
 
-namespace Test.Infra.Azure;
+namespace Test.Infra.Azure.ContainerApps;
 
 /// <summary>
 ///     Verifies Azure Monitor names and conversion to the shared metric units.

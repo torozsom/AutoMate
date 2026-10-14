@@ -1,13 +1,13 @@
 using System.Reflection;
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Ai.Context;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Web.Components.Shared;
 
-namespace Test.Web;
+namespace Test.Web.Analysis;
 
 /// <summary>
 ///     Exercises the shared context picker and real event callbacks without provider calls.

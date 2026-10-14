@@ -1,8 +1,8 @@
 using System.IO.Compression;
 using System.Net;
-using Domain.Enums;
+using Domain.Enums.GitHub;
 using FluentAssertions;
-using Infrastructure.GitHub;
+using Infrastructure.GitHub.Api;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Infra.TestSupport;

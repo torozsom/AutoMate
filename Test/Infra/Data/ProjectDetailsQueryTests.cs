@@ -1,6 +1,9 @@
 using Application.Data.Apps;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Infrastructure.ApplicationServices.Data.Apps;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.DataProtection;
@@ -8,7 +11,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
-namespace Test.Infra;
+namespace Test.Infra.Data;
 
 /// <summary>
 ///     Exercises the real bounded project reads, complete-history aggregates and authorization in relational SQL.
@@ -28,7 +31,7 @@ public sealed class ProjectDetailsQueryTests
         var clock = new Clock();
         await using var db = new QueryDb(options, clock);
         await db.Database.EnsureCreatedAsync();
-        var app = new Domain.Entities.Application
+        var app = new Domain.Entities.Projects.Application
         {
             Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local,
             User = new LocalUser { Username = "owner", Email = "owner@example.invalid" },

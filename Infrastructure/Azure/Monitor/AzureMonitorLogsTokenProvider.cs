@@ -1,12 +1,12 @@
 using System.Text.Json;
 using Application.Abstractions.Azure;
-using Domain.Entities;
+using Domain.Entities.Users;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Monitor;
 
 /// <summary>
 ///     Exchanges the connected user's encrypted refresh token for a short-lived Azure Monitor

@@ -1,22 +1,29 @@
 using System.Globalization;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Application.Orchestration.Jobs;
+using Application.Orchestration.Status;
+using Domain.DTO.Deployment;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
-using Web.Components.Shared;
+using Web.Components.Pages.Identity;
+using Web.Components.Shared.Configuration;
+using Web.Components.Shared.Console;
+using Web.Components.Shared.Projects;
 using Web.Hubs;
 using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Projects;
 
 /// <summary>
 ///     A Blazor component that displays the details of a specific project, including its name,
@@ -59,7 +66,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private bool _analysisDisposed;
 
     /// <summary>Current owned project, or null before loading.</summary>
-    private Domain.Entities.Application? _app;
+    private Domain.Entities.Projects.Application? _app;
 
     /// <summary>Displays redacted managed Azure database resource logs.</summary>
     private Terminal? _azureDatabaseTerminal;
@@ -998,7 +1005,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>Default deployment settings for the saved remote repository.</returns>
-    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Projects.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }

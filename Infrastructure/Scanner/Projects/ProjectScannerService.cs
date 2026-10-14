@@ -1,10 +1,13 @@
 using Application.Abstractions.Scanning;
 using Domain.Defaults;
-using Domain.DTO;
-using Domain.Entities;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
+using Domain.Entities.Projects;
+using Infrastructure.Scanner.Catalog;
+using Infrastructure.Scanner.Environment;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Projects;
 
 /// <summary>
 ///     Coordinates C# project metadata scanning, dependency analysis, and environment-variable
@@ -58,7 +61,7 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
     /// <exception cref="T:System.OperationCanceledException">
     ///     The underlying read or analysis observes cancellation.
     /// </exception>
-    public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Domain.Entities.Application app,
+    public async Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Domain.Entities.Projects.Application app,
         CsProject csProject,
         CancellationToken cancellationToken = default)
     {
@@ -118,7 +121,8 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
     /// <param name="app">The application whose project dependencies are being analyzed.</param>
     /// <param name="csProject">The selected C# project and its recorded metadata.</param>
     /// <returns>The deployment config dto projection derived from the verified inputs.</returns>
-    private DeploymentConfigDto CreateDefaultDeploymentConfig(Domain.Entities.Application app, CsProject csProject)
+    private DeploymentConfigDto CreateDefaultDeploymentConfig(Domain.Entities.Projects.Application app,
+        CsProject csProject)
     {
         return new DeploymentConfigDto
         {

@@ -1,7 +1,7 @@
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Monitor;
 
 /// <summary>
 ///     A provider minute bucket with native timestamp and explicitly aggregated dimensions.

@@ -1,13 +1,17 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Application.Abstractions.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
 using Application.Abstractions.GitHub;
-using Application.Ai;
+using Application.Ai.Policy;
 using Application.Diagnostics;
-using Application.Orchestration;
-using Infrastructure.Ai;
-using Infrastructure.Diagnostics;
+using Application.Orchestration.Cloud;
+using Infrastructure.Ai.Processing;
+using Infrastructure.Ai.Providers;
+using Infrastructure.Diagnostics.Policy;
 using Infrastructure.Observability;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -23,9 +27,11 @@ using Microsoft.Extensions.Options;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
-using Web.Configs;
+using Test.Web.Diagnostics;
+using Web.Configs.Hosting;
+using Web.Configs.Observability;
 
-namespace Test.Web;
+namespace Test.Web.Hosting;
 
 /// <summary>
 ///     Verifies profile-specific validation using the production Web composition root.

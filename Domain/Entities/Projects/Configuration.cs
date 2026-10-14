@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Projects;
 
 /// <summary>
 ///     Saved deployment settings and separate AI egress consent for one C# project.

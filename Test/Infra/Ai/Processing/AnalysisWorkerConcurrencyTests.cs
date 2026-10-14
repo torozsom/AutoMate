@@ -1,21 +1,31 @@
 using System.Collections.Concurrent;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Policy;
+using Domain.Entities.Ai;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Ai;
+using Domain.Enums.Projects;
+using Infrastructure.Ai.Admission;
+using Infrastructure.Ai.Processing;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using DeploymentAnalysisWorkItem = Domain.Entities.DeploymentAnalysisWorkItem;
+using Test.Infra.Ai.Admission;
+using Test.Infra.Ai.ContextAndResults;
+using DeploymentAnalysisWorkItem = Domain.Entities.Ai.DeploymentAnalysisWorkItem;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Processing;
 
 /// <summary>
 ///     Exercises hosted processing slots with production leases and independent relational scopes;
@@ -314,7 +324,7 @@ public sealed class AnalysisWorkerConcurrencyTests
                 Name = "web",
                 Path = "web.csproj",
                 Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
-                Application = new Domain.Entities.Application
+                Application = new Domain.Entities.Projects.Application
                     { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
             };
             for (var i = 0; i < count; i++)

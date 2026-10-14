@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Deployments;
 
 /// <summary>
 ///     Non-secret launch settings and resolved artifact metadata saved for one deployment.

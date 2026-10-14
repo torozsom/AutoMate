@@ -2,17 +2,21 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Reflection;
 using System.Text;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Logging;
 using Docker.DotNet;
 using Docker.DotNet.Models;
-using Infrastructure.Diagnostics;
-using Infrastructure.Docker;
+using Infrastructure.Diagnostics.Runtime;
+using Infrastructure.Docker.Cli;
+using Infrastructure.Docker.Diagnostics;
+using Infrastructure.Docker.Runtime;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Diagnostics;
+namespace Test.Infra.Diagnostics.Docker;
 
 /// <summary>
 ///     Exercises collector framing, owned lifecycle routing and cancellation through the Docker SDK

@@ -1,6 +1,8 @@
 using System.Text;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.History;
 
 /// <summary>
 ///     Versioned terminal history with resource-scoped navigation cursors and storage

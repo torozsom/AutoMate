@@ -1,8 +1,8 @@
 using System.Text.Json;
-using Domain.DTO;
+using Domain.DTO.Projects;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Catalog;
 
 /// <summary>
 ///     Loads and caches database provider package matching rules from scanner configuration.

@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Diagnostics;
 
 /// <summary>
 ///     A complete provider line or an explicit omission, before central redaction.

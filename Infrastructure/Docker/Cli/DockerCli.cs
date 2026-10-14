@@ -1,11 +1,16 @@
 using System.Diagnostics;
 using System.Globalization;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
+using Infrastructure.Docker.Compose;
+using Infrastructure.Docker.Diagnostics;
+using Infrastructure.Docker.Runtime;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Cli;
 
 /// <summary>
 ///     Executes Docker CLI commands needed for Compose, metrics, port discovery, and project

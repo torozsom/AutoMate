@@ -1,17 +1,26 @@
 using System.Data.Common;
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
-using Application.Ai;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Ai;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Orchestration.Status;
+using Domain.DTO.Deployment;
+using Domain.Entities.Ai;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Entities.Users;
+using Domain.Enums.Ai;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
+using Infrastructure.Ai.Admission;
+using Infrastructure.Ai.Context;
+using Infrastructure.Ai.Processing;
+using Infrastructure.ApplicationServices.Orchestration.Local;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -19,8 +28,10 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Test.Infra.Ai.ContextAndResults;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
-namespace Test.Infra.Ai;
+namespace Test.Infra.Ai.Admission;
 
 /// <summary>
 ///     Verifies admission/idempotency/quotas through the production service and independent
@@ -877,7 +888,7 @@ public sealed class AnalysisAdmissionTests
                 Name = "web",
                 Path = "web.csproj",
                 Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
-                Application = new Domain.Entities.Application
+                Application = new Domain.Entities.Projects.Application
                     { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
             };
             var deployments = Enumerable.Range(0, deploymentCount).Select(_ => new Deployment { CsProject = project })

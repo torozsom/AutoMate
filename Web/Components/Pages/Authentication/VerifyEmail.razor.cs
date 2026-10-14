@@ -2,7 +2,7 @@ using Application.Auth;
 using Microsoft.AspNetCore.Components;
 using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Authentication;
 
 /// <summary>
 ///     This component handles the email verification process for users. It either prompts the user to

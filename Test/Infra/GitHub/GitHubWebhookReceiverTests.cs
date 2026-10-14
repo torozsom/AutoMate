@@ -1,11 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Cloud;
+using Domain.Entities.Users;
+using Domain.Enums.Projects;
 using FluentAssertions;
 using Infrastructure.Data;
-using Infrastructure.GitHub;
+using Infrastructure.GitHub.Authentication;
+using Infrastructure.GitHub.Webhooks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +33,7 @@ public sealed class GitHubWebhookReceiverTests
         await using var db = new AutoMateDbContext(dbOptions, new EphemeralDataProtectionProvider());
         await db.Database.EnsureCreatedAsync();
         var user = new RemoteUser { AccountId = "123", Email = "user@example.test", Username = "user" };
-        var project = new Domain.Entities.Application
+        var project = new Domain.Entities.Projects.Application
         {
             UserId = user.Id,
             Name = "web",

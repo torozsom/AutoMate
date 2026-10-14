@@ -2,9 +2,9 @@ using Azure;
 using Azure.ResourceManager;
 using Azure.ResourceManager.ManagedServiceIdentities;
 using Azure.ResourceManager.Resources;
-using Domain.DTO;
+using Domain.DTO.Azure;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Identity;
 
 /// <summary>
 ///     Provisions Azure resource groups and user-assigned managed identities through the Azure

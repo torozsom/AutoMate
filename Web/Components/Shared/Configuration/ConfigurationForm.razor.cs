@@ -1,11 +1,11 @@
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
-using Application.Orchestration;
+using Application.Orchestration.Cloud;
 using Domain.Defaults;
-using Domain.DTO;
+using Domain.DTO.Deployment;
 using Microsoft.AspNetCore.Components;
 
-namespace Web.Components.Shared;
+namespace Web.Components.Shared.Configuration;
 
 /// <summary>
 ///     A Blazor component that provides a user interface for configuring deployment settings for a

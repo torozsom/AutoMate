@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Projects;
 
 /// <summary>
 ///     Data Transfer Object (DTO) representing a local project on the file system.

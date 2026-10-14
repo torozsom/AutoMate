@@ -1,11 +1,17 @@
 @*
     Presents the owned current deployment, source-separated terminals, live metrics and analysis dialog.
 *@
-@namespace Web.Components.Pages
+@namespace Web.Components.Pages.Projects
 @page "/project/{ProjectId:guid}"
 @using Application.Data.Apps
-@using Domain.Entities
-@using Domain.Enums
+@using Domain.Entities.Deployments
+@using Domain.Entities.Projects
+@using Domain.Enums.Deployments
+@using Domain.Enums.Projects
+@using Web.Components.Shared.Configuration
+@using Web.Components.Shared.Console
+@using Web.Components.Shared.Metrics
+@using Web.Components.Shared.Projects
 
 <PageTitle>Project Details</PageTitle>
 

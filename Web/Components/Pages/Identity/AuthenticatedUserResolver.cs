@@ -2,7 +2,7 @@ using System.Security.Claims;
 using Application.Data.Users;
 using Microsoft.AspNetCore.Components.Authorization;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Identity;
 
 /// <summary>
 ///     Resolves AutoMate user records from Blazor authentication claims for page components.
