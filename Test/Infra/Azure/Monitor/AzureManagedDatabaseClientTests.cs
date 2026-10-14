@@ -103,7 +103,7 @@ public sealed class AzureManagedDatabaseClientTests
         {
             reads++;
             return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new
-                { value = Array.Empty<object>(), nextLink = continuation }));
+            { value = Array.Empty<object>(), nextLink = continuation }));
         })));
         await Assert.ThrowsAsync<InvalidOperationException>(() => client.DiscoverAsync(
             "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/containerApps/app", Guid.NewGuid(), "app",

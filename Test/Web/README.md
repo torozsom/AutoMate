@@ -1,5 +1,9 @@
 # Web Tests
 
+Console rendering fixtures copy the scoped CSS bundle from the test assembly's build configuration. A Release-only
+checkout does not need Debug artifacts; the same tests also support Debug builds. Build the solution in the selected
+configuration before running tests with `--no-build`, as the Verify workflow does.
+
 ## Source documentation
 
 Test types, scenarios, constructors and private helpers use multiline XML summaries with matching parameters,

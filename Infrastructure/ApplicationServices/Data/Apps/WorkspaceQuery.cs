@@ -40,8 +40,12 @@ public sealed class WorkspaceQuery(
         var github = await apps.CountAsync(a => a.SourceType == SourceType.Remote, token);
         var rows = apps.Select(a => new
         {
-            a.Id, a.Name, Source = a.SourcePathOrUrl, a.SourceType,
-            Components = a.CsProjects.Count, WebApps = a.CsProjects.Count(c => c.IsWebProject),
+            a.Id,
+            a.Name,
+            Source = a.SourcePathOrUrl,
+            a.SourceType,
+            Components = a.CsProjects.Count,
+            WebApps = a.CsProjects.Count(c => c.IsWebProject),
             SavedAt = a.CreatedAt,
             LatestAt = a.CsProjects.SelectMany(c => c.Deployments).OrderByDescending(d => d.CreatedAt)
                 .ThenByDescending(d => d.Id)
@@ -121,11 +125,15 @@ public sealed class WorkspaceQuery(
         var activity = await selected
             .GroupBy(d => new
             {
-                d.CreatedAt.Year, d.CreatedAt.Month, d.CreatedAt.Day,
-                Hour = shortWindow ? d.CreatedAt.Hour : 0, Minute = shortWindow ? d.CreatedAt.Minute : 0, d.Outcome
+                d.CreatedAt.Year,
+                d.CreatedAt.Month,
+                d.CreatedAt.Day,
+                Hour = shortWindow ? d.CreatedAt.Hour : 0,
+                Minute = shortWindow ? d.CreatedAt.Minute : 0,
+                d.Outcome
             })
             .Select(g => new
-                { g.Key.Year, g.Key.Month, g.Key.Day, g.Key.Hour, g.Key.Minute, g.Key.Outcome, Count = g.Count() })
+            { g.Key.Year, g.Key.Month, g.Key.Day, g.Key.Hour, g.Key.Minute, g.Key.Outcome, Count = g.Count() })
             .ToListAsync(token);
         var duration = await selected.Where(d => d.FinishedAt != null && d.FinishedAt >= d.CreatedAt)
             .Select(d => (double?)(d.FinishedAt!.Value - d.CreatedAt).TotalSeconds).AverageAsync(token);
@@ -183,8 +191,12 @@ public sealed class WorkspaceQuery(
                     .GroupBy(t => new { t.DayUtc, t.Metric, t.Unit })
                     .Select(g => new
                     {
-                        Day = g.Key.DayUtc, g.Key.Metric, g.Key.Unit, Samples = g.Sum(t => t.SampleCount),
-                        Average = g.Sum(t => t.Sum) / g.Sum(t => t.SampleCount), Minimum = g.Min(t => t.Minimum),
+                        Day = g.Key.DayUtc,
+                        g.Key.Metric,
+                        g.Key.Unit,
+                        Samples = g.Sum(t => t.SampleCount),
+                        Average = g.Sum(t => t.Sum) / g.Sum(t => t.SampleCount),
+                        Minimum = g.Min(t => t.Minimum),
                         Maximum = g.Max(t => t.Maximum),
                         Incomplete = g.Any(t => t.Incomplete)
                     }).OrderBy(t => t.Day)

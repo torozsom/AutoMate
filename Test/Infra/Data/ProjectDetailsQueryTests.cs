@@ -33,7 +33,9 @@ public sealed class ProjectDetailsQueryTests
         await db.Database.EnsureCreatedAsync();
         var app = new Domain.Entities.Projects.Application
         {
-            Name = "fixture", SourcePathOrUrl = "fixture", SourceType = SourceType.Local,
+            Name = "fixture",
+            SourcePathOrUrl = "fixture",
+            SourceType = SourceType.Local,
             User = new LocalUser { Username = "owner", Email = "owner@example.invalid" },
             CsProjects =
             [
@@ -53,7 +55,9 @@ public sealed class ProjectDetailsQueryTests
                 Status = DeploymentStatus.Stopped,
                 Outcome = (index % 3) switch
                 {
-                    0 => DeploymentOutcome.Succeeded, 1 => DeploymentOutcome.Failed, _ => DeploymentOutcome.Unknown
+                    0 => DeploymentOutcome.Succeeded,
+                    1 => DeploymentOutcome.Failed,
+                    _ => DeploymentOutcome.Unknown
                 }
             });
             await db.SaveChangesAsync();

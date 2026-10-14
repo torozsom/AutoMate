@@ -129,8 +129,10 @@ public sealed record AssessmentSelection(
             throw new ArgumentException("Invalid assessment selection.");
         return this with
         {
-            LogContainers = Names(LogContainers), MetricContainers = Names(MetricContainers),
-            Start = Start?.ToUniversalTime(), End = End?.ToUniversalTime()
+            LogContainers = Names(LogContainers),
+            MetricContainers = Names(MetricContainers),
+            Start = Start?.ToUniversalTime(),
+            End = End?.ToUniversalTime()
         };
     }
 
@@ -195,7 +197,8 @@ public sealed record AssessmentSelection(
             {
                 DeploymentStatus.Starting => AssessmentKind.Startup,
                 DeploymentStatus.Failed => AssessmentKind.FailureDiagnosis,
-                DeploymentStatus.Running => AssessmentKind.RuntimeOverview, _ => AssessmentKind.HistoricalReview
+                DeploymentStatus.Running => AssessmentKind.RuntimeOverview,
+                _ => AssessmentKind.HistoricalReview
             };
     }
 
@@ -226,8 +229,11 @@ public sealed record AssessmentSelection(
             activityEnd < now ? activityEnd : now;
         var start = range switch
         {
-            AssessmentRange.Custom => Start!.Value, AssessmentRange.Last15Minutes => end.AddMinutes(-15),
-            AssessmentRange.LastHour => end.AddHours(-1), AssessmentRange.Last24Hours => end.AddHours(-24), _ => created
+            AssessmentRange.Custom => Start!.Value,
+            AssessmentRange.Last15Minutes => end.AddMinutes(-15),
+            AssessmentRange.LastHour => end.AddHours(-1),
+            AssessmentRange.Last24Hours => end.AddHours(-24),
+            _ => created
         };
         if (end > now || end <= DateTimeOffset.UnixEpoch)
             throw new ArgumentException("Range must end in the recorded past.");
@@ -295,7 +301,8 @@ public static class AssessmentClassification
             {
                 DeploymentDiagnosticComponent.Web => AssessmentSources.Web,
                 DeploymentDiagnosticComponent.Database => AssessmentSources.Database,
-                DeploymentDiagnosticComponent.Build => AssessmentSources.Build, _ => AssessmentSources.Other
+                DeploymentDiagnosticComponent.Build => AssessmentSources.Build,
+                _ => AssessmentSources.Other
             },
             _ => AssessmentSources.Other
         };

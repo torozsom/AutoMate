@@ -135,10 +135,10 @@ public sealed class MimirDeploymentMetrics(
                 "&time=" + Seconds(DateTimeOffset.UtcNow), cancellationToken);
             var samples = new HashSet<(string, long, double)>();
             foreach (var series in response.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
-            foreach (var pair in series.GetProperty("values").EnumerateArray())
-                if (double.TryParse(pair[1].GetString(), CultureInfo.InvariantCulture, out var value))
-                    samples.Add((series.GetProperty("metric").GetProperty("container").GetString()!,
-                        (long)Math.Round(pair[0].GetDouble() * 1000), value));
+                foreach (var pair in series.GetProperty("values").EnumerateArray())
+                    if (double.TryParse(pair[1].GetString(), CultureInfo.InvariantCulture, out var value))
+                        samples.Add((series.GetProperty("metric").GetProperty("container").GetString()!,
+                            (long)Math.Round(pair[0].GetDouble() * 1000), value));
             if (group.Any(x => !samples.Contains((x.e.Event.TerminalChannel.Target!,
                     x.e.Event.TimestampUtc.ToUnixTimeMilliseconds(), x.m.Value)))) return false;
         }
@@ -226,17 +226,17 @@ public sealed class MimirDeploymentMetrics(
                 using var response = await QueryAsync(tenantId, "query_range", query,
                     $"&start={Seconds(start)}&end={Seconds(end)}&step={interval}", cancellationToken);
                 foreach (var series in response.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
-                foreach (var pair in series.GetProperty("values").EnumerateArray())
-                {
-                    var container = series.GetProperty("metric").GetProperty("container").GetString()!;
-                    var time = DateTimeOffset.FromUnixTimeMilliseconds((long)(pair[0].GetDouble() * 1000));
-                    if (!double.TryParse(pair[1].GetString(), CultureInfo.InvariantCulture, out var value) ||
-                        !double.IsFinite(value)) continue;
-                    var key = (container, name, time);
-                    if (!points.TryGetValue(key, out var values))
-                        points[key] = values = [double.NaN, double.NaN, double.NaN];
-                    values[i] = value;
-                }
+                    foreach (var pair in series.GetProperty("values").EnumerateArray())
+                    {
+                        var container = series.GetProperty("metric").GetProperty("container").GetString()!;
+                        var time = DateTimeOffset.FromUnixTimeMilliseconds((long)(pair[0].GetDouble() * 1000));
+                        if (!double.TryParse(pair[1].GetString(), CultureInfo.InvariantCulture, out var value) ||
+                            !double.IsFinite(value)) continue;
+                        var key = (container, name, time);
+                        if (!points.TryGetValue(key, out var values))
+                            points[key] = values = [double.NaN, double.NaN, double.NaN];
+                        values[i] = value;
+                    }
             }
         }
 
