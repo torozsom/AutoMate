@@ -37,7 +37,7 @@ public sealed class MetricResourceSafetyTests
         string expectedService, string expectedEnvironment)
     {
         var resource = ResourceBuilder.CreateEmpty().AddAttributes(new Dictionary<string, object>
-        { ["private-extra"] = "private-token" }).Clear()
+                { ["private-extra"] = "private-token" }).Clear()
             .AddDetector(new SafeResourceDetector(new DiagnosticRedactor(), service, environment, "1.0.0", "SaaS"))
             .Build().Attributes.ToDictionary(pair => pair.Key, pair => pair.Value);
         Assert.Equal(4, resource.Count);

@@ -53,7 +53,7 @@ public sealed class AzureResourceProviderRegistrarTests
                 new DelegateHttpMessageHandler(request =>
                     request.Method == HttpMethod.Post
                         ? new HttpResponseMessage(HttpStatusCode.Forbidden)
-                        { Content = new StringContent("sensitive-provider-body") }
+                            { Content = new StringContent("sensitive-provider-body") }
                         : DelegateHttpMessageHandler.Json("{\"registrationState\":\"NotRegistered\"}"))),
             NullLogger.Instance);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => registrar.EnsureRequiredProvidersAsync(

@@ -351,7 +351,7 @@ public sealed class DeploymentJobWorkerTests
     private static LocalDeploymentJob Local(Guid projectId, string name, int port)
     {
         return new LocalDeploymentJob(new DeploymentConfigDto
-        { ProjectId = projectId, ProjectName = name, ExposedPort = port });
+            { ProjectId = projectId, ProjectName = name, ExposedPort = port });
     }
 
     /// <summary>

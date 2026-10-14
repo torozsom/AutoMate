@@ -186,9 +186,9 @@ public sealed class DeploymentAnalysisContextBuilder(
         };
         return new AnalysisContextSelector(redactor).Select(history, points, AnalysisContextBudget.From(options.Value),
                 unavailable, token, provenance.EffectiveKind, metadata) with
-        {
-            Provenance = provenance
-        };
+            {
+                Provenance = provenance
+            };
     }
 
     /// <summary>

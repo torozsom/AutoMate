@@ -839,7 +839,7 @@ public sealed class AnalysisAdmissionTests
         public AutoMateDbContext NewDb(DbCommandInterceptor? interceptor = null)
         {
             var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(new SqliteConnectionStringBuilder
-            { DataSource = path, Pooling = false }.ToString());
+                { DataSource = path, Pooling = false }.ToString());
             if (interceptor is not null) options.AddInterceptors(interceptor);
             return new AdmissionContext(options.Options);
         }

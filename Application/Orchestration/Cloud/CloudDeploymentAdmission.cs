@@ -48,7 +48,7 @@ public sealed class CloudDeploymentAdmission(
         CancellationToken token = default)
     {
         var metadata = new ProjectMetadataDto
-        { TargetFramework = "net10.0", DotNetVersion = "10.0", IsWebProject = true };
+            { TargetFramework = "net10.0", DotNetVersion = "10.0", IsWebProject = true };
         if (!capabilities.LocalDeploymentsEnabled)
             return await runs.StartAsync(new CloudDeploymentStart(request.Owner, request.Config.ProjectId,
                 request.IdempotencyKey!, request.RepositoryOwner, request.RepositoryName, request.GitHubToken,

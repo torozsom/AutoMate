@@ -126,7 +126,7 @@ public sealed class AzureContainerAppLiveLogsTests
         {
             requests++;
             return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new
-            { properties = new { eventStreamEndpoint = endpoint } }));
+                { properties = new { eventStreamEndpoint = endpoint } }));
         });
         await Assert.ThrowsAsync<InvalidOperationException>(() => collector.DiscoverAsync(Target(), default));
         Assert.Equal(1, requests);
@@ -216,7 +216,7 @@ public sealed class AzureContainerAppLiveLogsTests
     {
         var publisher = new RecordingPublisher();
         var collector = Create(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
-        { Content = new StringContent("private-provider-secret") }, publisher);
+            { Content = new StringContent("private-provider-secret") }, publisher);
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         collector.Update(Target(), lifetime.Token);
         await publisher.Notice.Task.WaitAsync(TimeSpan.FromSeconds(3));
