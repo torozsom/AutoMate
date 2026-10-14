@@ -2,8 +2,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Results;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -89,6 +89,7 @@ public sealed class ConsoleExceptionDiagnostics(
                 {
                     text.Append("AI provider: ").Append(denied.Provider).AppendLine();
                     text.Append("Provider code: ").Append(denied.Code).AppendLine();
+                    text.Append("Provider denial reason: ").Append(denied.Reason).AppendLine();
                     if (denied.RequestId is { } requestId)
                         text.Append("Provider request ID: ").Append(requestId).AppendLine();
                 }

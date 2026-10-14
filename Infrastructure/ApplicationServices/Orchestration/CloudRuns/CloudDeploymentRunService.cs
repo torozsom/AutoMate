@@ -3,16 +3,18 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Application.Abstractions.GitHub;
 using Application.Diagnostics;
-using Application.Orchestration;
+using Application.Orchestration.Cloud;
 using Domain.Defaults;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Cloud;
+using Domain.Entities.Users;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Authorizes and atomically admits a credential-free SaaS deployment.
@@ -30,6 +32,27 @@ public sealed class CloudDeploymentRunService(
     /// <summary>Accepted Azure Container Registry login server shape.</summary>
     private static readonly Regex RegistryPattern = new(
         "^[a-z0-9][a-z0-9-]*\\.azurecr\\.io$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>Samples deadlines and transitions at their original decision points.</summary>
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    /// <summary>
+    ///     Uses an explicit execution clock while retaining the original constructor and system-clock defaults.
+    /// </summary>
+    /// <param name="dbContext">
+    ///     Application metadata context used for ownership, leases and persisted state.
+    /// </param>
+    /// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+    /// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="clock">The execution clock for the existing lease, retry and completion decisions.</param>
+    public CloudDeploymentRunService(AutoMateDbContext dbContext,
+        IGitHubAppCredentials githubApp,
+        IOptions<CloudSaasOptions> options,
+        TimeProvider clock)
+        : this(dbContext, githubApp, options)
+    {
+        _clock = clock;
+    }
 
     /// <summary>
     ///     Creates or returns the request identified by the user's idempotency key.
@@ -176,7 +199,7 @@ public sealed class CloudDeploymentRunService(
             WorkflowFileName = DeploymentDefaults.CloudWorkflowFileName,
             RegistryServer = registry,
             SnapshotJson = snapshot,
-            NextAttemptAt = DateTimeOffset.UtcNow
+            NextAttemptAt = _clock.GetUtcNow()
         };
         dbContext.CloudDeploymentRuns.Add(run);
         dbContext.CloudRunOutbox.Add(new CloudRunOutbox { RunId = run.Id });

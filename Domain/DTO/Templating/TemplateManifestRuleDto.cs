@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Templating;
 
 /// <summary>
 ///     Represents one template manifest rule used to decide which deployment artifact should be

@@ -1,4 +1,4 @@
-namespace Web.Configs;
+namespace Web.Configs.Observability;
 
 /// <summary>
 ///     Controls OpenTelemetry export without placing credentials in application settings.

@@ -1,6 +1,6 @@
-using Domain.Enums;
+using Domain.Enums.GitHub;
 
-namespace Domain.Entities;
+namespace Domain.Entities.Diagnostics;
 
 /// <summary>
 ///     Stores a redacted-log checkpoint and state fingerprint for one GitHub Actions job.

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Policy;
 
 /// <summary>
 ///     Short-lived, bounded server-owned identity mapping, never derived from a tenant HTTP

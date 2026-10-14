@@ -1,6 +1,6 @@
 using Domain.Defaults;
 
-namespace Domain.DTO;
+namespace Domain.DTO.Deployment;
 
 /// <summary>
 ///     Represents database settings rendered into generated deployment templates.

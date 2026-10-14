@@ -1,9 +1,9 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.History;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Storage;
 
 /// <summary>
 ///     Deletes expired redacted diagnostics in bounded batches.

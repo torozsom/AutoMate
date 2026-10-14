@@ -1,6 +1,6 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Jobs;
 
 /// <summary>
 ///     Represents a queued deployment operation processed outside the Blazor component

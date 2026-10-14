@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Azure;
 
 /// <summary>
 ///     Contains Azure OIDC setup details that must be provided to GitHub Actions.

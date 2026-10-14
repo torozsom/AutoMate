@@ -1,0 +1,773 @@
+using System.Collections.Concurrent;
+using System.Net;
+using System.Reflection;
+using System.Text;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Docker;
+using Application.Abstractions.Logging;
+using Docker.DotNet;
+using Docker.DotNet.Models;
+using Infrastructure.Diagnostics.Runtime;
+using Infrastructure.Docker.Cli;
+using Infrastructure.Docker.Diagnostics;
+using Infrastructure.Docker.Runtime;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
+
+namespace Test.Infra.Diagnostics.Docker;
+
+/// <summary>
+///     Exercises collector framing, owned lifecycle routing and cancellation through the Docker SDK
+///     contracts.
+/// </summary>
+/// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
+public sealed class DockerCollectorTests
+{
+    /// <summary>
+    ///     Cancellation must close an idle owned log stream without waiting for its container to exit.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [DockerSmokeFact]
+    public async Task Real_idle_container_log_subscription_cancels_while_container_keeps_running()
+    {
+        using var client = new DockerClientConfiguration(new Uri(OperatingSystem.IsWindows()
+            ? "npipe://./pipe/docker_engine"
+            : "unix:///var/run/docker.sock")).CreateClient();
+        var target = DockerOutputTests.Target();
+        var name = "automate-idle-cancel-test-" + Guid.NewGuid().ToString("N");
+        target = target with { Containers = [target.Containers[0] with { Name = name }] };
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        using var token = new CancellationTokenSource();
+        var publisher = new RecordingPublisher();
+        var result = await client.Containers.CreateContainerAsync(new CreateContainerParameters
+        {
+            Name = name,
+            Image = Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE_IMAGE") ?? "busybox:1.37",
+            Cmd = ["sh", "-c", "printf 'ready\\n'; sleep 600"],
+            Labels = DockerOutputTests.Labels(target, target.Containers[0])
+        }, deadline.Token);
+        Task? pending = null;
+        try
+        {
+            await client.Containers.StartContainerAsync(result.ID, new ContainerStartParameters(), deadline.Token);
+            pending = Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], token.Token);
+            while (!publisher.Events.Any(e => e.Kind == DeploymentDiagnosticKind.Log))
+                await Task.Delay(10, deadline.Token);
+            token.Cancel();
+            await AwaitShutdownAsync(pending.WaitAsync(TimeSpan.FromSeconds(3)));
+            Assert.True((await client.Containers.InspectContainerAsync(result.ID, deadline.Token)).State.Running);
+        }
+        finally
+        {
+            token.Cancel();
+            await client.Containers.RemoveContainerAsync(result.ID, new ContainerRemoveParameters { Force = true },
+                CancellationToken.None);
+            if (pending is not null) await AwaitShutdownAsync(pending.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+    }
+
+    /// <summary>
+    ///     A real idle daemon subscription must finish cancellation without generating any Docker
+    ///     lifecycle mutation.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [DockerSmokeFact]
+    public async Task Real_idle_daemon_subscription_cancels_without_lifecycle_events()
+    {
+        using var client = new DockerClientConfiguration(new Uri(OperatingSystem.IsWindows()
+            ? "npipe://./pipe/docker_engine"
+            : "unix:///var/run/docker.sock")).CreateClient();
+        using var token = new CancellationTokenSource();
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending = Collector(client, new RecordingPublisher()).MonitorDaemonAsync(DockerOutputTests.Target(),
+            () => ready.TrySetResult(), token.Token);
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(300);
+        token.Cancel();
+        await AwaitShutdownAsync(pending.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    /// <summary>
+    ///     Log collection waits through a creation race, then subscribes to owned output without a
+    ///     failure warning.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [Fact]
+    public async Task Initial_missing_container_waits_then_collects_owned_output()
+    {
+        var target = DockerOutputTests.Target();
+        var publisher = new RecordingPublisher();
+        var logger = new CollectorLogger();
+        var inspections = 0;
+        var containers = Proxy<IContainerOperations>((method, _) => method.Name switch
+        {
+            "InspectContainerAsync" when Interlocked.Increment(ref inspections) == 1 =>
+                Task.FromException<ContainerInspectResponse>(
+                    new DockerContainerNotFoundException(HttpStatusCode.NotFound, "private-body")),
+            "InspectContainerAsync" => Task.FromResult(new ContainerInspectResponse
+            {
+                ID = "owned-container",
+                Config = new Config { Labels = DockerOutputTests.Labels(target, target.Containers[0]) },
+                State = new ContainerState { Running = true }
+            }),
+            "GetContainerLogsAsync" => Task.FromResult(
+                new MultiplexedStream(new MemoryStream(Frames((1, "2026-10-05T08:00:00Z ready\n"))), true)),
+            _ => throw new NotSupportedException(method.Name)
+        });
+        var client = Proxy<IDockerClient>((_, _) => containers);
+        var collector =
+            new DockerDiagnosticCollector(client, publisher, new DiagnosticRedactor(), TimeProvider.System, logger);
+        using var token = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var pending = collector.MonitorContainerAsync(target, target.Containers[0], token.Token);
+        // The startup wait is informational; wait for actual output rather than using the lifecycle notice as EOF.
+        while (!publisher.Events.Any(e => e.Kind == DeploymentDiagnosticKind.Log)) await Task.Delay(10, token.Token);
+        token.Cancel();
+        await AwaitShutdownAsync(pending);
+        Assert.Equal(0, logger.Warnings);
+        Assert.Contains(publisher.Events, e => e.Message == "ready\n");
+        var waiting = Assert.Single(publisher.Events, e => e.Message.Contains("Waiting for"));
+        Assert.Equal(DeploymentDiagnosticSeverity.Information, waiting.Severity);
+    }
+
+    /// <summary>
+    ///     Missing containers during Compose startup are a wait state; permission failures still warn.
+    /// </summary>
+    /// <param name="missing">Whether the fixture omits the required resource.</param>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Metrics_missing_container_is_expected_but_permission_failure_remains_visible(bool missing)
+    {
+        var target = DockerOutputTests.Target();
+        var publisher = new RecordingPublisher();
+        var logger = new CollectorLogger();
+        var containers = Proxy<IContainerOperations>((_, _) => Task.FromException<ContainerInspectResponse>(missing
+            ? new DockerContainerNotFoundException(HttpStatusCode.NotFound, "private-provider-body")
+            : new DockerApiException(HttpStatusCode.Forbidden, "private-provider-body")));
+        var client = Proxy<IDockerClient>((_, _) => containers);
+        var collector =
+            new DockerDiagnosticCollector(client, publisher, new DiagnosticRedactor(), TimeProvider.System, logger);
+        Assert.Null(await collector.VerifyContainerAsync(target, target.Containers[0], CancellationToken.None));
+        Assert.Equal(missing ? 0 : 1, logger.Warnings);
+        Assert.Equal(missing ? 0 : 1, publisher.Events.Count);
+        Assert.DoesNotContain(publisher.Events, e => e.Message.Contains("private"));
+    }
+
+    /// <summary>
+    ///     Multiplexed frames retain separate streams, redact secrets and explicitly report EOF.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [Fact]
+    public async Task Container_frames_are_redacted_before_confirmation_and_report_eof()
+    {
+        var target = DockerOutputTests.Target();
+        using var token = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var publisher = new RecordingPublisher();
+        var containers = Proxy<IContainerOperations>((method, args) => method.Name switch
+        {
+            "InspectContainerAsync" => Task.FromResult(new ContainerInspectResponse
+            {
+                ID = "container-id",
+                Config = new Config { Labels = DockerOutputTests.Labels(target, target.Containers[0]) },
+                State = new ContainerState { Running = true }
+            }),
+            "GetContainerLogsAsync" => Task.FromResult(new MultiplexedStream(new MemoryStream(Frames(
+                (1, "2026-10-04T08:00:00.123456789Z out ár"),
+                (2, "2026-10-04T08:00:00.123456789Z password=private-value\r\n"),
+                (1, "víz 😀\r\n2026-10-04T08:00:01Z partial"))), true)),
+            _ => throw new NotSupportedException(method.Name)
+        });
+        var client = Proxy<IDockerClient>((method, _) =>
+            method.Name == "get_Containers" ? containers : throw new NotSupportedException(method.Name));
+        var pending = Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], token.Token);
+        await publisher.Ended.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        token.Cancel();
+        await AwaitShutdownAsync(pending);
+        var logs = publisher.Events.Where(e => e.Kind == DeploymentDiagnosticKind.Log).ToArray();
+        Assert.Equal(3, logs.Length);
+        Assert.Contains(logs,
+            e => e.Message == "out árvíz 😀\r\n" &&
+                 e.SourceIdentity!.Stream == DeploymentDiagnosticStream.StandardOutput);
+        Assert.Contains(logs,
+            e => e.Message == "password=[REDACTED]\r\n" &&
+                 e.SourceIdentity!.Stream == DeploymentDiagnosticStream.StandardError);
+        Assert.Contains(logs, e => e.Message == "partial");
+        Assert.All(logs, e => Assert.NotNull(e.Cursor));
+        Assert.DoesNotContain(publisher.Events, e => e.Message.Contains("private-value"));
+    }
+
+    /// <summary>
+    ///     A mismatched inspection never subscribes to another deployment's output.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [Fact]
+    public async Task Unowned_container_never_opens_logs()
+    {
+        var target = DockerOutputTests.Target();
+        var publisher = new RecordingPublisher();
+        var containers = Proxy<IContainerOperations>((method, _) => method.Name == "InspectContainerAsync"
+            ? Task.FromResult(new ContainerInspectResponse
+            { ID = "foreign", Config = new Config { Labels = new Dictionary<string, string>() } })
+            : throw new InvalidOperationException("Must not subscribe to unowned container"));
+        var client = Proxy<IDockerClient>((method, _) =>
+            method.Name == "get_Containers" ? containers : throw new NotSupportedException());
+        await Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], CancellationToken.None);
+        Assert.Single(publisher.Events);
+        Assert.Contains("ownership", publisher.Events.Single().Message);
+    }
+
+    /// <summary>
+    ///     A failed durable admission replays from the old checkpoint and retains repeated legitimate
+    ///     messages.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [Fact]
+    public async Task Reconnect_retries_unconfirmed_output_without_collapsing_repeated_lines()
+    {
+        var target = DockerOutputTests.Target();
+        var publisher = new RecordingPublisher { RejectNextLog = true };
+        var subscriptions = new List<ContainerLogsParameters>();
+        var containers = Proxy<IContainerOperations>((method, args) =>
+        {
+            if (method.Name == "InspectContainerAsync")
+                return Task.FromResult(new ContainerInspectResponse
+                {
+                    ID = "container-id",
+                    Config = new Config { Labels = DockerOutputTests.Labels(target, target.Containers[0]) },
+                    State = new ContainerState { Running = true }
+                });
+            if (method.Name != "GetContainerLogsAsync") throw new NotSupportedException();
+            subscriptions.Add((ContainerLogsParameters)args![2]!);
+            return Task.FromResult(new MultiplexedStream(new MemoryStream(Frames(
+                (1, "2026-10-04T08:00:00.123456789Z same\n2026-10-04T08:00:00.123456789Z same\n"))), true));
+        });
+        var client = Proxy<IDockerClient>((method, _) =>
+            method.Name == "get_Containers" ? containers : throw new NotSupportedException());
+        using var token = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var pending = Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], token.Token);
+        await publisher.Ended.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        token.Cancel();
+        await AwaitShutdownAsync(pending);
+        Assert.Equal(2, subscriptions.Count);
+        Assert.All(subscriptions, s => Assert.Null(s.Since));
+        var logs = publisher.Events.Where(e => e.Kind == DeploymentDiagnosticKind.Log).ToArray();
+        Assert.Equal(2, logs.Length);
+        Assert.Equal("same\n", logs[0].Message);
+        Assert.Equal("same\n", logs[1].Message);
+        Assert.EndsWith("/1", logs[0].Cursor);
+        Assert.EndsWith("/2", logs[1].Cursor);
+        Assert.NotEqual(logs[0].EventId, logs[1].EventId);
+    }
+
+    /// <summary>
+    ///     Supported SDK event callbacks filter before durable publication and cancel without detached
+    ///     tasks.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [Fact]
+    public async Task Daemon_callbacks_are_filtered_and_receiver_is_awaited_on_shutdown()
+    {
+        var target = DockerOutputTests.Target();
+        var publisher = new RecordingPublisher();
+        var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var system = Proxy<ISystemOperations>((method, args) => method.Name == "MonitorEventsAsync" && args!.Length == 3
+            ? ReceiveAsync((IProgress<Message>)args[1]!, (CancellationToken)args[2]!)
+            : throw new NotSupportedException());
+        var client = Proxy<IDockerClient>((method, _) =>
+            method.Name == "get_System" ? system : throw new NotSupportedException());
+        using var token = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var pending = Collector(client, publisher).MonitorDaemonAsync(target, () => { }, token.Token);
+        await publisher.Lifecycle.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        token.Cancel();
+        await AwaitShutdownAsync(pending);
+        Assert.True(exited.Task.IsCompletedSuccessfully);
+        Assert.Single(publisher.Events,
+            e => e.Source == DeploymentDiagnosticSource.DockerDaemon && e.Kind == DeploymentDiagnosticKind.Lifecycle);
+
+        // The custom progress adapter executes synchronously and is governed by the source cancellation token.
+#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
+        /// <summary>
+        ///     Reports controlled Docker lifecycle events and waits for cancellation before signaling
+        ///     shutdown.
+        /// </summary>
+        /// <param name="progress">Sink receiving synthetic Docker lifecycle events.</param>
+        /// <param name="cancellation">Cancellation source owning this supervised operation.</param>
+        /// <returns>A pending operation that completes through cancellation rather than producing a value.</returns>
+        /// <exception cref="OperationCanceledException">The caller cancellation or fixture deadline ends the pending operation.</exception>
+        async Task ReceiveAsync(IProgress<Message> progress, CancellationToken cancellation)
+        {
+            try
+            {
+                progress.Report(
+                    DockerOutputTests.Event(DockerOutputTests.Labels(target, target.Containers[0]), "start"));
+                progress.Report(
+                    DockerOutputTests.Event(DockerOutputTests.Labels(target, target.Containers[0]), "start"));
+                progress.Report(DockerOutputTests.Event(
+                    DockerOutputTests.Labels(target with { ProjectId = Guid.NewGuid() }, target.Containers[0]),
+                    "start"));
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellation);
+            }
+            finally
+            {
+                exited.TrySetResult();
+            }
+        }
+#pragma warning restore CS1587
+    }
+
+    /// <summary>
+    ///     An explicitly enabled smoke test verifies owned and unrelated Docker containers without host
+    ///     ports or volumes.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [DockerSmokeFact]
+    public async Task Real_docker_lifecycle_and_streams_use_only_disposable_owned_containers()
+    {
+        using var client = new DockerClientConfiguration(new Uri(OperatingSystem.IsWindows()
+            ? "npipe://./pipe/docker_engine"
+            : "unix:///var/run/docker.sock")).CreateClient();
+        var name = "automate-diagnostics-test-" + Guid.NewGuid().ToString("N");
+        var target = DockerOutputTests.Target() with { Containers = [new DockerContainerTarget(name, "web")] };
+        var publisher = new RecordingPublisher();
+        var collector = Collector(client, publisher);
+        using var token = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var daemon = collector.MonitorDaemonAsync(target, () => { }, token.Token);
+        var created = new List<string>();
+        Task? logs = null;
+        try
+        {
+            foreach (var owned in new[] { false, true })
+            {
+                var labels = owned
+                    ? DockerOutputTests.Labels(target, target.Containers[0])
+                    : new Dictionary<string, string>();
+                var result = await client.Containers.CreateContainerAsync(new CreateContainerParameters
+                {
+                    Name = owned ? name : name + "-unrelated",
+                    Image = Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE_IMAGE") ?? "alpine:3.20",
+                    Cmd = ["sh", "-c", "printf 'stdout 😀\\n'; printf 'password=private-value\\n' >&2"],
+                    Labels = labels
+                }, token.Token);
+                created.Add(result.ID);
+                await client.Containers.StartContainerAsync(result.ID, new ContainerStartParameters(), token.Token);
+            }
+
+            logs = collector.MonitorContainerAsync(target, target.Containers[0], token.Token);
+            await publisher.Ended.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            await publisher.Died.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.Contains(publisher.Events, e => e.Message == "stdout 😀\n");
+            Assert.Contains(publisher.Events,
+                e => e.Message == "password=[REDACTED]\n" &&
+                     e.SourceIdentity!.Stream == DeploymentDiagnosticStream.StandardError);
+            Assert.DoesNotContain(publisher.Events, e => e.SourceIdentity?.InstanceId == created[0]);
+            Assert.Contains(publisher.Events,
+                e => e.Source == DeploymentDiagnosticSource.DockerDaemon && e.Attributes!["action"] == "create");
+        }
+        finally
+        {
+            token.Cancel();
+            await AwaitShutdownAsync(daemon);
+            if (logs is not null) await AwaitShutdownAsync(logs);
+            foreach (var id in created)
+                await client.Containers.RemoveContainerAsync(id, new ContainerRemoveParameters { Force = true },
+                    CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    ///     Real Compose receives deployment labels and reports exit outcomes without changing host
+    ///     resources.
+    /// </summary>
+    /// <returns>A task completing when the scenario and its assertions finish.</returns>
+    [DockerSmokeFact]
+    public async Task Real_compose_injects_deployment_labels_and_reports_success_and_failure()
+    {
+        var target = DockerOutputTests.Target();
+        var name = "automate-compose-test-" + Guid.NewGuid().ToString("N");
+        var directory = Path.Combine(Path.GetTempPath(), name);
+        var file = Path.Combine(directory, "docker-compose.yml");
+        Directory.CreateDirectory(directory);
+        using var client = new DockerClientConfiguration(new Uri(OperatingSystem.IsWindows()
+            ? "npipe://./pipe/docker_engine"
+            : "unix:///var/run/docker.sock")).CreateClient();
+        using var token = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var publisher = new RecordingPublisher();
+        var cli = new DockerCli(new DockerOptions(), publisher, NullLogger.Instance, 60, new UnusedLive(),
+            new DiagnosticRedactor(), new DeploymentRuntimeViewers(TimeProvider.System), TimeProvider.System);
+        using var subscriptions = new CancellationTokenSource();
+        var collector = Collector(client, publisher);
+        var sources = new List<Task>();
+        var image = Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE_IMAGE") ?? "alpine:3.20";
+        await File.WriteAllTextAsync(file, $$"""
+                                             services:
+                                               web:
+                                                 image: "{{image}}"
+                                                 container_name: "{{name}}"
+                                                 command: ["sh", "-c", "printf 'password=private-value\\n'; sleep 600"]
+                                                 labels:
+                                                   io.automate.owner: "AutoMate"
+                                                   io.automate.project: "{{target.ProjectId:N}}"
+                                                   io.automate.deployment: "${AUTOMATE_DEPLOYMENT_ID:-unassigned}"
+                                                   io.automate.service: "web"
+                                                   io.automate.scope: "deployment"
+                                             """, token.Token);
+        try
+        {
+            Assert.True(await cli.RunComposeAsync(directory, name, target.ProjectId, target.DeploymentId, token.Token,
+                "up", "--no-build", "-d"));
+            var inspect = await client.Containers.InspectContainerAsync(name, token.Token);
+            Assert.Equal(target.DeploymentId.ToString("N"), inspect.Config.Labels["io.automate.deployment"]);
+            target = target with { ComposeProject = name, Containers = [new DockerContainerTarget(name, "web")] };
+            sources.Add(collector.MonitorDaemonAsync(target, () => { }, subscriptions.Token));
+            sources.Add(collector.MonitorContainerAsync(target, target.Containers[0], subscriptions.Token));
+            sources.Add(cli.StreamContainerMetricsAsync(inspect.ID, target.ProjectId, target.DeploymentId, "web",
+                subscriptions.Token));
+            Assert.False(await cli.RunComposeAsync(directory, name, target.ProjectId, target.DeploymentId, token.Token,
+                "up", "--invalid-smoke-option"));
+            Assert.Contains(publisher.Events,
+                e => e.Attributes?.GetValueOrDefault("state") == "completed" && e.Attributes["exit_code"] == "0");
+            Assert.Contains(publisher.Events,
+                e => e.Attributes?.GetValueOrDefault("state") == "failed" &&
+                     e.Severity == DeploymentDiagnosticSeverity.Error);
+            Assert.All(publisher.Events, e => Assert.Equal(target.DeploymentId, e.DeploymentId));
+            Assert.Contains(publisher.Events,
+                e => e.SourceIdentity?.Stream == DeploymentDiagnosticStream.StandardError);
+        }
+        finally
+        {
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            Assert.True(await cli.RunComposeAsync(directory, name, target.ProjectId, target.DeploymentId, cleanup.Token,
+                "down"));
+            await subscriptions.CancelAsync();
+            await Task.WhenAll(sources.Select(AwaitShutdownAsync)).WaitAsync(TimeSpan.FromSeconds(5));
+            File.Delete(file);
+            Directory.Delete(directory);
+        }
+    }
+
+    /// <summary>Ten independent Compose projects start and stop concurrently through AutoMate's real CLI adapter.</summary>
+    [DockerSmokeFact]
+    public async Task Real_compose_starts_and_stops_ten_independent_projects()
+    {
+        var prefix = "automate-concurrent-test-" + Guid.NewGuid().ToString("N");
+        var projects = Enumerable.Range(0, 10).Select(index =>
+            (Name: prefix + "-" + index, Directory: Path.Combine(Path.GetTempPath(), prefix + "-" + index),
+                Project: Guid.NewGuid(), Deployment: Guid.NewGuid())).ToArray();
+        var publisher = new RecordingPublisher();
+        var cli = new DockerCli(new DockerOptions(), publisher, NullLogger.Instance, 60, new UnusedLive(),
+            new DiagnosticRedactor(), new DeploymentRuntimeViewers(TimeProvider.System), TimeProvider.System);
+        using var client = new DockerClientConfiguration(new Uri(OperatingSystem.IsWindows()
+            ? "npipe://./pipe/docker_engine"
+            : "unix:///var/run/docker.sock")).CreateClient();
+        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+        var image = Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE_IMAGE") ?? "busybox:1.37";
+        try
+        {
+            foreach (var project in projects)
+            {
+                Directory.CreateDirectory(project.Directory);
+                await File.WriteAllTextAsync(Path.Combine(project.Directory, "docker-compose.yml"), $$"""
+                      services:
+                        web:
+                          image: "{{image}}"
+                          container_name: "{{project.Name}}"
+                          command: ["sh", "-c", "sleep 600"]
+                          labels:
+                            io.automate.owner: "AutoMate"
+                            io.automate.project: "{{project.Project:N}}"
+                            io.automate.deployment: "${AUTOMATE_DEPLOYMENT_ID:-unassigned}"
+                      """, deadline.Token);
+            }
+
+            var started = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
+                project.Name, project.Project, project.Deployment, deadline.Token, "up", "-d")));
+            Assert.All(started, Assert.True);
+            foreach (var project in projects)
+            {
+                var container = await client.Containers.InspectContainerAsync(project.Name, deadline.Token);
+                Assert.True(container.State.Running);
+                Assert.Equal(project.Deployment.ToString("N"), container.Config.Labels["io.automate.deployment"]);
+            }
+
+            var stopped = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
+                project.Name, project.Project, project.Deployment, deadline.Token, "down")));
+            Assert.All(stopped, Assert.True);
+        }
+        finally
+        {
+            using var cleanup = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            var cleaned = await Task.WhenAll(projects
+                .Where(project => File.Exists(Path.Combine(project.Directory, "docker-compose.yml")))
+                .Select(project => cli.RunComposeAsync(project.Directory, project.Name, project.Project,
+                    project.Deployment, cleanup.Token, "down")));
+            Assert.All(cleaned, Assert.True);
+            foreach (var project in projects)
+            {
+                var file = Path.Combine(project.Directory, "docker-compose.yml");
+                if (File.Exists(file)) File.Delete(file);
+                if (Directory.Exists(project.Directory)) Directory.Delete(project.Directory);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Accepts source cancellation while still observing every task fault.
+    /// </summary>
+    /// <param name="task">Owned asynchronous operation to supervise.</param>
+    /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
+    private static async Task AwaitShutdownAsync(Task task)
+    {
+        try
+        {
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    /// <summary>
+    ///     Creates a collector with the production redactor and deterministic fake transport.
+    /// </summary>
+    /// <param name="client">Fixture HTTP or Docker client.</param>
+    /// <param name="publisher">Accepts normalized observations for bounded redaction and durable delivery.</param>
+    /// <returns>The configured Docker diagnostic collector instance or response for this scenario.</returns>
+    private static DockerDiagnosticCollector Collector(IDockerClient client, RecordingPublisher publisher)
+    {
+        return new DockerDiagnosticCollector(client, publisher, new DiagnosticRedactor(), TimeProvider.System,
+            NullLogger.Instance);
+    }
+
+    /// <summary>
+    ///     Builds Docker's eight-byte multiplexed frame headers.
+    /// </summary>
+    /// <param name="frames">Stream-number and text pairs to encode as Docker output frames.</param>
+    /// <returns>The synthetic encoded payload.</returns>
+    private static byte[] Frames(params (int Stream, string Text)[] frames)
+    {
+        using var bytes = new MemoryStream();
+        foreach (var frame in frames)
+        {
+            var text = Encoding.UTF8.GetBytes(frame.Text);
+            bytes.Write(new byte[]
+            {
+                (byte)frame.Stream, 0, 0, 0, (byte)(text.Length >> 24), (byte)(text.Length >> 16),
+                (byte)(text.Length >> 8), (byte)text.Length
+            });
+            bytes.Write(text);
+        }
+
+        return bytes.ToArray();
+    }
+
+    /// <summary>
+    ///     Creates a small SDK contract fake without adding a mocking dependency.
+    /// </summary>
+    /// <param name="handler">Configured HTTP handler or reflected port callback.</param>
+    /// <typeparam name="T">Interface or result type created by the fixture.</typeparam>
+    /// <returns>The configured t instance or response for this scenario.</returns>
+    private static T Proxy<T>(Func<MethodInfo, object?[]?, object?> handler) where T : class
+    {
+        var proxy = DispatchProxy.Create<T, SdkProxy>();
+        ((SdkProxy)(object)proxy).Handler = handler;
+        return proxy;
+    }
+
+    /// <summary>
+    ///     Counts warnings and rejects any raw provider error body.
+    /// </summary>
+    private sealed class CollectorLogger : ILogger
+    {
+        /// <summary>Number of actual failure warnings.</summary>
+        public int Warnings { get; private set; }
+
+        /// <summary>
+        ///     Returns no scope handle because this fixture does not retain scopes.
+        /// </summary>
+        /// <param name="state">Synthetic readiness or structured logger state; ignored by this fixture.</param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
+        /// <returns>Null; this fixture retains no scopes.</returns>
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+        {
+            return null;
+        }
+
+        /// <summary>
+        ///     Enables every log level so the fixture can observe all emitted records.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output; ignored by this fixture.</param>
+        /// <returns>True for every call in this fixture.</returns>
+        public bool IsEnabled(LogLevel level)
+        {
+            return true;
+        }
+
+        /// <summary>
+        ///     Captures or checks the logger call using the fixture assertions and supplied formatter.
+        /// </summary>
+        /// <param name="level">Reviewed log severity used to select safe output.</param>
+        /// <param name="id">Selected project identity; ignored by this fixture.</param>
+        /// <param name="state">Synthetic readiness or structured logger state.</param>
+        /// <param name="error">Original failure to classify without persisting arbitrary exception text.</param>
+        /// <param name="formatter">Provider log formatter; untrusted rendered text is not exported.</param>
+        /// <typeparam name="TState">Type of structured logger state.</typeparam>
+        public void Log<TState>(LogLevel level, EventId id,
+            TState state, Exception? error, Func<TState, Exception?, string> formatter)
+        {
+            Assert.Null(error);
+            Assert.DoesNotContain("private", formatter(state, error));
+            if (level == LogLevel.Warning) Warnings++;
+        }
+    }
+
+    /// <summary>
+    ///     Dispatches only the SDK members a test expects.
+    /// </summary>
+    public class SdkProxy : DispatchProxy
+    {
+        /// <summary>Test-specific SDK response handler.</summary>
+        public Func<MethodInfo, object?[]?, object?> Handler { get; set; } = null!;
+
+        /// <summary>
+        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
+        /// </summary>
+        /// <param name="targetMethod">Reflected port member dispatched by the fake.</param>
+        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        /// <returns>
+        ///     The configured response for the selected fixture member, including null when its contract
+        ///     requires no value.
+        /// </returns>
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+        {
+            return Handler(targetMethod!, args);
+        }
+    }
+
+    /// <summary>
+    ///     Fails if a Compose operation unexpectedly attempts direct live metric/terminal transport.
+    /// </summary>
+    private sealed class UnusedLive : ILogStreamer
+    {
+        /// <summary>
+        ///     Rejects stream container metrics because this member is deliberately unavailable in the
+        ///     fixture.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="container">Recorded container identity to select; ignored by this fixture.</param>
+        /// <param name="cpu">Provider CPU display value; ignored by this fixture.</param>
+        /// <param name="memory">Provider memory display value; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
+        public Task StreamContainerMetricsAsync(Guid projectId, string container, string cpu, string memory,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        /// <summary>
+        ///     Rejects stream terminal log because this member is deliberately unavailable in the fixture.
+        /// </summary>
+        /// <param name="diagnostic">Synthetic diagnostic event or terminal record; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
+        public Task StreamTerminalLogAsync(DeploymentTerminalLog diagnostic,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        /// <summary>
+        ///     Rejects stream terminal notice because this member is deliberately unavailable in the
+        ///     fixture.
+        /// </summary>
+        /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>
+        /// <param name="notice">Synthetic availability guidance delivered by the fixture; ignored by this fixture.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>This deliberately unavailable member never returns successfully.</returns>
+        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
+        public Task StreamTerminalNoticeAsync(Guid projectId, string notice,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    /// <summary>
+    ///     Records already-redacted durable admissions and safe source notices.
+    /// </summary>
+    private sealed class RecordingPublisher : IDeploymentDiagnosticPublisher, IDurableDeploymentDiagnosticPublisher
+    {
+        /// <summary>Simulates a failed durable receipt before any checkpoint is committed.</summary>
+        public bool RejectNextLog { get; set; }
+
+        /// <summary>Thread-safe captured records.</summary>
+        public ConcurrentQueue<DeploymentDiagnosticEvent> Events { get; } = new();
+
+        /// <summary>Container EOF notification.</summary>
+        public TaskCompletionSource Ended { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>First owned daemon lifecycle event.</summary>
+        public TaskCompletionSource Lifecycle { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Owned daemon exit event.</summary>
+        public TaskCompletionSource Died { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>
+        ///     Records normalized fixture observations and reports the configured publication outcome.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
+        public ValueTask PublishAsync(DeploymentDiagnosticEvent e, CancellationToken cancellationToken = default)
+        {
+            Events.Enqueue(e);
+            if (e.Source == DeploymentDiagnosticSource.DockerContainer && e.Kind == DeploymentDiagnosticKind.Lifecycle)
+                Ended.TrySetResult();
+            return ValueTask.CompletedTask;
+        }
+
+        /// <summary>
+        ///     Records accepted events, rejects the configured next log and signals selected delivery
+        ///     milestones.
+        /// </summary>
+        /// <param name="e">Browser change or keyboard event.</param>
+        /// <param name="cancellationToken">Cancellation token for the fixture operation; ignored by this fixture.</param>
+        /// <returns>A task returning the configured fixture condition or completion outcome.</returns>
+        public Task<bool> PublishDurablyAsync(DeploymentDiagnosticEvent e,
+            CancellationToken cancellationToken = default)
+        {
+            if (RejectNextLog && e.Kind == DeploymentDiagnosticKind.Log)
+            {
+                RejectNextLog = false;
+                return Task.FromResult(false);
+            }
+
+            Events.Enqueue(e);
+            if (e.Source == DeploymentDiagnosticSource.DockerDaemon && e.Kind == DeploymentDiagnosticKind.Lifecycle)
+                Lifecycle.TrySetResult();
+            if (e.Attributes?.GetValueOrDefault("action") == "die") Died.TrySetResult();
+            return Task.FromResult(true);
+        }
+    }
+
+    /// <summary>
+    ///     Requires explicit opt-in and a pre-existing test image for disposable real-daemon
+    ///     verification.
+    /// </summary>
+    private sealed class DockerSmokeFactAttribute : FactAttribute
+    {
+        /// <summary>
+        ///     Skips real daemon access during normal credential-free test runs.
+        /// </summary>
+        public DockerSmokeFactAttribute()
+        {
+            if (Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE") != "1")
+                Skip = "Set AUTOMATE_DOCKER_SMOKE=1 to test a disposable local Docker container.";
+        }
+    }
+}

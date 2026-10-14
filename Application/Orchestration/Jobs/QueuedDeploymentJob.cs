@@ -1,4 +1,4 @@
-namespace Application.Orchestration;
+namespace Application.Orchestration.Jobs;
 
 /// <summary>
 ///     A queued operation and its monotonic enqueue timestamp. Never log the job payload.

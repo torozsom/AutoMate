@@ -6,7 +6,7 @@ using System.Text;
 using Azure.ResourceManager.ManagedServiceIdentities;
 using Azure.ResourceManager.Resources;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Identity;
 
 /// <summary>
 ///     Assigns Azure RBAC permissions needed by the deployment managed identity.

@@ -27,7 +27,7 @@ Supervisors open runtime subscriptions for active deployments independently of b
 `LocalDockerTargets` stores names, service tabs and ownership IDs only, never credentials or environment payloads.
 
 Docker details and bounded replay limitations are documented in [Docker](../../Docker/README.md).
-Verification lives in `Infrastructure.Tests/Orchestration/LocalDiagnosticSupervisionTests.cs`.
+Verification lives in `Test/Infra/Orchestration/LocalDiagnosticSupervisionTests.cs`.
 
 Local deployment logging carries project/deployment GUID scopes and omits project names and filesystem paths from
 start/solution lookup messages. The shared status updater reports persistence failure type without the exception body;
@@ -74,3 +74,13 @@ Folders group related files while retaining the module's existing .NET namespace
   `Lifecycle/DeploymentStatusUpdater.cs`, `Lifecycle/GitHubWorkflowMonitor.cs`.
 - `Local/` — `Local/LocalDeploymentLogStreamManager.cs`, `Local/LocalDeploymentOrchestrator.cs`,
   `Local/LocalDockerTargets.cs`, `Local/LocalRuntimeRecoveryService.cs`.
+
+## Refinement boundaries
+
+`Lifecycle/DeploymentReconciliation.cs` owns verified-local startup status reconciliation. The host retains nonblocking
+startup, its original token, catch/log behavior and immediate StopAsync completion. Shutdown cancellation/awaiting is
+intentionally excluded from this behavior-preserving change.
+
+Cloud run admission, processing, monitoring and scheduler lease extension use an explicit TimeProvider with system
+clock defaults and the original public constructors retained. Existing retry jitter, polling delays, lease lengths,
+transaction boundaries and status transitions remain unchanged.

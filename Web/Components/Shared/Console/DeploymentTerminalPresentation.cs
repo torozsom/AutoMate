@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 
-namespace Web.Components.Shared;
+namespace Web.Components.Shared.Console;
 
 /// <summary>
 ///     Formats Azure records and identifies stderr consistently in live and saved terminal output.

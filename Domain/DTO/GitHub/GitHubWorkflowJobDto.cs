@@ -1,6 +1,6 @@
-using Domain.Enums;
+using Domain.Enums.GitHub;
 
-namespace Domain.DTO;
+namespace Domain.DTO.GitHub;
 
 /// <summary>
 ///     Provider-neutral projection of a GitHub Actions workflow job.

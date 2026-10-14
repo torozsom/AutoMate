@@ -1,10 +1,12 @@
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Policy;
+using Application.Ai.Results;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Providers;
 
 /// <summary>
 ///     Direct OpenAI adapter retaining its exact regional route and independent credential
@@ -45,17 +47,17 @@ public sealed class OpenAiAnalysisProvider(
     ///     A task returning untrusted structured analysis output that must be validated and
     ///     redacted before use.
     /// </returns>
-    /// <exception cref="T:Application.Ai.AnalysisProviderUnavailableException">
+    /// <exception cref="T:AnalysisProviderUnavailableException">
     ///     Current provider configuration, operator policy or deployment consent prevents
     ///     execution.
     /// </exception>
-    /// <exception cref="T:Application.Ai.AnalysisProviderAccessDeniedException">
+    /// <exception cref="T:AnalysisProviderAccessDeniedException">
     ///     The provider rejects access to the configured resource or model.
     /// </exception>
-    /// <exception cref="T:Application.Ai.TransientAnalysisProviderException">
+    /// <exception cref="T:TransientAnalysisProviderException">
     ///     The provider or transport reports a failure eligible for bounded retry handling.
     /// </exception>
-    /// <exception cref="T:Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="T:InvalidAnalysisResultException">
     ///     The provider output violates the supported response, provenance or evidence contract.
     /// </exception>
     /// <exception cref="T:System.OperationCanceledException">

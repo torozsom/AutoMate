@@ -1,6 +1,8 @@
 using Domain.Defaults;
+using Domain.DTO.Azure;
+using Domain.DTO.Projects;
 
-namespace Domain.DTO;
+namespace Domain.DTO.Deployment;
 
 /// <summary>
 ///     Contains the repository and project details required to generate and commit cloud

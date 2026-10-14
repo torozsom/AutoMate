@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Secrets;
 
 /// <summary>
 ///     Repository public key response used for GitHub Actions secret encryption.

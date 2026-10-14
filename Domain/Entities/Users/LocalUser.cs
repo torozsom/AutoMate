@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Users;
 
 /// <summary>
 ///     A local account with password-hash and email-verification metadata.

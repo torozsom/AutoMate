@@ -2,7 +2,7 @@ using Application.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 
-namespace Web.Configs;
+namespace Web.Configs.Observability;
 
 /// <summary>
 ///     Audits authorization challenges/denials while preserving the framework's challenge/forbid

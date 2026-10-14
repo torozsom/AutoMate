@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
 using Application.Data.Apps;
 using Application.Diagnostics;
 using Microsoft.AspNetCore.Authorization;

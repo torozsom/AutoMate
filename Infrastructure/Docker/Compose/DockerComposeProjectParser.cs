@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Compose;
 
 /// <summary>
 ///     Parses JSON output from <c>docker compose ls --format json</c>.

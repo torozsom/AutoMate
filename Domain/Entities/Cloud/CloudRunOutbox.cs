@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Cloud;
 
 /// <summary>
 ///     Transactional wakeup for an admitted cloud run.

@@ -4,7 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.Monitor;
 
 /// <summary>
 ///     Queries Azure Monitor Logs through its resource-scoped data-plane API.
@@ -131,7 +131,7 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         if (!table.TryGetProperty("columns", out var columns) || !table.TryGetProperty("rows", out var rows))
             return [];
         var indexes = columns.EnumerateArray().Select((column, index) => new
-                { Name = column.GetProperty("name").GetString(), Index = index })
+        { Name = column.GetProperty("name").GetString(), Index = index })
             .Where(item => !string.IsNullOrWhiteSpace(item.Name))
             .ToDictionary(item => item.Name!, item => item.Index, StringComparer.OrdinalIgnoreCase);
 

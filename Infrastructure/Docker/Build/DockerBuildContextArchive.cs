@@ -1,7 +1,8 @@
 using System.Formats.Tar;
+using Infrastructure.Docker.Runtime;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Build;
 
 /// <summary>
 ///     Creates temporary tar archives used as Docker image build contexts.

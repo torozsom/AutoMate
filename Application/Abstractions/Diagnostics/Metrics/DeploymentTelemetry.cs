@@ -1,6 +1,8 @@
-using Application.Abstractions.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
 
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Metrics;
 
 /// <summary>
 ///     A numeric observation with provider-independent units; absent values are never zero-

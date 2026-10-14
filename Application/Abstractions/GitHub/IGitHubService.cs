@@ -1,5 +1,6 @@
 using Domain.Defaults;
-using Domain.DTO;
+using Domain.DTO.GitHub;
+using Domain.DTO.Templating;
 
 namespace Application.Abstractions.GitHub;
 

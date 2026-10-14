@@ -1,12 +1,12 @@
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Execution;
+using Application.Ai.Policy;
 using Application.Diagnostics;
-using Domain.Enums;
+using Domain.Enums.Ai;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Processing;
 
 /// <summary>
 ///     Uses conditional database updates for multi-instance ownership and renewable crash-

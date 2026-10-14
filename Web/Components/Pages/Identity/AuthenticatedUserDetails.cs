@@ -1,4 +1,4 @@
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Identity;
 
 /// <summary>
 ///     Represents the current AutoMate user details resolved from the active authentication state.

@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Azure;
 
 /// <summary>
 ///     Contains Azure account details required for cloud deployment setup.

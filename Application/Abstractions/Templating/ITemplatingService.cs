@@ -1,4 +1,6 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
+using Domain.DTO.Templating;
 
 namespace Application.Abstractions.Templating;
 

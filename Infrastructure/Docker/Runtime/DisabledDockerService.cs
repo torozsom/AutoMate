@@ -1,6 +1,6 @@
 using Application.Abstractions.Docker;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Runtime;
 
 /// <summary>
 ///     Safe placeholder used by hosted SaaS instances. It prevents any Docker daemon

@@ -1,11 +1,11 @@
-using Domain.Enums;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Removes transient webhook and outbox metadata after the diagnostic retention window.

@@ -1,4 +1,4 @@
-using Domain.DTO;
+using Domain.DTO.Projects;
 
 namespace Application.Abstractions.Scanning;
 

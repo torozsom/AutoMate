@@ -1,6 +1,9 @@
-using Domain.Enums;
+using Domain.Entities.Ai;
+using Domain.Entities.Diagnostics;
+using Domain.Entities.Projects;
+using Domain.Enums.Deployments;
 
-namespace Domain.Entities;
+namespace Domain.Entities.Deployments;
 
 /// <summary>
 ///     Records one deployment launch, its runtime state, completion outcome and resolved

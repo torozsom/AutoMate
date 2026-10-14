@@ -3,18 +3,21 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Channels;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.Docker;
 using Application.Diagnostics;
 using Docker.DotNet;
 using Docker.DotNet.Models;
-using Domain.Entities;
+using Domain.Entities.Deployments;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Diagnostics;
 
 /// <summary>
 ///     Owns cancellable Docker subscriptions, bounded parsing and durable overlap confirmation.
@@ -96,7 +99,7 @@ internal sealed class DockerDiagnosticCollector(
             {
                 using var subscription = CancellationTokenSource.CreateLinkedTokenSource(token);
                 var pending = Channel.CreateBounded<DeploymentDiagnosticEvent>(new BoundedChannelOptions(256)
-                    { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
+                { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
                 var omitted = 0;
                 var receiver = ReceiveAsync();
                 if (!ready)

@@ -3,15 +3,20 @@ using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Enums;
+using Application.Orchestration.Jobs;
+using Application.Orchestration.Status;
+using Domain.DTO.Deployment;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.JSInterop;
-using Web.Components.Shared;
+using Web.Components.Pages.Identity;
+using Web.Components.Pages.Projects;
+using Web.Components.Shared.Projects;
+using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Workspace;
 
 /// <summary>
 ///     Represents a dashboard component that displays user-specific project data. This component is
@@ -30,7 +35,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     private readonly HashSet<Guid> _preparingStops = [];
 
     /// <summary>Current owner project inventory, or null before loading.</summary>
-    private List<Domain.Entities.Application>? _apps;
+    private List<Domain.Entities.Projects.Application>? _apps;
 
     /// <summary>Tenant identity entered for Azure account connection.</summary>
     private string _azureTenantId = string.Empty;
@@ -52,6 +57,15 @@ public partial class Dashboard : ComponentBase, IDisposable
 
     /// <summary>Bounded inventory projection.</summary>
     private ProjectInventoryPage? _inventory;
+
+    /// <summary>Exposes an in-page retry only when inventory loading failed.</summary>
+    private bool _inventoryReadFailed;
+
+    /// <summary>Renderer-owned admission for coalesced inventory reads.</summary>
+    private bool _inventoryRefreshInProgress;
+
+    /// <summary>Requests one fresh inventory pass after notifications overlap an awaited read.</summary>
+    private bool _inventoryRefreshPending;
 
     /// <summary>Fences superseded inventory replies.</summary>
     private int _inventoryVersion;
@@ -78,7 +92,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     private string _search = "";
 
     /// <summary>Saved remote project selected for deployment.</summary>
-    private Domain.Entities.Application? _selectedCloudApp;
+    private Domain.Entities.Projects.Application? _selectedCloudApp;
 
     /// <summary>Local project directory supplied to variable discovery.</summary>
     private string? _selectedProjectPath;
@@ -107,21 +121,16 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    /// <summary>Owner-scoped saved-project operations.</summary>
-    [Inject]
-    private IApplicationService ApplicationService { get; set; } = null!;
 
     /// <summary>Admits bounded deployment jobs.</summary>
     [Inject]
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
-    /// <summary>Durable SaaS cloud admission.</summary>
-    [Inject]
-    private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
 
-    /// <summary>Resolves owner accounts and protected provider connections.</summary>
+    /// <summary>Prepares cloud connections and admits requests without exposing provider credentials.</summary>
     [Inject]
-    private IUserService UserService { get; set; } = null!;
+    private ConnectedCloudDeploymentAdmission CloudAdmission { get; set; } = null!;
+
 
     /// <summary>Discovers deployment metadata and configuration variables.</summary>
     [Inject]
@@ -213,7 +222,9 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         if (_currentUserId != Guid.Empty)
         {
-            _isAzureConnected = await UserService.HasAzureConnectionAsync(_currentUserId);
+            await using var connectionScope = ServiceScopes.CreateAsyncScope();
+            _isAzureConnected = await connectionScope.ServiceProvider.GetRequiredService<IUserService>()
+                .HasAzureConnectionAsync(_currentUserId);
             await RefreshAppsAsync();
         }
 
@@ -310,6 +321,26 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RefreshAppsAsync()
     {
+        _inventoryRefreshPending = true;
+        if (_inventoryRefreshInProgress || _disposed) return;
+        _inventoryRefreshInProgress = true;
+        try
+        {
+            while (_inventoryRefreshPending && !_disposed)
+            {
+                _inventoryRefreshPending = false;
+                await RefreshAppsCoreAsync();
+            }
+        }
+        finally
+        {
+            _inventoryRefreshInProgress = false;
+        }
+    }
+
+    /// <summary>Reads one detached inventory in its own scope and fences stale replies.</summary>
+    private async Task RefreshAppsCoreAsync()
+    {
         if (_currentUserId == Guid.Empty || _disposed) return;
         var version = ++_inventoryVersion;
         _isLoading = true;
@@ -322,7 +353,12 @@ public partial class Dashboard : ComponentBase, IDisposable
                 _sort, Page ?? 1);
             var result = await scope.ServiceProvider.GetRequiredService<IWorkspaceQuery>()
                 .ProjectsAsync(_currentUserId, request, _lifetime.Token);
-            if (!_disposed && version == _inventoryVersion) _inventory = result;
+            if (!_disposed && version == _inventoryVersion && !_inventoryRefreshPending)
+            {
+                _inventory = result;
+                if (_inventoryReadFailed) _globalErrorMessage = null;
+                _inventoryReadFailed = false;
+            }
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -330,7 +366,10 @@ public partial class Dashboard : ComponentBase, IDisposable
         catch (Exception)
         {
             if (!_disposed && version == _inventoryVersion)
+            {
                 _globalErrorMessage = "Projects could not be loaded. Refresh to try again.";
+                _inventoryReadFailed = true;
+            }
         }
         finally
         {
@@ -351,7 +390,9 @@ public partial class Dashboard : ComponentBase, IDisposable
 
         ClearMessages();
 
-        var success = await ApplicationService.DeleteAppAsync(appId, _currentUserId);
+        await using var scope = ServiceScopes.CreateAsyncScope();
+        var success = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
+            .DeleteAppAsync(appId, _currentUserId);
 
         if (success)
         {
@@ -372,7 +413,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app"></param>
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
-    private async Task DeployAppAsync(Domain.Entities.Application app)
+    private async Task DeployAppAsync(Domain.Entities.Projects.Application app)
     {
         ClearMessages();
 
@@ -462,17 +503,16 @@ public partial class Dashboard : ComponentBase, IDisposable
                 return;
             }
 
-            var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(owner);
-            if (_disposed || owner != _currentUserId) return;
-            if (azureCredentials == null)
+            var preparation = await CloudAdmission.PrepareAsync(owner, AuthStateProvider,
+                true, () => !_disposed && owner == _currentUserId);
+            if (preparation.State == CloudConnectionState.Obsolete) return;
+            if (preparation.State == CloudConnectionState.MissingAzure)
             {
                 _globalErrorMessage = "Connect your Azure account before deploying GitHub projects to the cloud.";
                 return;
             }
 
-            var userDetails = await GetCurrentUserDetailsAsync();
-            if (_disposed || owner != _currentUserId || userDetails.UserId != owner) return;
-            if (string.IsNullOrWhiteSpace(userDetails.AccessToken))
+            if (preparation.State == CloudConnectionState.MissingGitHub)
             {
                 _globalErrorMessage = "Connect your GitHub account before deploying GitHub projects to the cloud.";
                 return;
@@ -491,28 +531,13 @@ public partial class Dashboard : ComponentBase, IDisposable
                     }
 
                     _pendingCloudIdempotencyKey ??= Guid.NewGuid().ToString("N");
-                    await CloudDeploymentRuns.StartAsync(new CloudDeploymentStart(
-                        owner, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
-                        repository.Owner, repository.Name, userDetails.AccessToken,
-                        finalConfig, CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
-                        cloudApp.Name, "."));
+                    await preparation.StartAsync(finalConfig, repository.Owner, repository.Name,
+                        cloudApp.Name, _pendingCloudIdempotencyKey);
                     _pendingCloudIdempotencyKey = null;
                 }
                 else
                 {
-                    await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
-                    {
-                        RequestingUserId = owner,
-                        Config = finalConfig,
-                        Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
-                        CsProjectName = cloudApp.Name,
-                        RepositoryRoot = ".",
-                        GitHubAccessToken = userDetails.AccessToken,
-                        GitHubContainerRegistryToken = userDetails.AccessToken,
-                        AzureCredentials = azureCredentials,
-                        RepositoryOwner = repository.Owner,
-                        RepositoryName = repository.Name
-                    }));
+                    await preparation.StartAsync(finalConfig, repository.Owner, repository.Name, cloudApp.Name, null);
                 }
 
                 if (_disposed || owner != _currentUserId) return;
@@ -555,23 +580,31 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
+    ///     Reads bounded action metadata, retaining the legacy port for older host composition.
+    /// </summary>
+    /// <param name="services">The current operation scope.</param>
+    /// <param name="project">The selected application identity.</param>
+    /// <param name="owner">The captured initiating owner.</param>
+    /// <param name="token">The existing page-lifetime token.</param>
+    /// <returns>The owned current metadata, or null for an inaccessible project.</returns>
+    private static Task<Domain.Entities.Projects.Application?> ReadActionProjectAsync(IServiceProvider services,
+        Guid project,
+        Guid owner, CancellationToken token)
+    {
+        return services.GetService<IProjectActionQuery>() is { } query
+            ? query.GetAsync(project, owner, token)
+            : services.GetRequiredService<IApplicationService>().GetAppByIdAsync(project, owner, token);
+    }
+
+    /// <summary>
     ///     Resolves the current user's internal AutoMate ID from authentication claims.
     /// </summary>
     /// <returns>A task returning the internal owner identity, or Guid.Empty when unauthenticated or unresolved.</returns>
     private async Task<Guid> GetCurrentUserIdAsync()
     {
-        return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider, UserService);
-    }
-
-
-    /// <summary>
-    ///     Gets the current user details, including the GitHub token for remote deployments.
-    /// </summary>
-    /// <returns>A task returning owner identity, optional GitHub token and account kind; unresolved identities use Guid.Empty.</returns>
-    private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
-    {
-        var details = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(AuthStateProvider, UserService);
-        return (details.UserId, details.AccessToken, details.IsGitHubUser);
+        await using var scope = ServiceScopes.CreateAsyncScope();
+        return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider,
+            scope.ServiceProvider.GetRequiredService<IUserService>());
     }
 
 
@@ -604,8 +637,30 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// <param name="projectId">The project identity used for authorization or correlation.</param>
     private void OnQueueStateChanged(Guid projectId)
     {
-        if (!_disposed && (_inventory?.Items.Any(app => app.Id == projectId) == true ||
-                           _apps?.Any(app => app.Id == projectId) == true)) _ = InvokeAsync(StateHasChanged);
+        _ = DispatchQueueChangedAsync(projectId);
+    }
+
+    /// <summary>Reads presentation state only on the renderer and observes navigation races.</summary>
+    private async Task DispatchQueueChangedAsync(Guid projectId)
+    {
+        if (_disposed) return;
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (!_disposed && (_inventory?.Items.Any(app => app.Id == projectId) == true ||
+                                   _apps?.Any(app => app.Id == projectId) == true)) StateHasChanged();
+            });
+        }
+        catch (Exception) when (_disposed)
+        {
+            // Navigation can retire the renderer after admission.
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning("Queue notification failed for {ProjectId}: {FailureType}.", projectId,
+                error.GetType().Name);
+        }
     }
 
 
@@ -614,7 +669,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>True during admission, for disabled local deployments, or when a remote project lacks an Azure connection.</returns>
-    private bool IsDeployDisabled(Domain.Entities.Application app)
+    private bool IsDeployDisabled(Domain.Entities.Projects.Application app)
     {
         return IsDeploying(app.Id) ||
                (app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled) ||
@@ -627,7 +682,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>Fixed Azure-connection guidance for a disconnected remote project; otherwise the deployment label.</returns>
-    private string GetDeployButtonTitle(Domain.Entities.Application app)
+    private string GetDeployButtonTitle(Domain.Entities.Projects.Application app)
     {
         return app.SourceType == SourceType.Remote && !_isAzureConnected
             ? "Connect to Azure to deploy GitHub projects."
@@ -640,7 +695,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>Default deployment settings for the saved remote repository.</returns>
-    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Projects.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }
@@ -671,7 +726,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>The newest recorded deployment status, or null when no deployment exists.</returns>
-    private static DeploymentStatus? GetLatestStatus(Domain.Entities.Application app)
+    private static DeploymentStatus? GetLatestStatus(Domain.Entities.Projects.Application app)
     {
         return app.CsProjects
             .SelectMany(c => c.Deployments)
@@ -760,8 +815,7 @@ public partial class Dashboard : ComponentBase, IDisposable
         try
         {
             using var scope = ServiceScopes.CreateScope();
-            var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
-                .GetAppByIdAsync(id, owner, _lifetime.Token);
+            var app = await ReadActionProjectAsync(scope.ServiceProvider, id, owner, _lifetime.Token);
             if (_disposed || owner != _currentUserId) return;
             if (app is null)
             {
@@ -800,8 +854,7 @@ public partial class Dashboard : ComponentBase, IDisposable
         try
         {
             using var scope = ServiceScopes.CreateScope();
-            var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
-                .GetAppByIdAsync(id, owner, _lifetime.Token);
+            var app = await ReadActionProjectAsync(scope.ServiceProvider, id, owner, _lifetime.Token);
             if (_disposed || owner != _currentUserId) return;
             if (app is null || app.UserId != owner)
             {

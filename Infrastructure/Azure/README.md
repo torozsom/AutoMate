@@ -1,5 +1,36 @@
 # Azure
 
+## Database monitoring repair
+
+Database inventory and native metrics complete before Container Apps history queries. Database history uses separate
+checkpoint scopes and runs alongside ACA history, so slow app logs cannot starve database collection. Recorded
+database providers constrain the owned inventory when an immutable snapshot includes them; legacy snapshots still
+require both ownership tags. Database availability notices now appear in the Azure Databases terminal. Empty samples,
+quiet logs and metrics-only providers produce deduplicated informational guidance; read/permission failures remain
+warnings. Database containers use the same `azure-db` channel for live stdout/stderr and persisted replay.
+
+`AzureMonitorLogs:DatabaseInitialLookback` defaults to 24 hours and accepts one minute through seven days. Quiet
+database startup events can precede web readiness by more than the former ten-minute window. Confirmed cursors retain
+their positions; only sources without a confirmed event use the wider initial window. App lookback and sampling cadence
+are unchanged. Cosmos RU samples may be absent without workload; Cosmos CPU/memory are unsupported. Shared ACA
+containers expose app totals, not individual container CPU/memory.
+
+To repair existing managed deployments:
+
+1. Verify the selected project's recorded resource group/app and configured database provider.
+2. Check database ownership tags: `automate-project-id` must equal the project GUID in `N` format and
+   `automate-container-app` the recorded web app name. SQL child databases require their own tags.
+3. Check `automate-runtime` diagnostic export sends supported operational categories to the deployment workspace.
+   Regenerate/redeploy the owned infrastructure or apply equivalent verified tags/settings. MySQL audit/slow-query
+   collection remains opt-in; MySQL/Redis are metrics-only.
+4. Check the connected user's resource-group/metrics read permissions and Log Analytics access; allow ingestion latency.
+5. Restart updated AutoMate binaries and inspect the Azure Databases terminal. Updated templates also tag the web app.
+
+Dedicated database Container Apps require the same two ownership tags plus `automate-database-component` matching
+an exact recorded database suffix and `automate-database-provider` matching the configured provider. This explicit
+association enables their own ready-revision metrics and environment-scoped console logs. Web and unrelated apps
+are excluded. Shared sidecars remain part of the web app total; names alone never establish an association.
+
 Azure Container Apps and OIDC infrastructure adapters.
 For SaaS, launch workers refresh ARM credentials on demand, ensure a customer ACR exists, assign separate push and pull
 identities, and use the pull identity for Container Apps image access. ACR creation and role assignment require the
@@ -110,7 +141,7 @@ AzureLogIngestionCursors adds nullable ingestion time/hash fields. Pages use ing
 timestamps and stable event IDs, and advance only after durable acknowledgement. Partial reads and failed writes
 retain the cursor. Web metrics sum podName dimensions within the exact revision; Cosmos uses Maximum normalized RU.
 Native minute timestamps and units survive persistence and typed live delivery. Cosmos CPU/memory are unsupported,
-not zero. Permission/storage/collection notices appear outside project terminal output.
+not zero. Database notices appear in the Azure Databases terminal; other source notices retain their existing delivery.
 
 Legacy ContainerApp custom tables can have an empty _ResourceId. Collection therefore resolves the verified managed
 environment's Log Analytics customer ID through ARM, then queries that workspace with exact app/revision filters. Native
@@ -179,3 +210,11 @@ Folders group related files while retaining the module's existing .NET namespace
   `Monitor/AzureMonitorLogsOptions.cs`, `Monitor/AzureMonitorLogsTokenProvider.cs`.
 - `Provisioning/` — `Provisioning/AzureContainerRegistryProvisioner.cs`, `Provisioning/AzureDeploymentOrchestrator.cs`,
   `Provisioning/AzureResourceProviderRegistrar.cs`.
+
+## Runtime collector collaborators
+
+`ContainerApps/Runtime/` separates owned database collection (`AzureDatabaseDiagnostics`), shared outage/recovery
+state (`AzureRuntimeAvailability`), pure event/checkpoint identity rules (`AzureRuntimeDiagnosticPolicy`) and the
+memory-only verified target (`ContainerAppStreamTarget`). Existing namespaces and public provider APIs remain stable.
+The runtime streamer still supervises web/live collection and scopes. Database passes retain the same inventory,
+metrics/log ordering, limits, isolation and durable-acknowledgement checkpoint rules.

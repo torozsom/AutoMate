@@ -1,16 +1,16 @@
 using System.Data;
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Policy;
+using Application.Ai.Policy;
 using Application.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Ai;
+using Domain.Enums.Ai;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Work = Application.Abstractions.Ai.DeploymentAnalysisWorkItem;
+using Work = Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Admission;
 
 /// <summary>
 ///     Serializes short metadata reservations; no database lock is held during context or

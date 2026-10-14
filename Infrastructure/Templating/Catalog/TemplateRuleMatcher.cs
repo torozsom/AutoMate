@@ -1,6 +1,7 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
+using Domain.DTO.Templating;
 
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Catalog;
 
 /// <summary>
 ///     Applies manifest rule activation and deployment-target matching.

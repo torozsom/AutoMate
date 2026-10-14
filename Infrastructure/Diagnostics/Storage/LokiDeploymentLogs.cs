@@ -1,12 +1,16 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Context;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Storage;
 
 /// <summary>
 ///     Loki JSON ingestion and bounded structured-metadata queries.
@@ -216,17 +220,17 @@ public sealed class LokiDeploymentLogs(
             throw new InvalidOperationException("Telemetry log query failed.");
         var result = new List<DeploymentLogEnvelope>();
         foreach (var stream in response.RootElement.GetProperty("data").GetProperty("result").EnumerateArray())
-        foreach (var value in stream.GetProperty("values").EnumerateArray())
-        {
-            var envelope =
-                JsonSerializer.Deserialize<DeploymentLogEnvelope>(value[1].GetString()!, TelemetryHttpTransport.Json);
-            if (envelope is not null && envelope.TenantId == tenantId && envelope.ExpiresAt > now)
-                result.Add(envelope with
-                {
-                    Event = redactor.Redact(envelope.Event).Event,
-                    Channel = envelope.Channel is null ? null : redactor.RedactText(envelope.Channel, 128)
-                });
-        }
+            foreach (var value in stream.GetProperty("values").EnumerateArray())
+            {
+                var envelope =
+                    JsonSerializer.Deserialize<DeploymentLogEnvelope>(value[1].GetString()!, TelemetryHttpTransport.Json);
+                if (envelope is not null && envelope.TenantId == tenantId && envelope.ExpiresAt > now)
+                    result.Add(envelope with
+                    {
+                        Event = redactor.Redact(envelope.Event).Event,
+                        Channel = envelope.Channel is null ? null : redactor.RedactText(envelope.Channel, 128)
+                    });
+            }
 
         return result.DistinctBy(e => e.EventId).OrderBy(e => e.OrderId).ToArray();
     }

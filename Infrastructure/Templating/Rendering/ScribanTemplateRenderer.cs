@@ -1,8 +1,9 @@
-using Domain.DTO;
+using Domain.DTO.Templating;
+using Infrastructure.Templating.Catalog;
 using Microsoft.Extensions.Logging;
 using Scriban;
 
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Rendering;
 
 /// <summary>
 ///     Parses and renders individual Scriban templates.

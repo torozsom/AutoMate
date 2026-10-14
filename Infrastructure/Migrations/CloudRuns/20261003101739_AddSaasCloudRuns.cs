@@ -2,7 +2,7 @@
 
 using Microsoft.EntityFrameworkCore.Migrations;
 
-namespace Infrastructure.Migrations;
+namespace Infrastructure.Migrations.CloudRuns;
 
 /// <summary>
 ///     EF schema migration and target-model metadata for Add Saas Cloud Runs.

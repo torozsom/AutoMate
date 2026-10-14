@@ -1,10 +1,12 @@
 @using System.Globalization
-@using Application.Abstractions.Diagnostics
+@using Application.Abstractions.Diagnostics.Metrics
 @using Application.Data.Apps
+@using Web.Components.Shared.Metrics
+@using Web.Components.Shared.Projects
 @*
     Presents recorded deployment activity and resource aggregates with numeric alternatives.
 *@
-@namespace Web.Components.Shared
+@namespace Web.Components.Shared.Workspace
 @if (Data is { } data)
 {
     <div class="console-kpis">

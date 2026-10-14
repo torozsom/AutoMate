@@ -1,6 +1,6 @@
 using System.Security.Claims;
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Execution;
+using Application.Ai.Context;
 using Application.Data.Users;
 using Microsoft.AspNetCore.Antiforgery;
 

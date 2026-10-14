@@ -43,7 +43,8 @@ Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployme
 writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
 gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
 revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
-Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
+Operational Loki/Mimir data expires after 30 days; permanent archives and daily summaries retain until project deletion
+under ADR 0004. See the root navigation.md for new module entry
 points.
 
 `20261004201350_AddAiAnalysisResultProvenance` adds nullable provenance/usage/cost fields to AiDeploymentAnalysis only.
@@ -90,3 +91,13 @@ all saved diagnostic/history rows; downgrade removes defaults without restoring 
 AzureLogIngestionCursors adds two nullable fields to existing Azure log checkpoints: last_ingestion_timestamp and
 last_ingestion_tie_breaker (128 characters). Apply before running updated collectors. Existing event-time cursors,
 deployment history and diagnostic payloads are preserved; no backfill fabricates ingestion times.
+
+## Model and audit separation
+
+`AutoMateModelConfiguration.cs` owns the existing mappings, indexes, relationships and Data Protection converters.
+`AutoMateDbContext` retains DbSets and save-time audit/outcome transitions. Purpose strings, schema and generated
+migration files are unchanged; PersistenceModelTests checks that PostgreSQL has no pending model change.
+
+The context keeps its single public constructor for EF pooling. Its internal clock constructor supports deterministic
+audit/query verification without changing production pooling or model caching. System time is still sampled at the
+original persistence decision points.

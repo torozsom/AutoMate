@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Delivery;
 
 /// <summary>
 ///     Private host protocol information; contains no tenant data, endpoints or credentials.

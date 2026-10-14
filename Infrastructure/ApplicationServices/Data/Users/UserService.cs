@@ -1,9 +1,10 @@
-using Domain.DTO;
-using Domain.Entities;
+using Application.Data.Users;
+using Domain.DTO.Azure;
+using Domain.Entities.Users;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Data.Users;
+namespace Infrastructure.ApplicationServices.Data.Users;
 
 /// <summary>
 ///     Implementation of <see cref="IUserService" /> for managing users using Entity Framework

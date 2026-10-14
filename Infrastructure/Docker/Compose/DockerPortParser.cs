@@ -1,4 +1,6 @@
-namespace Infrastructure.Docker;
+using Infrastructure.Docker.Cli;
+
+namespace Infrastructure.Docker.Compose;
 
 /// <summary>
 ///     Parses mapped host ports from <c>docker port</c> command output.

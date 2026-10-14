@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Deployments;
+
+namespace Domain.Entities.Diagnostics;
 
 /// <summary>
 ///     Legacy redacted diagnostic history and retained delivery-buffer metadata.

@@ -1,8 +1,11 @@
 @*
     Presents owner-scoped project inventory, deployment controls and workspace telemetry.
 *@
-@namespace Web.Components.Pages
+@namespace Web.Components.Pages.Workspace
 @page "/dashboard"
+@using Web.Components.Shared.Configuration
+@using Web.Components.Shared.Console
+@using Web.Components.Shared.Workspace
 
 <PageTitle>Projects · AutoMate</PageTitle>
 <div class="container page-shell projects-page">
@@ -34,8 +37,15 @@
             </section>
             @if (_globalErrorMessage is { } error)
             {
-                <div class="alert alert-danger" role="alert">@error <button class="btn-close" @onclick="ClearMessages"
-                                                                            aria-label="Dismiss"></button>
+                <div class="alert alert-danger" role="alert">@error
+                    @if (_inventoryReadFailed)
+                    {
+                        <button type="button" class="btn btn-outline-primary btn-sm" @onclick="RefreshAppsAsync">Try
+                            again
+                        </button>
+                    }
+                    <button class="btn-close" @onclick="ClearMessages"
+                            aria-label="Dismiss"></button>
                 </div>
             }
             @if (_globalSuccessMessage is { } success)

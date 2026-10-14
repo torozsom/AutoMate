@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Metrics;
 
 /// <summary>
 ///     Absolute half-open UTC window shared by chart and statistics requests.
@@ -47,10 +47,16 @@ public sealed record MetricTimeRange(DateTimeOffset Start, DateTimeOffset End)
     {
         return new MetricTimeRange(choice switch
         {
-            "10m" => now.AddMinutes(-10), "30m" => now.AddMinutes(-30),
-            "1h" => now.AddHours(-1), "6h" => now.AddHours(-6), "24h" => now.AddDays(-1),
-            "7d" => now.AddDays(-7), "30d" => now.AddDays(-30), "90d" => now.AddDays(-90),
-            "1y" => now.AddYears(-1), "5y" => now.AddYears(-5),
+            "10m" => now.AddMinutes(-10),
+            "30m" => now.AddMinutes(-30),
+            "1h" => now.AddHours(-1),
+            "6h" => now.AddHours(-6),
+            "24h" => now.AddDays(-1),
+            "7d" => now.AddDays(-7),
+            "30d" => now.AddDays(-30),
+            "90d" => now.AddDays(-90),
+            "1y" => now.AddYears(-1),
+            "5y" => now.AddYears(-5),
             _ => throw new ArgumentException("Unknown metric range.")
         }, now);
     }

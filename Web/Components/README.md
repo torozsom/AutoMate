@@ -29,7 +29,7 @@ rounded axes and sample-weighted daily averages. Historical summaries average re
 counts are unavailable there. Memory capacity remains supporting text rather than flattening the usage chart.
 
 Collection and approved storage are automatic; retention/sampling help is collapsed. AI egress consent remains explicit.
-Rendering fixtures in Web.Tests generate ignored `.artifacts/metrics-preview` HTML for browser checks without OAuth.
+Rendering fixtures in Test/Web generate ignored `.artifacts/metrics-preview` HTML for browser checks without OAuth.
 
 Project details offers Stop only for local sources. Remote cloud deployments must be stopped in the provider portal;
 the handler also rejects remote sources so their relative project paths never enter the local filesystem scanner.

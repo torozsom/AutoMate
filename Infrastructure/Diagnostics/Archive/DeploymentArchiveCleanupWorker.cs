@@ -1,11 +1,11 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.History;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Archive;
 
 /// <summary>
 ///     Retries deletion of archived payloads after transactional metadata deletion.

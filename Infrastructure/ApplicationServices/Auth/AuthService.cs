@@ -1,13 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
 using Application.Abstractions.Email;
-using Domain.Entities;
+using Application.Auth;
+using Domain.Entities.Users;
 using Infrastructure.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Auth;
+namespace Infrastructure.ApplicationServices.Auth;
 
 /// <summary>
 ///     Service implementation for handling user authentication, registration, and email
@@ -45,6 +46,24 @@ public sealed class AuthService(
 
     /// <summary>Subject line used for local registration verification emails.</summary>
     private const string VerificationEmailSubject = "Confirm your registration to AutoMate!";
+
+    /// <summary>Preserves the system clock unless an execution/test clock is explicitly supplied.</summary>
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    /// <summary>
+    ///     Uses an explicit clock while preserving the original constructor for existing consumers.
+    /// </summary>
+    /// <param name="dbContext">The operation-owned user metadata context.</param>
+    /// <param name="emailSenderService">The unchanged verification delivery boundary.</param>
+    /// <param name="passwordHasher">The existing password hashing policy.</param>
+    /// <param name="logger">The existing authentication logging category.</param>
+    /// <param name="clock">Samples verification expiry at the existing decision points.</param>
+    public AuthService(AutoMateDbContext dbContext, IEmailSenderService emailSenderService,
+        IPasswordHasher<LocalUser> passwordHasher, ILogger<AuthService> logger, TimeProvider clock)
+        : this(dbContext, emailSenderService, passwordHasher, logger)
+    {
+        _clock = clock;
+    }
 
     /// <summary>
     ///     Registers a new user by creating their account, saving their details, and sending a
@@ -125,7 +144,7 @@ public sealed class AuthService(
             .OfType<LocalUser>()
             .FirstOrDefaultAsync(u => u.EmailVerificationToken == token, cancellationToken);
 
-        if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < DateTimeOffset.UtcNow)
+        if (user == null || user.IsEmailVerified || user.VerificationTokenExpiry < _clock.GetUtcNow())
         {
             logger.LogWarning("[AuthService] Email verification failed for token fingerprint '{TokenFingerprint}'.",
                 CreateTokenFingerprint(token));
@@ -318,7 +337,7 @@ public sealed class AuthService(
             Username = registration.Username,
             IsEmailVerified = false,
             EmailVerificationToken = GenerateSecureToken(),
-            VerificationTokenExpiry = DateTimeOffset.UtcNow.AddHours(VerificationTokenLifetimeHours)
+            VerificationTokenExpiry = _clock.GetUtcNow().AddHours(VerificationTokenLifetimeHours)
         };
 
         user.PasswordHash = passwordHasher.HashPassword(user, registration.Password);

@@ -2,10 +2,13 @@
     Coordinates owned analysis choices, consent, requests, cancellation and bounded result polling.
 *@
 @namespace Web.Components.Shared
-@using Application.Abstractions.Ai
-@using Application.Ai
+@using Application.Abstractions.Ai.Context
+@using Application.Abstractions.Ai.Execution
+@using Application.Ai.Context
+@using Application.Ai.Policy
 @using Application.Data.Apps
-@using Domain.Enums
+@using Domain.Enums.Ai
+@using Domain.Enums.Deployments
 @using Microsoft.Extensions.Options
 @implements IAsyncDisposable
 @inject IServiceScopeFactory Scopes

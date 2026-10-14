@@ -1,19 +1,24 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Context;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Archive;
 
 /// <summary>
 ///     Checksummed immutable per-event segments on the telemetry volume, retained until owner
 ///     deletion.
 /// </summary>
-public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDisposable
+public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploymentAssessmentArchive, IDisposable
 {
     /// <summary>Serializes writes, queries and deletion within the volume's single-writer host.</summary>
     private readonly SemaphoreSlim _gate = new(1);

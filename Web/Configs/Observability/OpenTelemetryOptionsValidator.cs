@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace Web.Configs;
+namespace Web.Configs.Observability;
 
 /// <summary>
 ///     Validates optional exporter configuration without exposing endpoint or resource-label values.

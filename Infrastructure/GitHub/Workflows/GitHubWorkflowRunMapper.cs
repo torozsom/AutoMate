@@ -1,6 +1,6 @@
-using Domain.DTO;
+using Domain.DTO.GitHub;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Workflows;
 
 /// <summary>
 ///     Selects and maps GitHub workflow run API items into AutoMate DTOs.

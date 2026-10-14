@@ -1,6 +1,6 @@
 using Domain.Defaults;
 
-namespace Domain.DTO;
+namespace Domain.DTO.Deployment;
 
 /// <summary>
 ///     Represents the configuration settings required for deploying a .NET project, including

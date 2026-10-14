@@ -89,7 +89,7 @@ Successful dispatch never copies terminal messages into platform logs, including
 pattern-based, so arbitrary private text must remain confined to authorized tenant storage and presentation.
 Redaction already emits only counts and finite source/kind values. New platform audit events never duplicate diagnostic
 payloads; existing disk gateway and Loki/Mimir storage paths remain unchanged. Real SDK failure exports are tested in
-`Web.Tests/Diagnostics/OperationalLoggingTests.cs`; Web/Observability now enforces the platform logging/trace boundary.
+`Test/Web/Diagnostics/OperationalLoggingTests.cs`; Web/Observability now enforces the platform logging/trace boundary.
 
 Redaction, persistence confirmation and live delivery have fixed child spans under the ingestion/dispatch trace, with
 GUID correlation and safe outcomes. Checkpoints and stored event trace/span IDs keep their existing semantics. Custom

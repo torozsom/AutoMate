@@ -1,9 +1,10 @@
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Results;
+using Application.Ai.Policy;
+using Application.Ai.Results;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Providers;
 
 /// <summary>
 ///     Composition-root adapter identity, implementation type and exact approved-route policy;
@@ -109,10 +110,10 @@ public sealed class ConfiguredAnalysisProvider(
     ///     Current provider selection or returned provenance violates the configured contract.
     /// </exception>
     /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
-    /// <exception cref="T:Application.Ai.AnalysisProviderAccessDeniedException">
+    /// <exception cref="T:AnalysisProviderAccessDeniedException">
     ///     The provider rejects access to the configured resource or model.
     /// </exception>
-    /// <exception cref="T:Application.Ai.TransientAnalysisProviderException">
+    /// <exception cref="T:TransientAnalysisProviderException">
     ///     The provider or transport reports a failure eligible for bounded retry handling.
     /// </exception>
     /// <exception cref="T:System.ArgumentException">

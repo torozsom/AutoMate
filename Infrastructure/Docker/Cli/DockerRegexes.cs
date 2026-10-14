@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Cli;
 
 /// <summary>
 ///     Centralizes generated regular expressions used by Docker parsing helpers.

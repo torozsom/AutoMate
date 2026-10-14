@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.Deployments;
 
 /// <summary>
 ///     Defines the possible statuses of a deployment.

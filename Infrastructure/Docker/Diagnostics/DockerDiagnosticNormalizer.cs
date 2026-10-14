@@ -2,11 +2,11 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Docker.DotNet.Models;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Diagnostics;
 
 /// <summary>
 ///     Validates explicit ownership and normalizes daemon/Compose observations without
@@ -70,7 +70,7 @@ internal static partial class DockerDiagnosticNormalizer
         var id = message.Actor.ID ?? message.ID;
         if (string.IsNullOrWhiteSpace(id)) return null;
         var attributes = new Dictionary<string, string>
-            { ["phase"] = "lifecycle", ["action"] = action!, ["container_id"] = id, ["service"] = container.Channel };
+        { ["phase"] = "lifecycle", ["action"] = action!, ["container_id"] = id, ["service"] = container.Channel };
         if (int.TryParse(exitCode, out var exit)) attributes["exit_code"] = exit.ToString(CultureInfo.InvariantCulture);
         return new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
             DeploymentDiagnosticSource.DockerDaemon,

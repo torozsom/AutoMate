@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Deployments;
+
+namespace Domain.Entities.Diagnostics;
 
 /// <summary>
 ///     Stores a durable, non-sensitive cursor for one Azure Container Apps log source.

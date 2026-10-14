@@ -1,8 +1,8 @@
 using System.Text.Json;
-using Domain.DTO;
+using Domain.DTO.Templating;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Catalog;
 
 /// <summary>
 ///     Loads and caches template manifest rules used by the templating service.

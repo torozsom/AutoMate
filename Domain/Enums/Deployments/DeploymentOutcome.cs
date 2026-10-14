@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.Deployments;
 
 /// <summary>
 ///     Deployment completion outcome, independent of later runtime stops.

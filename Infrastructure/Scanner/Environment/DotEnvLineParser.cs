@@ -1,4 +1,4 @@
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Environment;
 
 /// <summary>
 ///     Parses individual .env file lines into environment variable pairs.

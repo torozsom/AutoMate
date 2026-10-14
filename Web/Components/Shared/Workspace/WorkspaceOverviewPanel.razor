@@ -1,13 +1,14 @@
 @*
     Loads owner-scoped overview data through independent scopes and visibility-aware polling.
 *@
-@namespace Web.Components.Shared
-@using Application.Abstractions.Diagnostics
+@namespace Web.Components.Shared.Workspace
+@using Application.Abstractions.Diagnostics.Metrics
 @using Application.Data.Apps
 @using Application.Data.Users
-@using Application.Orchestration
-@using Domain.Enums
-@using Web.Components.Pages
+@using Application.Orchestration.Status
+@using Domain.Enums.Deployments
+@using Web.Components.Pages.Identity
+@using Web.Components.Shared.Metrics
 @implements IAsyncDisposable
 @inject IServiceScopeFactory Scopes
 @inject AuthenticationStateProvider Authentication

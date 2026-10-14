@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Workflows;
 
 /// <summary>
 ///     Response shape returned by GitHub when listing workflow runs.

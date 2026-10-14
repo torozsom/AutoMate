@@ -1,10 +1,16 @@
 using System.Text.Json;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Archive;
 
 /// <summary>
 ///     Authorizes deployment history before any provider query or preference change.

@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Deployments;
+
+namespace Domain.Entities.Projects;
 
 /// <summary>
 ///     Represents a C# project within a solution.

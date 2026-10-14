@@ -1,18 +1,27 @@
 using System.Data;
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Execution;
+using Application.Abstractions.Ai.Policy;
+using Application.Abstractions.Ai.Results;
+using Application.Abstractions.Diagnostics.History;
+using Application.Ai.Context;
+using Application.Ai.Policy;
+using Application.Ai.Results;
 using Application.Diagnostics;
-using Domain.Entities;
-using Domain.Enums;
+using Domain.Entities.Ai;
+using Domain.Entities.Deployments;
+using Domain.Enums.Ai;
+using Domain.Enums.Deployments;
+using Infrastructure.Ai.Admission;
+using Infrastructure.Ai.Context;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using DeploymentAnalysisWorkItem = Domain.Entities.DeploymentAnalysisWorkItem;
+using DeploymentAnalysisWorkItem = Domain.Entities.Ai.DeploymentAnalysisWorkItem;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Processing;
 
 /// <summary>
 ///     Owner-authorized analysis admission and redacted readback, including legacy-result
@@ -107,14 +116,14 @@ public sealed class DeploymentAnalysisService(
         var deployment = await dbContext.Deployments.AsNoTracking().Where(d => d.Id == deploymentId &&
                                                                                d.CsProject!.Application.UserId ==
                                                                                ownerId).Select(d => new
-        {
-            d.Status,
-            d.CreatedAt,
-            d.UpdatedAt,
-            d.AiAssessmentPreferencesJson,
-            d.ConfigurationSnapshotJson,
-            Project = d.CsProject!.AppId
-        }).SingleOrDefaultAsync(token);
+                                                                               {
+                                                                                   d.Status,
+                                                                                   d.CreatedAt,
+                                                                                   d.UpdatedAt,
+                                                                                   d.AiAssessmentPreferencesJson,
+                                                                                   d.ConfigurationSnapshotJson,
+                                                                                   Project = d.CsProject!.AppId
+                                                                               }).SingleOrDefaultAsync(token);
         if (deployment is null) return null;
         var now = clock.GetUtcNow();
         var selection = AssessmentSelection.Read(deployment.AiAssessmentPreferencesJson);

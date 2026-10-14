@@ -1,8 +1,8 @@
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
-using Domain.Enums;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Ai.Context;
+using Domain.Enums.Deployments;
 
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Context;
 
 /// <summary>
 ///     Bounded v2 sections; overview and recommendations use existing result fields.

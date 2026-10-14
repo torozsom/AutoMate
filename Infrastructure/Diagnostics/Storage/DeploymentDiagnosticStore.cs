@@ -1,9 +1,11 @@
 using System.Text;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Redaction;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Storage;
 
 /// <summary>
 ///     Reads and expires legacy PostgreSQL diagnostics; new payload writes are prohibited.

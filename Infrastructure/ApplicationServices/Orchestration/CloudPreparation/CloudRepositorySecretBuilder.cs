@@ -1,8 +1,9 @@
 using System.Text;
-using Domain.DTO;
-using Infrastructure.Templating;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Infrastructure.Templating.Models;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
 
 /// <summary>
 ///     Builds GitHub Actions repository secrets required by generated cloud deployment

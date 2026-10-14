@@ -1,4 +1,6 @@
-namespace Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
+
+namespace Application.Abstractions.Diagnostics.Events;
 
 /// <summary>
 ///     Identifies the adapter that observed a deployment diagnostic.

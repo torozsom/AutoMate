@@ -1,7 +1,7 @@
 using Domain.Defaults;
-using Domain.DTO;
+using Domain.DTO.Deployment;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Projects;
 
 /// <summary>
 ///     Creates UI-layer default values used when deploying saved GitHub repositories without a local
@@ -14,7 +14,7 @@ internal static class CloudDeploymentPageDefaults
     /// </summary>
     /// <param name="app">The saved AutoMate application representing the remote repository.</param>
     /// <returns>A deployment configuration with the same defaults used by the dashboard and project detail pages.</returns>
-    internal static DeploymentConfigDto CreateConfiguration(Domain.Entities.Application app)
+    internal static DeploymentConfigDto CreateConfiguration(Domain.Entities.Projects.Application app)
     {
         var resourceName = ToAzureResourceName(app.Name);
 
@@ -30,21 +30,6 @@ internal static class CloudDeploymentPageDefaults
             CloudContainerAppName = $"{resourceName}-prod-app",
             CloudRegistryName = string.Empty,
             Databases = []
-        };
-    }
-
-
-    /// <summary>
-    ///     Creates metadata for a remote repository deployment that has no local checkout to scan.
-    /// </summary>
-    /// <returns>The minimal metadata model expected by cloud deployment orchestration.</returns>
-    internal static ProjectMetadataDto CreateRemoteProjectMetadata()
-    {
-        return new ProjectMetadataDto
-        {
-            TargetFramework = "net10.0",
-            DotNetVersion = "10.0",
-            IsWebProject = true
         };
     }
 

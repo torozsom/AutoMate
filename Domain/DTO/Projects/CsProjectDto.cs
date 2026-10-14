@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Projects;
 
 /// <summary>
 ///     Represents a C# project within a solution.

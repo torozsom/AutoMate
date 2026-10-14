@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Models;
 
 /// <summary>
 ///     Builds deterministic GitHub Actions secret names used by generated cloud deployment

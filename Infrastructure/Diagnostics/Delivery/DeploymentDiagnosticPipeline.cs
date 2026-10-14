@@ -1,15 +1,20 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Delivery;
 
 /// <summary>
 ///     Accepts redacted events into a bounded, non-blocking delivery queue.

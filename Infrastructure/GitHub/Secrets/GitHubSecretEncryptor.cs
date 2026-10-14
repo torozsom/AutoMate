@@ -1,7 +1,7 @@
 using System.Text;
 using Sodium;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Secrets;
 
 /// <summary>
 ///     Encrypts GitHub Actions repository secrets using GitHub's sealed box requirement.

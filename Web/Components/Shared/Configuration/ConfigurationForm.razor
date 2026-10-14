@@ -1,7 +1,8 @@
+@using Web.Components.Shared.Console
 @*
     Edits deployment settings and merges discovered variables while retaining explicit user values.
 *@
-@namespace Web.Components.Shared
+@namespace Web.Components.Shared.Configuration
 <ConsoleDialog Title="@($"Configure deployment: {Config.ProjectName}")" Eyebrow="Next deployment" OnClose="OnCancel">
     <div class="modal-body p-4">
         @if (!string.IsNullOrWhiteSpace(_validationMessage))

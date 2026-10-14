@@ -1,4 +1,4 @@
-namespace Web.Components.Shared;
+namespace Web.Components.Shared.Projects;
 
 /// <summary>
 ///     Parses persisted GitHub repository URLs into repository references for deployment workflows.

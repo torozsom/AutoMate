@@ -1,7 +1,8 @@
 using Application.Auth;
 using Microsoft.AspNetCore.Components;
+using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Authentication;
 
 /// <summary>
 ///     This component handles the email verification process for users. It either prompts the user to
@@ -13,9 +14,9 @@ public partial class VerifyEmail : ComponentBase
     private string _pageTitle = "Email Confirmation";
 
 
-    /// <summary>Local registration and email-verification contract.</summary>
+    /// <summary>Isolates each authentication operation from the interactive circuit context.</summary>
     [Inject]
-    private IAuthService AuthService { get; set; } = null!;
+    private ScopedApplicationOperations Operations { get; set; } = null!;
 
     /// <summary>Application navigation and absolute-link generation.</summary>
     [Inject]
@@ -71,7 +72,7 @@ public partial class VerifyEmail : ComponentBase
 
         try
         {
-            var success = await AuthService.VerifyEmailAsync(Token);
+            var success = await Operations.RunAsync<IAuthService, bool>(auth => auth.VerifyEmailAsync(Token));
 
             if (success)
                 NavigationManager.NavigateTo("/login?verified=true");

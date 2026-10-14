@@ -1,6 +1,6 @@
-using Domain.Enums;
+using Domain.Enums.Deployments;
 
-namespace Domain.Entities;
+namespace Domain.Entities.Cloud;
 
 /// <summary>
 ///     Durable SaaS run metadata with a protected launch snapshot and fenced worker lease.

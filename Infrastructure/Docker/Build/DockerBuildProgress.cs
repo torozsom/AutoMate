@@ -1,8 +1,9 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Docker.DotNet.Models;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Build;
 
 /// <summary>
 ///     Tracks Docker image build progress and records whether Docker reported a build error.

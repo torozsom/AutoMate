@@ -1,6 +1,7 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Protected, token-free inputs needed to resume a SaaS launch on another worker.

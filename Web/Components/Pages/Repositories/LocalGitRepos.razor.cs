@@ -2,12 +2,14 @@ using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Domain.DTO;
+using Domain.DTO.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
+using Web.Components.Pages.Identity;
+using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Repositories;
 
 /// <summary>
 ///     The LocalGitRepos component is responsible for displaying a list of local Git projects that
@@ -59,13 +61,10 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
     [Inject]
     private IDeploymentCapabilities DeploymentCapabilities { get; set; } = null!;
 
-    /// <summary>Owner-scoped saved-project operations.</summary>
+    /// <summary>Isolates EF-backed operations from the shared Blazor circuit lifetime.</summary>
     [Inject]
-    private IApplicationService ApplicationService { get; set; } = null!;
+    private ScopedApplicationOperations Operations { get; set; } = null!;
 
-    /// <summary>Resolves owner accounts and protected provider connections.</summary>
-    [Inject]
-    private IUserService UserService { get; set; } = null!;
 
     /// <summary>Reviewed operational logger for the component.</summary>
     [Inject]
@@ -101,10 +100,9 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
             return;
         }
 
-        _currentUserId = await AuthenticatedUserResolver.GetCurrentUserIdAsync(
-            AuthStateProvider,
-            UserService,
-            _componentCancellation.Token);
+        _currentUserId = await Operations.RunAsync<IUserService, Guid>(users =>
+            AuthenticatedUserResolver.GetCurrentUserIdAsync(
+                AuthStateProvider, users, _componentCancellation.Token));
     }
 
 
@@ -196,8 +194,8 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
 
         try
         {
-            var success = await ApplicationService.AddLocalAppAsync(_currentUserId, project, csproject,
-                _componentCancellation.Token);
+            var success = await Operations.RunAsync<IApplicationService, bool>(apps =>
+                apps.AddLocalAppAsync(_currentUserId, project, csproject, _componentCancellation.Token));
 
             if (success)
                 SetStatusMessage($"{csproject.Name} successfully saved!", false);

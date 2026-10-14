@@ -1,15 +1,31 @@
 @*
     Presents the owned current deployment, source-separated terminals, live metrics and analysis dialog.
 *@
-@namespace Web.Components.Pages
+@namespace Web.Components.Pages.Projects
 @page "/project/{ProjectId:guid}"
-@using Domain.Entities
-@using Domain.Enums
+@using Application.Data.Apps
+@using Domain.Entities.Deployments
+@using Domain.Entities.Projects
+@using Domain.Enums.Deployments
+@using Domain.Enums.Projects
+@using Web.Components.Shared.Configuration
+@using Web.Components.Shared.Console
+@using Web.Components.Shared.Metrics
+@using Web.Components.Shared.Projects
 
 <PageTitle>Project Details</PageTitle>
 
 <div class="container page-shell project-details-page">
     @RenderConfigurationForm()
+
+    @if (_projectReadError is not null)
+    {
+        <div class="alert alert-warning" role="alert">
+            @_projectReadError
+            <button type="button" class="btn btn-outline-primary btn-sm" @onclick="RetryProjectReadAsync">Try again
+            </button>
+        </div>
+    }
 
     @if (_isLoading)
     {
@@ -47,7 +63,11 @@
         var subProjectCount = _app.CsProjects.Count;
         var databaseCount = _databaseTabs.Count();
         var allDeployments = _app.CsProjects.SelectMany(p => p.Deployments).OrderBy(d => d.CreatedAt).ToList();
-        var recentDeployments = allDeployments.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Skip(_deploymentPage * 6).Take(6).ToList();
+        var recentDeployments = _projectView?.History.ToList() ?? allDeployments.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Skip(_deploymentPage * 6).Take(6).ToList();
+        var summary = _projectView?.Summary ?? new ProjectDeploymentSummary(allDeployments.Count,
+            allDeployments.Count(d => d.Outcome == DeploymentOutcome.Succeeded),
+            allDeployments.Count(d => d.Outcome == DeploymentOutcome.Failed),
+            allDeployments.Count(d => d.Outcome == DeploymentOutcome.Unknown), allDeployments.FirstOrDefault()?.CreatedAt);
 
         <section class="project-console @GetProjectSourceClass(_app.SourceType)">
             <header class="project-console-header">
@@ -166,19 +186,19 @@
                         </article>
                         <article class="detail-panel">
                             <div class="panel-header"><h3>Total deployments</h3></div>
-                            <strong class="overview-count">@allDeployments.Count</strong>
+                            <strong class="overview-count">@summary.Total</strong>
                             <dl class="detail-list">
                                 <div>
                                     <dt>Successful</dt>
-                                    <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Succeeded)</dd>
+                                    <dd>@summary.Succeeded</dd>
                                 </div>
                                 <div>
                                     <dt>Failed</dt>
-                                    <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Failed)</dd>
+                                    <dd>@summary.Failed</dd>
                                 </div>
                                 <div>
                                     <dt>Pending / unknown</dt>
-                                    <dd>@allDeployments.Count(d => d.Outcome == DeploymentOutcome.Unknown)</dd>
+                                    <dd>@summary.Unknown</dd>
                                 </div>
                             </dl>
                         </article>
@@ -188,7 +208,7 @@
                             <dl class="detail-list">
                                 <div>
                                     <dt>First deployment</dt>
-                                    <dd>@FormatTimestamp(allDeployments.FirstOrDefault()?.CreatedAt)</dd>
+                                    <dd>@FormatTimestamp(summary.FirstCreatedAt)</dd>
                                 </div>
                             </dl>
                         </article>
@@ -353,7 +373,7 @@
                                     <div class="min-w-0">
                                         <div class="metric-label">Container</div>
                                         <div class="container-name text-truncate"
-                                             title="@currentContainer">@currentContainer</div>
+                                             title="@currentContainer">@(currentContainer == "cloud-web" ? "Azure Container App (total)" : currentContainer)</div>
                                     </div>
                                 </div>
                             </div>
@@ -495,12 +515,12 @@
                     </div>
                     <div class="history-pagination">
                         <button class="btn btn-sm btn-outline-secondary" disabled="@(_deploymentPage == 0)"
-                                @onclick="() => _deploymentPage--">Newer deployments
+                                @onclick="() => ChangeDeploymentPageAsync(-1)">Newer deployments
                         </button>
                         <span>Page @(_deploymentPage + 1)</span>
                         <button class="btn btn-sm btn-outline-secondary"
-                                disabled="@((_deploymentPage + 1) * 6 >= allDeployments.Count)"
-                                @onclick="() => _deploymentPage++">Older deployments
+                                disabled="@((_deploymentPage + 1) * 6 >= summary.Total)"
+                                @onclick="() => ChangeDeploymentPageAsync(1)">Older deployments
                         </button>
                     </div>
                 </section>
@@ -545,18 +565,6 @@
             .MaxBy(deployment => deployment.CreatedAt);
     }
 
-    /// <summary>
-    ///     Selects up to six deployments in descending creation order.
-    /// </summary>
-    /// <returns>Up to six newest deployments, or an empty sequence when no application is loaded.</returns>
-    private IEnumerable<Deployment> GetRecentDeployments()
-    {
-        return _app?.CsProjects
-                   .SelectMany(csp => csp.Deployments)
-                   .OrderByDescending(deployment => deployment.CreatedAt)
-                   .Take(6)
-               ?? [];
-    }
 
     /// <summary>
     ///     Formats an available timestamp for the project summary.

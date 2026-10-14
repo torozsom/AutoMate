@@ -2,7 +2,7 @@
 
 using Microsoft.EntityFrameworkCore.Migrations;
 
-namespace Infrastructure.Migrations;
+namespace Infrastructure.Migrations.Checkpoints;
 
 /// <summary>
 ///     EF schema migration and target-model metadata for Add Git Hub Workflow Checkpoints.

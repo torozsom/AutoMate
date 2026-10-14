@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.Ai;
 
 /// <summary>
 ///     Identifies how an AI deployment analysis was requested.

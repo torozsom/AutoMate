@@ -1,4 +1,4 @@
-namespace Infrastructure.Scanner;
+namespace Infrastructure.Scanner.Filesystem;
 
 /// <summary>
 ///     Centralizes filesystem rules used by local project discovery.

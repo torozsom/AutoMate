@@ -22,3 +22,12 @@ overload retains its first-configured-project behavior for existing callers. Con
 
 Apps/IWorkspaceQuery exposes bounded inventory and Overview metadata. Overview accepts absolute UTC chart windows and
 returns optional detailed metric projections without provider credentials or entity graphs.
+
+## Current project reads
+
+`Apps/IProjectDetailsQuery.cs` defines owner-scoped current metadata, complete-history outcome totals and six-row
+history
+pages. `IProjectActionQuery` supplies only the current graph for deploy/stop actions. The detached domain-shaped graph
+is a compatibility boundary for existing scanner/presentation consumers, not a tracked persistence aggregate.
+Deployments tied at each C# project's newest timestamp are retained so existing latest-selection behavior stays stable.
+`IApplicationService` continues to expose its existing full-graph APIs for legacy consumers.

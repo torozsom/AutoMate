@@ -1,4 +1,4 @@
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Runtime;
 
 /// <summary>
 ///     Configuration options for the Docker Service.

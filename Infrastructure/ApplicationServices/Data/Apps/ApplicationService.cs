@@ -1,11 +1,13 @@
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Data.Apps;
+using Domain.DTO.Projects;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
+using Domain.Enums.Projects;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Data.Apps;
+namespace Infrastructure.ApplicationServices.Data.Apps;
 
 /// <summary>
 ///     Service class responsible for managing projects within the application. It handles
@@ -148,7 +150,7 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <param name="userId">The unique identifier of the user.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task returning a list of projects belonging to the user.</returns>
-    public async Task<List<Domain.Entities.Application>> GetUserAppsAsync(Guid userId,
+    public async Task<List<Domain.Entities.Projects.Application>> GetUserAppsAsync(Guid userId,
         CancellationToken cancellationToken = default)
     {
         return await QueryApplicationsWithProjectDeployments()
@@ -215,7 +217,7 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <param name="userId">The unique identifier of the user who owns the project.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task that returns the project if found, or null if not found.</returns>
-    public async Task<Domain.Entities.Application?> GetAppByIdAsync(Guid appId, Guid userId,
+    public async Task<Domain.Entities.Projects.Application?> GetAppByIdAsync(Guid appId, Guid userId,
         CancellationToken cancellationToken = default)
     {
         return await QueryApplicationsWithProjectDeployments()
@@ -283,7 +285,7 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
         if (project.Configuration is null)
         {
             project.Configuration = new Configuration
-                { CsProjectId = project.Id, DotNetVersion = DefaultDotNetVersion };
+            { CsProjectId = project.Id, DotNetVersion = DefaultDotNetVersion };
             context.Set<Configuration>().Add(project.Configuration);
         }
 
@@ -303,7 +305,7 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     ///     The query applications with project deployments selection with its documented bounds and
     ///     ordering.
     /// </returns>
-    private IQueryable<Domain.Entities.Application> QueryApplicationsWithProjectDeployments()
+    private IQueryable<Domain.Entities.Projects.Application> QueryApplicationsWithProjectDeployments()
     {
         return context.Applications
             .AsNoTracking()
@@ -324,7 +326,7 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     ///     A task returning the domain.entities.application projection derived from the verified
     ///     inputs, or null when no value is available.
     /// </returns>
-    private async Task<Domain.Entities.Application?> GetLocalAppWithProjectsAsync(LocalAppInput input,
+    private async Task<Domain.Entities.Projects.Application?> GetLocalAppWithProjectsAsync(LocalAppInput input,
         CancellationToken cancellationToken)
     {
         return await context.Applications
@@ -354,9 +356,9 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// </summary>
     /// <param name="input">Normalized registration or project-import input.</param>
     /// <returns>The domain.entities.application projection derived from the verified inputs.</returns>
-    private static Domain.Entities.Application CreateLocalApplication(LocalAppInput input)
+    private static Domain.Entities.Projects.Application CreateLocalApplication(LocalAppInput input)
     {
-        return new Domain.Entities.Application
+        return new Domain.Entities.Projects.Application
         {
             UserId = input.UserId,
             Name = input.ProjectName,
@@ -371,9 +373,9 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// </summary>
     /// <param name="input">Normalized registration or project-import input.</param>
     /// <returns>The domain.entities.application projection derived from the verified inputs.</returns>
-    private static Domain.Entities.Application CreateRemoteApplication(RemoteAppInput input)
+    private static Domain.Entities.Projects.Application CreateRemoteApplication(RemoteAppInput input)
     {
-        return new Domain.Entities.Application
+        return new Domain.Entities.Projects.Application
         {
             UserId = input.UserId,
             Name = input.AppName,
@@ -414,7 +416,7 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     /// <param name="app">The application whose project dependencies are being analyzed.</param>
     /// <param name="csProjectPath">The local C# project path used to locate Compose resources.</param>
     /// <returns>Whether the documented cs project condition holds.</returns>
-    private static bool ContainsCsProject(Domain.Entities.Application app, string csProjectPath)
+    private static bool ContainsCsProject(Domain.Entities.Projects.Application app, string csProjectPath)
     {
         return app.CsProjects.Any(csp => csp.Path == csProjectPath);
     }

@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Execution;
 
 /// <summary>
 ///     Reports local AI configuration and durable metadata access without claiming work or

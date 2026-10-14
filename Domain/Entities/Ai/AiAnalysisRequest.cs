@@ -1,4 +1,6 @@
-namespace Domain.Entities;
+using Domain.Entities.Projects;
+
+namespace Domain.Entities.Ai;
 
 /// <summary>
 ///     Metadata-only admission receipt; quota/idempotency survive deletion or expiry of

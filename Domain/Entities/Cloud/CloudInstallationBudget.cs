@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Cloud;
 
 /// <summary>
 ///     Shared GitHub installation cooldown after provider throttling.

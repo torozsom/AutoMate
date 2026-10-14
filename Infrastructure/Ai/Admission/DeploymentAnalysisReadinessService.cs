@@ -1,10 +1,11 @@
-using Application.Abstractions.Ai;
-using Application.Ai;
+using Application.Abstractions.Ai.Execution;
+using Application.Ai.Policy;
+using Infrastructure.Ai.Providers;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Admission;
 
 /// <summary>
 ///     Read-only local readiness checks; never resolves an LLM adapter, reads diagnostics or

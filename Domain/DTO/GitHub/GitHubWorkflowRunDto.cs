@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.GitHub;
 
 /// <summary>
 ///     Represents a GitHub Actions workflow run tracked by AutoMate.

@@ -2,10 +2,12 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 
-namespace Application.Ai;
+namespace Application.Ai.Context;
 
 /// <summary>
 ///     Selects bounded diagnostic evidence using assessment focus, source representation,

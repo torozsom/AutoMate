@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Metrics;
 
 /// <summary>
 ///     Retained daily sufficient statistics for one container metric; sample counts support

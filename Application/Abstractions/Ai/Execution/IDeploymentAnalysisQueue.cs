@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Ai;
+namespace Application.Abstractions.Ai.Execution;
 
 /// <summary>
 ///     Detached claim metadata; the lease token fences this attempt, and no diagnostic context

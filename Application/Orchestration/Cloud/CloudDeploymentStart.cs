@@ -1,7 +1,8 @@
-using Domain.DTO;
-using Domain.Enums;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
+using Domain.Enums.Deployments;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Cloud;
 
 /// <summary>
 ///     Inputs for an authorized, durable SaaS cloud deployment request.

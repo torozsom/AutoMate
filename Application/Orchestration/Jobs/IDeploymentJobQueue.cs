@@ -1,4 +1,4 @@
-namespace Application.Orchestration;
+namespace Application.Orchestration.Jobs;
 
 /// <summary>
 ///     Queues deployment operations for background processing by the deployment worker.

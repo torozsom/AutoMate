@@ -1,7 +1,8 @@
 using System.Text.RegularExpressions;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Redaction;
 
 /// <summary>
 ///     Conservatively removes common credentials from normalized diagnostics.

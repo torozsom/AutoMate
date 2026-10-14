@@ -1,4 +1,4 @@
-namespace Application.Abstractions.Diagnostics;
+namespace Application.Abstractions.Diagnostics.Delivery;
 
 /// <summary>
 ///     Tracks expiring authorized viewing interest; viewer presence does not authorize

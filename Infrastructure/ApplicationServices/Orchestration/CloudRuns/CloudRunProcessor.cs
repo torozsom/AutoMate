@@ -4,19 +4,21 @@ using System.Net;
 using System.Text.Json;
 using Application.Abstractions.GitHub;
 using Application.Diagnostics;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Azure;
+using Application.Orchestration.Cloud;
+using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
+using Domain.Enums.Deployments;
+using Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
+using Infrastructure.ApplicationServices.Orchestration.Lifecycle;
+using Infrastructure.Azure.Identity;
 using Infrastructure.Data;
-using Infrastructure.GitHub;
+using Infrastructure.GitHub.Api;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
-namespace Infrastructure.ApplicationServices.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 
 /// <summary>
 ///     Claims SaaS launches with cluster-wide admission and executes a short launch phase.
@@ -43,6 +45,39 @@ public sealed class CloudRunProcessor(
     IOptions<CloudSaasOptions> options,
     ILogger<CloudRunProcessor> logger)
 {
+    /// <summary>Samples deadlines and transitions at their original decision points.</summary>
+    private readonly TimeProvider _clock = TimeProvider.System;
+
+    /// <summary>
+    ///     Uses an explicit execution clock while retaining the original constructor and system-clock defaults.
+    /// </summary>
+    /// <param name="dbContext">
+    ///     Application metadata context used for ownership, leases and persisted state.
+    /// </param>
+    /// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
+    /// <param name="azureCredentials">
+    ///     Resolves current scoped Azure authorization without logging credentials.
+    /// </param>
+    /// <param name="orchestrator">
+    ///     Provides the cloud deployment orchestrator boundary used by this operation.
+    /// </param>
+    /// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
+    /// <param name="logger">
+    ///     Receives reviewed operational events without diagnostic payloads or credentials.
+    /// </param>
+    /// <param name="clock">The execution clock for the existing lease, retry and completion decisions.</param>
+    public CloudRunProcessor(AutoMateDbContext dbContext,
+        IGitHubAppCredentials githubApp,
+        AzureArmCredentialsProvider azureCredentials,
+        ICloudDeploymentOrchestrator orchestrator,
+        IOptions<CloudSaasOptions> options,
+        ILogger<CloudRunProcessor> logger,
+        TimeProvider clock)
+        : this(dbContext, githubApp, azureCredentials, orchestrator, options, logger)
+    {
+        _clock = clock;
+    }
+
     /// <summary>
     ///     Atomic cluster-wide claim, including fair user ordering and provider limits.
     /// </summary>
@@ -58,7 +93,7 @@ public sealed class CloudRunProcessor(
         await dbContext.Database.SqlQueryRaw<int>(
                 "SELECT 1 AS \"Value\" FROM pg_advisory_xact_lock(617773318)")
             .SingleAsync(cancellationToken);
-        var now = DateTimeOffset.UtcNow;
+        var now = _clock.GetUtcNow();
         var limits = options.Value;
         var active = await dbContext.CloudDeploymentRuns.CountAsync(item =>
             item.Phase == CloudRunPhase.Preparing && item.LeaseUntil > now, cancellationToken);
@@ -198,15 +233,15 @@ public sealed class CloudRunProcessor(
             };
             var retryAt = ex is GitHubRateLimitException rate
                 ? rate.RetryAt
-                : DateTimeOffset.UtcNow.AddSeconds(Math.Min(300, 10 * (1 << Math.Min(run.Attempt, 4))) +
-                                                   Random.Shared.Next(0, 10));
+                : _clock.GetUtcNow().AddSeconds(Math.Min(300, 10 * (1 << Math.Min(run.Attempt, 4))) +
+                                                Random.Shared.Next(0, 10));
             if (throttled)
             {
                 AutoMateTelemetry.CloudProviderThrottles.Add(1);
                 await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                                                                       INSERT INTO cloud_installation_budgets
                                                                           (installation_id, paused_until, updated_at, throttle_count)
-                                                                      VALUES ({run.InstallationId}, {retryAt}, {DateTimeOffset.UtcNow}, 1)
+                                                                      VALUES ({run.InstallationId}, {retryAt}, {_clock.GetUtcNow()}, 1)
                                                                       ON CONFLICT (installation_id) DO UPDATE SET
                                                                           paused_until = GREATEST(cloud_installation_budgets.paused_until, EXCLUDED.paused_until),
                                                                           updated_at = EXCLUDED.updated_at,
@@ -228,7 +263,7 @@ public sealed class CloudRunProcessor(
             {
                 run.Phase = CloudRunPhase.Failed;
                 run.FailureReason = SafeFailureReason(ex);
-                run.CompletedAt = DateTimeOffset.UtcNow;
+                run.CompletedAt = _clock.GetUtcNow();
                 run.SnapshotJson = null;
                 if (run.DeploymentId is { } deploymentId)
                 {

@@ -1,12 +1,10 @@
 using Application.Abstractions.Docker;
-using Domain.Enums;
 using Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 
 /// <summary>
 ///     A hosted service that runs at application startup to clean up any deployments that are
@@ -40,7 +38,7 @@ public sealed class DeploymentCleanupHostedService(
 
 
     /// <summary>
-    ///     Stops admission and awaits owned background work before host shutdown.
+    ///     Reports host shutdown without awaiting startup reconciliation, preserving the existing lifecycle contract.
     /// </summary>
     /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
     /// <returns>A task representing completion of the asynchronous operation.</returns>
@@ -69,63 +67,7 @@ public sealed class DeploymentCleanupHostedService(
             var dbContext = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
             var dockerService = scope.ServiceProvider.GetRequiredService<IDockerService>();
 
-            // 1. Mark 'Starting' as 'Failed'
-            var updatedCount = await dbContext.Deployments
-                .Where(d => d.Status == DeploymentStatus.Starting &&
-                            d.CsProject!.Application.SourceType == SourceType.Local &&
-                            d.CloudResourceId == null && d.CloudGitHubActionRunId == null)
-                .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(d => d.Status, DeploymentStatus.Failed),
-                    cancellationToken);
-
-            if (updatedCount > 0)
-                logger.LogWarning("[DeploymentCleanupHostedService] Successfully cleaned up and marked {Count} " +
-                                  "stuck deployments (Starting) as 'Failed'.", updatedCount);
-
-            // 2. Synchronize 'Running' and 'Stopped' deployments with Docker daemon
-            var runningDeployments = await dbContext.Deployments
-                .Include(d => d.CsProject)
-                .ThenInclude(csp => csp!.Application)
-                .Where(d => (d.Status == DeploymentStatus.Running || d.Status == DeploymentStatus.Stopped) &&
-                            d.CsProject!.Application.SourceType == SourceType.Local &&
-                            d.CloudResourceId == null && d.CloudGitHubActionRunId == null)
-                .ToListAsync(cancellationToken);
-
-            if (runningDeployments.Count > 0)
-            {
-                var runningProjectsInDocker = await dockerService.GetRunningProjectNamesAsync();
-                var changedCount = 0;
-
-                foreach (var deployment in runningDeployments)
-                {
-                    if (deployment.CsProject == null) continue;
-
-                    var expectedProjectName = OrchestrationNameNormalizer.NormalizeComposeProjectName(
-                        deployment.CsProject.Application?.Name ?? deployment.CsProject.Name);
-                    var isActuallyRunning =
-                        runningProjectsInDocker.Contains(expectedProjectName, StringComparer.OrdinalIgnoreCase);
-
-                    if (deployment.Status == DeploymentStatus.Running && !isActuallyRunning)
-                    {
-                        deployment.Status = DeploymentStatus.Stopped;
-                        changedCount++;
-                    }
-                    else if (deployment.Status == DeploymentStatus.Stopped && isActuallyRunning)
-                    {
-                        deployment.Status = DeploymentStatus.Running;
-                        changedCount++;
-                    }
-                }
-
-                if (changedCount > 0)
-                {
-                    await dbContext.SaveChangesAsync(cancellationToken);
-                    logger.LogWarning("[DeploymentCleanupHostedService] Synchronized {Count} deployments with " +
-                                      "the actual Docker state.", changedCount);
-                }
-            }
-
-            logger.LogInformation("[DeploymentCleanupHostedService] Deployment sync completed.");
+            await new DeploymentReconciliation(dbContext, dockerService, logger).RunAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {

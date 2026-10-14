@@ -1,8 +1,11 @@
 using System.Text.RegularExpressions;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Ai.Results;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
+using Application.Ai.Policy;
 
-namespace Application.Ai;
+namespace Application.Ai.Results;
 
 /// <summary>
 ///     Validates legacy/v2 result shapes and redacts every provider-authored text field.
@@ -33,7 +36,7 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     /// </summary>
     /// <param name="response">The untrusted structured analysis response to validate.</param>
     /// <returns>An independent fully validated and redacted result; no partial output is accepted.</returns>
-    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="InvalidAnalysisResultException">
     ///     The response or value violates the supported result, text or provenance contract.
     /// </exception>
     public LlmAnalysisResponse Validate(LlmAnalysisResponse response)
@@ -80,7 +83,7 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     /// <param name="count">The maximum allowed collection size.</param>
     /// <param name="length">The maximum permitted identifier or text length.</param>
     /// <returns>An independent collection of validated, individually redacted text values.</returns>
-    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="InvalidAnalysisResultException">
     ///     The response or value violates the supported result, text or provenance contract.
     /// </exception>
     private string[] Items(IReadOnlyList<string> values, int count, int length)
@@ -99,7 +102,7 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     /// <param name="value">The value to normalize, redact or validate.</param>
     /// <param name="maximum">The supported upper bound.</param>
     /// <returns>Validated and redacted text within the requested length bound.</returns>
-    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="InvalidAnalysisResultException">
     ///     The response or value violates the supported result, text or provenance contract.
     /// </exception>
     private string Text(string value, int maximum)
@@ -120,7 +123,7 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     /// </summary>
     /// <param name="value">The value to normalize, redact or validate.</param>
     /// <returns>A bounded provenance identifier unchanged by redaction.</returns>
-    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="InvalidAnalysisResultException">
     ///     The response or value violates the supported result, text or provenance contract.
     /// </exception>
     private string Identifier(string value)
@@ -138,7 +141,7 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     /// </summary>
     /// <param name="value">The value to normalize, redact or validate.</param>
     /// <returns>The validated provenance identifier, or null when it was not supplied.</returns>
-    /// <exception cref="Application.Ai.InvalidAnalysisResultException">
+    /// <exception cref="InvalidAnalysisResultException">
     ///     The response or value violates the supported result, text or provenance contract.
     /// </exception>
     private string? OptionalIdentifier(string? value)

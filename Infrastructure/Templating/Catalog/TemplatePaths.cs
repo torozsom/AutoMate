@@ -1,4 +1,4 @@
-namespace Infrastructure.Templating;
+namespace Infrastructure.Templating.Catalog;
 
 /// <summary>
 ///     Centralizes template and generated-output path resolution with traversal protection.

@@ -1,7 +1,7 @@
-using Domain.DTO;
-using Domain.Entities;
+using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Cloud;
 
 /// <summary>
 ///     Service responsible for coordinating cloud deployment asset generation and GitHub commit

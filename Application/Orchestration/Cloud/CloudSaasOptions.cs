@@ -1,4 +1,4 @@
-namespace Application.Orchestration;
+namespace Application.Orchestration.Cloud;
 
 /// <summary>
 ///     Cluster-wide SaaS cloud admission limits.

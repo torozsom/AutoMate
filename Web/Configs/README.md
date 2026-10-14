@@ -1,5 +1,10 @@
 # Configs
 
+Local scheduler options default to uncapped independent builds/stops (`DeploymentConcurrency:MaxLocalBuilds=0`,
+`MaxLocalStops=0`); explicit operator caps are validated at startup. Cloud and bounded waiting-queue defaults are
+unchanged. `AzureMonitorLogs` now binds polling settings before overriding OAuth credentials from secure Microsoft
+authentication configuration. `DatabaseInitialLookback` defaults to 24 hours and must be one minute through seven days.
+
 M8 shared limits use owner accounts as tenants. Startup validates daily tenant quota, rolling admission rate, shared
 provider concurrency, exact eight-decimal cost budgets and uppercase currency even while AI is disabled. Defaults are
 100 admissions/day, 10/minute, two provider attempts per tenant and sixteen globally. USD budgets default to zero;
@@ -114,7 +119,7 @@ logs retain the failure type and omit the raw exception. Web/Observability now s
 through the registered ILoggerFactory and SDK processors.
 Its explicit catalog and typed allowlists retain safe audit correlation and omit unapproved payloads. Real SDK
 exports/resource attributes and default authorization behavior are tested
-without a collector in `Web.Tests/Diagnostics/OperationalLoggingTests.cs` and hosting-profile tests.
+without a collector in `Test/Web/Diagnostics/OperationalLoggingTests.cs` and hosting-profile tests.
 
 Tracing includes Microsoft.AspNetCore.SignalR.Server. SQL command and DeploymentTelemetry HTTP Information chatter is
 suppressed by tracked category defaults; warnings/errors and application Information remain visible. Temporarily set
@@ -201,3 +206,13 @@ Folders group related files while retaining the module's existing .NET namespace
   `Hosting/ServiceConfiguration.cs`.
 - `Observability/` — `Observability/OpenTelemetryOptions.cs`, `Observability/OpenTelemetryOptionsValidator.cs`,
   `Observability/SecurityAuditResultHandler.cs`.
+
+## Composition refinement
+
+`Hosting/OAuthAccountCallbacks.cs` owns provider ticket linking, ARM refresh exchange, Azure subscription lookup and
+cookie-preserving completion. ServiceConfiguration retains scheme/event registration and delegates these callbacks;
+callback ordering, authorities, scopes, tokens, redirect destinations and safe audit records are unchanged.
+
+Composition registers the new scoped operation, connection preparation, cloud admission and current-project query
+boundaries. Original service lifetimes/aliases and DbContext pooling remain intact. Constructor compatibility tests
+cover both hosting profiles without provider credentials.

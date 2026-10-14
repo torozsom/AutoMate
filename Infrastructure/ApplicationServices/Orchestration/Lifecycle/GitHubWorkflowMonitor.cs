@@ -1,17 +1,22 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.GitHub;
 using Application.Diagnostics;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Domain.DTO.Deployment;
+using Domain.DTO.GitHub;
+using Domain.Entities.Deployments;
+using Domain.Entities.Diagnostics;
+using Domain.Enums.GitHub;
 using Infrastructure.Data;
-using Infrastructure.GitHub;
+using Infrastructure.GitHub.Workflows;
 using Microsoft.Extensions.Logging;
+using GitHubWorkflowLogNormalizer = Infrastructure.GitHub.Workflows.GitHubWorkflowLogNormalizer;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Lifecycle;
 
 /// <summary>
 ///     Polls GitHub Actions workflow, job, and step state and publishes safe incremental
@@ -466,7 +471,7 @@ internal sealed class GitHubWorkflowMonitor(
                     $"GitHub Actions final archive did not contain a stable entry for job {checkpoint.JobName}.\r\n",
                     DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Warning,
                     new Dictionary<string, string>
-                        { ["workflow.run_id"] = run.Id.ToString(CultureInfo.InvariantCulture) },
+                    { ["workflow.run_id"] = run.Id.ToString(CultureInfo.InvariantCulture) },
                     cancellationToken);
                 continue;
             }

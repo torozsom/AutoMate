@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Users;
 
 /// <summary>
 ///     Represents a user authenticated through a remote source-code provider.

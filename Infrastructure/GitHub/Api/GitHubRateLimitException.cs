@@ -1,4 +1,4 @@
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Api;
 
 /// <summary>
 ///     GitHub asked this installation to pause API requests until the indicated time.

@@ -18,7 +18,8 @@ AutoMate helps developers automate the operational work between "the source code
 
 It can discover local and GitHub-hosted .NET projects, prepare deployment configuration, generate infrastructure/deployment artifacts from templates, run local Docker Compose deployments, and orchestrate cloud deployments through GitHub Actions and Azure Container Apps.
 
-The application is built with a strict Clean Architecture split:
+The application uses the following architectural layers. EF-backed application-service implementations currently
+live in Infrastructure, as documented in the navigation map:
 
 | Project | Responsibility |
 |---|---|
@@ -148,7 +149,8 @@ Generated cloud artifacts include:
 AutoMate intentionally keeps infrastructure and UI concerns out of the domain model.
 
 - **Clean Architecture:** `Domain` has no dependency on `Application`, `Infrastructure`, or `Web`.
-- **Dependency Injection:** all orchestration and adapter Application are registered behind interfaces.
+- **Dependency Injection:** infrastructure boundaries use Application ports; focused workflow and presentation collaborators
+  use explicit dependencies at the composition root.
 - **Minimal API endpoint modules:** endpoint classes implement `IEndpoint`; raw route definitions stay out of `Program.cs`.
 - **Thin startup:** `Program.cs` delegates service registration and pipeline setup to configuration extensions.
 - **Template-driven deployment:** deployment files are rendered from Scriban templates and a manifest.
@@ -339,7 +341,8 @@ AutoMate currently supports:
 - GitHub Actions based Azure Container Apps deployment
 - live workflow/build/runtime log streaming
 
-Future improvements may include richer Azure subscription selection, deployment history UX, cost controls, and broader cloud target support.
+Future improvements may include richer Azure subscription selection and broader cloud target support. Deployment
+history and AI cost controls are implemented as described below.
 
 ## Deployment history storage
 
@@ -356,8 +359,9 @@ guidance and validated results; advice is never executed. Active work can be can
 through the owner-authorized API. Context stays in memory; validated guidance and control metadata use PostgreSQL.
 
 AI/automatic/provider flags remain off by default, with an explicit approved-owner cohort and fresh project consent.
-Currency defaults to USD and provider spending to zero. Results expire after configurable 1–90 days, default ninety;
-independent quota/idempotency receipts and budget metadata preserve usage through deletion. Leases, durable retries,
+Currency defaults to USD and provider spending to zero. Work execution expires after configurable 1–90 days, default
+ninety; saved analyses retain until owner deletion under ADR 0004. Independent quota/idempotency receipts and budget
+metadata preserve usage through deletion. Leases, durable retries,
 shared capacity/budgets and reload shutdown guard execution without blocking deployment work.
 
 See [architecture, onboarding and ordered metadata upgrades](docs/ai-analysis.md),
@@ -371,3 +375,20 @@ adapter and remaining resource/identity/deployment inputs; Azure egress is not e
 AutoMate's platform OpenTelemetry logs now include fixed security/analysis audit events, GUID correlation scopes and
 uniform service/environment/version/hosting-profile resources. See [platform observability](Application/Diagnostics/README.md)
 for coverage and supported export/redaction boundaries. Deployment log/metric persistence continues through Loki/Mimir.
+
+## Engineering verification
+
+The [refinement record](docs/engineering-refinement.md) describes the behavior-preserving boundaries and excluded
+behavioral changes. `.github/workflows/verify.yml` checks pull requests and main/master pushes with a warning-free
+Release build, credential-free .NET tests and project-section browser checks. The broader console layout audit reports
+known baseline 200% zoom overflow without changing repository page styles; see [browser verification](Test/Web/Browser/README.md).
+Pull requests also check whitespace in changed C#
+files. `.editorconfig` and Directory.Build.props provide formatting and .NET analyzer policy without repository-wide
+reformatting. SDK compatibility remains unchanged. External PostgreSQL checks use the owned disposable verification
+runners; they never use the application database.
+
+## Test organization
+
+[Test](Test/README.md) is the solution's single .NET test project, organized into Infra, App and Web modules with
+business submodules. Run `dotnet test Test/Test.csproj` from the repository root.
+The root `docs/` directory is local-only and ignored by Git; project and module READMEs remain versioned.

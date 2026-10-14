@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.GitHub;
 
 /// <summary>
 ///     Records the most recent outcome of retrieving one GitHub Actions job log.

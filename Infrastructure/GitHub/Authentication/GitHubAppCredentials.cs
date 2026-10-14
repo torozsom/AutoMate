@@ -4,9 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Application.Abstractions.GitHub;
+using Infrastructure.GitHub.Api;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Authentication;
 
 /// <summary>
 ///     Verifies repository access and issues short-lived GitHub App installation tokens.

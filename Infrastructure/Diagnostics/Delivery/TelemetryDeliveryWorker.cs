@@ -1,12 +1,15 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Delivery;
 
 /// <summary>
 ///     Leases tenant streams and retains each ordered batch until its complete prefix is query-

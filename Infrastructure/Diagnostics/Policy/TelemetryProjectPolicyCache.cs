@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Policy;
 
 /// <summary>
 ///     Detached project ownership and compatibility flags used by telemetry admission checks.

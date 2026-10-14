@@ -19,7 +19,7 @@ Web configures actual OpenTelemetry scope capture, service resources and optiona
 framework/legacy logs pass through Web/Observability allowlists before registered providers and SDK exporters. This
 helper makes
 no global safety guarantee and does not persist diagnostic logs or metrics. Loki/Mimir storage stays behind its ports.
-Tests in `Web.Tests/Diagnostics/OperationalLoggingTests.cs` capture actual SDK exports; worker tests verify terminal
+Tests in `Test/Web/Diagnostics/OperationalLoggingTests.cs` capture actual SDK exports; worker tests verify terminal
 outcomes and
 correlation without contacting providers.
 

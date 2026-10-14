@@ -1,12 +1,12 @@
 using Application.Diagnostics;
-using Domain.Enums;
+using Domain.Enums.Ai;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Processing;
 
 /// <summary>
 ///     Reclaims expired analysis metadata and cascading work items even when AI admission is

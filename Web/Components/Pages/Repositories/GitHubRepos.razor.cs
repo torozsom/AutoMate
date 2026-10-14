@@ -1,11 +1,13 @@
 using Application.Abstractions.GitHub;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Domain.DTO;
+using Domain.DTO.GitHub;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Web.Components.Pages.Identity;
+using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Repositories;
 
 /// <summary>
 ///     The GitHubRepos component is responsible for retrieving and displaying a list of GitHub
@@ -43,17 +45,14 @@ public partial class GitHubRepos : ComponentBase, IDisposable
     [Inject]
     private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
 
-    /// <summary>Resolves owner accounts and protected provider connections.</summary>
-    [Inject]
-    private IUserService UserService { get; set; } = null!;
 
     /// <summary>Reads repositories through the owner GitHub connection.</summary>
     [Inject]
     private IGitHubService GitHubService { get; set; } = null!;
 
-    /// <summary>Owner-scoped saved-project operations.</summary>
+    /// <summary>Isolates EF-backed operations from the shared Blazor circuit lifetime.</summary>
     [Inject]
-    private IApplicationService ApplicationService { get; set; } = null!;
+    private ScopedApplicationOperations Operations { get; set; } = null!;
 
     /// <summary>Reviewed operational logger for the component.</summary>
     [Inject]
@@ -82,10 +81,9 @@ public partial class GitHubRepos : ComponentBase, IDisposable
     {
         try
         {
-            var userDetails = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(
-                AuthStateProvider,
-                UserService,
-                _componentCancellation.Token);
+            var userDetails = await Operations.RunAsync<IUserService, AuthenticatedUserDetails>(users =>
+                AuthenticatedUserResolver.GetCurrentUserDetailsAsync(
+                    AuthStateProvider, users, _componentCancellation.Token));
 
             _currentUserId = userDetails.UserId;
             _isGitHubUser = userDetails.IsGitHubUser;
@@ -131,8 +129,8 @@ public partial class GitHubRepos : ComponentBase, IDisposable
 
         try
         {
-            var success = await ApplicationService.AddGitHubAppAsync(_currentUserId, repo.Name, repo.HtmlUrl,
-                _componentCancellation.Token);
+            var success = await Operations.RunAsync<IApplicationService, bool>(apps =>
+                apps.AddGitHubAppAsync(_currentUserId, repo.Name, repo.HtmlUrl, _componentCancellation.Token));
 
             if (success)
                 SetStatusMessage($"{repo.Name} successfully saved!", false);

@@ -1,9 +1,9 @@
-using Domain.DTO;
-using Domain.Entities;
+using Domain.DTO.Deployment;
+using Domain.Entities.Projects;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
 
 /// <summary>
 ///     Resolves or creates the C# project record used by cloud deployment records.

@@ -1,4 +1,4 @@
-namespace Infrastructure.Azure;
+namespace Infrastructure.Azure.ContainerApps;
 
 /// <summary>
 ///     Runtime availability state read from an Azure Container App.

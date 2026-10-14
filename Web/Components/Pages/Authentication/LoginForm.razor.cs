@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Components;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Authentication;
 
 /// <summary>
 ///     Represents the login form component used for user authentication. Handles standard credentials

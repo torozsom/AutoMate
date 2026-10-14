@@ -1,4 +1,6 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.Logging;
 using Application.Diagnostics;
 using Microsoft.AspNetCore.SignalR;

@@ -1,8 +1,9 @@
 using Application.Abstractions.Docker;
-using Domain.DTO;
-using Infrastructure.Docker;
+using Domain.DTO.Deployment;
+using Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
+using Infrastructure.Docker.Compose;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Local;
 
 /// <summary>
 ///     Captures collector inventories using the existing generated container naming rules.

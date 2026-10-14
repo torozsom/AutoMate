@@ -1,7 +1,7 @@
-using Domain.Enums;
+using Domain.Enums.Deployments;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Status;
 
 /// <summary>
 ///     In-process publisher for deployment status changes consumed by Blazor UI components.

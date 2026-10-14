@@ -1,10 +1,18 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Archive;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Redaction;
+using Infrastructure.Diagnostics.Storage;
 using Infrastructure.Observability;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -183,6 +191,7 @@ public static class TelemetryApplication
                 return Results.BadRequest();
             }
         });
+
         /* Read selected metric evidence only for an owned deployment and a positive window of at most 365 days. */
         app.MapPost("/archive/assessment-metrics", async (ArchiveAssessmentQuery request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
@@ -214,6 +223,7 @@ public static class TelemetryApplication
             return Results.Ok(await archive.ReadAsync(tenant, project, deployment, cursor ?? 0, backwards ?? true,
                 limit ?? 500, search, token));
         });
+
         /* Delegate bounded partition reads; denied ownership becomes 403 and invalid request arguments become 400. */
         app.MapPost("/archive/metric-batch", async (ArchiveMetricBatchRequest request, ArchiveMetricBatchReader reader,
             CancellationToken token) =>
@@ -231,6 +241,7 @@ public static class TelemetryApplication
                 return Results.BadRequest();
             }
         });
+
         /* Read owned metric history after checking positive bounds and a requested point limit from 1 through 1,000. */
         app.MapPost("/archive/metrics", async (ArchiveMetricRequest request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
@@ -242,6 +253,7 @@ public static class TelemetryApplication
             return Results.Ok(await archive.ReadMetricsAsync(request.Tenant, request.Project, request.Deployment,
                 request.Start, request.End, request.MaximumPoints, token));
         });
+
         /*
          * Import validated historical envelopes separately from ordinary ingestion's 30-day timestamp boundary.
          * Preserve positive ordering and event identity, verify ownership, and return the archive acknowledgement.
@@ -266,6 +278,7 @@ public static class TelemetryApplication
                 request.Event.TimestampUtc > DateTimeOffset.UtcNow.AddMinutes(5)) return Results.BadRequest();
             return Results.Ok(await archive.AppendAsync(request, token));
         });
+
         /* Import at most 3,000 points for an owned deployment; acknowledge only after the archive operation completes. */
         app.MapPost("/archive/import-metrics", async (ArchiveMetricImport request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>
@@ -278,6 +291,7 @@ public static class TelemetryApplication
             await archive.ImportMetricsAsync(request, token);
             return Results.Ok(new { });
         });
+
         /* Delete retained history only after project removal and an owner-matching durable cleanup request. */
         app.MapPost("/archive/delete", async (ArchiveDeleteRequest request, AutoMateDbContext db,
             IDeploymentArchive archive, CancellationToken token) =>

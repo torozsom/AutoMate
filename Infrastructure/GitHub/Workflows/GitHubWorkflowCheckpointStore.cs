@@ -1,8 +1,8 @@
-using Domain.Entities;
+using Domain.Entities.Diagnostics;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Workflows;
 
 /// <summary>
 ///     Persists non-sensitive workflow streaming checkpoints for restart-safe deduplication.

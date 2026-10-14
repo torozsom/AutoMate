@@ -19,6 +19,9 @@ Dashboard is an approved category for its fixed subscriber-failure template. Doc
 approved failure type; provider response bodies remain excluded. The analysis.outcome trace field accepts only the
 reviewed completed/failed/canceled/skipped/empty/discarded/retry_scheduled values.
 
+Metadata-read and queue callback failures use reviewed templates containing project GUID and failure type only.
+Console AI diagnostics include the finite denial reason; raw provider response prose remains excluded.
+
 This module owns SDK-independent platform log policy for both Web hosting profiles and the private Telemetry process.
 PlatformTelemetryPolicy, PlatformLogCatalog and SafeLoggerFactory moved here from Web/Observability so Infrastructure
 and Telemetry do not reference Web. No new packages or host dependencies were introduced.
@@ -38,7 +41,7 @@ Terminal text is not platform log state. It goes through IDiagnosticRedactor and
 adapters, history and browser boundaries instead. Operational authentication/configuration inputs retain their required
 credentials and are not exported as platform telemetry or diagnostic context.
 
-Web.Tests/PlatformTelemetrySafetyTests covers the shared factory and real SDK/wire exports. Hosting-profile tests cover
+Test/Web/PlatformTelemetrySafetyTests covers the shared factory and real SDK/wire exports. Hosting-profile tests cover
 Web composition. TelemetryHostSafetyTests builds the production private-host composition over loopback and verifies
 401/400 responses plus ordinary-provider output without external stores or running disk/background workers.
 
@@ -68,7 +71,7 @@ OTLP pipelines. This exception is documented in ADR 0001. Ordinary provider/expo
 
 Do not replace the factory or register an unredacted exception provider. Console failures and hostile exception getters
 are isolated. Existing standard log summaries still appear once; exception diagnostics are a separate correlated record.
-Web.Tests/ConsoleExceptionDiagnosticsTests and real SDK export tests cover the separate boundaries.
+Test/Web/ConsoleExceptionDiagnosticsTests and real SDK export tests cover the separate boundaries.
 
 Archive backfill and cleanup failures use approved failure-type metadata. Detached redacted console exception
 diagnostics follow the same bounded safety policy as other failures; exported telemetry never receives exception prose.

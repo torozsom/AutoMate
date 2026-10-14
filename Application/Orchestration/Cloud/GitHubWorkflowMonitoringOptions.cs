@@ -1,4 +1,4 @@
-namespace Application.Orchestration;
+namespace Application.Orchestration.Cloud;
 
 /// <summary>
 ///     Bounds GitHub Actions monitoring and untrusted log delivery work.

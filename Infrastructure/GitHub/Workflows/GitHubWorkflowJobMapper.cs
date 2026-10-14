@@ -1,6 +1,6 @@
-using Domain.DTO;
+using Domain.DTO.GitHub;
 
-namespace Infrastructure.GitHub;
+namespace Infrastructure.GitHub.Workflows;
 
 /// <summary>
 ///     Maps GitHub REST job payloads into Application-facing DTOs.

@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Projects;
 
 /// <summary>
 ///     Represents the metadata extracted from a .csproj file.

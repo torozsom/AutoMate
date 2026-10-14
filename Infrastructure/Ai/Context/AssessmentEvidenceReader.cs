@@ -1,12 +1,14 @@
 using System.Text.Json;
-using Application.Abstractions.Ai;
-using Application.Abstractions.Diagnostics;
-using Application.Ai;
+using Application.Abstractions.Ai.Context;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Ai.Context;
 using Infrastructure.Data;
-using Infrastructure.Diagnostics;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Ai;
+namespace Infrastructure.Ai.Context;
 
 /// <summary>
 ///     Merges bounded selected archive/legacy/backend evidence without retaining unfiltered
@@ -34,7 +36,9 @@ internal static class AssessmentEvidenceReader
         if (archive is not null)
             try
             {
-                var page = await archive.ReadAssessmentAsync(query, token);
+                var page = archive is IDeploymentAssessmentArchive selectedArchive
+                    ? await selectedArchive.ReadAssessmentAsync(query, token)
+                    : await archive.ReadAssessmentAsync(query, token);
                 foreach (var entry in page.Events)
                     if (entry.TenantId == query.Tenant && entry.Event.ProjectId == query.Project &&
                         entry.Event.DeploymentId == query.Deployment &&

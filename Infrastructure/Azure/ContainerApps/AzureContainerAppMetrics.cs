@@ -1,4 +1,6 @@
-namespace Infrastructure.Azure;
+using Infrastructure.Azure.Monitor;
+
+namespace Infrastructure.Azure.ContainerApps;
 
 /// <summary>
 ///     Runtime metrics rendered in the deployment log stream for an Azure Container App.

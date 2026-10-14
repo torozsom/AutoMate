@@ -2,12 +2,19 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Delivery;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Metrics;
+using Infrastructure.Diagnostics.Policy;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Storage;
 
 /// <summary>
 ///     Configures the private single-writer spool volume and bounded write-batch size.

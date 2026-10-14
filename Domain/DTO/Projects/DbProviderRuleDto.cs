@@ -1,4 +1,4 @@
-namespace Domain.DTO;
+namespace Domain.DTO.Projects;
 
 /// <summary>
 ///     Represents a database provider detection rule loaded from the scanner rule catalog.

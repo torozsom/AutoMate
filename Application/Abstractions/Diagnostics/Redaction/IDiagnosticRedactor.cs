@@ -1,4 +1,6 @@
-namespace Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+
+namespace Application.Abstractions.Diagnostics.Redaction;
 
 /// <summary>
 ///     Redacts externally sourced diagnostic text and attributes before they reach any sink.

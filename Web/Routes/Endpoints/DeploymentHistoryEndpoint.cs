@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Data.Users;
 
 namespace Web.Routes.Endpoints;

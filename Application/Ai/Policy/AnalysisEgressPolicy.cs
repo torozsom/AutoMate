@@ -1,4 +1,4 @@
-namespace Application.Ai;
+namespace Application.Ai.Policy;
 
 /// <summary>
 ///     Fail-closed policy for the initially supported provider, processing geographies and

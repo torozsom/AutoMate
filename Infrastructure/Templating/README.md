@@ -5,6 +5,9 @@ Artifact logs retain reviewed deployment filenames without exposing full output 
 An `.azurecr.io` registry renders the Azure OIDC/ACR workflow and a managed-identity Container App registry entry.
 The legacy GHCR template remains available for self-hosted deployments.
 
+The Azure Container App receives the same project/app ownership tags as its managed database resources. Operational
+export categories are unchanged; MySQL/Redis do not gain audit or slow-query collection.
+
 ## Source inventory
 
 - `Models/CloudDeploymentSecretNames.cs`

@@ -1,4 +1,4 @@
-using Web.Configs;
+using Web.Configs.Hosting;
 
 
 // Create a WebApplication builder with the provided command-line arguments.

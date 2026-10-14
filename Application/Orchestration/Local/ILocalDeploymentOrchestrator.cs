@@ -1,7 +1,7 @@
-using Domain.DTO;
-using Domain.Entities;
+using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
 
-namespace Application.Orchestration;
+namespace Application.Orchestration.Local;
 
 /// <summary>
 ///     Service responsible for coordinating the end-to-end deployment process of local .NET

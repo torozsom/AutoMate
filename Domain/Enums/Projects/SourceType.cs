@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.Projects;
 
 /// <summary>
 ///     Defines the source types for projects, indicating whether a project is sourced from a

@@ -1,4 +1,4 @@
-namespace Domain.Enums;
+namespace Domain.Enums.Ai;
 
 /// <summary>
 ///     Lifecycle state of an asynchronous AI deployment analysis; existing persisted ordinals

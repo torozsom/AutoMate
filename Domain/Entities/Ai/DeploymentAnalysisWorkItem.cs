@@ -1,4 +1,4 @@
-namespace Domain.Entities;
+namespace Domain.Entities.Ai;
 
 /// <summary>
 ///     Durable metadata-only work item with fenced lease ownership for a requested analysis.

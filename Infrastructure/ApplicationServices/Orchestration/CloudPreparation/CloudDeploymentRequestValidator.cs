@@ -1,6 +1,6 @@
-using Domain.DTO;
+using Domain.DTO.Deployment;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
 
 /// <summary>
 ///     Validates required inputs for cloud deployment orchestration.

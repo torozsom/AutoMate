@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Infrastructure.Docker;
+namespace Infrastructure.Docker.Cli;
 
 /// <summary>
 ///     Creates Docker CLI process start information with consistent redirection and shell

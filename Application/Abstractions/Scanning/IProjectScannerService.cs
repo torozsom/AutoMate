@@ -1,5 +1,6 @@
-using Domain.DTO;
-using Domain.Entities;
+using Domain.DTO.Deployment;
+using Domain.DTO.Projects;
+using Domain.Entities.Projects;
 
 namespace Application.Abstractions.Scanning;
 
@@ -34,7 +35,7 @@ public interface IProjectScannerService
     /// <exception cref="OperationCanceledException">
     ///     The underlying read or analysis observes cancellation.
     /// </exception>
-    Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Domain.Entities.Application app, CsProject csProject,
+    Task<DeploymentConfigDto> AnalyzeDependenciesAsync(Domain.Entities.Projects.Application app, CsProject csProject,
         CancellationToken cancellationToken = default);
 
 

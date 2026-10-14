@@ -1,4 +1,4 @@
-using Domain.DTO;
+using Domain.DTO.Projects;
 
 namespace Application.Data.Apps;
 
@@ -47,7 +47,7 @@ public interface IApplicationService
     /// <param name="userId">The unique identifier of the user.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task returning a list of projects belonging to the user.</returns>
-    Task<List<Domain.Entities.Application>>
+    Task<List<Domain.Entities.Projects.Application>>
         GetUserAppsAsync(Guid userId, CancellationToken cancellationToken = default);
 
 
@@ -73,7 +73,7 @@ public interface IApplicationService
     /// <param name="userId">The unique identifier of the user who owns the project.</param>
     /// <param name="cancellationToken">Propagates notification that operations should be canceled.</param>
     /// <returns>A task that returns the project if found, or null if not found.</returns>
-    Task<Domain.Entities.Application?> GetAppByIdAsync(Guid projectId, Guid userId,
+    Task<Domain.Entities.Projects.Application?> GetAppByIdAsync(Guid projectId, Guid userId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

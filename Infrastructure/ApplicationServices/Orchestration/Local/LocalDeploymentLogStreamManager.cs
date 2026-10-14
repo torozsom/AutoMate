@@ -1,13 +1,13 @@
 using System.Collections.Concurrent;
 using Application.Abstractions.Docker;
-using Domain.Enums;
+using Domain.Enums.Deployments;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.Local;
 
 /// <summary>
 ///     Host-owned supervision; every subscription is tracked, canceled and awaited on

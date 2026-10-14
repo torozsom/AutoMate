@@ -94,7 +94,7 @@ smoke test also stops a running container with event/log/metric subscriptions ac
 The real Docker/Compose smoke tests are opt-in, use a pre-existing image, expose no ports/mounts and remove only their
 containers and Compose network. Example: set `AUTOMATE_DOCKER_SMOKE=1` and
 `AUTOMATE_DOCKER_SMOKE_IMAGE=busybox:1.37`, then run
-`dotnet test Infrastructure.Tests --filter FullyQualifiedName~DockerCollectorTests.Real_`.
+`dotnet test Test/Test.csproj --filter FullyQualifiedName~DockerCollectorTests.Real_`.
 
 Build/Compose, daemon/output and metric subscription spans have fixed names, safe outcomes and GUID correlation.
 Paths, arguments, names and output are excluded from custom tags. Normal metric shutdown is Debug; unexpected

@@ -1,19 +1,25 @@
 using Application.Abstractions.Azure;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Redaction;
 using Application.Abstractions.GitHub;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Templating;
 using Application.Diagnostics;
-using Domain.DTO;
-using Domain.Entities;
-using Domain.Enums;
-using Infrastructure.Azure;
+using Application.Orchestration.Cloud;
+using Application.Orchestration.Status;
+using Domain.DTO.Azure;
+using Domain.DTO.Deployment;
+using Domain.Entities.Cloud;
+using Domain.Entities.Deployments;
+using Domain.Enums.Deployments;
+using Infrastructure.ApplicationServices.Orchestration.Lifecycle;
+using Infrastructure.Azure.Identity;
 using Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Application.Orchestration;
+namespace Infrastructure.ApplicationServices.Orchestration.CloudPreparation;
 
 /// <summary>
 ///     Orchestrates cloud deployment preparation by generating IaC and workflow files and

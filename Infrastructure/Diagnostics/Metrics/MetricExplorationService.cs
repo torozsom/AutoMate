@@ -1,10 +1,16 @@
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.History;
+using Application.Abstractions.Diagnostics.Metrics;
+using Application.Abstractions.Diagnostics.Redaction;
 using Infrastructure.Data;
+using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Diagnostics.Redaction;
+using Infrastructure.Diagnostics.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace Infrastructure.Diagnostics;
+namespace Infrastructure.Diagnostics.Metrics;
 
 /// <summary>
 ///     Combines full UTC-day statistics with exact archived boundary observations without
@@ -126,10 +132,10 @@ public sealed class MetricExplorationService(
 
         var allowed = new HashSet<Guid>();
         foreach (var projects in rows.Values.Select(p => p.Project).Distinct().Chunk(500))
-        foreach (var id in await db.Applications.AsNoTracking().Where(p => projects.Contains(p.Id) &&
-                                                                           p.UserId == query.Owner)
-                     .Select(p => p.Id).ToListAsync(token))
-            allowed.Add(id);
+            foreach (var id in await db.Applications.AsNoTracking().Where(p => projects.Contains(p.Id) &&
+                                                                               p.UserId == query.Owner)
+                         .Select(p => p.Id).ToListAsync(token))
+                allowed.Add(id);
         if (query.Project is { } selectedProject && !await db.Applications.AnyAsync(p =>
                 p.Id == selectedProject && p.UserId == query.Owner, token))
             throw new UnauthorizedAccessException("Metric access denied.");

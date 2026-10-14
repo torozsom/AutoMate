@@ -1,21 +1,29 @@
 using System.Globalization;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.Metrics;
 using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
 using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Data.Users;
-using Application.Orchestration;
-using Domain.DTO;
-using Domain.Enums;
+using Application.Orchestration.Cloud;
+using Application.Orchestration.Jobs;
+using Application.Orchestration.Status;
+using Domain.DTO.Deployment;
+using Domain.Enums.Deployments;
+using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR.Client;
-using Web.Components.Shared;
+using Web.Components.Pages.Identity;
+using Web.Components.Shared.Configuration;
+using Web.Components.Shared.Console;
+using Web.Components.Shared.Projects;
 using Web.Hubs;
+using Web.Services;
 
-namespace Web.Components.Pages;
+namespace Web.Components.Pages.Projects;
 
 /// <summary>
 ///     A Blazor component that displays the details of a specific project, including its name,
@@ -41,11 +49,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Recorded resource names available for metric-card navigation.</summary>
     private readonly List<string> _metricContainerNames = [];
 
-    /// <summary>Bounded output waiting for its terminal to initialize.</summary>
-    private readonly List<DeploymentTerminalLog> _pendingTerminalLogs = [];
 
-    /// <summary>Bounded identities rendered ahead of the confirmed replay cursor.</summary>
-    private readonly HashSet<long> _renderedTerminalIds = [];
+    /// <summary>Owns bounded buffering and deduplication independently of terminal rendering.</summary>
+    private readonly ProjectTerminalReplayState _terminalReplay = new();
 
     /// <summary>Serializes initial, reconnect and periodic replay handshakes.</summary>
     private readonly SemaphoreSlim _terminalReplayGate = new(1, 1);
@@ -60,7 +66,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     private bool _analysisDisposed;
 
     /// <summary>Current owned project, or null before loading.</summary>
-    private Domain.Entities.Application? _app;
+    private Domain.Entities.Projects.Application? _app;
 
     /// <summary>Displays redacted managed Azure database resource logs.</summary>
     private Terminal? _azureDatabaseTerminal;
@@ -117,8 +123,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Suppresses unchanged storage-status notices during periodic catch-up.</summary>
     private string? _lastHistoryAvailability;
 
-    /// <summary>Latest acknowledged history ordering position for deduplicated replay.</summary>
-    private long _lastTerminalOrderId;
 
     /// <summary>Bounds saved metric recovery while waiting for the first live sample.</summary>
     private DateTimeOffset _nextMetricReplayAt;
@@ -129,8 +133,23 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Stable key used if the current SaaS admission request is retried.</summary>
     private string? _pendingCloudIdempotencyKey;
 
+    /// <summary>Fixed recoverable metadata-read guidance; provider details never reach markup.</summary>
+    private string? _projectReadError;
+
+    /// <summary>Independent server-side totals and the selected bounded history page.</summary>
+    private ProjectDetailsReadModel? _projectView;
+
+    /// <summary>Renderer-owned refresh admission and pending retry state.</summary>
+    private bool _refreshInProgress;
+
+    /// <summary>Coalesces notifications arriving while a metadata read is awaited.</summary>
+    private bool _refreshPending;
+
     /// <summary>Rejoins the authorized stream after the replacement route has rendered terminals.</summary>
     private bool _rejoinPending;
+
+    /// <summary>Preserves startup port resolution requested by a coalesced notification.</summary>
+    private bool _resolvePortPending;
 
     /// <summary>Local project directory supplied to variable discovery.</summary>
     private string? _selectedProjectPath;
@@ -144,8 +163,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Distinguishes recovered observations from fresh live samples.</summary>
     private bool _showSavedMetricNotice;
 
-    /// <summary>Whether pre-initialization buffering omitted output.</summary>
-    private bool _terminalBufferOverflow;
 
     /// <summary>Deployment identity to which current terminal state belongs.</summary>
     private Guid? _terminalDeploymentId;
@@ -169,9 +186,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Parameter]
     public Guid ProjectId { get; set; }
 
-    /// <summary>Owner-scoped saved-project operations.</summary>
-    [Inject]
-    private IApplicationService ApplicationService { get; set; } = null!;
 
     /// <summary>Current circuit authentication state.</summary>
     [Inject]
@@ -181,17 +195,15 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     [Inject]
     private IDeploymentJobQueue DeploymentJobQueue { get; set; } = null!;
 
-    /// <summary>Durable SaaS cloud admission.</summary>
+
+    /// <summary>Prepares cloud connections and admits requests without exposing provider credentials.</summary>
     [Inject]
-    private ICloudDeploymentRunService CloudDeploymentRuns { get; set; } = null!;
+    private ConnectedCloudDeploymentAdmission CloudAdmission { get; set; } = null!;
 
     /// <summary>Creates an independent read scope for each cross-instance status poll.</summary>
     [Inject]
     private IServiceScopeFactory ScopeFactory { get; set; } = null!;
 
-    /// <summary>Resolves owner accounts and protected provider connections.</summary>
-    [Inject]
-    private IUserService UserService { get; set; } = null!;
 
     /// <summary>Application navigation and absolute-link generation.</summary>
     [Inject]
@@ -277,7 +289,33 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <param name="projectId">The project identity used for authorization or correlation.</param>
     private void OnQueueStateChanged(Guid projectId)
     {
-        if (projectId == ProjectId) _ = InvokeAsync(StateHasChanged);
+        _ = DispatchNotificationAsync(() =>
+        {
+            if (projectId == ProjectId) StateHasChanged();
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>Observes renderer callback faults and fences notifications after navigation.</summary>
+    private async Task DispatchNotificationAsync(Func<Task> notification)
+    {
+        if (_analysisDisposed) return;
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                if (!_analysisDisposed) await notification();
+            });
+        }
+        catch (Exception) when (_analysisDisposed)
+        {
+            // A queued callback may outlive the renderer during navigation.
+        }
+        catch (Exception error)
+        {
+            Logger.LogWarning("Project notification failed for {ProjectId}: {FailureType}.",
+                ProjectId, error.GetType().Name);
+        }
     }
 
 
@@ -452,10 +490,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             return;
         }
 
-        var azureCredentials = await UserService.GetAzureCloudCredentialsAsync(_currentUserId);
-        var userDetails = await GetCurrentUserDetailsAsync();
-
-        if (azureCredentials == null || string.IsNullOrWhiteSpace(userDetails.AccessToken))
+        var preparation = await CloudAdmission.PrepareAsync(_currentUserId, AuthStateProvider,
+            false, () => true);
+        if (preparation.State != CloudConnectionState.Ready)
         {
             _workflowStatusMessage = "Connect both GitHub and Azure before deploying to the cloud.";
             _isDeploying = false;
@@ -470,29 +507,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (!DeploymentCapabilities.LocalDeploymentsEnabled)
             {
                 _pendingCloudIdempotencyKey ??= Guid.NewGuid().ToString("N");
-                _cloudRunReceipt = await CloudDeploymentRuns.StartAsync(new CloudDeploymentStart(
-                    _currentUserId, finalConfig.ProjectId, _pendingCloudIdempotencyKey,
-                    repository.Owner, repository.Name, userDetails.AccessToken,
-                    finalConfig, CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
-                    _app.Name, "."));
+                _cloudRunReceipt = await preparation.StartAsync(finalConfig, repository.Owner,
+                    repository.Name, _app.Name, _pendingCloudIdempotencyKey);
                 _pendingCloudIdempotencyKey = null;
                 UpdateCloudRunMessage();
             }
             else
             {
-                await DeploymentJobQueue.EnqueueAsync(new CloudDeploymentJob(new CloudDeploymentRequestDto
-                {
-                    RequestingUserId = _currentUserId,
-                    Config = finalConfig,
-                    Metadata = CloudDeploymentPageDefaults.CreateRemoteProjectMetadata(),
-                    CsProjectName = _app.Name,
-                    RepositoryRoot = ".",
-                    GitHubAccessToken = userDetails.AccessToken,
-                    GitHubContainerRegistryToken = userDetails.AccessToken,
-                    AzureCredentials = azureCredentials,
-                    RepositoryOwner = repository.Owner,
-                    RepositoryName = repository.Name
-                }));
+                await preparation.StartAsync(finalConfig, repository.Owner, repository.Name, _app.Name, null);
             }
 
             _workflowStatusMessage = "GitHub Actions workflow has been queued.";
@@ -564,14 +586,57 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         var project = ProjectId;
         var generation = _pageGeneration;
+        try
+        {
+            _projectReadError = null;
+            await LoadCurrentProjectCoreAsync();
+        }
+        catch (OperationCanceledException) when (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested)
+        {
+        }
+        catch (Exception error)
+        {
+            if (!_analysisDisposed && project == ProjectId && generation == _pageGeneration)
+                _projectReadError = "Project details could not be loaded. Try again.";
+            Logger.LogWarning("Project loading failed for {ProjectId}: {FailureType}.", project, error.GetType().Name);
+        }
+        finally
+        {
+            if (!_analysisDisposed && project == ProjectId && generation == _pageGeneration) _isLoading = false;
+        }
+    }
+
+    /// <summary>Retries metadata without replacing the circuit or losing existing terminal output.</summary>
+    private async Task RetryProjectReadAsync()
+    {
+        if (_app is null)
+        {
+            _isLoading = true;
+            await LoadCurrentProjectAsync();
+            if (_app is not null && _cloudPollTask is null)
+                _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
+        }
+        else
+        {
+            await RefreshProjectAsync();
+        }
+    }
+
+    /// <summary>Loads detached route metadata with an operation-owned database scope.</summary>
+    private async Task LoadCurrentProjectCoreAsync()
+    {
+        var project = ProjectId;
+        var generation = _pageGeneration;
         var token = _cloudPollCancellation.Token;
         await using var scope = ScopeFactory.CreateAsyncScope();
-        var app = _currentUserId == Guid.Empty
+        var view = _currentUserId == Guid.Empty
             ? null
-            : await scope.ServiceProvider
-                .GetRequiredService<IApplicationService>().GetAppByIdAsync(project, _currentUserId, token);
+            : await ReadProjectViewAsync(
+                scope.ServiceProvider, project, _currentUserId, token);
+        var app = view?.Project;
         if (_analysisDisposed || token.IsCancellationRequested || project != ProjectId ||
             generation != _pageGeneration) return;
+        _projectView = view;
         _app = app;
         _terminalDeploymentId = GetLatestDeployment()?.Id;
         _activeTab = app?.SourceType == SourceType.Remote ? "github-actions" : "build";
@@ -588,7 +653,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
 
         if (app is { SourceType: SourceType.Local } && app.CsProjects.FirstOrDefault(csp => csp.IsWebProject) is
-                { } csProject)
+            { } csProject)
         {
             var config = await ProjectScanner.AnalyzeDependenciesAsync(app, csProject, token);
             if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;
@@ -598,6 +663,41 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         await UpdateWebHostPortAsync();
         if (project == ProjectId && generation == _pageGeneration && !token.IsCancellationRequested) _isLoading = false;
+    }
+
+    /// <summary>
+    ///     Uses the bounded production query while retaining legacy host composition compatibility.
+    /// </summary>
+    /// <param name="services">The existing operation scope.</param>
+    /// <param name="project">The captured project identity.</param>
+    /// <param name="owner">The captured owner identity.</param>
+    /// <param name="token">Cancels the current database reads.</param>
+    /// <returns>The detached bounded view, or a legacy-compatible projection when the new port is absent.</returns>
+    private async Task<ProjectDetailsReadModel?> ReadProjectViewAsync(IServiceProvider services, Guid project,
+        Guid owner, CancellationToken token)
+    {
+        if (services.GetService<IProjectDetailsQuery>() is { } query)
+            return await query.ReadAsync(project, owner, _deploymentPage, token);
+        var app = await services.GetRequiredService<IApplicationService>().GetAppByIdAsync(project, owner, token);
+        if (app is null) return null;
+        var history = app.CsProjects.SelectMany(p => p.Deployments).OrderBy(d => d.CreatedAt).ToArray();
+        return new ProjectDetailsReadModel(app, new ProjectDeploymentSummary(history.Length,
+                history.Count(d => d.Outcome == DeploymentOutcome.Succeeded),
+                history.Count(d => d.Outcome == DeploymentOutcome.Failed),
+                history.Count(d => d.Outcome == DeploymentOutcome.Unknown), history.FirstOrDefault()?.CreatedAt),
+            history.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
+                .Skip(_deploymentPage * 6).Take(6).ToArray());
+    }
+
+    /// <summary>
+    ///     Loads another history page while preserving the current renderer state and existing page numbering.
+    /// </summary>
+    /// <param name="delta">The existing newer/older page direction.</param>
+    /// <returns>Completes after the selected owned page is refreshed.</returns>
+    private async Task ChangeDeploymentPageAsync(int delta)
+    {
+        _deploymentPage += delta;
+        await RefreshProjectAsync();
     }
 
     /// <summary>
@@ -679,7 +779,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <param name="status">The new deployment status.</param>
     private void OnDeploymentStatusChanged(Guid projectId, DeploymentStatus status)
     {
-        _ = InvokeAsync(() => HandleDeploymentStatusChangedAsync(projectId, status));
+        _ = DispatchNotificationAsync(() => HandleDeploymentStatusChangedAsync(projectId, status));
     }
 
 
@@ -757,14 +857,57 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task RefreshProjectAsync(bool resolveWebPortWithRetry = false)
     {
+        _resolvePortPending |= resolveWebPortWithRetry;
+        _refreshPending = true;
+        if (_refreshInProgress || _analysisDisposed || _isLoading) return;
+        _refreshInProgress = true;
+        try
+        {
+            while (_refreshPending && !_analysisDisposed)
+            {
+                _refreshPending = false;
+                var resolvePort = _resolvePortPending;
+                _resolvePortPending = false;
+                var project = ProjectId;
+                var generation = _pageGeneration;
+                try
+                {
+                    await RefreshProjectCoreAsync(resolvePort);
+                    if (project == ProjectId) _projectReadError = null;
+                }
+                catch (OperationCanceledException) when (_analysisDisposed ||
+                                                         _cloudPollCancellation.IsCancellationRequested)
+                {
+                }
+                catch (Exception error)
+                {
+                    if (!_analysisDisposed && project == ProjectId && generation == _pageGeneration)
+                        _projectReadError = "Project details could not be refreshed. Try again.";
+                    Logger.LogWarning("Project refresh failed for {ProjectId}: {FailureType}.",
+                        project, error.GetType().Name);
+                }
+            }
+        }
+        finally
+        {
+            _refreshInProgress = false;
+            if (!_analysisDisposed) StateHasChanged();
+        }
+    }
+
+    /// <summary>Applies one fenced refresh; the caller serializes refreshes across await boundaries.</summary>
+    private async Task RefreshProjectCoreAsync(bool resolveWebPortWithRetry)
+    {
         if (_currentUserId == Guid.Empty || _analysisDisposed || _isLoading) return;
         var project = ProjectId;
         var generation = _pageGeneration;
         await using var scope = ScopeFactory.CreateAsyncScope();
-        var app = await scope.ServiceProvider.GetRequiredService<IApplicationService>()
-            .GetAppByIdAsync(project, _currentUserId, _cloudPollCancellation.Token);
+        var view = await ReadProjectViewAsync(scope.ServiceProvider, project, _currentUserId,
+            _cloudPollCancellation.Token);
+        var app = view?.Project;
         if (_analysisDisposed || generation != _pageGeneration || project != ProjectId) return;
         var previouslyActive = CanReplayTerminalHistory();
+        _projectView = view;
         _app = app;
         var latestDeploymentId = GetLatestDeployment()?.Id;
         if (latestDeploymentId != _terminalDeploymentId)
@@ -780,7 +923,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             // Keep visible output on stop, but invalidate replies issued before the status transition.
             _pageGeneration++;
-            _pendingTerminalLogs.Clear();
+            _terminalReplay.ClearPending();
             _terminalReplayPending = CanReplayTerminalHistory();
         }
 
@@ -799,11 +942,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _currentMetricIndex = 0;
         _nextMetricReplayAt = DateTimeOffset.MinValue;
         _showSavedMetricNotice = false;
-        _lastTerminalOrderId = 0;
-        _renderedTerminalIds.Clear();
+        _terminalReplay.Reset();
         _lastHistoryAvailability = null;
-        _pendingTerminalLogs.Clear();
-        _terminalBufferOverflow = false;
+        _terminalReplay.ClearPending();
+        _terminalReplay.AcknowledgeOverflow();
         _terminalReplayPending = true;
     }
 
@@ -863,7 +1005,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
     /// <returns>Default deployment settings for the saved remote repository.</returns>
-    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Application app)
+    private static DeploymentConfigDto CreateCloudDeploymentConfig(Domain.Entities.Projects.Application app)
     {
         return CloudDeploymentPageDefaults.CreateConfiguration(app);
     }
@@ -1017,108 +1159,15 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
 
     /// <summary>
-    ///     Converts metric text into a CSS width value for the lightweight utilization bar.
+    ///     Formats the metric track using the shared legacy presentation rules.
     /// </summary>
-    /// <param name="metricValue">Formatted observed metric text.</param>
+    /// <param name="metricValue">The existing observed metric display text.</param>
     /// <param name="isMemoryMetric">Whether the value contains used and limit memory quantities.</param>
-    /// <returns>A bounded CSS width derived from a parsed metric, or a fixed unavailable-value width.</returns>
+    /// <returns>The existing bounded CSS track width.</returns>
     private static string GetMetricTrackStyle(string metricValue, bool isMemoryMetric)
     {
-        var percent = isMemoryMetric
-            ? TryCalculateMemoryUsagePercent(metricValue)
-            : TryParsePercentage(metricValue);
-
-        if (percent is null)
-            return "width: 0%;";
-
-        var normalized = Math.Clamp(percent.Value, 0, 100);
-        if (normalized > 0 && normalized < 1)
-            normalized = 1;
-
-        return $"width: {normalized.ToString("0.##", CultureInfo.InvariantCulture)}%;";
+        return DeploymentMetricDisplay.TrackStyle(metricValue, isMemoryMetric);
     }
-
-
-    /// <summary>
-    ///     Parses invariant numeric text before an optional percent sign.
-    /// </summary>
-    /// <param name="value">Input text to validate, normalize or format.</param>
-    /// <returns>The parsed percentage, or null when the text cannot be parsed.</returns>
-    private static decimal? TryParsePercentage(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-
-        var percentIndex = value.IndexOf('%', StringComparison.Ordinal);
-        var numberPart = percentIndex >= 0 ? value[..percentIndex] : value;
-
-        return decimal.TryParse(numberPart.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : null;
-    }
-
-
-    /// <summary>
-    ///     Calculates utilization only when both used and positive limit values can be parsed.
-    /// </summary>
-    /// <param name="memoryUsage">Observed used/limit memory text.</param>
-    /// <returns>Used memory as a percentage of the positive limit, or null when either quantity is unavailable.</returns>
-    private static decimal? TryCalculateMemoryUsagePercent(string memoryUsage)
-    {
-        var parts = memoryUsage.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length != 2)
-            return null;
-
-        var usedBytes = TryParseDataSize(parts[0]);
-        var limitBytes = TryParseDataSize(parts[1]);
-
-        if (usedBytes is null || limitBytes is null || limitBytes <= 0)
-            return null;
-
-        return usedBytes.Value / limitBytes.Value * 100;
-    }
-
-
-    /// <summary>
-    ///     Parses supported byte quantities with decimal or binary unit multipliers.
-    /// </summary>
-    /// <param name="value">Input text to validate, normalize or format.</param>
-    /// <returns>The byte quantity, or null when its number or unit is unsupported.</returns>
-    private static decimal? TryParseDataSize(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-
-        var trimmed = value.Trim();
-        var numberLength = 0;
-
-        while (numberLength < trimmed.Length &&
-               (char.IsDigit(trimmed[numberLength]) || trimmed[numberLength] is '.' or ','))
-            numberLength++;
-
-        if (numberLength == 0)
-            return null;
-
-        var numberPart = trimmed[..numberLength].Replace(',', '.');
-        if (!decimal.TryParse(numberPart, NumberStyles.Float, CultureInfo.InvariantCulture, out var amount))
-            return null;
-
-        var unit = trimmed[numberLength..].Trim().ToUpperInvariant();
-        var multiplier = unit switch
-        {
-            "B" or "" => 1m,
-            "KB" => 1_000m,
-            "KIB" => 1_024m,
-            "MB" => 1_000_000m,
-            "MIB" => 1_048_576m,
-            "GB" => 1_000_000_000m,
-            "GIB" => 1_073_741_824m,
-            _ => 1m
-        };
-
-        return amount * multiplier;
-    }
-
 
     /// <summary>
     ///     Connects live diagnostics when the project view is ready and rejoins after route changes.
@@ -1187,8 +1236,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                         terminalLog.DeploymentId != _terminalDeploymentId) return;
                     if (_terminalReplayPending)
                     {
-                        if (_pendingTerminalLogs.Count < 512) _pendingTerminalLogs.Add(terminalLog);
-                        else _terminalBufferOverflow = true;
+                        _terminalReplay.Buffer(terminalLog);
                         return;
                     }
 
@@ -1270,7 +1318,8 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             var secureToken = protector.Protect($"{project}:{_currentUserId}", TimeSpan.FromMinutes(5));
             _terminalReplayPending = active;
             var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
-                project, active ? deployment : null, secureToken, _lastTerminalOrderId, _cloudPollCancellation.Token);
+                project, active ? deployment : null, secureToken, _terminalReplay.LastOrderId,
+                _cloudPollCancellation.Token);
             await InvokeAsync(async () =>
             {
                 if (!IsCurrentTerminalRead(project, deployment, generation))
@@ -1285,7 +1334,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                         ? null
                         : history.Availability;
                 if (history.EarlierOmitted)
-                    _lastHistoryAvailability = _lastTerminalOrderId == 0
+                    _lastHistoryAvailability = _terminalReplay.LastOrderId == 0
                         ? "Earlier output omitted; showing the most recent 500 events."
                         : "More output is available and will load on the next refresh.";
                 foreach (var terminalLog in history.Events)
@@ -1296,23 +1345,20 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
                 if (!IsCurrentTerminalRead(project, deployment, generation)) return;
                 if (history.CanAdvanceCursor && history.Events.Count > 0)
-                {
-                    _lastTerminalOrderId = Math.Max(_lastTerminalOrderId, history.Events.Max(e => e.OrderId));
-                    _renderedTerminalIds.RemoveWhere(id => id <= _lastTerminalOrderId);
-                }
+                    _terminalReplay.Confirm(history.Events.Max(e => e.OrderId));
 
-                foreach (var terminalLog in _pendingTerminalLogs.OrderBy(item => item.OrderId).ToArray())
+                foreach (var terminalLog in _terminalReplay.PendingSnapshot())
                 {
                     if (!IsCurrentTerminalRead(project, deployment, generation)) return;
                     await WriteTerminalLogAsync(terminalLog);
                 }
 
-                _pendingTerminalLogs.Clear();
+                _terminalReplay.ClearPending();
                 _terminalReplayPending = false;
-                if (_terminalBufferOverflow)
+                if (_terminalReplay.Overflow)
                 {
                     _lastHistoryAvailability = "Some live output was omitted. Reload to recover available history.";
-                    _terminalBufferOverflow = false;
+                    _terminalReplay.AcknowledgeOverflow();
                 }
 
                 StateHasChanged();
@@ -1427,16 +1473,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             return;
         }
 
-        var liveOnly = terminalLog.OrderId < 0;
-        if (!liveOnly && (terminalLog.OrderId <= _lastTerminalOrderId ||
-                          _renderedTerminalIds.Contains(terminalLog.OrderId))) return;
-        if (!liveOnly && _renderedTerminalIds.Count >= 2000 && !isReplay)
-        {
-            _terminalBufferOverflow = true;
-            return;
-        }
-
-        if (!liveOnly && _renderedTerminalIds.Count < 2000) _renderedTerminalIds.Add(terminalLog.OrderId);
+        if (!_terminalReplay.Accept(terminalLog.OrderId, isReplay)) return;
         var terminal = terminalLog.TerminalChannel switch
         {
             "build" => _buildTerminal,
@@ -1478,7 +1515,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task OnTerminalReady(Terminal? terminal, string componentName)
     {
-        if (terminal != null && _lastTerminalOrderId == 0)
+        if (terminal != null && _terminalReplay.LastOrderId == 0)
         {
             await terminal.WriteLineAsync($"\x1b[1;32mAutoMate {componentName} Terminal Initialized...\x1b[0m");
             await terminal.WriteLineAsync("Waiting for logs...");
@@ -1527,18 +1564,9 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <returns>The user ID if authenticated, otherwise Guid.Empty.</returns>
     private async Task<Guid> GetCurrentUserIdAsync()
     {
-        return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider, UserService);
-    }
-
-
-    /// <summary>
-    ///     Gets the current user details, including the GitHub token for remote deployments.
-    /// </summary>
-    /// <returns>A task returning owner identity, optional GitHub token and account kind; unresolved identities use Guid.Empty.</returns>
-    private async Task<(Guid UserId, string? AccessToken, bool IsGitHubUser)> GetCurrentUserDetailsAsync()
-    {
-        var details = await AuthenticatedUserResolver.GetCurrentUserDetailsAsync(AuthStateProvider, UserService);
-        return (details.UserId, details.AccessToken, details.IsGitHubUser);
+        await using var scope = ScopeFactory.CreateAsyncScope();
+        return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider,
+            scope.ServiceProvider.GetRequiredService<IUserService>());
     }
 
 

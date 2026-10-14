@@ -1,7 +1,7 @@
 using System.Globalization;
-using Application.Abstractions.Diagnostics;
+using Application.Abstractions.Diagnostics.Metrics;
 
-namespace Web.Components.Shared;
+namespace Web.Components.Shared.Metrics;
 
 /// <summary>
 ///     Presentation-only names, units and chart aggregates; never synthesizes missing measurements.
