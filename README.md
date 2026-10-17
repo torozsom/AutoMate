@@ -343,9 +343,11 @@ The [refinement record](docs/engineering-refinement.md) describes the behavior-p
 behavioral changes. `.github/workflows/verify.yml` checks pull requests and main/master pushes with a warning-free
 Release build, credential-free .NET tests and project-section browser checks. The broader console layout audit reports
 known baseline 200% zoom overflow without changing repository page styles; see [browser verification](Test/Web/Browser/README.md).
-Pull requests also check whitespace in changed C#
-files. `.editorconfig` and Directory.Build.props provide formatting and .NET analyzer policy without repository-wide
-reformatting. SDK compatibility remains unchanged. External PostgreSQL checks use the owned disposable verification
+Rider's built-in formatter owns C# code layout. Pull requests use `git diff --check` on changed C# lines to reject
+trailing whitespace and added blank lines at EOF, accepting both LF and CRLF line endings. CI does not impose
+`dotnet format` indentation or wrapping on Rider-formatted code. `.editorconfig` and Directory.Build.props provide
+local formatting and .NET analyzer policy without repository-wide reformatting. SDK compatibility remains unchanged.
+External PostgreSQL checks use the owned disposable verification
 runners; they never use the application database.
 
 ## Test organization
