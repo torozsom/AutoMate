@@ -35,27 +35,27 @@ public sealed class DeploymentCleanupHostedServiceTests
         await db.Database.EnsureCreatedAsync();
         var deployments = new List<Deployment>();
         foreach (var source in new[] { SourceType.Remote, SourceType.Local })
-            foreach (var status in new[] { DeploymentStatus.Starting, DeploymentStatus.Running, DeploymentStatus.Stopped })
-                deployments.Add(new Deployment
+        foreach (var status in new[] { DeploymentStatus.Starting, DeploymentStatus.Running, DeploymentStatus.Stopped })
+            deployments.Add(new Deployment
+            {
+                Status = status,
+                CsProject = new CsProject
                 {
-                    Status = status,
-                    CsProject = new CsProject
+                    Name = "web",
+                    Path = "fixture",
+                    Application = new Domain.Entities.Projects.Application
                     {
-                        Name = "web",
-                        Path = "fixture",
-                        Application = new Domain.Entities.Projects.Application
+                        Name = "fixture",
+                        SourceType = source,
+                        SourcePathOrUrl = "fixture",
+                        User = new LocalUser
                         {
-                            Name = "fixture",
-                            SourceType = source,
-                            SourcePathOrUrl = "fixture",
-                            User = new LocalUser
-                            {
-                                Username = $"fixture-{source}-{status}",
-                                Email = $"fixture-{source}-{status}@example.test"
-                            }
+                            Username = $"fixture-{source}-{status}",
+                            Email = $"fixture-{source}-{status}@example.test"
                         }
                     }
-                });
+                }
+            });
         db.Deployments.AddRange(deployments);
         await db.SaveChangesAsync();
         var docker = DispatchProxy.Create<IDockerService, EmptyDocker>();

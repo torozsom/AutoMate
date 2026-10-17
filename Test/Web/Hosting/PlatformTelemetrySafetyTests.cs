@@ -133,13 +133,13 @@ public sealed class PlatformTelemetrySafetyTests
         using var console = new StringWriter();
         var credentials = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
-            { ["AiAnalysis:AzureOpenAi:ApiKey"] = "private-exception" }).Build();
+                { ["AiAnalysis:AzureOpenAi:ApiKey"] = "private-exception" }).Build();
         using var factory = new SafeLoggerFactory(inner, policy,
             new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), credentials, console));
         var logger = factory.CreateLogger("private-category-token");
         var project = Guid.NewGuid();
         var scope = new Dictionary<string, object?>
-        { ["ProjectId"] = project, ["Cookie"] = "private-cookie", ["private-key"] = new NeverFormat() };
+            { ["ProjectId"] = project, ["Cookie"] = "private-cookie", ["private-key"] = new NeverFormat() };
         using (logger.BeginScope(scope))
         {
             scope["ProjectId"] = Guid.NewGuid();
@@ -411,7 +411,7 @@ public sealed class PlatformTelemetrySafetyTests
                 var scopes = new List<object?>();
                 owner._scopes.ForEachScope((scope, list) => list.Add(scope), scopes);
                 owner.Records.Enqueue(new
-                { category, eventId, exception, Message = formatter(state, exception), state, scopes });
+                    { category, eventId, exception, Message = formatter(state, exception), state, scopes });
             }
         }
     }

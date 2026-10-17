@@ -79,8 +79,11 @@ Infrastructure types are registered only in Web/Configs.
 at startup. [Telemetry hosting](../../docs/deployment-telemetry.md) documents operator secrets and retention controls.
 
 Telemetry startup validation uses `TelemetryStorageOptionsValidator` to identify individual invalid settings without
-exposing their values. Local IDE launches can import the complete pilot settings with
-`deploy/telemetry/Configure-TelemetryDevelopment.ps1`.
+exposing their values. Local Development launches load the loopback telemetry endpoints from
+`Web/appsettings.Development.json` and credentials plus the machine-specific CA certificate path from Web user secrets.
+These persist across restarts; no PowerShell import is required for normal startup. The optional
+`deploy/telemetry/Configure-TelemetryDevelopment.ps1` importer is for initial setup or intentionally changed pilot
+credentials/endpoints. Containerized Telemetry continues to read its Compose environment and persistent volumes.
 
 Both hosting profiles require LokiMimir/DiskGateway. Web supplies those defaults before binding operator settings and
 rejects PostgresOutbox even when explicitly configured. Endpoint and gateway credentials remain mandatory. Legacy

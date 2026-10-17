@@ -141,7 +141,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["AiAnalysis:" + setting] = value });
+            { ["AiAnalysis:" + setting] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         var failure =
@@ -173,7 +173,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["AiAnalysis:" + setting] = value });
+            { ["AiAnalysis:" + setting] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         Assert.Throws<OptionsValidationException>(() => services.GetRequiredService<IStartupValidator>().Validate());
@@ -226,7 +226,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["OpenTelemetry:OtlpEndpoint"] = endpoint });
+            { ["OpenTelemetry:OtlpEndpoint"] = endpoint });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         var failure =
@@ -401,7 +401,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { [$"DeploymentDiagnostics:{setting}"] = value });
+            { [$"DeploymentDiagnostics:{setting}"] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         var failure = Assert.Throws<OptionsValidationException>(() =>
@@ -427,7 +427,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { [$"AiAnalysis:{setting}"] = value });
+            { [$"AiAnalysis:{setting}"] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         var error = Assert.Throws<OptionsValidationException>(() =>
@@ -449,7 +449,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["AiAnalysis:DailyProjectLimit"] = limit.ToString() });
+            { ["AiAnalysis:DailyProjectLimit"] = limit.ToString() });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         if (valid) Assert.Equal(0, services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value.DailyProjectLimit);
@@ -474,7 +474,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["AiAnalysis:MaximumConcurrency"] = concurrency.ToString() });
+            { ["AiAnalysis:MaximumConcurrency"] = concurrency.ToString() });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         if (valid)
@@ -514,7 +514,7 @@ public sealed class HostingProfileRegistrationTests
     {
         var builder = CreateBuilder("SelfHosted");
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["TelemetryStorage:GatewayUrl"] = "" });
+            { ["TelemetryStorage:GatewayUrl"] = "" });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         var failure =

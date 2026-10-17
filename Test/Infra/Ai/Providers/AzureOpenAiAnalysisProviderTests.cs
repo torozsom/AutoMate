@@ -26,13 +26,22 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
     [Theory]
     [InlineData("Access denied due to Virtual Network/Firewall rules. password=private", "network_access_denied")]
     [InlineData("Traffic is not from an approved private endpoint.", "network_access_denied")]
+    [InlineData(
+        "A Virtual Network is configured for this resource. Please use the correct endpoint for making requests. Check https://aka.ms/cogsvc-vnet for more details. password=private",
+        "network_access_denied")]
+    [InlineData("a virtual network is configured for this resource. password=private", "network_access_denied")]
     [InlineData("The resource has been temporarily blocked.", "resource_blocked")]
     [InlineData("private arbitrary provider prose", "unknown")]
     public async Task Azure_denial_keeps_only_safe_classification(string message, string reason)
     {
-        using var handler = new DelegateHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
+        var calls = 0;
+        using var handler = new DelegateHttpMessageHandler(_ =>
         {
-            Content = new StringContent(JsonSerializer.Serialize(new { error = new { code = "403", message } }))
+            calls++;
+            return new HttpResponseMessage(HttpStatusCode.Forbidden)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(new { error = new { code = "403", message } }))
+            };
         });
         using var client = new HttpClient(handler);
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
@@ -41,7 +50,10 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
             CreateProvider(client, Configuration(), settings).AnalyzeAsync(Request()));
         Assert.Equal(reason, error.Reason);
         Assert.Equal("403", error.Code);
+        Assert.Equal(HttpStatusCode.Forbidden, error.StatusCode);
+        Assert.Equal(1, calls);
         Assert.DoesNotContain("private", error.ToString());
+        Assert.DoesNotContain(message, error.ToString());
         Assert.Null(error.InnerException);
     }
 
@@ -317,7 +329,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
             var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests)
             {
                 Content = new StringContent(JsonSerializer.Serialize(new
-                { error = new { code, message = "password=private-value" } }))
+                    { error = new { code, message = "password=private-value" } }))
             };
             if (hint) response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
             return response;

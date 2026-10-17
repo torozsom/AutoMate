@@ -1,5 +1,23 @@
 # Local telemetry and Grafana
 
+## Folder-based self-hosted storage
+
+This folder's default `compose.yaml` starts all persistence services without profiles or extra file arguments:
+SeaweedFS, Loki, Mimir, volume initialization and the TLS query gateway. It does not start either ASP.NET application;
+the [app stack](../app/README.md) starts both Web and Telemetry, including the durable spool/archive volume.
+
+For first-time setup, run `./Initialize-TelemetrySecrets.ps1` from this folder and copy the generated
+`../../.telemetry/pilot/compose.env` to `.env` here. Reuse existing credentials if already initialized. Then run:
+
+```powershell
+docker compose up -d
+```
+
+Keep the default project name `automate-telemetry` so the app stack can join `automate-telemetry_gateway` and existing
+storage volumes are reused. Start infrastructure and this storage stack before app. The optional disk and Grafana
+overrides below remain available for IDE development; do not start the disk override's Telemetry service together
+with the app stack against the same spool volume. See [deployment setup](../README.md) for the complete sequence.
+
 For AutoMate platform security and AI workflow monitoring, use the separate
 [operator guide](../../docs/ai-analysis-operations.md). It defines dashboard panels, safe dimensions, initial alerts,
 read-only AI queue queries and incident responses. The deployment dashboards below remain deployment-history views;

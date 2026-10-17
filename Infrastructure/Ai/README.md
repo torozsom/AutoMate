@@ -545,6 +545,12 @@ Recognized Azure firewall/private endpoint and blocked-resource phrases become f
 memory-only. Raw response text is never retained, exported or persisted; permanent failure/no-retry behavior is
 unchanged.
 
+The Azure message "A Virtual Network is configured for this resource" is also classified as `network_access_denied`.
+For local hosts, compare the current outbound public IPv4 address with the resource's selected-network IP rules;
+an ISP or VPN change can invalidate a previously working allowlist. Add only the approved host address, preserving
+existing IP/subnet rules and default-deny. Verify access with an authenticated read-only `GET /openai/v1/models`
+before requesting a fresh analysis through AutoMate; local readiness does not test Azure connectivity.
+
 The October 13 investigation verified a ready deployment, matching endpoint and matching resource key, then reproduced a
 firewall/network
 HTTP 403 through a read-only models request without inference or customer data. Correct the operator's Azure OpenAI

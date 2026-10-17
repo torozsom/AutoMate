@@ -35,7 +35,7 @@ public sealed class AssessmentSelectionTests
         var context = new AnalysisContextSelector(new DiagnosticRedactor()).Select(history, [],
             AnalysisContextBudget.From(new AiAnalysisOptions()), false, kind: AssessmentKind.Startup,
             metadata: new
-            { status = "Starting", configuration = new { image = "cookie: private-header-value", port = 8080 } });
+                { status = "Starting", configuration = new { image = "cookie: private-header-value", port = 8080 } });
         Assert.DoesNotContain("private-header-value", context.Text);
         using var json = JsonDocument.Parse(context.Text);
         var metadata = json.RootElement.GetProperty("deployment");
@@ -142,9 +142,9 @@ public sealed class AssessmentSelectionTests
         var e = Event(Guid.NewGuid(), Guid.NewGuid(), DeploymentDiagnosticSource.AzureContainerApps,
                 DeploymentDiagnosticComponent.Container, DeploymentDiagnosticStream.StandardOutput,
                 "Azure system log") with
-        {
-            SourceIdentity = null
-        };
+            {
+                SourceIdentity = null
+            };
         Assert.Equal(AssessmentSources.Other, AssessmentClassification.Source(e));
     }
 

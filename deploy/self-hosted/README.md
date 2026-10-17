@@ -1,5 +1,11 @@
 # Self-hosted AutoMate
 
+For the folder-based setup,
+use [infrastructure](../infrastructure/README.md), [telemetry storage](../telemetry/README.md)
+and [app](../app/README.md). Each starts with `docker compose up -d` from its folder. This directory retains the earlier
+combined/release-image workflow for existing installations; do not run both layouts together. See the app README for
+volume reuse and switching instructions.
+
 Independent local builds and stops are uncapped by default. Operators may explicitly set
 `DeploymentConcurrency__MaxLocalBuilds` or `DeploymentConcurrency__MaxLocalStops` to a positive cap; zero means
 uncapped. Waiting queue capacity and conflicting project/Compose/port ordering remain enforced. Restart after changes.

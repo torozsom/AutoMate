@@ -839,7 +839,7 @@ public sealed class AnalysisAdmissionTests
         public AutoMateDbContext NewDb(DbCommandInterceptor? interceptor = null)
         {
             var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(new SqliteConnectionStringBuilder
-            { DataSource = path, Pooling = false }.ToString());
+                { DataSource = path, Pooling = false }.ToString());
             if (interceptor is not null) options.AddInterceptors(interceptor);
             return new AdmissionContext(options.Options);
         }
@@ -889,7 +889,7 @@ public sealed class AnalysisAdmissionTests
                 Path = "web.csproj",
                 Configuration = new Configuration { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
                 Application = new Domain.Entities.Projects.Application
-                { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
+                    { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
             };
             var deployments = Enumerable.Range(0, deploymentCount).Select(_ => new Deployment { CsProject = project })
                 .ToArray();

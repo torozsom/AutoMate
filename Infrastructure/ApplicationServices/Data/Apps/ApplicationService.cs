@@ -285,7 +285,7 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
         if (project.Configuration is null)
         {
             project.Configuration = new Configuration
-            { CsProjectId = project.Id, DotNetVersion = DefaultDotNetVersion };
+                { CsProjectId = project.Id, DotNetVersion = DefaultDotNetVersion };
             context.Set<Configuration>().Add(project.Configuration);
         }
 

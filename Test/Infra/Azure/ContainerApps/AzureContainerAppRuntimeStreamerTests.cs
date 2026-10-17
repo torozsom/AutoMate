@@ -203,7 +203,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             await using var seeded = new AutoMateDbContext(dbOptions, protector);
             var project = await seeded.Applications.SingleAsync();
             seeded.Deployments.Add(new Deployment
-            { Id = second, CsProjectId = (await seeded.Deployments.SingleAsync()).CsProjectId });
+                { Id = second, CsProjectId = (await seeded.Deployments.SingleAsync()).CsProjectId });
             await seeded.SaveChangesAsync();
             using var services = new ServiceCollection()
                 .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(dbOptions, protector)).BuildServiceProvider();
@@ -233,7 +233,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                     DeploymentId = target.Id,
                     ExpectedRevision = target.Revision,
                     AzureCredentials = new AzureCloudCredentialsDto
-                    { SubscriptionId = "sub", AccessToken = "arm-token" },
+                        { SubscriptionId = "sub", AccessToken = "arm-token" },
                     Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
                 });
             await streamer.PollOnceAsync(default);

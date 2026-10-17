@@ -76,7 +76,7 @@ live in Infrastructure, as documented in the navigation map:
 
 The same AutoMate image supports two server-enforced profiles:
 
-- **SelfHosted** enables local filesystem discovery and local Docker Compose deployments, as well as GitHub-to-Azure deployments. Use [`deploy/self-hosted`](./deploy/self-hosted) and mount only a developer-controlled project directory.
+- **SelfHosted** enables local filesystem discovery and local Docker Compose deployments, as well as GitHub-to-Azure deployments. Start [`deploy/infrastructure`](./deploy/infrastructure), [`deploy/telemetry`](./deploy/telemetry), then [`deploy/app`](./deploy/app), each with `docker compose up -d` after initial configuration. Mount only a developer-controlled project directory. See the [setup and migration instructions](./deploy/README.md).
 - **SaaS** is for `automate.com`: it disables local filesystem and Docker deployment paths, and supports only GitHub-to-Azure deployments into the connected customer's Azure subscription. See [`deploy/saas`](./deploy/saas).
 
 These profiles are selected with `HostingProfile__Mode`; they are enforced in the background worker and deployment orchestrators, rather than only hidden in the UI.
