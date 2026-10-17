@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Application.Abstractions.Ai.Execution;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -71,13 +72,23 @@ public sealed class AnalysisReadinessTests
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
+        builder.Services.AddAuthentication("Cookies").AddCookie("Cookies");
+        builder.Services.AddAuthorization(options =>
+            options.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
         builder.Services.AddScoped<IDeploymentAnalysisReadiness>(_ => port);
         builder.Services.AddHealthChecks().AddCheck<AnalysisReadinessHealthCheck>("ai_analysis",
             tags: [AnalysisHealthChecks.ReadinessTag], timeout: TimeSpan.FromMilliseconds(100));
         await using var app = builder.Build();
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapApplicationHealthChecks();
+        app.MapGet("/private", () => "Protected");
         await app.StartAsync();
-        using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+        {
+            BaseAddress = new Uri(app.Urls.Single())
+        };
+        Assert.Equal(HttpStatusCode.Redirect, (await client.GetAsync("/private")).StatusCode);
         var live = await client.GetAsync("/health");
         Assert.Equal(HttpStatusCode.OK, live.StatusCode);
         Assert.Equal(0, port.Calls);

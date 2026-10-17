@@ -20,6 +20,10 @@ the guide includes a separate read-only queue snapshot and telemetry freshness c
 
 ## Liveness and AI readiness
 
+Both probe routes explicitly allow anonymous requests so the authentication fallback cannot redirect Docker health
+checks to OAuth. Other routes retain their existing authorization policy. Regression tests exercise both probes
+under an authenticated fallback and verify that an ordinary route still challenges anonymous requests.
+
 Both hosting profiles register `AnalysisReadinessHealthCheck` through the Application readiness port with a five-second
 timeout. `/health` remains lightweight liveness and excludes the AI check. `/health/ready` runs the tagged AI check and
 returns uncached JSON with only `status`, `configuration` and `queue`. Exceptions, descriptions, provider identifiers,

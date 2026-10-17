@@ -72,18 +72,14 @@ live in Infrastructure, as documented in the navigation map:
 
 ## Deployment Workflows
 
-### Hosting Profiles
+### Local development hosting
 
-The same AutoMate image supports two server-enforced profiles:
+Run AutoMate through `deploy/infrastructure`, `deploy/telemetry` and `deploy/app`, each with `docker compose up -d`.
+The [local setup guide](deploy/README.md) describes the startup order and private settings. Both ASP.NET hosts run in
+Development mode; the internal `SelfHosted` capability setting enables local filesystem discovery and Docker deployment.
 
-- **SelfHosted** enables local filesystem discovery and local Docker Compose deployments, as well as GitHub-to-Azure deployments. Start [`deploy/infrastructure`](./deploy/infrastructure), [`deploy/telemetry`](./deploy/telemetry), then [`deploy/app`](./deploy/app), each with `docker compose up -d` after initial configuration. Mount only a developer-controlled project directory. See the [setup and migration instructions](./deploy/README.md).
-- **SaaS** is for `automate.com`: it disables local filesystem and Docker deployment paths, and supports only GitHub-to-Azure deployments into the connected customer's Azure subscription. See [`deploy/saas`](./deploy/saas).
-
-These profiles are selected with `HostingProfile__Mode`; they are enforced in the background worker and deployment orchestrators, rather than only hidden in the UI.
-
-Both profiles expose `/health` for lightweight liveness and `/health/ready` for AI configuration and durable queue
-readiness. The readiness probe has a five-second deadline, reads metadata only and never calls an LLM. Intentionally
-disabled AI is healthy when queue storage is readable. See [probe status codes and scope](Web/Configs/README.md).
+`/health` provides lightweight liveness; `/health/ready` checks AI configuration and durable queue readiness.
+See [probe status codes and scope](Web/Configs/README.md).
 
 The [AI analysis and security monitoring guide](docs/ai-analysis-operations.md) defines operator dashboard signals,
 read-only backlog queries, initial alert conditions and incident responses. Collector/backends and alert routing are
@@ -193,63 +189,26 @@ AutoMate intentionally keeps infrastructure and UI concerns out of the domain mo
 - Microsoft Entra app registration for Azure connection
 - Azure subscription for cloud deployments
 
-### 1. Start Local Infrastructure
+### Start the local stack
 
-Hosting files are centralized in [`deploy/`](./deploy/README.md). If `deploy/.env` does not exist, copy
-`deploy/.env.example` to it and set private database credentials. Run the following from the repository root:
+The three folder-local `.env` files contain private configuration. On a new machine, follow
+[the initial setup instructions](deploy/README.md). With Docker Desktop running in Linux-container mode:
 
-```bash
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d
+```powershell
+cd deploy/infrastructure
+docker compose up -d
+cd ../telemetry
+docker compose up -d
+cd ../app
+docker compose up -d
 ```
 
-### 2. Configure Secrets
+Open [AutoMate](http://localhost:8080). The app stack builds both ASP.NET hosts and waits for its dependencies.
+Web applies checked-in migrations automatically. After source changes, run `docker compose up -d --build` in
+`deploy/app`. Stop the stacks with `docker compose down` in reverse order. Named volumes retain local data.
 
-Use user-secrets or environment variables. Do not commit secrets to `appsettings.json`.
-
-Common settings:
-
-```text
-ConnectionStrings:DefaultConnection
-ConnectionStrings:Redis
-Authentication:GitHub:ClientId
-Authentication:GitHub:ClientSecret
-Authentication:Microsoft:ClientId
-Authentication:Microsoft:ClientSecret
-Email:SenderEmail
-Email:AppPassword
-```
-
-`appsettings.json` deliberately contains no credentials or connection strings. Configure all of the preceding
-values through user-secrets for local development, environment variables for deployed instances, or a managed secret
-store. If a credential has ever been committed, revoke and rotate it with its provider before relying on the new
-configuration source.
-
-For local development from `Web/`:
-
-```bash
-dotnet user-secrets set "Authentication:GitHub:ClientId" "<github-client-id>"
-dotnet user-secrets set "Authentication:GitHub:ClientSecret" "<github-client-secret>"
-dotnet user-secrets set "Authentication:Microsoft:ClientId" "<microsoft-client-id>"
-dotnet user-secrets set "Authentication:Microsoft:ClientSecret" "<microsoft-client-secret>"
-```
-
-### 3. Apply Database Migrations
-
-Migrations live in `Infrastructure`, but the startup project is `Web`.
-
-```bash
-cd Web
-dotnet ef database update --project ../Infrastructure
-```
-
-### 4. Run the Application
-
-```bash
-cd Web
-dotnet run
-```
-
-Open the ASP.NET Core URL printed in the terminal.
+OAuth credentials belong in `deploy/app/.env`; do not commit credentials to application settings. The image build
+excludes private environment and telemetry credential files.
 
 ---
 
@@ -309,13 +268,15 @@ dotnet build AutoMate.slnx
 ### Run Infrastructure Only
 
 ```bash
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d
+cd deploy/infrastructure
+docker compose up -d
 ```
 
 ### Stop Infrastructure
 
 ```bash
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml down
+cd deploy/infrastructure
+docker compose down
 ```
 
 ---
