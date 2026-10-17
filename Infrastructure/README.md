@@ -11,6 +11,13 @@ EF Core persistence, external-system adapters, and Application-port implementati
 Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
 behavior.
 
+## Dependency security
+
+`Infrastructure.csproj` explicitly references `System.Security.Cryptography.Pkcs` 10.0.13 to override
+MailKit → MimeKit's vulnerable 10.0.0 minimum in both Web and Telemetry. Keep this reference until the
+upstream dependency requires a patched version; audit transitive packages after dependency updates with
+`dotnet list AutoMate.slnx package --include-transitive --vulnerable`.
+
 ## Related documentation
 
 - [Domain](../Domain/README.md)

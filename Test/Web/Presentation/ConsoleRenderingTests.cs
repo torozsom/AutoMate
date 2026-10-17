@@ -19,6 +19,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Web.Components.Layout;
+using Web.Components.Layout.Shell;
 using Web.Components.Pages;
 using Web.Components.Pages.Authentication;
 using Web.Components.Shared.Configuration;

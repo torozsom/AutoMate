@@ -1,8 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using Application.Abstractions.Ai.Execution;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

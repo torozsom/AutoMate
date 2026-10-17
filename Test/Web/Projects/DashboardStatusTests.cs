@@ -4,6 +4,7 @@ using Application.Abstractions.Hosting;
 using Application.Data.Apps;
 using Application.Orchestration.Jobs;
 using Application.Orchestration.Status;
+using Domain.DTO.Deployment;
 using Domain.Entities.Deployments;
 using Domain.Entities.Projects;
 using Domain.Enums.Deployments;
@@ -23,6 +24,38 @@ namespace Test.Web.Projects;
 /// </summary>
 public sealed class DashboardStatusTests
 {
+    /// <summary>Deployment admission navigates within the current Blazor circuit without a popup or document reload.</summary>
+    [Fact]
+    public async Task Queued_deployment_navigates_within_the_current_app()
+    {
+        var project = Guid.NewGuid();
+        var navigation = new RecordingNavigation();
+        var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
+        LocalDeploymentJob? submitted = null;
+        ((OperationalLoggingTests.PortProxy)queue).Call = (method, args) =>
+        {
+            Assert.Equal(nameof(IDeploymentJobQueue.EnqueueAsync), method!.Name);
+            submitted = Assert.IsType<LocalDeploymentJob>(args![0]);
+            return ValueTask.CompletedTask;
+        };
+        using var services = new ServiceCollection().BuildServiceProvider();
+        await using var renderer = new TestRenderer(services);
+        var component = new FixtureDashboard();
+        typeof(Dashboard).GetProperty("DeploymentJobQueue", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(component, queue);
+        typeof(Dashboard).GetProperty("NavigationManager", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(component, navigation);
+        await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
+        await renderer.Dispatcher.InvokeAsync(async () =>
+            await (Task)typeof(Dashboard).GetMethod("ExecuteDeploymentAsync",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(component, [new DeploymentConfigDto { ProjectId = project, ProjectName = "fixture" }])!);
+        Assert.NotNull(submitted);
+        Assert.Equal($"/project/{project}", navigation.Destination);
+        Assert.False(navigation.ForceLoad);
+        Assert.Empty(renderer.Errors);
+    }
+
     /// <summary>
     ///     Only an owned running local deployment with enabled hosting can enter the stop queue.
     /// </summary>
@@ -265,6 +298,29 @@ public sealed class DashboardStatusTests
                 value);
         }
 #pragma warning restore CS1587
+    }
+
+    /// <summary>Records actual NavigationManager requests without opening a browser document.</summary>
+    private sealed class RecordingNavigation : NavigationManager
+    {
+        /// <summary>Initializes the same origin used by local IDE development.</summary>
+        public RecordingNavigation()
+        {
+            Initialize("https://localhost:7288/", "https://localhost:7288/dashboard");
+        }
+
+        /// <summary>Selected route within the existing application.</summary>
+        public string? Destination { get; private set; }
+
+        /// <summary>Whether a document reload was requested.</summary>
+        public bool ForceLoad { get; private set; }
+
+        /// <inheritdoc />
+        protected override void NavigateToCore(string uri, bool forceLoad)
+        {
+            Destination = uri;
+            ForceLoad = forceLoad;
+        }
     }
 
     /// <summary>

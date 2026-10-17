@@ -1,5 +1,6 @@
 using System.Reflection;
 using Application.Abstractions.Diagnostics.Events;
+using Application.Abstractions.Diagnostics.History;
 using Application.Abstractions.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,6 +18,31 @@ namespace Test.Web.Projects;
 /// <exception cref="HttpRequestException">The returned task faults when the fixture failure is selected.</exception>
 public sealed class DeploymentHistoryTests
 {
+    /// <summary>
+    ///     Selecting an older lifecycle channel requests its own server page instead of filtering the runtime tail.
+    /// </summary>
+    /// <returns>A task completing when the selected saved channel has been restored.</returns>
+    [Fact]
+    public async Task Channel_change_reloads_saved_build_and_workflow_pages()
+    {
+        var project = Guid.NewGuid();
+        var deployment = Guid.NewGuid();
+        var history = new HistoryStub(new DeploymentTerminalHistory([
+            new DeploymentTerminalLog(1, project, deployment, "build", "saved build\r\n"),
+            new DeploymentTerminalLog(2, project, deployment, "github-actions", "saved workflow\r\n"),
+            new DeploymentTerminalLog(3, project, deployment, "web", "runtime\r\n")
+        ], false));
+        var (page, js) = CreatePage(history);
+        SetField(page, "_channel", "build");
+        await LoadAsync(page);
+        Assert.Equal("build", history.RequestedChannel);
+        Assert.Equal("saved build\r\n", js.Output);
+        SetField(page, "_channel", "github-actions");
+        await LoadAsync(page);
+        Assert.Equal("github-actions", history.RequestedChannel);
+        Assert.Equal("saved workflow\r\n", js.Output);
+    }
+
     /// <summary>
     ///     A failing metric provider must not leave successfully fetched terminal logs blank.
     /// </summary>
@@ -38,8 +64,8 @@ public sealed class DeploymentHistoryTests
         await LoadAsync(page);
         await LoadMetricsAsync(page);
 
-        Assert.Equal("web started\r\nrequest served\r\n", js.Output);
-        Assert.Equal("web", GetField<string>(page, "_channel"));
+        Assert.Equal("web started\r\ndb started\r\nrequest served\r\n", js.Output);
+        Assert.Equal("", GetField<string>(page, "_channel"));
         Assert.True(GetField<bool>(page, "_authorized"));
         Assert.Contains("temporarily unavailable", GetField<string>(page, "_metricAvailability"));
         Assert.Null(GetField<string?>(page, "_error"));
@@ -109,6 +135,7 @@ public sealed class DeploymentHistoryTests
             new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), "build", "saved output")
         ], false));
         var (page, js) = CreatePage(history);
+        SetField(page, "_channel", "build");
         await LoadAsync(page);
         SetField(page, "_earlierCursor", "unchanged cursor");
         SetField(page, "_metricDays", 7);
@@ -252,9 +279,25 @@ public sealed class DeploymentHistoryTests
         /// <summary>Counts actual log queries independently of metric requests.</summary>
         public int LogReads { get; private set; }
 
+        /// <summary>Channel requested before server-side paging.</summary>
+        public string? RequestedChannel { get; private set; }
+
         /// <summary>Controllable independent provider response for concurrency and authorization scenarios.</summary>
         public Func<Task<DeploymentMetricHistory>> Metrics { get; set; } =
             () => Task.FromException<DeploymentMetricHistory>(new HttpRequestException("Metric backend unavailable"));
+
+        /// <inheritdoc />
+        public Task<TelemetryLogPage> ReadLogsV2Async(Guid user, Guid project, Guid deployment, string? cursor,
+            bool backwards, int limit, string? search = null, CancellationToken token = default, string? channel = null)
+        {
+            LogReads++;
+            RequestedChannel = channel;
+            var selected = logs with
+            {
+                Events = logs.Events.Where(e => string.IsNullOrEmpty(channel) || e.TerminalChannel == channel).ToArray()
+            };
+            return Task.FromResult(TelemetryHistoryCursor.Page(selected, project, deployment));
+        }
 
         /// <summary>
         ///     Supplies configured saved terminal history and records any fixture read count.

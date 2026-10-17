@@ -105,12 +105,14 @@ public sealed class LokiDeploymentLogs(
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
     /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>A task returning a bounded ordered page of redacted log envelopes.</returns>
     public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenantId, Guid projectId,
         Guid deploymentId, long cursor, bool backwards, int limit, CancellationToken cancellationToken,
-        DateTimeOffset? start = null)
+        DateTimeOffset? start = null, string? channel = null)
     {
         var filter = $" | project_id=\"{projectId:N}\" | deployment_id=\"{deploymentId:N}\"";
+        if (!string.IsNullOrEmpty(channel)) filter += " | channel=" + JsonSerializer.Serialize(channel);
         if (cursor > 0) filter += $" | order_id {(backwards ? "<" : ">")} {cursor}";
         return await QueryAsync(tenantId, filter, backwards, Math.Clamp(limit, 1, 2001), cancellationToken, start);
     }
@@ -143,13 +145,15 @@ public sealed class LokiDeploymentLogs(
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="search">The optional plain-text search term.</param>
     /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>A task returning a bounded resource-scoped page of matching log envelopes.</returns>
     /// <exception cref="ArgumentException">Log search is limited to 256 characters.</exception>
     public Task<IReadOnlyList<DeploymentLogEnvelope>> SearchAsync(Guid tenant, Guid project, Guid deployment,
-        long cursor, bool backwards, int limit, string search, CancellationToken token)
+        long cursor, bool backwards, int limit, string search, CancellationToken token, string? channel = null)
     {
         if (search.Length > 256) throw new ArgumentException("Log search is limited to 256 characters.");
         var filter = $" | project_id=\"{project:N}\" | deployment_id=\"{deployment:N}\"";
+        if (!string.IsNullOrEmpty(channel)) filter += " | channel=" + JsonSerializer.Serialize(channel);
         if (cursor > 0) filter += $" | order_id {(backwards ? "<" : ">")} {cursor}";
         filter += " |= " + JsonSerializer.Serialize(search);
         return QueryAsync(tenant, filter, backwards, Math.Clamp(limit, 1, 2001), token);

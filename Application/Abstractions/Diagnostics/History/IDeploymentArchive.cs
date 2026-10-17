@@ -141,9 +141,10 @@ public interface IDeploymentArchive
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="search">The optional plain-text search term.</param>
     /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>A task returning a bounded ordered page of redacted log envelopes.</returns>
     Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
-        long cursor, bool backwards, int limit, string? search, CancellationToken token);
+        long cursor, bool backwards, int limit, string? search, CancellationToken token, string? channel = null);
 
     /// <summary>
     ///     Aggregates retained numeric samples without zero-filling missing intervals.

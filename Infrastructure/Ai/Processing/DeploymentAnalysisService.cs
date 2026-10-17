@@ -470,6 +470,8 @@ public sealed class DeploymentAnalysisService(
             return new DeploymentAnalysisRequestResult(false,
                 "The daily analysis request limit for this project has been reached.");
         AnalysisSkipReason? skip = approved ? null : AnalysisSkipReason.Unavailable;
+        if (skip is not null && settings.Enabled && settings.ApprovedTenantIds?.Contains(ownerId) != true)
+            skip = AnalysisSkipReason.TenantNotApproved;
         if (skip is null && existing is null && await dbContext.AiAnalysisRequests.CountAsync(item =>
                 item.ProjectId == scope.CsProjectId &&
                 item.AdmissionDay == day && item.ConsumesQuota, token) >=
@@ -587,7 +589,8 @@ public sealed class DeploymentAnalysisService(
             return new DeploymentAnalysisView(item.Id, item.DeploymentId, item.Status, item.Trigger,
                 AnalysisSkipPolicy.Message(item.FailureCode), [], [],
                 item.FailureCode is "unavailable" or "quota_exceeded" or "unsupported_data" or "tenant_quota_exceeded"
-                    or "rate_limited" or "concurrency_exceeded" or "budget_exceeded"
+                    or "rate_limited" or "concurrency_exceeded" or "budget_exceeded" or "tenant_not_approved"
+                    or "budget_not_configured" or "budget_configuration_invalid" or "budget_currency_mismatch"
                     ? item.FailureCode
                     : "unavailable",
                 item.CreatedAt, item.CompletedAt);

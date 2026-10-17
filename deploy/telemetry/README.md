@@ -13,7 +13,8 @@ For first-time setup, run `./Initialize-TelemetrySecrets.ps1` from this folder a
 docker compose up -d
 ```
 
-Keep the project name `automate-telemetry` so the app stack can join `automate-telemetry_gateway`. Explicit volume names ensure existing
+Keep the project name `automate-telemetry` so the app stack can join `automate-telemetry_gateway`. Explicit volume names
+ensure existing
 storage volumes are reused. Start infrastructure and this storage stack before app. The app stack starts the only
 Telemetry spool/archive writer. Grafana below is optional. See [local setup](../README.md) for the complete sequence.
 

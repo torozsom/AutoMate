@@ -40,6 +40,66 @@ namespace Test.Infra.Diagnostics.Archive;
 public sealed class SaaSTelemetryTests
 {
     /// <summary>
+    ///     Reopening a deployment restores its finite lifecycle channels even after runtime output fills a page.
+    /// </summary>
+    /// <returns>A task completing after durable archive recovery and filtered history assertions.</returns>
+    [Fact]
+    public async Task Runtime_tail_does_not_hide_saved_build_and_workflow_history()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var path = Path.Combine(Path.GetTempPath(), "automate-channel-replay-" + Guid.NewGuid().ToString("N"));
+        var diskOptions = Options.Create(new DiskSpoolOptions { Directory = path });
+        try
+        {
+            using (var writer = new DiskDeploymentArchive(diskOptions, new DiagnosticRedactor()))
+            {
+                for (var order = 1; order <= 16; order++)
+                {
+                    var channel = order <= 3 ? "build" : order <= 6 ? "github-actions" : "web";
+                    var e = fixture.Event() with { Message = $"{channel} observation {order}" };
+                    await writer.AppendAsync(new DeploymentLogEnvelope(e.EventId!.Value, fixture.User, order,
+                        DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, channel), default);
+                }
+            }
+
+            using var archive = new DiskDeploymentArchive(diskOptions, new DiagnosticRedactor());
+            var options = Options.Create(new TelemetryStorageOptions { Backend = "LokiMimir" });
+            var store = new DeploymentTelemetryStore(fixture.Db,
+                new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), new EmptyLogs(), options,
+                new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
+                new DeploymentRuntimeViewers(TimeProvider.System), archive: archive);
+            var replay = await store.ReadRecentAsync(fixture.Project, fixture.Deployment, 6);
+            Assert.Contains(replay.Events, e => e.TerminalChannel == "build");
+            Assert.Contains(replay.Events, e => e.TerminalChannel == "github-actions");
+            Assert.Contains(replay.Events, e => e.TerminalChannel == "web");
+            Assert.InRange(replay.Events.Count, 1, 6);
+            Assert.True(replay.EarlierOmitted);
+            Assert.Equal(replay.Events.OrderBy(e => e.OrderId), replay.Events);
+
+            var history = new DeploymentHistoryService(fixture.Db, store, new EmptyMetrics(), options);
+            foreach (var channel in new[] { "build", "github-actions" })
+            {
+                var page = await history.ReadLogsV2Async(fixture.User, fixture.Project, fixture.Deployment,
+                    null, true, 2, channel: channel);
+                Assert.Equal(2, page.Events.Count);
+                Assert.All(page.Events, e => Assert.Equal(channel, e.TerminalChannel));
+                Assert.NotNull(page.EarlierCursor);
+                var earlier = await history.ReadLogsV2Async(fixture.User, fixture.Project, fixture.Deployment,
+                    page.EarlierCursor, true, 2, channel: channel);
+                Assert.Single(earlier.Events);
+                Assert.True(earlier.Events[0].OrderId < page.Events[0].OrderId);
+            }
+
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => history.ReadLogsV2Async(Guid.NewGuid(),
+                fixture.Project, fixture.Deployment, null, true, 2, channel: "build"));
+        }
+        finally
+        {
+            Directory.Delete(path, true);
+        }
+    }
+
+    /// <summary>
     ///     History applies current masking to old/provider records while retaining durable ordering and
     ///     authorization.
     /// </summary>
@@ -734,11 +794,12 @@ public sealed class SaaSTelemetryTests
         /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
         /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
         /// <param name="start">UTC observation-window start, or null when absent; ignored by this fixture.</param>
+        /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
         /// <returns>A task returning the configured synthetic log records.</returns>
         /// <exception cref="IOException">The fixture injects the configured storage or output failure.</exception>
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
             long cursor,
-            bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null)
+            bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null, string? channel = null)
         {
             Reads++;
             if (Fail) throw new IOException("Synthetic backend outage");

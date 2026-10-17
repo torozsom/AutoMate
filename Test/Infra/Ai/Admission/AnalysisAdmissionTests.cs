@@ -39,6 +39,24 @@ namespace Test.Infra.Ai.Admission;
 /// </summary>
 public sealed class AnalysisAdmissionTests
 {
+    /// <summary>An owner missing from the approved cohort receives an actionable skip without work or quota charges.</summary>
+    [Fact]
+    public async Task Unapproved_current_account_has_an_explicit_safe_skip_reason()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(Guid.NewGuid());
+        await using var db = fixture.NewDb();
+        var service = fixture.Service(db);
+        var result = await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], Guid.NewGuid());
+        Assert.False(result.Accepted);
+        Assert.Equal("tenant_not_approved", result.Analysis!.FailureCode);
+        Assert.Contains("AI-approved account list", result.Analysis.Summary);
+        Assert.False(await db.DeploymentAnalysisWorkItems.AnyAsync());
+        Assert.False((await db.AiAnalysisRequests.SingleAsync()).ConsumesQuota);
+        var saved = await service.GetLatestAsync(fixture.OwnerId, fixture.Deployments[0]);
+        Assert.Equal("tenant_not_approved", saved!.FailureCode);
+    }
+
     /// <summary>
     ///     Queued Automatic choices resolve from current persisted status and configuration alone is
     ///     not evidence.

@@ -1,5 +1,9 @@
 # AI result policy
 
+New requests from an enabled but unapproved owner use the fixed `tenant_not_approved` skip code and guidance naming
+the approved-account setting. Existing budget-configuration skip codes also survive safe result projection so the
+UI can show their actionable messages. This does not authorize an account, alter consent or enable automatic analysis.
+
 `AnalysisProviderAccessDeniedException` retains provider/code/request ID and a finite `Reason` (`network_access_denied`,
 `resource_blocked`, or `unknown`) without response prose. Its persisted failure code remains `provider_access_denied`;
 denial is permanent and does not gain retries. Authored guidance identifies credential pairing and Azure host network

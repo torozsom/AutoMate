@@ -1,5 +1,10 @@
 # Deployment Diagnostics Port
 
+Log-query, archive and v2 history reads accept an optional terminal channel. Adapters must filter that channel before
+applying their bounded page limit. A channel change starts a new cursor traversal; cursors remain owner-authorized
+and scoped to the project/deployment. The default legacy history adapter rejects filtered paging explicitly.
+The private archive capability `channel-logs` prevents Web from silently using an older host that ignores the filter.
+
 This module owns the provider-neutral, versioned event contract for deployment observations and the ports that accept
 them. Docker, GitHub, Azure, and other collectors normalize provider payloads here before delivery.
 

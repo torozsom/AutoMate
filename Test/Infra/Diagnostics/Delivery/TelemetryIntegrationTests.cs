@@ -599,9 +599,11 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
         /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
         /// <param name="start">UTC observation-window start, or null when absent; ignored by this fixture.</param>
+        /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
         /// <returns>A task returning an empty synthetic result collection.</returns>
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
-            long cursor, bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null)
+            long cursor, bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null,
+            string? channel = null)
         {
             Reads++;
             return Task.FromResult<IReadOnlyList<DeploymentLogEnvelope>>([]);

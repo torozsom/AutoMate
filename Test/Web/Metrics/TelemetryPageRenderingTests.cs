@@ -25,6 +25,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using Test.Web.Presentation;
 using Web.Components.Layout;
+using Web.Components.Layout.Shell;
 using Web.Components.Pages;
 using Web.Components.Shared.Configuration;
 using Web.Components.Shared.Metrics;

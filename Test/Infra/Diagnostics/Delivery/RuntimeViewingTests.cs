@@ -280,12 +280,14 @@ public sealed class RuntimeViewingTests
         /// <param name="limit">Requested count or configured admission bound; ignored by this fixture.</param>
         /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
         /// <param name="start">UTC observation-window start, or null when absent; ignored by this fixture.</param>
+        /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
         /// <returns>This deliberately unavailable member never returns successfully.</returns>
         /// <exception cref="InvalidOperationException">
         ///     The fixture injects a configured failure or detects an unexpected operation.
         /// </exception>
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,
-            long cursor, bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null)
+            long cursor, bool backwards, int limit, CancellationToken token, DateTimeOffset? start = null,
+            string? channel = null)
         {
             throw new InvalidOperationException();
         }

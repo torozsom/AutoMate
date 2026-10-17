@@ -365,11 +365,12 @@ public sealed class WorkspaceQueryTests
         /// <param name="limit">Requested count or configured admission bound.</param>
         /// <param name="search">The optional plain-text search term.</param>
         /// <param name="token">Cancellation token for the fixture operation.</param>
+        /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
         /// <returns>A task returning the configured synthetic collection or recorded fixture selection.</returns>
         public Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
-            long cursor, bool backwards, int limit, string? search, CancellationToken token)
+            long cursor, bool backwards, int limit, string? search, CancellationToken token, string? channel = null)
         {
-            return disk.ReadAsync(tenant, project, deployment, cursor, backwards, limit, search, token);
+            return disk.ReadAsync(tenant, project, deployment, cursor, backwards, limit, search, token, channel);
         }
 
         /// <summary>

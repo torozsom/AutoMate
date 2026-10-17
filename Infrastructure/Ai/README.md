@@ -1,5 +1,10 @@
 # Deployment analysis infrastructure
 
+Manual admission distinguishes an enabled account missing from `ApprovedTenantIds` using `tenant_not_approved`,
+without creating work or consuming quota. This is useful after switching databases, where a newly created local
+account can have a different identity. Approval must target the current account; automatic-analysis and spending
+settings remain independent. Safe readback retains this code and the bounded budget-configuration reasons.
+
 ## Staged rollout and egress shutdown
 
 Default-off feature/automatic/egress flags and the approved owner-account allowlist define the rollout cohort;

@@ -191,14 +191,16 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="search">The optional plain-text search term.</param>
     /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>A task returning a bounded ordered page of redacted log envelopes.</returns>
     /// <exception cref="ArgumentException">Archive search exceeds its bound.</exception>
     /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
-        long cursor, bool backwards, int limit, string? search, CancellationToken token)
+        long cursor, bool backwards, int limit, string? search, CancellationToken token, string? channel = null)
     {
         limit = Math.Clamp(limit, 1, 2001);
         if (search?.Length > 256) throw new ArgumentException("Archive search exceeds its bound.");
+        if (channel?.Length > 128) throw new ArgumentException("Archive channel exceeds its bound.");
         await _gate.WaitAsync(token);
         try
         {
@@ -209,6 +211,7 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
                 token.ThrowIfCancellationRequested();
                 var entry = await ReadSegmentAsync(path, token);
                 if (entry.Channel is null || entry.Event.Kind == DeploymentDiagnosticKind.Metric ||
+                    (!string.IsNullOrEmpty(channel) && entry.Channel != channel) ||
                     (cursor != 0 && (backwards ? entry.OrderId >= cursor : entry.OrderId <= cursor)) ||
                     (!string.IsNullOrEmpty(search) &&
                      !entry.Event.Message.Contains(search, StringComparison.Ordinal))) continue;
