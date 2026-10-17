@@ -1,6 +1,6 @@
 # Local telemetry and Grafana
 
-## Folder-based self-hosted storage
+## Local storage
 
 This folder's default `compose.yaml` starts all persistence services without profiles or extra file arguments:
 SeaweedFS, Loki, Mimir, volume initialization and the TLS query gateway. It does not start either ASP.NET application;
@@ -13,10 +13,9 @@ For first-time setup, run `./Initialize-TelemetrySecrets.ps1` from this folder a
 docker compose up -d
 ```
 
-Keep the default project name `automate-telemetry` so the app stack can join `automate-telemetry_gateway` and existing
-storage volumes are reused. Start infrastructure and this storage stack before app. The optional disk and Grafana
-overrides below remain available for IDE development; do not start the disk override's Telemetry service together
-with the app stack against the same spool volume. See [deployment setup](../README.md) for the complete sequence.
+Keep the project name `automate-telemetry` so the app stack can join `automate-telemetry_gateway`. Explicit volume names ensure existing
+storage volumes are reused. Start infrastructure and this storage stack before app. The app stack starts the only
+Telemetry spool/archive writer. Grafana below is optional. See [local setup](../README.md) for the complete sequence.
 
 For AutoMate platform security and AI workflow monitoring, use the separate
 [operator guide](../../docs/ai-analysis-operations.md). It defines dashboard panels, safe dimensions, initial alerts,
@@ -129,19 +128,5 @@ arrive on a 60-second sampling interval. Choose the time range containing those 
 To select another local tenant, rerun initialization with its owner GUID, then restart Grafana. Existing credentials
 remain unchanged. This changes the account scope of the entire local operator UI, including saved dashboards.
 
-## Deployment telemetry update
-
-Both SelfHosted and SaaS use the private Telemetry disk gateway for new deployment logs and metrics. PostgreSQL payload
-writes are rejected at application startup; legacy reads and draining of existing outbox rows remain available. The
-gateway confirms durable checksummed writes before cloud checkpoints advance. Tenant-scoped v2 history, deployment
-revision recovery and weighted daily project analytics are documented in [the rollout guide](/docs/saas-telemetry.md).
-Detailed data expires after 30 days; daily statistics after 365 days. See the root navigation.md for new module entry
-points.
-
-For both self-hosted development and SaaS, start the disk service by also including compose.disk.yaml with --build. Set
-TELEMETRY_DATABASE_CONNECTION in the private compose.env to a database hostname reachable from the telemetry container
-(for Docker Desktop host development, host.docker.internal). New initialization generates the ingestion token;
-Configure-TelemetryDevelopment.ps1 upgrades an older pilot's compose.env token and imports DiskGateway into Web user
-secrets. Import before starting the service so an upgraded pilot has its token. The development ingestion URL is
-loopback http://localhost:9450; Loki/Mimir query endpoints continue to verify their TLS certificate. See
-../self-hosted/README.md for the complete self-hosted Compose command.
+Deployment history uses the private Telemetry host in ../app. PostgreSQL retains application metadata; Loki/Mimir
+and the Telemetry spool/archive retain diagnostics. Normal startup needs only the three commands in ../README.md.

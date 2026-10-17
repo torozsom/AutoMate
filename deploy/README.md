@@ -1,99 +1,88 @@
-# Deploy and run AutoMate
+# Run AutoMate locally
 
-All checked-in hosting files live here. Run the commands below from the repository root.
+## One-command control
 
-## Three-folder self-hosted setup
+From this folder, choose PowerShell or Bash:
 
-Each folder has a default Compose file, so normal startup requires only `docker compose up -d` inside each folder:
+| Action | PowerShell | Bash |
+|--------|------------|------|
+| Start everything | `./manage.ps1 start` | `bash manage.sh start` |
+| Stop everything | `./manage.ps1 stop` | `bash manage.sh stop` |
+| Restart everything | `./manage.ps1 restart` | `bash manage.sh restart` |
+| Show all containers | `./manage.ps1 status` | `bash manage.sh status` |
+| Pull registry images | `./manage.ps1 pull` | `bash manage.sh pull` |
+| Rebuild apps and start | `./manage.ps1 start -Build` | `bash manage.sh start --build` |
+| Remove containers, keep data | `./manage.ps1 down` | `bash manage.sh down` |
 
-| Folder            | Starts                                                                              |
-|-------------------|-------------------------------------------------------------------------------------|
-| `infrastructure/` | PostgreSQL and Redis                                                                |
-| `telemetry/`      | SeaweedFS object storage, Loki, Mimir and the TLS query gateway                     |
-| `app/`            | AutoMate Web and the Telemetry ASP.NET host, including its persistent spool/archive |
+From the repository root, use `./deploy/manage.ps1 start` or `bash deploy/manage.sh start`. Both scripts also work
+from other working directories. Add `-DryRun` in PowerShell or `--dry-run` in Bash to preview the commands.
+Startup runs infrastructure, telemetry, then app; shutdown uses the reverse order. The app's existing readiness
+checks wait for its dependencies. Scripts stop immediately if any Compose command fails and never delete volumes.
+`pull` updates registry images; use the rebuild option to refresh the source-built ASP.NET images.
 
-For first-time configuration, copy `infrastructure/.env.example` and `app/.env.example` to `.env` in their respective
-folders. Choose matching database/Redis passwords, set OAuth credentials and `PROJECTS_ROOT` in `app/.env`, and
-initialize telemetry secrets once from the repository root:
+The wrappers keep the three Docker project names. A Dockerfile builds an image, and a combined Compose file would
+use one project identity, so neither is used as a multi-project controller here.
 
-```powershell
-./deploy/telemetry/Initialize-TelemetrySecrets.ps1
-Copy-Item .telemetry/pilot/compose.env deploy/telemetry/.env
-```
+## Individual projects
 
-If pilot secrets already exist, reuse them and copy their `compose.env`; do not rerun initialization or replace storage
-credentials. Copy its `TELEMETRY_INGEST_TOKEN` value to `app/.env`. All `.env` files remain private and ignored by Git.
-
-Start the stacks in order (commands below begin at the repository root):
+Docker Desktop must be running with Linux containers. Start these three stacks in order from the repository root:
 
 ```powershell
 cd deploy/infrastructure
 docker compose up -d
-docker compose ps
 cd ../telemetry
 docker compose up -d
 cd ../app
 docker compose up -d
 ```
 
-Wait for PostgreSQL/Redis to become healthy and for Loki/Mimir to finish starting before starting app. Open
-[AutoMate](http://localhost:8080). The app stack builds both ASP.NET images on first start; after source changes use
-`docker compose up -d --build` there. Stop with `docker compose down` in each folder, in reverse order. Named volumes
-survive shutdown. Read [app setup and migration notes](app/README.md) before switching an existing installation.
+Open [AutoMate](http://localhost:8080). Each command automatically loads the `.env` in its folder. The local private
+files are already populated; no import script, profile flag, extra Compose file or manual database migration is
+required for normal startup.
 
-The following options retain the earlier IDE-development and combined self-hosted workflows.
+| Folder | Starts |
+|--------|--------|
+| [infrastructure](infrastructure/README.md) | PostgreSQL and Redis |
+| [telemetry](telemetry/README.md) | SeaweedFS object storage, Loki, Mimir and the TLS query gateway |
+| [app](app/README.md) | AutoMate Web and the Telemetry ASP.NET host, with persistent spool/archive |
 
-| Location             | Purpose                                                                                   |
-|----------------------|-------------------------------------------------------------------------------------------|
-| `docker-compose.yml` | PostgreSQL and Redis for local development with `dotnet run`                              |
-| `self-hosted/`       | Containerized AutoMate with access to a developer-controlled project directory and Docker |
-| `saas/`              | Public-service hosting profile and configuration guidance                                 |
-| `telemetry/`         | Required Loki/Mimir storage, durable disk gateway and authenticated TLS access            |
+The app stack waits for PostgreSQL, Redis, Loki and Mimir before starting Web. Web applies database migrations;
+Telemetry starts after Web's HTTP health check passes. Both ASP.NET hosts run in Development mode. The first app
+startup builds the images from this checkout. After source changes, run `docker compose up -d --build` in `app`.
+Use `docker compose ps` and `docker compose logs` in the relevant folder to inspect startup.
 
-## Local development
+Stop the stacks with `docker compose down` in each folder, in reverse order: app, telemetry, infrastructure.
+Named volumes survive shutdown. Do not add `-v` unless you intend to delete persistent data. Existing volume
+identities are retained so this cleanup does not reset databases or archives. Docker Desktop groups are named `automate-app`, `automate-telemetry` and `automate-infrastructure`. Do not run an older Telemetry container
+against the same spool volume.
 
-For the complete cold-start sequence, including the required disk gateway and Grafana,
-see [local development](../docs/local-development.md). Development telemetry endpoints are saved in
-`Web/appsettings.Development.json`; private application settings persist in Web's .NET user secrets and load
-automatically for Development IDE/`dotnet run` launches. `Configure-LocalDevelopment.ps1` is an optional one-time
-import for a new machine or deliberately changed private settings, not a normal startup step. ASP.NET Core does not
-load `.env` files automatically; Docker Compose still uses its existing private `--env-file` files.
+## First-time setup on another machine
 
-Copy `deploy/.env.example` to `deploy/.env` if you do not already have local credentials. Configure `DB_USER` and
-`DB_PASSWORD`, then start the dependencies:
-
-```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d
-dotnet run --project Web
-```
-
-Configure AutoMate's connection strings through .NET user secrets or environment variables: PostgreSQL uses
-`localhost:5432`, database `automate_db`, and the credentials in `deploy/.env`; Redis uses `localhost:6379`.
-See the [application configuration instructions](../README.md#2-configure-secrets) for OAuth and other required
-settings.
-
-Stop the development dependencies:
+Copy `infrastructure/.env.example` and `app/.env.example` to `.env` in their respective folders. Set matching
+PostgreSQL/Redis passwords, OAuth credentials and the host project directory in `app/.env`. Register OAuth callbacks
+for the local application's URL. Initialize telemetry credentials once from the repository root:
 
 ```powershell
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml down
+./deploy/telemetry/Initialize-TelemetrySecrets.ps1
+Copy-Item .telemetry/pilot/compose.env deploy/telemetry/.env
 ```
 
-The development Compose project retains its original `docker` identity, explicit container names, and named volumes
-(`automate_pgdata` and `automate_redis_data`). Moving these files does not migrate or reset database contents. Local
-credentials moved from `.docker/.env` remain private in `deploy/.env`; only `.env.example` files are tracked.
+Copy the generated `TELEMETRY_INGEST_TOKEN` to `app/.env`. Reuse existing pilot credentials and certificates when
+present; do not reinitialize storage keys. All `.env` files and `.telemetry/` artifacts are ignored by Git. Web's image
+build context excludes these private files.
 
-## Other hosting options
+The Docker socket lets AutoMate manage local containers. `PROJECTS_ROOT` selects the host directory exposed as
+`/workspace` inside Web. Web binds to loopback, database ports stay inside Docker, and authenticated Telemetry ingestion
+uses the private Docker network. This setup is intended for local development.
 
-- [Self-hosted setup](self-hosted/README.md)
-- [SaaS setup](saas/README.md)
-- [Telemetry setup and retention operations](../docs/deployment-telemetry.md)
-- [Local Grafana dashboards and log search](telemetry/README.md)
-- [Owned disposable PostgreSQL verification](verification/README.md)
+[Optional Grafana tools](telemetry/README.md) and [isolated PostgreSQL verification](verification/README.md) are
+available separately and are not required to start AutoMate.
 
-Telemetry credentials, certificates, and working test artifacts remain in the ignored root `.telemetry/` directory.
-Its initialization script resolves that directory relative to its own location, independently of the shell's working
-directory.
-
-Deployment telemetry is required in both hosting profiles, including local Web development. Configure the DiskGateway
-and start the separate Telemetry service before starting Web; the application does not select raw PostgreSQL persistence
-when configuration or storage is unavailable. See self-hosted/README.md and ../docs/saas-telemetry.md.
+The exited `dependencies`, `spool-permissions` and `permissions` containers are one-time readiness/ownership
+helpers, not duplicate databases or application instances. Compose retains them to record successful initialization.
+Only project names use the `automate-` prefix. Containers have explicit names such as `postgres`, `redis`, `loki`, `web` and `telemetry`, with no prefix or replica-number suffix. Registry
+images use current-release tags and `pull_policy: always`; each normal startup checks for updated images. PostgreSQL
+tracks the current 18.x release line so a future major release cannot open an incompatible database directory.
+Both ASP.NET images are built locally; rebuild with `docker compose up -d --build` after source updates. Builds pull
+the current .NET 10 SDK/runtime bases. PostgreSQL 16 data was backed up and restored into the PostgreSQL 18 volume;
+the original database/Redis volumes remain available for recovery. Private database backups live in `.telemetry/backups`.

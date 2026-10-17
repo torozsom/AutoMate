@@ -1,13 +1,17 @@
 name: automate-telemetry
 services:
   permissions:
-    image: busybox:1.37
+    container_name: storage-permissions
+    image: busybox:latest
+    pull_policy: always
     user: root
     command: [ "sh", "-ec", "chown -R 10001:10001 /loki; chown -R 10001:10001 /mimir" ]
     volumes: [ loki:/loki, mimir:/mimir ]
     network_mode: none
   objects:
-    image: chrislusf/seaweedfs:4.48
+    container_name: objects
+    image: chrislusf/seaweedfs:latest
+    pull_policy: always
     command: mini -dir=/data
     environment:
       AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY:?Set a dedicated object-store user}
@@ -17,7 +21,9 @@ services:
     networks: [ storage ]
     restart: unless-stopped
   loki:
-    image: grafana/loki:3.7.5
+    container_name: loki
+    image: grafana/loki:latest
+    pull_policy: always
     command: -config.file=/etc/loki/config.yaml -config.expand-env=true
     environment:
       OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?}
@@ -29,7 +35,9 @@ services:
     networks: [ storage, gateway ]
     restart: unless-stopped
   mimir:
-    image: grafana/mimir:2.17.2
+    container_name: mimir
+    image: grafana/mimir:latest
+    pull_policy: always
     user: "10001:10001"
     working_dir: /var/mimir
     command: -target=all -config.file=/etc/mimir/config.yaml -config.expand-env=true
@@ -43,7 +51,9 @@ services:
     networks: [ storage, gateway ]
     restart: unless-stopped
   gateway:
-    image: nginx:1.28-alpine
+    container_name: gateway
+    image: nginx:alpine
+    pull_policy: always
     depends_on: [ loki, mimir ]
     ports: [ "127.0.0.1:${TELEMETRY_PORT:-9443}:443" ]
     volumes:
@@ -53,8 +63,11 @@ services:
     restart: unless-stopped
 volumes:
   objects:
+    name: automate-telemetry_objects
   loki:
+    name: automate-telemetry_loki
   mimir:
+    name: automate-telemetry_mimir
 networks:
   storage: { internal: true }
   gateway:

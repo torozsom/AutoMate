@@ -1,0 +1,114 @@
+name: automate-app
+
+services:
+  dependencies:
+    container_name: dependencies
+    image: postgres:18-alpine
+    pull_policy: always
+    restart: on-failure
+    # Cross-project dependencies must be ready before Web applies its migrations.
+    entrypoint: [ "sh", "-ec" ]
+    command:
+      - |
+        until pg_isready -h postgres -U automate -d automate >/dev/null 2>&1 &&
+          nc -z redis 6379 &&
+          wget -q -O /dev/null http://loki:3100/ready &&
+          wget -q -O /dev/null http://mimir:9009/ready; do
+          sleep 2
+        done
+    networks: [ infrastructure, telemetry ]
+
+  automate:
+    container_name: web
+    build:
+      pull: true
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${AUTOMATE_PORT:-8080}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      HostingProfile__Mode: SelfHosted
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=automate;Username=automate;Password=${POSTGRES_PASSWORD:?Set the infrastructure PostgreSQL password}
+      ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:?Set the infrastructure Redis password}
+      TelemetryStorage__Backend: LokiMimir
+      TelemetryStorage__DeliveryMode: DiskGateway
+      TelemetryStorage__GatewayUrl: http://telemetry:8080
+      TelemetryStorage__GatewayToken: ${TELEMETRY_INGEST_TOKEN:?Set a private random credential with at least 32 characters}
+      TelemetryStorage__LokiUrl: http://loki:3100
+      TelemetryStorage__MetricsWriteUrl: http://mimir:9009/otlp/v1/metrics
+      TelemetryStorage__MetricsQueryUrl: http://mimir:9009/prometheus
+      # Plaintext is limited to private Docker networks on a developer-controlled host.
+      TelemetryStorage__AllowInsecureDevelopment: "true"
+      Authentication__GitHub__ClientId: ${AUTH_GITHUB_CLIENT_ID:?Set the GitHub OAuth client ID}
+      Authentication__GitHub__ClientSecret: ${AUTH_GITHUB_CLIENT_SECRET:?Set the GitHub OAuth client secret}
+      Authentication__Microsoft__ClientId: ${AUTH_MICROSOFT_CLIENT_ID:?Set the Microsoft OAuth client ID}
+      Authentication__Microsoft__ClientSecret: ${AUTH_MICROSOFT_CLIENT_SECRET:?Set the Microsoft OAuth client secret}
+      Authentication__Microsoft__TenantId: ${AUTH_MICROSOFT_TENANT_ID:-organizations}
+    volumes:
+      - ${PROJECTS_ROOT:?Set the host project directory}:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [ infrastructure, telemetry ]
+    depends_on:
+      dependencies: { condition: service_completed_successfully }
+    # The runtime image has Bash but no curl. Wait for Web's HTTP listener after migrations.
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - 'exec 3<>/dev/tcp/127.0.0.1/8080; printf "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3; read -r status <&3; [[ "$$status" == *" 200 "* ]]'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  spool-permissions:
+    container_name: spool-permissions
+    image: busybox:latest
+    pull_policy: always
+    user: root
+    command: [ "sh", "-ec", "chown 10001:10001 /spool; chmod 700 /spool" ]
+    volumes: [ telemetry-spool:/spool ]
+    network_mode: none
+
+  telemetry:
+    container_name: telemetry
+    build:
+      pull: true
+      context: ../..
+      dockerfile: Telemetry/Dockerfile
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=automate;Username=automate;Password=${POSTGRES_PASSWORD:?}
+      DiskSpool__Directory: /var/telemetry
+      TelemetryStorage__Backend: LokiMimir
+      TelemetryStorage__DeliveryMode: DiskGateway
+      TelemetryStorage__GatewayUrl: http://telemetry:8080
+      TelemetryStorage__GatewayToken: ${TELEMETRY_INGEST_TOKEN:?}
+      TelemetryStorage__AllowInsecureDevelopment: "true"
+      TelemetryStorage__LokiUrl: http://loki:3100
+      TelemetryStorage__MetricsWriteUrl: http://mimir:9009/otlp/v1/metrics
+      TelemetryStorage__MetricsQueryUrl: http://mimir:9009/prometheus
+    volumes: [ telemetry-spool:/var/telemetry ]
+    networks: [ infrastructure, telemetry ]
+    depends_on:
+      automate: { condition: service_healthy }
+      spool-permissions: { condition: service_completed_successfully }
+
+volumes:
+  telemetry-spool:
+    # Reuse the existing standalone telemetry pilot spool/archive; never run two writers.
+    name: ${TELEMETRY_SPOOL_VOLUME:-automate-telemetry_telemetry-spool}
+
+networks:
+  infrastructure:
+    external: true
+    name: automate-infrastructure_default
+  telemetry:
+    external: true
+    name: automate-telemetry_gateway

@@ -1,7 +1,9 @@
 # Local operator UI only. Combine with compose.yaml and enable both profiles.
 services:
   grafana:
-    image: grafana/grafana:13.1.6
+    container_name: grafana
+    image: grafana/grafana:latest
+    pull_policy: always
     profiles: [ grafana ]
     restart: unless-stopped
     ports: [ "127.0.0.1:${GRAFANA_PORT:-3000}:3000" ]
@@ -27,3 +29,4 @@ services:
     networks: [ gateway ]
 volumes:
   grafana:
+    name: automate-telemetry_grafana
