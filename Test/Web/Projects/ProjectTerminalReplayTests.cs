@@ -8,20 +8,20 @@ using ProjectDetails = Web.Components.Pages.Projects.ProjectDetails;
 namespace Test.Web.Projects;
 
 /// <summary>
-///     Checks active-only replay and delayed-reply fences without a live SignalR connection.
+///     Checks latest-deployment replay and delayed-reply fences without a live SignalR connection.
 /// </summary>
 public sealed class ProjectTerminalReplayTests
 {
     /// <summary>
-    ///     Inactive history belongs on historical pages; active deployments can replay.
+    ///     Saved output remains replayable after stopping or failure without accepting obsolete project replies.
     /// </summary>
     /// <param name="status">Deployment state under test.</param>
     /// <param name="expected">Expected outcome for this scenario.</param>
     [Theory]
     [InlineData(DeploymentStatus.Starting, true)]
     [InlineData(DeploymentStatus.Running, true)]
-    [InlineData(DeploymentStatus.Stopped, false)]
-    [InlineData(DeploymentStatus.Failed, false)]
+    [InlineData(DeploymentStatus.Stopped, true)]
+    [InlineData(DeploymentStatus.Failed, true)]
     public void Replay_checks_status_route_deployment_and_generation(DeploymentStatus status, bool expected)
     {
         var project = Guid.NewGuid();

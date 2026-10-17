@@ -61,7 +61,7 @@ public static class AnalysisHealthChecks
         app.MapHealthChecks("/health", new HealthCheckOptions
         {
             Predicate = registration => !registration.Tags.Contains(ReadinessTag)
-        });
+        }).AllowAnonymous();
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains(ReadinessTag),
@@ -72,7 +72,7 @@ public static class AnalysisHealthChecks
                 [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
             },
             ResponseWriter = WriteReadinessAsync
-        });
+        }).AllowAnonymous();
     }
 
     /// <summary>

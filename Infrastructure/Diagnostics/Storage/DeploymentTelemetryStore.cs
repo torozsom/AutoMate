@@ -91,10 +91,38 @@ public sealed class DeploymentTelemetryStore(
     ///     A task returning recent terminal records with explicit omissions and availability
     ///     metadata.
     /// </returns>
-    public Task<DeploymentTerminalHistory> ReadRecentAsync(Guid projectId, Guid deploymentId, int limit,
+    public async Task<DeploymentTerminalHistory> ReadRecentAsync(Guid projectId, Guid deploymentId, int limit,
         CancellationToken cancellationToken = default)
     {
-        return ReadPageAsync(projectId, deploymentId, 0, true, limit, cancellationToken);
+        limit = Math.Clamp(limit, 1, 2000);
+        var recent = await ReadPageAsync(projectId, deploymentId, 0, true, limit, cancellationToken);
+        if (!options.Value.Specialized || archive is null) return recent;
+        // Lifecycle output is finite and precedes runtime traffic; reserve replay space for it.
+        var events = recent.Events.ToList();
+        foreach (var channel in new[] { "build", "github-actions" })
+        {
+            var phase = await ReadPageAsync(projectId, deploymentId, 0, true, Math.Max(1, limit / 3),
+                cancellationToken, channel: channel);
+            events.AddRange(phase.Events);
+            recent = recent with
+            {
+                CanAdvanceCursor = recent.CanAdvanceCursor && phase.CanAdvanceCursor,
+                Availability = recent.Availability ??
+                               (phase.Availability?.StartsWith("No saved output", StringComparison.Ordinal) == true
+                                   ? null
+                                   : phase.Availability)
+            };
+        }
+
+        var unique = events.DistinctBy(e => e.OrderId).ToArray();
+        var channels = unique.GroupBy(e => e.TerminalChannel).ToArray();
+        var share = Math.Max(1, limit / Math.Max(1, channels.Length));
+        var balanced = channels.SelectMany(group => group.OrderByDescending(e => e.OrderId).Take(share))
+            .OrderByDescending(e => e.OrderId).Take(limit).OrderBy(e => e.OrderId).ToArray();
+        return recent with
+        {
+            Events = balanced, EarlierOmitted = recent.EarlierOmitted || unique.Length > balanced.Length
+        };
     }
 
     /// <summary>
@@ -174,11 +202,13 @@ public sealed class DeploymentTelemetryStore(
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
     /// <param name="search">The optional plain-text search term.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>A task returning bounded ordered history with omission and availability metadata.</returns>
     public async Task<DeploymentTerminalHistory> ReadPageAsync(Guid projectId, Guid deploymentId, long cursor,
-        bool backwards, int limit, CancellationToken cancellationToken, string? search = null)
+        bool backwards, int limit, CancellationToken cancellationToken, string? search = null, string? channel = null)
     {
         limit = Math.Clamp(limit, 1, 2000);
+        if (channel?.Length > 128) throw new ArgumentException("Log channel is limited to 128 characters.");
         var now = DateTimeOffset.UtcNow;
         var project = await db.Applications.AsNoTracking().Where(p => p.Id == projectId)
             .Select(p => new { p.UserId }).SingleOrDefaultAsync(cancellationToken);
@@ -188,7 +218,7 @@ public sealed class DeploymentTelemetryStore(
             .Where(d => d.Id == deploymentId && d.CsProject!.AppId == projectId)
             .Select(d => (DateTimeOffset?)d.CreatedAt).SingleOrDefaultAsync(cancellationToken);
         if (tenant == Guid.Empty || deploymentCreatedAt is null) return new DeploymentTerminalHistory([], false);
-        if (!specialized && cursor == 0 && backwards && string.IsNullOrEmpty(search))
+        if (!specialized && cursor == 0 && backwards && string.IsNullOrEmpty(search) && string.IsNullOrEmpty(channel))
         {
             var history = await postgres.ReadRecentAsync(projectId, deploymentId, limit, cancellationToken);
             history = history with { Events = history.Events.Select(redactor.RedactTerminal).ToArray() };
@@ -208,6 +238,9 @@ public sealed class DeploymentTelemetryStore(
               (nextDeploymentCreatedAt == null || r.TimestampUtc < nextDeploymentCreatedAt.Value))));
         if (cursor > 0) query = backwards ? query.Where(r => r.OrderId < cursor) : query.Where(r => r.OrderId > cursor);
         if (!string.IsNullOrEmpty(search)) query = query.Where(r => r.Message.Contains(search));
+        if (!string.IsNullOrEmpty(channel))
+            query = query.Where(r =>
+                (r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build")) == channel);
         var local = await (backwards ? query.OrderByDescending(r => r.OrderId) : query.OrderBy(r => r.OrderId))
             .Take(limit + 1).Select(r => new DeploymentTerminalLog(r.OrderId, r.ProjectId, r.DeploymentId,
                 r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build"), r.Message, r.Id, null,
@@ -229,7 +262,7 @@ public sealed class DeploymentTelemetryStore(
                 if (archive is not null)
                 {
                     var archived = await archive.ReadAsync(tenant, projectId, deploymentId, cursor, backwards,
-                        limit + 1, search, cancellationToken);
+                        limit + 1, search, cancellationToken, channel);
                     local.AddRange(
                         archived.Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
                     archiveAvailable = true;
@@ -239,6 +272,7 @@ public sealed class DeploymentTelemetryStore(
                 {
                     var pending = await gateway!.ReadPendingAsync(tenant, projectId, deploymentId, cancellationToken);
                     local.AddRange(pending.Events.Where(e => e.Channel is not null &&
+                                                             (string.IsNullOrEmpty(channel) || e.Channel == channel) &&
                                                              (cursor == 0 || (backwards
                                                                  ? e.OrderId < cursor
                                                                  : e.OrderId > cursor)) &&
@@ -253,9 +287,9 @@ public sealed class DeploymentTelemetryStore(
 
                 var remote = !string.IsNullOrEmpty(search) && logs is IDeploymentLogSearch searchable
                     ? await searchable.SearchAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
-                        search, cancellationToken)
+                        search, cancellationToken, channel)
                     : await logs.ReadAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
-                        cancellationToken, deploymentCreatedAt);
+                        cancellationToken, deploymentCreatedAt, channel);
                 local.AddRange(remote.Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
                 if (await db.DeploymentDiagnosticRecords.AnyAsync(
                         r => r.ProjectId == projectId && r.DeploymentId == deploymentId && r.DeliveryJson != null,

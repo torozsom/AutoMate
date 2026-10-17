@@ -1,5 +1,11 @@
 # Web/Components/Pages
 
+Dashboard deployment admission navigates to Project Details within the current interactive Blazor application.
+It does not open another browser tab or force a document reload. Project route changes retain the existing
+cancellation/generation fences. The latest deployment's saved logs can replay after failure or stop as well as while
+running; live collection leases still require an active latest deployment. History channel changes issue a fresh
+server-filtered page, resetting the cursor while preserving the selected channel across metric-only refreshes.
+
 Dashboard inventory and Project Details metadata refreshes coalesce overlapping notifications into a serial read plus
 one fresh pending pass, each using an independent operation scope. Queue/status callbacks read and mutate UI state
 only on the renderer dispatcher; failures are observed and disposed pages reject late notifications. Metadata failures

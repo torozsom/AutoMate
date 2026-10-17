@@ -39,13 +39,13 @@ jobs:
         # requiring a visual behavior change in this refactor. Make this blocking when that baseline debt is fixed.
         continue-on-error: true
         run: node --test Test/Web/Browser/console-ui.test.cjs
-      - name: Verify formatting of changed C# files
+      - name: Check whitespace in changed C# lines
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         shell: bash
         run: |
-          mapfile -t changed < <(git diff --name-only --diff-filter=ACMR "$BASE_SHA" HEAD -- '*.cs')
-          if ((${#changed[@]})); then
-            dotnet format whitespace AutoMate.slnx --no-restore --verify-no-changes --include "${changed[@]}"
-          fi
+          # Rider owns code layout. Reject trailing whitespace and added blank lines at EOF,
+          # while accepting both Windows and Unix line endings and IDE-specific indentation.
+          git -c core.whitespace=blank-at-eol,blank-at-eof,cr-at-eol \
+            diff --check "$BASE_SHA...HEAD" -- '*.cs'

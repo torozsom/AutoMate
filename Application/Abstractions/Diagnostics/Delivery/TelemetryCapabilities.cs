@@ -13,6 +13,7 @@ public sealed record TelemetryCapabilities(int Version, IReadOnlyList<string> Ar
     /// <summary>Archive operations required before Web reads or maintains permanent history.</summary>
     public static IReadOnlyList<string> RequiredArchiveOperations { get; } = Array.AsReadOnly(new[]
     {
-        "logs", "metrics", "metric-batch", "assessment", "assessment-metrics", "import", "import-metrics", "delete"
+        "logs", "channel-logs", "metrics", "metric-batch", "assessment", "assessment-metrics", "import",
+        "import-metrics", "delete"
     });
 }

@@ -4,6 +4,7 @@ using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Diagnostics.History;
 using Application.Data.Apps;
 using Application.Diagnostics;
+using Domain.Enums.Deployments;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR;
@@ -87,7 +88,9 @@ public sealed class LogHub(
             }
 
             // Only a latest deployment can collect live output; historical subscriptions remain read-only.
-            if (app.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt)?.Id == deploymentId)
+            var latest = app.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt);
+            if (latest?.Id == deploymentId && latest.Status is DeploymentStatus.Starting
+                    or DeploymentStatus.Running)
                 viewers.Renew(Context.ConnectionId, projectId, deploymentId.Value);
             var history = await DeploymentTracing.RunAsync(DeploymentOperation.SignalRReplay, projectId, deploymentId,
                 Context.ConnectionAborted, () => afterOrderId > 0

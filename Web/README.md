@@ -2,6 +2,11 @@
 
 Blazor Server presentation, HTTP endpoints, SignalR, and the composition root.
 
+For local IDE development, run `./deploy/manage.ps1 start -Ide` from the repository root (or
+`bash deploy/manage.sh start --ide`), then select Web's `https` launch profile in the IDE. Web listens at
+`https://localhost:7288`; Docker hosts PostgreSQL, Redis and Telemetry. The Docker Web container stays stopped.
+See [IDE configuration and OAuth callbacks](../deploy/README.md#preferred-workflow-web-in-the-ide).
+
 ## Source inventory
 
 - `appsettings.Development.json`

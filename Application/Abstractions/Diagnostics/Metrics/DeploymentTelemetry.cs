@@ -118,9 +118,11 @@ public interface IDeploymentLogQuery
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
     /// <param name="start">The lower bound of the selected observation window.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>A task returning a bounded ordered page of redacted log envelopes.</returns>
     Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenantId, Guid projectId, Guid deploymentId,
-        long cursor, bool backwards, int limit, CancellationToken cancellationToken, DateTimeOffset? start = null);
+        long cursor, bool backwards, int limit, CancellationToken cancellationToken, DateTimeOffset? start = null,
+        string? channel = null);
 
     /// <summary>
     ///     Confirms exact event identities are queryable before removing their durable buffer.
@@ -245,6 +247,7 @@ public interface IDeploymentHistoryService
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="search">The optional plain-text search term.</param>
     /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>
     ///     A task returning an owned terminal page with opaque navigation cursors and availability
     ///     metadata.
@@ -253,12 +256,14 @@ public interface IDeploymentHistoryService
     ///     The cursor is malformed, oversized, nonpositive, or belongs to a different resource.
     /// </exception>
     /// <remarks>
-    ///     The compatibility implementation adapts legacy cursor reads and does not apply the
-    ///     search term.
+    ///     The compatibility implementation adapts legacy cursor reads, does not apply the search
+    ///     term and explicitly rejects channel-filtered reads.
     /// </remarks>
     async Task<TelemetryLogPage> ReadLogsV2Async(Guid user, Guid project, Guid deployment, string? cursor,
-        bool backwards, int limit, string? search = null, CancellationToken token = default)
+        bool backwards, int limit, string? search = null, CancellationToken token = default, string? channel = null)
     {
+        if (!string.IsNullOrEmpty(channel))
+            throw new NotSupportedException("This history adapter does not support channel-filtered paging.");
         var history = await ReadLogsAsync(user, project, deployment,
             TelemetryHistoryCursor.Decode(cursor, project, deployment),
             backwards, limit, token);

@@ -87,7 +87,10 @@
                     </div>
                 </div>
                 <label class="telemetry-control">Channel<select class="form-select" @bind="_channel"
-                                                                @bind:after="RenderTerminalAsync">@foreach (var channel in _history?.Events.Select(e => e.TerminalChannel).Distinct() ?? [])
+                                                                @bind:after="LatestAsync">
+                        <option value="">All channels</option>
+                        @foreach (var channel in new[] { "build", "github-actions", "web", "azure-web", "azure-system", "azure-db" }
+                                          .Concat(_history?.Events.Select(e => e.TerminalChannel) ?? []).Distinct())
                         {
                             <option value="@channel">@channel</option>
                         }</select></label>
@@ -436,12 +439,11 @@
             var route = (ProjectId, DeploymentId);
             await using var scope = ServiceScopes.CreateAsyncScope();
             var service = scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>();
-            var page = await service.ReadLogsV2Async(_owner, ProjectId, DeploymentId, cursor, true, 500, _search, request.Token);
+            var page = await service.ReadLogsV2Async(_owner, ProjectId, DeploymentId, cursor, true, 500, _search, request.Token, _channel);
             if (route != (ProjectId, DeploymentId) || request.IsCancellationRequested) return;
             _earlierCursor = page.EarlierCursor;
             _history = new DeploymentTerminalHistory(page.Events, page.EarlierCursor is not null, page.Availability, page.CanAdvanceCursor);
             _authorized = true;
-            _channel = _history.Events.Any(e => e.TerminalChannel == _channel) ? _channel : _history.Events.FirstOrDefault()?.TerminalChannel ?? "";
             _error = null;
             await RenderTerminalAsync();
         }
@@ -478,7 +480,7 @@
     {
         if (_terminal is null || _history is null) return;
         await _terminal.ClearAsync();
-        var output = string.Concat(_history.Events.Where(e => e.TerminalChannel == _channel).Select(DeploymentTerminalPresentation.Format));
+        var output = string.Concat(_history.Events.Where(e => string.IsNullOrEmpty(_channel) || e.TerminalChannel == _channel).Select(DeploymentTerminalPresentation.Format));
         await _terminal.WriteAsync(output.Length > 0 ? output : "[No saved output in this terminal page.]\r\n");
     }
 

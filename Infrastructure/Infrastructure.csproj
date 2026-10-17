@@ -27,8 +27,10 @@
         <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.13"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3"/>
         <PackageReference Include="Octokit" Version="14.0.0"/>
-        <PackageReference Include="Scriban" Version="7.5.0"/>
+        <PackageReference Include="Scriban" Version="7.5.1"/>
         <PackageReference Include="Sodium.Core" Version="1.4.1"/>
+        <!-- Override MimeKit's transitive minimum with the patched PKCS implementation in every consuming host. -->
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13"/>
     </ItemGroup>
 
     <ItemGroup>

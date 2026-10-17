@@ -20,6 +20,10 @@ the guide includes a separate read-only queue snapshot and telemetry freshness c
 
 ## Liveness and AI readiness
 
+Both probe routes explicitly allow anonymous requests so the authentication fallback cannot redirect Docker health
+checks to OAuth. Other routes retain their existing authorization policy. Regression tests exercise both probes
+under an authenticated fallback and verify that an ordinary route still challenges anonymous requests.
+
 Both hosting profiles register `AnalysisReadinessHealthCheck` through the Application readiness port with a five-second
 timeout. `/health` remains lightweight liveness and excludes the AI check. `/health/ready` runs the tagged AI check and
 returns uncached JSON with only `status`, `configuration` and `queue`. Exceptions, descriptions, provider identifiers,
@@ -79,8 +83,11 @@ Infrastructure types are registered only in Web/Configs.
 at startup. [Telemetry hosting](../../docs/deployment-telemetry.md) documents operator secrets and retention controls.
 
 Telemetry startup validation uses `TelemetryStorageOptionsValidator` to identify individual invalid settings without
-exposing their values. Local IDE launches can import the complete pilot settings with
-`deploy/telemetry/Configure-TelemetryDevelopment.ps1`.
+exposing their values. Local Development launches load the loopback telemetry endpoints from
+`Web/appsettings.Development.json` and credentials plus the machine-specific CA certificate path from Web user secrets.
+These persist across restarts; no PowerShell import is required for normal startup. The optional
+`deploy/telemetry/Configure-TelemetryDevelopment.ps1` importer is for initial setup or intentionally changed pilot
+credentials/endpoints. Containerized Telemetry continues to read its Compose environment and persistent volumes.
 
 Both hosting profiles require LokiMimir/DiskGateway. Web supplies those defaults before binding operator settings and
 rejects PostgresOutbox even when explicitly configured. Endpoint and gateway credentials remain mandatory. Legacy

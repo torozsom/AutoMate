@@ -42,19 +42,20 @@ public sealed class DeploymentHistoryService(
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="search">The optional plain-text search term.</param>
     /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>
     ///     A task returning an owned terminal page with opaque navigation cursors and availability
     ///     metadata.
     /// </returns>
     /// <exception cref="ArgumentException">Log search is limited to 256 characters.</exception>
     public async Task<TelemetryLogPage> ReadLogsV2Async(Guid user, Guid project, Guid deployment, string? cursor,
-        bool backwards, int limit, string? search = null, CancellationToken token = default)
+        bool backwards, int limit, string? search = null, CancellationToken token = default, string? channel = null)
     {
         await AuthorizeAsync(user, project, deployment, token);
         if (search?.Length > 256) throw new ArgumentException("Log search is limited to 256 characters.");
         var history = await store.ReadPageAsync(project, deployment,
             TelemetryHistoryCursor.Decode(cursor, project, deployment),
-            backwards, limit, token, search);
+            backwards, limit, token, search, channel);
         return TelemetryHistoryCursor.Page(history, project, deployment);
     }
 

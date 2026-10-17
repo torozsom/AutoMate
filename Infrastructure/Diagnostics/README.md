@@ -1,5 +1,11 @@
 # Deployment Diagnostics
 
+Initial project replay balances its bounded page across terminal channels and separately retrieves finite build and
+GitHub Actions output so a runtime tail cannot hide those phases. Incremental replay retains its confirmed cursor.
+Deployment-history channel filters apply before archive, pending-buffer, legacy SQL and Loki page limits, including
+text search and earlier-page reads. Ownership checks, read-time redaction and durable archive writes are unchanged.
+The private Telemetry host must advertise `channel-logs`; update it before running the matching Web build.
+
 Infrastructure owns the diagnostic redactor, redacted diagnostic store, and bounded delivery pipeline. It receives
 normalized events from provider adapters, redacts them before every sink, adds structured logs/traces/metrics, and fans
 out safe terminal data after durable persistence. Runtime logs and sampled metrics are collected and persisted

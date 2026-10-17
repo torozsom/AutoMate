@@ -2,7 +2,7 @@
 Run again after adding users or recreating the database. Existing projects/deployments update live. #>
 param(
     [string]$SecretsDirectory = (Join-Path $PSScriptRoot '../../.telemetry/pilot'),
-    [string]$PostgresContainer = 'automate-postgres',
+    [string]$PostgresContainer = 'postgres',
     [string]$PostgresAddress = 'host.docker.internal:5432',
     [string]$GrafanaUrl = 'http://localhost:3000'
 )

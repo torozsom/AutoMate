@@ -1,5 +1,10 @@
 # Deployment analysis infrastructure
 
+Manual admission distinguishes an enabled account missing from `ApprovedTenantIds` using `tenant_not_approved`,
+without creating work or consuming quota. This is useful after switching databases, where a newly created local
+account can have a different identity. Approval must target the current account; automatic-analysis and spending
+settings remain independent. Safe readback retains this code and the bounded budget-configuration reasons.
+
 ## Staged rollout and egress shutdown
 
 Default-off feature/automatic/egress flags and the approved owner-account allowlist define the rollout cohort;
@@ -544,6 +549,12 @@ Recognized Azure firewall/private endpoint and blocked-resource phrases become f
 `resource_blocked` console classifications; other denial prose becomes `unknown`. Inspection remains bounded and
 memory-only. Raw response text is never retained, exported or persisted; permanent failure/no-retry behavior is
 unchanged.
+
+The Azure message "A Virtual Network is configured for this resource" is also classified as `network_access_denied`.
+For local hosts, compare the current outbound public IPv4 address with the resource's selected-network IP rules;
+an ISP or VPN change can invalidate a previously working allowlist. Add only the approved host address, preserving
+existing IP/subnet rules and default-deny. Verify access with an authenticated read-only `GET /openai/v1/models`
+before requesting a fresh analysis through AutoMate; local readiness does not test Azure connectivity.
 
 The October 13 investigation verified a ready deployment, matching endpoint and matching resource key, then reproduced a
 firewall/network

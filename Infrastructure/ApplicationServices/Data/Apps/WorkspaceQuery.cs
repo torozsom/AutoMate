@@ -133,7 +133,7 @@ public sealed class WorkspaceQuery(
                 d.Outcome
             })
             .Select(g => new
-            { g.Key.Year, g.Key.Month, g.Key.Day, g.Key.Hour, g.Key.Minute, g.Key.Outcome, Count = g.Count() })
+                { g.Key.Year, g.Key.Month, g.Key.Day, g.Key.Hour, g.Key.Minute, g.Key.Outcome, Count = g.Count() })
             .ToListAsync(token);
         var duration = await selected.Where(d => d.FinishedAt != null && d.FinishedAt >= d.CreatedAt)
             .Select(d => (double?)(d.FinishedAt!.Value - d.CreatedAt).TotalSeconds).AverageAsync(token);

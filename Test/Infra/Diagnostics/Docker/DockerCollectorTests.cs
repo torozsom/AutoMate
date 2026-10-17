@@ -210,7 +210,7 @@ public sealed class DockerCollectorTests
         var publisher = new RecordingPublisher();
         var containers = Proxy<IContainerOperations>((method, _) => method.Name == "InspectContainerAsync"
             ? Task.FromResult(new ContainerInspectResponse
-            { ID = "foreign", Config = new Config { Labels = new Dictionary<string, string>() } })
+                { ID = "foreign", Config = new Config { Labels = new Dictionary<string, string>() } })
             : throw new InvalidOperationException("Must not subscribe to unowned container"));
         var client = Proxy<IDockerClient>((method, _) =>
             method.Name == "get_Containers" ? containers : throw new NotSupportedException());

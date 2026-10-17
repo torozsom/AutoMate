@@ -382,7 +382,7 @@ public sealed class AnalysisBudgetTests
                 var lease = Guid.NewGuid();
                 var until = Clock.Now.AddDays(2);
                 db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem
-                { Analysis = analysis, LeaseId = lease, LeaseUntil = until });
+                    { Analysis = analysis, LeaseId = lease, LeaseUntil = until });
                 results.Add(new Work(analysis.Id, Deployments[index], lease, until, 1));
             }
 

@@ -182,7 +182,7 @@ public sealed class DiagnosticDeliveryTests
         return new ServiceCollection().AddSingleton<IDeploymentDiagnosticStore>(store)
             .AddSingleton<ILogStreamer>(live)
             .AddSingleton<IOptions<TelemetryStorageOptions>>(Options.Create(new TelemetryStorageOptions
-            { Backend = "LokiMimir", DeliveryMode = "DiskGateway" })).BuildServiceProvider();
+                { Backend = "LokiMimir", DeliveryMode = "DiskGateway" })).BuildServiceProvider();
     }
 
     /// <summary>

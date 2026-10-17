@@ -34,7 +34,10 @@ public enum AnalysisSkipReason
     BudgetConfigurationInvalid,
 
     /// <summary>Today's reservations use a different currency from the current configuration.</summary>
-    BudgetCurrencyMismatch
+    BudgetCurrencyMismatch,
+
+    /// <summary>The current owner-account identity has not been approved for provider egress.</summary>
+    TenantNotApproved
 }
 
 /// <summary>
@@ -61,6 +64,7 @@ public static class AnalysisSkipPolicy
             AnalysisSkipReason.BudgetNotConfigured => "budget_not_configured",
             AnalysisSkipReason.BudgetConfigurationInvalid => "budget_configuration_invalid",
             AnalysisSkipReason.BudgetCurrencyMismatch => "budget_currency_mismatch",
+            AnalysisSkipReason.TenantNotApproved => "tenant_not_approved",
             _ => "unavailable"
         };
     }
@@ -74,6 +78,8 @@ public static class AnalysisSkipPolicy
     {
         return code switch
         {
+            "tenant_not_approved" =>
+                "AI analysis was skipped because this account is not in the operator's AI-approved account list. Ask the operator to verify AiAnalysis:ApprovedTenantIds for the current account.",
             "quota_exceeded" =>
                 "AI analysis was skipped because this project's daily analysis allowance has been reached.",
             "unsupported_data" => "AI analysis was skipped because no supported diagnostic data was available.",

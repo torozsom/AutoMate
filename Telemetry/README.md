@@ -1,5 +1,9 @@
 # Deployment telemetry service (SelfHosted and SaaS)
 
+The private archive log route accepts an optional `channel` query parameter and filters it before selecting the
+bounded page. This host advertises `channel-logs`; deploy it before the matching Web build. Existing spool/archive
+volumes remain compatible, and no database migration or credential rotation is required for channel paging.
+
 This separate private ASP.NET Core process owns the single disk-spool writer, Loki/Mimir delivery and hourly daily
 aggregation. Web replicas hold no telemetry disk volume. Application contracts are in
 `Application/Abstractions/Diagnostics`; filesystem, provider and EF implementations remain in Infrastructure.

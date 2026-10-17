@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 
-namespace Web.Components.Layout;
+namespace Web.Components.Layout.Shell;
 
 /// <summary>
 ///     Renders responsive navigation and persists the selected browser theme.

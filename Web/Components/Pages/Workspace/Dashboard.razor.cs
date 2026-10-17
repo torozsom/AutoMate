@@ -552,7 +552,7 @@ public partial class Dashboard : ComponentBase, IDisposable
             }
 
             if (_disposed || owner != _currentUserId) return;
-            await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
+            NavigationManager.NavigateTo($"/project/{finalConfig.ProjectId}");
             return;
         }
 
@@ -575,7 +575,7 @@ public partial class Dashboard : ComponentBase, IDisposable
         }
 
         if (_disposed || owner != _currentUserId) return;
-        await JSRuntime.InvokeVoidAsync("open", $"/project/{finalConfig.ProjectId}", "_blank");
+        NavigationManager.NavigateTo($"/project/{finalConfig.ProjectId}");
     }
 
 

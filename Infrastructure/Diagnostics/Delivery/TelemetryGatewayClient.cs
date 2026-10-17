@@ -89,12 +89,13 @@ public sealed class TelemetryGatewayClient(
     /// <param name="limit">The maximum number of returned or processed records.</param>
     /// <param name="search">The optional plain-text search term.</param>
     /// <param name="token">Cancels the operation when supported by the underlying work.</param>
+    /// <param name="channel">Optional terminal channel, filtered before applying the page limit.</param>
     /// <returns>A task returning a bounded ordered page of redacted log envelopes.</returns>
     public async Task<IReadOnlyList<DeploymentLogEnvelope>> ReadAsync(Guid tenant, Guid project, Guid deployment,
-        long cursor, bool backwards, int limit, string? search, CancellationToken token)
+        long cursor, bool backwards, int limit, string? search, CancellationToken token, string? channel = null)
     {
         return await SendArchiveAsync<DeploymentLogEnvelope[]>(
-            $"archive/{tenant:N}/{project:N}/{deployment:N}?cursor={cursor}&backwards={backwards.ToString().ToLowerInvariant()}&limit={Math.Clamp(limit, 1, 2001)}&search={Uri.EscapeDataString(search ?? "")}",
+            $"archive/{tenant:N}/{project:N}/{deployment:N}?cursor={cursor}&backwards={backwards.ToString().ToLowerInvariant()}&limit={Math.Clamp(limit, 1, 2001)}&search={Uri.EscapeDataString(search ?? "")}&channel={Uri.EscapeDataString(channel ?? "")}",
             null, token);
     }
 

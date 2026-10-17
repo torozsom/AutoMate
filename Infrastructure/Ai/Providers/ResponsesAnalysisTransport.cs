@@ -384,6 +384,8 @@ internal sealed class ResponsesAnalysisTransport(
                 {
                     var text = message.GetString() ?? string.Empty;
                     reason = text.Contains("Virtual Network/Firewall", StringComparison.OrdinalIgnoreCase) ||
+                             text.Contains("A Virtual Network is configured for this resource",
+                                 StringComparison.OrdinalIgnoreCase) ||
                              text.Contains("approved private endpoint", StringComparison.OrdinalIgnoreCase)
                         ? "network_access_denied"
                         : text.Contains("resource has been temporarily blocked", StringComparison.OrdinalIgnoreCase)

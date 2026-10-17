@@ -56,7 +56,7 @@ public sealed class AzureArmCredentialsProviderTests
         });
         var provider = new AzureArmCredentialsProvider(db, new StubHttpClientFactory(handler),
             Options.Create(new AzureMonitorLogsOptions
-            { TokenEndpoint = "https://example.invalid/token", ClientId = "client", ClientSecret = "secret" }));
+                { TokenEndpoint = "https://example.invalid/token", ClientId = "client", ClientSecret = "secret" }));
         if (success)
         {
             var credentials = await provider.GetAsync(user.Id, CancellationToken.None);

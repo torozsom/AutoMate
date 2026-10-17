@@ -76,7 +76,8 @@ separately from bounded
 rendered live identities and does not advance on failed backend reads. Self-hosted pages also periodically catch up.
 
 Runtime logs and metrics are automatically saved while the deployment is active, including while the page is closed.
-Project terminals replay only Starting/Running deployments; Stopped/Failed pages initialize empty. Permanent historical
+Project terminals replay the latest deployment across Starting/Running/Stopped/Failed states. Initial replay reserves
+space for build and GitHub Actions channels alongside runtime output. Permanent historical
 reads remain on deployment-history pages. Metric history defaults to 60-second sampling; local live cards update with
 each
 Docker stats observation (normally every 1–2 seconds). The metric cards restore the latest

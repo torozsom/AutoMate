@@ -653,7 +653,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
 
         if (app is { SourceType: SourceType.Local } && app.CsProjects.FirstOrDefault(csp => csp.IsWebProject) is
-            { } csProject)
+                { } csProject)
         {
             var config = await ProjectScanner.AnalyzeDependenciesAsync(app, csProject, token);
             if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;
@@ -966,21 +966,21 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
     /// <summary>
-    ///     Only the currently active deployment can replay output on the live project page.
+    ///     Restores the latest deployment's saved output even after it stops or fails.
     /// </summary>
-    /// <returns>True only when the newest deployment is Starting or Running.</returns>
+    /// <returns>True when the project has a recorded deployment to replay.</returns>
     private bool CanReplayTerminalHistory()
     {
-        return GetLatestStatus() is DeploymentStatus.Starting or DeploymentStatus.Running;
+        return GetLatestDeployment() is not null;
     }
 
     /// <summary>
-    ///     Rejects replies after disposal, navigation, deployment replacement or an inactive status.
+    ///     Rejects replies after disposal, navigation or deployment replacement.
     /// </summary>
     /// <param name="project">Project identity associated with this operation.</param>
     /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
     /// <param name="generation">Page generation captured before the asynchronous read.</param>
-    /// <returns>True only when the component, page generation, project and active deployment still match.</returns>
+    /// <returns>True only when the component, page generation, project and selected deployment still match.</returns>
     private bool IsCurrentTerminalRead(Guid project, Guid? deployment, long generation)
     {
         return !_analysisDisposed && generation == _pageGeneration && project == ProjectId &&
@@ -1298,7 +1298,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     }
 
     /// <summary>
-    ///     Joins the live stream and restores only the current active deployment's bounded output.
+    ///     Joins the project stream and restores the latest deployment's bounded saved output.
     /// </summary>
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     private async Task JoinLogHubGroupAsync()
@@ -1335,7 +1335,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                         : history.Availability;
                 if (history.EarlierOmitted)
                     _lastHistoryAvailability = _terminalReplay.LastOrderId == 0
-                        ? "Earlier output omitted; showing the most recent 500 events."
+                        ? "Showing bounded saved output across channels. Open deployment history for earlier output."
                         : "More output is available and will load on the next refresh.";
                 foreach (var terminalLog in history.Events)
                 {

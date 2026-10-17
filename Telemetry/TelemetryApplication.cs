@@ -140,12 +140,11 @@ public static class TelemetryApplication
          */
         app.MapPost("/ingest", async (TelemetryIngestRequest request, TelemetryAdmissionPolicy admission,
             DiskTelemetrySpool spool,
-            IDiagnosticRedactor redactor, IOptions<TelemetryStorageOptions> options, CancellationToken token) =>
+            IDiagnosticRedactor redactor, IOptions<TelemetryStorageOptions> _, CancellationToken token) =>
         {
             var e = request.Event;
-            if (e is null || e.ProjectId == Guid.Empty || e.EventId is null || e.EventId == Guid.Empty ||
-                e.TerminalChannel is null ||
-                e.Message is null || e.Message.Length > 8192 || e.TerminalChannel.Target?.Length > 128 ||
+            if (e.ProjectId == Guid.Empty || e.EventId is null || e.EventId == Guid.Empty || e.Message.Length > 8192 ||
+                e.TerminalChannel.Target?.Length > 128 ||
                 request.Channel?.Length > 128 || !Enum.IsDefined(e.TerminalChannel.Kind) ||
                 !Enum.IsDefined(e.Source) || !Enum.IsDefined(e.Severity) || !Enum.IsDefined(e.Kind) ||
                 e.TimestampUtc > DateTimeOffset.UtcNow.AddMinutes(5) ||
@@ -214,14 +213,14 @@ public static class TelemetryApplication
 
         /* Read owned log history, defaulting to the latest backward page of 500 records when options are absent. */
         app.MapGet("/archive/{tenant:guid}/{project:guid}/{deployment:guid}", async (Guid tenant, Guid project,
-            Guid deployment, long? cursor, bool? backwards, int? limit, string? search,
+            Guid deployment, long? cursor, bool? backwards, int? limit, string? search, string? channel,
             AutoMateDbContext db, IDeploymentArchive archive, CancellationToken token) =>
         {
             if (!await db.Deployments.AnyAsync(d => d.Id == deployment && d.CsProject!.AppId == project &&
                                                     d.CsProject.Application.UserId == tenant, token))
                 return Results.StatusCode(403);
             return Results.Ok(await archive.ReadAsync(tenant, project, deployment, cursor ?? 0, backwards ?? true,
-                limit ?? 500, search, token));
+                limit ?? 500, search, token, channel));
         });
 
         /* Delegate bounded partition reads; denied ownership becomes 403 and invalid request arguments become 400. */
@@ -262,8 +261,7 @@ public static class TelemetryApplication
             IDeploymentArchive archive, CancellationToken token) =>
         {
             var e = request.Event;
-            if (e is null || e.Message is null || e.TerminalChannel is null ||
-                request.EventId == Guid.Empty || request.OrderId <= 0 || e.Message.Length > 8192 ||
+            if (request.EventId == Guid.Empty || request.OrderId <= 0 || e.Message.Length > 8192 ||
                 request.Channel?.Length > 128 || e.TerminalChannel.Target?.Length > 128 ||
                 !Enum.IsDefined(e.Source) || !Enum.IsDefined(e.Kind) || !Enum.IsDefined(e.Severity) ||
                 !Enum.IsDefined(e.TerminalChannel.Kind) || e.TimestampUtc > DateTimeOffset.UtcNow.AddMinutes(5) ||
@@ -287,7 +285,7 @@ public static class TelemetryApplication
                     d.Id == request.Deployment && d.CsProject!.AppId == request.Project &&
                     d.CsProject.Application.UserId == request.Tenant, token))
                 return Results.StatusCode(403);
-            if (request.Points is null || request.Points.Count > 3000) return Results.BadRequest();
+            if (request.Points.Count > 3000) return Results.BadRequest();
             await archive.ImportMetricsAsync(request, token);
             return Results.Ok(new { });
         });
