@@ -3,7 +3,7 @@
 set -euo pipefail
 
 usage() {
-    printf 'Usage: bash manage.sh [start|stop|restart|status|pull|down] [--build] [--dry-run]\n'
+    printf 'Usage: bash manage.sh [start|stop|restart|status|pull|down] [--ide] [--build] [--dry-run]\n'
 }
 
 action="${1:-start}"
@@ -16,10 +16,12 @@ esac
 
 build=false
 dry_run=false
+ide=false
 for option in "$@"; do
     case "$option" in
         --build) build=true ;;
         --dry-run) dry_run=true ;;
+        --ide) ide=true ;;
         *) usage >&2; exit 2 ;;
     esac
 done
@@ -41,9 +43,12 @@ run_compose() {
     printf ' %s' "$@"
     printf '\n'
     if [[ "$dry_run" == true ]]; then return; fi
-    docker compose --project-directory "$directory" \
-        --env-file "$directory/.env" --file "$directory/compose.yaml" \
-        --project-name "automate-$stack" "$@"
+    local arguments=(compose --project-directory "$directory"
+        --env-file "$directory/.env" --file "$directory/compose.yaml")
+    if [[ "$ide" == true && -f "$directory/compose.ide.yaml" ]]; then
+        arguments+=(--file "$directory/compose.ide.yaml")
+    fi
+    docker "${arguments[@]}" --project-name "automate-$stack" "$@"
 }
 
 if [[ "$action" == stop || "$action" == restart || "$action" == down ]]; then
@@ -55,6 +60,8 @@ if [[ "$action" == stop || "$action" == restart || "$action" == down ]]; then
 fi
 
 if [[ "$action" == start || "$action" == restart ]]; then
+    # Avoid running Docker Web workers alongside the IDE Web process.
+    if [[ "$ide" == true ]]; then run_compose app stop automate; fi
     for stack in "${startup_order[@]}"; do
         if [[ "$build" == true && "$stack" == app ]]; then
             run_compose "$stack" up -d --build

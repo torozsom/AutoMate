@@ -1,5 +1,9 @@
 # Local ASP.NET applications
 
+For Web builds/debugging in the IDE at `https://localhost:7288`, use `../manage.ps1 start -Ide` (or
+`bash ../manage.sh start --ide`). `compose.ide.yaml` leaves Docker Web stopped and publishes the Telemetry host on
+loopback port 9450. The following instructions retain the full Docker alternative.
+
 Start the infrastructure and telemetry stacks, then run from this folder:
 
 ```powershell

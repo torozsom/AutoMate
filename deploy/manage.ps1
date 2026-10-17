@@ -6,6 +6,7 @@ param(
     [string]$Action = 'start',
 
     [switch]$Build,
+    [switch]$Ide,
     [switch]$DryRun
 )
 
@@ -27,9 +28,13 @@ function Invoke-StackCompose {
     $arguments = @(
         'compose', '--project-directory', $stackDirectory,
         '--env-file', (Join-Path $stackDirectory '.env'),
-        '--file', (Join-Path $stackDirectory 'compose.yaml'),
-        '--project-name', "automate-$Stack"
-    ) + $ComposeArguments
+        '--file', (Join-Path $stackDirectory 'compose.yaml')
+    )
+    $ideOverride = Join-Path $stackDirectory 'compose.ide.yaml'
+    if ($Ide -and (Test-Path -LiteralPath $ideOverride)) {
+        $arguments += @('--file', $ideOverride)
+    }
+    $arguments += @('--project-name', "automate-$Stack") + $ComposeArguments
 
     Write-Host "[$Stack] docker compose $($ComposeArguments -join ' ')"
     if ($DryRun) { return }
@@ -47,6 +52,8 @@ if ($Action -in @('stop', 'restart', 'down')) {
 }
 
 if ($Action -in @('start', 'restart')) {
+    # Stop a previously containerized Web so only the IDE runs deployment workers.
+    if ($Ide) { Invoke-StackCompose -Stack 'app' -ComposeArguments @('stop', 'automate') }
     foreach ($stack in $startupOrder) {
         $upArguments = @('up', '-d')
         if ($Build -and $stack -eq 'app') { $upArguments += '--build' }

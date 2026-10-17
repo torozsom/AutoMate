@@ -1,5 +1,35 @@
 # Run AutoMate locally
 
+## Preferred workflow: Web in the IDE
+
+Start only Web's Docker dependencies from the repository root:
+
+```powershell
+./deploy/manage.ps1 start -Ide
+```
+
+Or use `bash deploy/manage.sh start --ide`. In the IDE, select the **Web** project and its **https** launch profile,
+then build/run normally. Web opens at **https://localhost:7288**. Its existing trusted development certificate and
+.NET user secrets provide HTTPS and local credentials. Web applies migrations during startup.
+
+IDE mode adds loopback ports 5432 (PostgreSQL), 6379 (Redis) and 9450 (Telemetry). It stops the Docker Web container,
+then runs the persistent Telemetry host without depending on Docker Web. The base Docker Compose files remain
+available unchanged. Only run one Web instance to avoid duplicate deployment workers.
+
+GitHub must register `https://localhost:7288/signin-github` as a callback for the configured OAuth app. Use
+`https://localhost:7288` as the homepage. If retaining the Docker login option, keep its HTTP callback as an additional
+registered URI. Microsoft sign-in likewise needs `https://localhost:7288/signin-microsoft` registered when used.
+
+Stop Web through the IDE. Stop its Docker dependencies with `./deploy/manage.ps1 stop -Ide` or
+`bash deploy/manage.sh stop --ide`. Use the same IDE flag with `restart`, `status`, `pull` or `down`. The scripts do
+not launch or terminate an IDE-owned process. Starting without the IDE flag selects the full Docker Web workflow
+below; stop IDE Web before doing so.
+
+IDE connection strings must use `localhost`, database `automate`, and the passwords from the current infrastructure
+`.env`. The gateway URL is `http://localhost:9450`; storage queries use the existing scoped CA and authorization at
+`https://localhost:9443`. This machine's Web user secrets have been synchronized to those settings without changing
+unrelated options. ASP.NET does not load the Compose `.env` files automatically.
+
 ## One-command control
 
 From this folder, choose PowerShell or Bash:

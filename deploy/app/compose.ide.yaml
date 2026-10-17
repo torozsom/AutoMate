@@ -1,0 +1,9 @@
+# Run only the Telemetry host in Docker when the IDE owns Web.
+services:
+  automate:
+    profiles: [ container-web ]
+  telemetry:
+    ports: [ "127.0.0.1:9450:8080" ]
+    depends_on: !override
+      dependencies: { condition: service_completed_successfully }
+      spool-permissions: { condition: service_completed_successfully }
