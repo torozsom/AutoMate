@@ -1,26 +1,34 @@
-# Web/Components/Shared
+# Reusable presenters
 
-Related files are grouped by responsibility. Existing .NET namespaces and public identities are preserved.
+Analysis, deployment settings, terminal/dialog, metrics and workspace/project presentation components.
 
-- `Analysis/` — `Analysis/AssessmentContextControls.razor`, `Analysis/AssessmentResultSection.razor`,
-  `Analysis/DeploymentAnalysisPanel.razor`, `Analysis/DeploymentAnalysisPanel.razor.css`,
-  `Analysis/DeploymentAnalysisSection.razor`.
-- `Configuration/` — `Configuration/ConfigurationForm.razor`, `Configuration/ConfigurationForm.razor.cs`,
-  `Configuration/DeploymentConfigurationDetails.razor`, `Configuration/RecordedValueRow.razor`.
-- `Console/` — `Console/ConsoleDialog.razor`, `Console/Terminal.razor`, `Console/ThemeToggle.razor`,
-  `Console/DeploymentTerminalPresentation.cs`.
-- `Metrics/` — `Metrics/MetricRangePicker.razor`, `Metrics/MetricStatisticsView.razor`,
-  `Metrics/ProjectTelemetrySummary.razor`, `Metrics/StatisticsPager.razor`, `Metrics/TelemetryChart.razor`,
-  `Metrics/TelemetryPreferences.razor`, `Metrics/TelemetryPresentation.cs`.
-- `Projects/` — `Projects/DeploymentBadge.razor`, `Projects/ProjectSectionNavigation.razor`,
-  `Projects/WorkflowBadge.razor`, `Projects/GitHubRepositoryReference.cs`, `Projects/GitHubRepositoryUrlParser.cs`.
-- `Workspace/` — `Workspace/KpiCard.razor`, `Workspace/ProjectInventoryTable.razor`,
-  `Workspace/WorkspaceOverviewPanel.razor`, `Workspace/WorkspaceOverviewView.razor`.
+## Contents
 
-## Application policy and scope boundaries
+| Module                                   | Responsibility                                                            |
+|------------------------------------------|---------------------------------------------------------------------------|
+| [Analysis](Analysis/README.md)           | Assessment choices, consent, result management and safe answer rendering. |
+| [Configuration](Configuration/README.md) | Next-launch editing and immutable recorded-value presentation.            |
+| [Console](Console/README.md)             | Terminal, modal, theme and source-aware output formatting.                |
+| [Metrics](Metrics/README.md)             | Frozen ranges, charts, numeric paging and observed units.                 |
+| [Projects](Projects/README.md)           | Status/workflow badges, repository parsing and section navigation.        |
+| [Workspace](Workspace/README.md)         | Owner-scoped overview, KPI and inventory presenters.                      |
 
-ConfigurationForm delegates its existing cloud validation rules and first-error precedence to
-Application.Orchestration.CloudRuntimeConfigurationValidation. The form still owns binding, local port validation,
-default-name editing and deployment confirmation. Provider/template validation remains separate and unchanged.
-TelemetryPreferences resolves owner and history dependencies within a fresh operation scope instead of sharing circuit
-EF services. Its existing loading, selection and failure messages are unchanged.
+## Usage and integration
+
+Choose a child module by behavior. Page containers supply owned IDs/state and actions; reusable views render data or
+invoke focused scoped Application reads. Keep provider/EF implementations outside shared controls. Existing Razor
+namespaces may differ from folder names; use declarations/imports as the source of truth.
+
+## Contracts and lifecycle
+
+Callbacks delegate ownership-sensitive mutations to authorized workflows. Respect cancellation, frozen windows, nullable
+observations and JS disposal. Render untrusted/provider-authored text as text, not markup. Distinguish next-launch
+configuration from immutable recorded history and live snapshots from sampled/aggregated metrics.
+
+## Related documentation
+
+- [Parent module](../README.md)
+- [Page owners](../Pages/README.md)
+- [Independent operations](../../Services/README.md)
+- [Contracts](../../../Application/README.md)
+- [Presentation checks](../../../Test/Web/Presentation/ConsoleRenderingTests.cs)

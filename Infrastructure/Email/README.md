@@ -1,17 +1,29 @@
-# Email
+# SMTP email adapter
 
-Email delivery infrastructure adapter implementation.
+Transactional email delivery through configurable Gmail-compatible SMTP settings.
 
-## Source inventory
+## Contents
 
-- `EmailOptions.cs`
-- `GmailSenderService.cs`
+| File                                           | Types or asset       | Responsibility                                                                                |
+|------------------------------------------------|----------------------|-----------------------------------------------------------------------------------------------|
+| [EmailOptions.cs](EmailOptions.cs)             | `EmailOptions`       | Configuration options for the email sender service.                                           |
+| [GmailSenderService.cs](GmailSenderService.cs) | `GmailSenderService` | Sends transactional email through an SMTP provider configured with Gmail-compatible settings. |
 
-## Boundary
+## Usage and integration
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
-behavior.
+GmailSenderService implements IEmailSenderService and is consumed by account registration/verification. EmailOptions
+controls sender identity, SMTP host/port and app password. The host binds options and registers the sender.
+
+## Contracts and lifecycle
+
+Defaults are smtp.gmail.com:587 and sender name AutoMate. The implementation owns SMTP
+connection/authentication/send/disconnect and propagates cancellation. Credentials and verification message/link content
+are sensitive; do not log whole messages/options. Send completion is not confirmation the recipient received or read
+mail.
 
 ## Related documentation
 
-- [Solution navigation map](../../navigation.md)
+- [Parent module](../README.md)
+- [Email port](../../Application/Abstractions/Email/README.md)
+- [Verification consumer](../ApplicationServices/Auth/README.md)
+- [Authentication workflow tests](../../Test/Infra/Auth/AuthServiceTests.cs)

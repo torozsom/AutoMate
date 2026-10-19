@@ -1,49 +1,31 @@
-# Infrastructure Application Services
+# EF-backed application services
 
-Current EF-backed implementations of Application service contracts. This transitional module owns direct
-AutoMateDbContext access.
+Concrete account/project services and deployment workflows that currently require direct metadata persistence.
 
-Registration, verification, GitHub/Azure account persistence and project saves log internal actor/project GUIDs after
-persistence. Consent changes and ownership denials use finite enabled/disabled states. Names, emails, external account
-identifiers and tokens are not security-audit fields.
+## Contents
 
-## Source inventory
+| Module                                   | Responsibility                                                        |
+|------------------------------------------|-----------------------------------------------------------------------|
+| [Auth](Auth/README.md)                   | Registration, verification, login and connected-provider persistence. |
+| [Data](Data/README.md)                   | Owner-scoped project/workspace and account persistence.               |
+| [Orchestration](Orchestration/README.md) | Local/cloud launch, monitoring and history lifecycle.                 |
 
-- Submodules are documented by their own README files.
+## Usage and integration
 
-## Boundary
+Auth implements Application authentication; Data implements owner-scoped lifecycle/read services; Orchestration
+coordinates local/cloud preparation, status and runtime supervision. These are current EF-backed implementations, not a
+new Application-layer dependency on EF.
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
-behavior.
+## Contracts and lifecycle
+
+Do not return tracked aggregates merely because a contract uses Domain-shaped data. Focused query services return
+detached, owner-scoped projections; legacy graph reads remain for compatibility. Audit logs use internal GUIDs and
+finite state, not names/emails/tokens. Explicit execution clocks retain existing constructors and system defaults.
 
 ## Related documentation
 
-- [Solution navigation map](../../navigation.md)
-
-Data/Apps/ApplicationService persists exact-project AI consent only after filtering application ownership and C#
-project membership. Explicit consent edits create missing remote-project configuration with the existing .NET default;
-missing local configuration or ownership returns false without changes. Sibling projects remain untouched. The existing
-application-level
-consent overload remains available. Analysis admission and provider egress continue to enforce current policy.
-
-## Workspace projections
-
-Data/Apps/WorkspaceQuery implements IWorkspaceQuery through owner-scoped SQL projections and daily aggregate reads.
-It loads no entity graph for inventory, isolates missing resource statistics, and performs no provider requests.
-
-Workspace Overview also accepts absolute UTC windows, buckets recorded outcomes adaptively and uses IMetricExploration
-for detailed/long-range resource projections. It never queries Azure and isolates resource failures from deployment
-counts.
-
-## Bounded project details
-
-`Data/Apps/ProjectDetailsQuery.cs` implements both current-project read ports. It applies ownership to every query,
-reads current metadata without older deployments, aggregates all recorded outcomes in SQL and pages history six rows
-at a time. The split PostgreSQL reads share a repeatable snapshot (or retain a caller-owned transaction) so concurrent
-updates cannot mix current state, totals and paging; isolated SQLite verification uses serializable reads. Equal newest
-timestamps remain in the current graph; the history page keeps creation/identity descending
-ordering. No additional index or migration is introduced. The old ApplicationService reads remain compatible.
-
-Authentication and cloud admission/processing/monitoring now accept explicit execution clocks through additive
-constructors. Existing constructors retain TimeProvider.System, and time is sampled at the original expiry, lease,
-retry and completion decision points. Registration compensation and verification boundaries are unchanged.
+- [Parent module](../README.md)
+- [Auth contract](../../Application/Auth/README.md)
+- [Data contracts](../../Application/Data/README.md)
+- [Workflow ports](../../Application/Orchestration/README.md)
+- [Persistence](../Data/README.md)

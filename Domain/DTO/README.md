@@ -1,42 +1,33 @@
-# DTO
+# Data transfer contracts
 
-Shared data-transfer records used by application workflows and adapters.
+Shared inputs and projections exchanged by application ports, scanners and provider adapters.
 
-## Source inventory
+## Contents
 
-- `Azure/AzureCloudCredentialsDto.cs`
-- `Azure/AzureContainerAppRuntimeStreamRequest.cs`
-- `Azure/AzureOidcSetupResultDto.cs`
-- `Deployment/CloudDeploymentRequestDto.cs`
-- `Projects/CsProjectDto.cs`
-- `Deployment/DatabaseConfigDto.cs`
-- `Projects/DbProviderRuleDto.cs`
-- `Deployment/DeploymentConfigDto.cs`
-- `GitHub/GitHubRepositoryDto.cs`
-- `GitHub/GitHubWorkflowRunDto.cs`
-- `GitHub/GitHubWorkflowJobDto.cs`
-- `Projects/LocalProjectDto.cs`
-- `Projects/ProjectMetadataDto.cs`
-- `Templating/TemplateFile.cs`
-- `Templating/TemplateManifestRuleDto.cs`
+| Module                             | Responsibility                                                     |
+|------------------------------------|--------------------------------------------------------------------|
+| [Azure](Azure/README.md)           | Credentials, federated-identity setup and monitoring requests.     |
+| [Deployment](Deployment/README.md) | Local/cloud configuration, databases and repository launch inputs. |
+| [GitHub](GitHub/README.md)         | Repository import, workflow progress and log projections.          |
+| [Projects](Projects/README.md)     | Filesystem discovery, .NET metadata and detection rules.           |
+| [Templating](Templating/README.md) | Manifest rules and generated artifacts.                            |
 
-## Boundary
+## Usage and integration
 
-Keep this module independent of Application, Infrastructure, Web, framework APIs, and provider SDKs.
+Choose a child module by workflow, then follow its concrete consumer
+links. [Application ports](../../Application/Abstractions/README.md) define operations using these contracts;
+Infrastructure performs scanning, rendering and provider interactions. Persisted ownership and execution state belong
+to [Entities](../Entities/README.md).
+
+## Contracts and lifecycle
+
+Records here are not uniformly immutable: several expose mutable collections, and DeploymentConfigDto is a mutable
+class. Empty strings and collections are initialization defaults, not evidence of valid input. Some DTOs contain
+credentials or generated secret-bearing content; consult their leaf guides before logging or persisting them. DTO
+construction does not validate paths, authorize owners or protect stored values.
 
 ## Related documentation
 
-- [Solution navigation map](../../navigation.md)
-
-## Folder organization
-
-Folders group related files while retaining the module's existing .NET namespaces and public contracts.
-
-- `Azure/` — `Azure/AzureCloudCredentialsDto.cs`, `Azure/AzureContainerAppRuntimeStreamRequest.cs`,
-  `Azure/AzureOidcSetupResultDto.cs`.
-- `Deployment/` — `Deployment/CloudDeploymentRequestDto.cs`, `Deployment/DatabaseConfigDto.cs`,
-  `Deployment/DeploymentConfigDto.cs`.
-- `GitHub/` — `GitHub/GitHubRepositoryDto.cs`, `GitHub/GitHubWorkflowJobDto.cs`, `GitHub/GitHubWorkflowRunDto.cs`.
-- `Projects/` — `Projects/CsProjectDto.cs`, `Projects/LocalProjectDto.cs`, `Projects/ProjectMetadataDto.cs`,
-  `Projects/DbProviderRuleDto.cs`.
-- `Templating/` — `Templating/TemplateFile.cs`, `Templating/TemplateManifestRuleDto.cs`.
+- [Domain](../README.md)
+- [Deployment defaults](../Defaults/README.md)
+- [Infrastructure adapters](../../Infrastructure/README.md)

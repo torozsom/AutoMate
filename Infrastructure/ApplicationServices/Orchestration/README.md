@@ -1,86 +1,36 @@
-# Local deployment diagnostic supervision
+# Deployment execution workflows
 
-`LocalDeploymentOrchestrator` persists the deployment before preparation and registers the labeled inventory before
-Compose work. Safe phase, command and daemon observations use that deployment's Build channel. Stop operations register
-lifecycle collection before Compose down, then cancel and await the project's sources. Diagnostic startup failure is
-reported without failing an otherwise valid deployment.
+Local/cloud launch, durable SaaS scheduling, status persistence, snapshots and runtime supervision.
 
-Stop reuses an active deployment supervisor instead of rescanning dependencies and replacing healthy runtime sources.
-Successful Compose down persists Stopped before diagnostic cleanup, preventing runtime recovery during slow cleanup.
-Failed Compose down fails the queued stop job instead of recording a successful scheduler outcome.
-Source retirement is shared per target and awaited outside the registry gate: other projects can register/stop while a
-slow provider acknowledges cancellation. Replacements for the same project still await that retirement; a late stop
-cannot remove a replacement. Command exit, finite outcome, source cleanup and job completion have safe platform logs.
+## Contents
 
-`LocalDeploymentLogStreamManager` is a singleton hosted service implementing `ILocalDeploymentDiagnostics`. Its finite
-registry tracks every daemon/log/metrics task and awaits cancellation on replacement, stop and host shutdown. Each
-target
-owns a scoped Docker source; policy reads use separate scopes. Daemon collection runs during deployment operations or
-runtime interest. Runtime logs and metrics are automatic for the latest Starting or Running deployment, without viewing
-or preference gates. The
-five-second
-policy loop checks the latest deployment, restarts completed sources independently and cancels all runtime sources when
-the deployment becomes inactive. No static state or detached `Task.Run` loops own subscription lifetimes.
+| Module                                         | Responsibility                                                               |
+|------------------------------------------------|------------------------------------------------------------------------------|
+| [CloudPreparation](CloudPreparation/README.md) | Cloud validation, identity/artifact preparation and GitHub publication.      |
+| [CloudRuns](CloudRuns/README.md)               | Durable SaaS admission, launch leases, webhook monitoring and retention.     |
+| [Lifecycle](Lifecycle/README.md)               | Status persistence, snapshots, workflow progress and startup reconciliation. |
+| [Local](Local/README.md)                       | Docker deployment/stop and host-owned diagnostic supervision.                |
 
-`LocalRuntimeRecoveryService` registers missing supervisors for current running local deployments every 15 seconds.
-Supervisors open runtime subscriptions for active deployments independently of browser presence.
-`LocalDockerTargets` stores names, service tabs and ownership IDs only, never credentials or environment payloads.
+## Usage and integration
 
-Docker details and bounded replay limitations are documented in [Docker](../../Docker/README.md).
-Verification lives in `Test/Infra/Orchestration/LocalDiagnosticSupervisionTests.cs`.
+CloudPreparation builds provider resources/GitHub artifacts. CloudRuns owns durable admission/leases/webhook
+reconciliation. Local executes Docker and supervises sources. Lifecycle persists state/snapshots and reconciles startup.
+Application owns ports and the separate in-memory scheduler.
 
-Local deployment logging carries project/deployment GUID scopes and omits project names and filesystem paths from
-start/solution lookup messages. The shared status updater reports persistence failure type without the exception body;
-its non-throwing behavior and deployment notifications remain unchanged.
+## Contracts and lifecycle
 
-Local execution spans parent Compose/diagnostic children. GitHub spans correlate workflow/job/log phases. Deployment
-admission/status, source supervision and checkpoints are unchanged; durable queue propagation remains M6 work.
+Create deployment identity before reporting deployment-scoped failure; failures before persistence must not mutate an
+unrelated latest deployment. Keep completion outcome independent of runtime state. Database capture drives automatic AI
+wakeups, not project-only UI events.
 
-Cloud preparation carries project/deployment GUID scopes. Scheduler, monitor, metrics, retention and cleanup failures
-omit raw exceptions. Customer-visible preparation/run errors use fixed guidance instead of provider exception text;
-status, retries and lease recovery are unchanged.
+Local source lifetimes are host-owned/awaited; SaaS releases launch slots before remote monitoring. Clock-aware
+constructors retain system defaults. Exceptions can reach the separate bounded console sink; ordinary exports/customer
+guidance remain safe.
 
-Automatic AI admission now comes from database failure capture using the persisted deployment ID, independently of
-project-only UI events. It covers DeploymentStatusUpdater, SaaS cloud monitoring/processing and bulk startup cleanup.
-Local failure outcome publication/persistence uses an independent token so caller cancellation after deployment creation
-cannot suppress Failed persistence. Failures before any deployment is persisted do not invent an ID or fail an unrelated
-latest deployment. The first cloud preparation diagnostic runs inside the existing failure handler.
+## Related documentation
 
-Deployment failure handlers now pass exceptions to ILogger so the host can produce a bounded redacted console snapshot.
-The shared ordinary-provider/export boundary remains metadata-only. Customer-visible cloud/local failure guidance,
-statuses, cancellation and retry behavior are unchanged.
-
-## Deployment history update (2026-10-08)
-
-DeploymentSnapshotCapture whitelists non-secret launch settings before provider side effects, then records discovered
-runtime/commit/image facts. Current configuration edits never rewrite previous snapshots. Preparation outcomes persist
-independently of later stops.
-
-DeploymentCleanupHostedService reconciles only Local-source deployments without Azure resource/workflow identity.
-Remote Azure launches and running deployments never become Failed/Stopped merely because Docker has no matching
-Compose project. Azure runtime recovery owns their verified resource/revision mapping after restart.
-
-## Folder organization
-
-Folders group related files while retaining the module's existing .NET namespaces and public contracts.
-
-- `CloudPreparation/` — `CloudPreparation/CloudCsProjectResolver.cs`, `CloudPreparation/CloudDeploymentDefaults.cs`,
-  `CloudPreparation/CloudDeploymentOrchestrator.cs`, `CloudPreparation/CloudDeploymentRequestValidator.cs`,
-  `CloudPreparation/CloudRepositorySecretBuilder.cs`, `CloudPreparation/OrchestrationNameNormalizer.cs`.
-- `CloudRuns/` — `CloudRuns/CloudDeploymentRunService.cs`, `CloudRuns/CloudDeploymentScheduler.cs`,
-  `CloudRuns/CloudRunMetricsService.cs`, `CloudRuns/CloudRunMonitor.cs`, `CloudRuns/CloudRunMonitorService.cs`,
-  `CloudRuns/CloudRunProcessor.cs`, `CloudRuns/CloudRunRetentionService.cs`, `CloudRuns/CloudRunSnapshot.cs`.
-- `Lifecycle/` — `Lifecycle/DeploymentCleanupHostedService.cs`, `Lifecycle/DeploymentSnapshotCapture.cs`,
-  `Lifecycle/DeploymentStatusUpdater.cs`, `Lifecycle/GitHubWorkflowMonitor.cs`.
-- `Local/` — `Local/LocalDeploymentLogStreamManager.cs`, `Local/LocalDeploymentOrchestrator.cs`,
-  `Local/LocalDockerTargets.cs`, `Local/LocalRuntimeRecoveryService.cs`.
-
-## Refinement boundaries
-
-`Lifecycle/DeploymentReconciliation.cs` owns verified-local startup status reconciliation. The host retains nonblocking
-startup, its original token, catch/log behavior and immediate StopAsync completion. Shutdown cancellation/awaiting is
-intentionally excluded from this behavior-preserving change.
-
-Cloud run admission, processing, monitoring and scheduler lease extension use an explicit TimeProvider with system
-clock defaults and the original public constructors retained. Existing retry jitter, polling delays, lease lengths,
-transaction boundaries and status transitions remain unchanged.
+- [Parent module](../README.md)
+- [Ports](../../../Application/Orchestration/README.md)
+- [Failure capture](../../Data/README.md)
+- [Diagnostics](../../Diagnostics/README.md)
+- [Scheduling tests](../../../Test/Infra/Orchestration/DeploymentJobWorkerTests.cs)

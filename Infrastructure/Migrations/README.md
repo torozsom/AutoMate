@@ -1,48 +1,45 @@
-# Infrastructure/Migrations
+# EF schema history
 
-Related files are grouped by responsibility. Existing .NET namespaces and public identities are preserved.
+Chronological metadata schema changes grouped into folders by responsibility, plus the latest EF model snapshot.
 
-- `AnalysisQueue/` — `AnalysisQueue/20261005091947_AddAnalysisQueueLeases.cs`,
-  `AnalysisQueue/20261005091947_AddAnalysisQueueLeases.Designer.cs`,
-  `AnalysisQueue/20261005094754_AddAnalysisRetryScheduling.cs`,
-  `AnalysisQueue/20261005094754_AddAnalysisRetryScheduling.Designer.cs`,
-  `AnalysisQueue/20261005102239_AddAnalysisAdmissionReceipts.cs`,
-  `AnalysisQueue/20261005102239_AddAnalysisAdmissionReceipts.Designer.cs`,
-  `AnalysisQueue/20261005104851_AddFailedDeploymentAnalysisEvents.cs`,
-  `AnalysisQueue/20261005104851_AddFailedDeploymentAnalysisEvents.Designer.cs`.
-- `AnalysisResults/` — `AnalysisResults/20261002062913_AddDeploymentDiagnosticsAndAiAnalysis.cs`,
-  `AnalysisResults/20261002062913_AddDeploymentDiagnosticsAndAiAnalysis.Designer.cs`,
-  `AnalysisResults/20261004201350_AddAiAnalysisResultProvenance.cs`,
-  `AnalysisResults/20261004201350_AddAiAnalysisResultProvenance.Designer.cs`,
-  `AnalysisResults/20261009091530_StatusAwareAssessments.cs`,
-  `AnalysisResults/20261009091530_StatusAwareAssessments.Designer.cs`.
-- `Checkpoints/` — `Checkpoints/20260928200050_AddGitHubWorkflowCheckpoints.cs`,
-  `Checkpoints/20260928200050_AddGitHubWorkflowCheckpoints.Designer.cs`,
-  `Checkpoints/20260928212104_AddAzureContainerAppLogCheckpoints.cs`,
-  `Checkpoints/20260928212104_AddAzureContainerAppLogCheckpoints.Designer.cs`,
-  `Checkpoints/20261004112450_AddCloudTelemetryCollectorLeases.cs`,
-  `Checkpoints/20261004112450_AddCloudTelemetryCollectorLeases.Designer.cs`,
-  `Checkpoints/20261011001842_AzureLogIngestionCursors.cs`,
-  `Checkpoints/20261011001842_AzureLogIngestionCursors.Designer.cs`.
-- `CloudRuns/` — `CloudRuns/20261003101739_AddSaasCloudRuns.cs`,
-  `CloudRuns/20261003101739_AddSaasCloudRuns.Designer.cs`, `CloudRuns/20261003103139_AddCloudInstallationBudget.cs`,
-  `CloudRuns/20261003103139_AddCloudInstallationBudget.Designer.cs`,
-  `CloudRuns/20261003105303_AddCloudWebhookBranch.cs`, `CloudRuns/20261003105303_AddCloudWebhookBranch.Designer.cs`,
-  `CloudRuns/20261003105945_AddCloudAdmissionIndexes.cs`,
-  `CloudRuns/20261003105945_AddCloudAdmissionIndexes.Designer.cs`.
-- `Identity/` — `Identity/20260522134720_Initial.cs`, `Identity/20260522134720_Initial.Designer.cs`,
-  `Identity/20260524171414_RefactorRemoteUser.cs`, `Identity/20260524171414_RefactorRemoteUser.Designer.cs`.
-- `RetentionAndPolicy/` — `RetentionAndPolicy/20261005190054_AddAiTenantBudgets.cs`,
-  `RetentionAndPolicy/20261005190054_AddAiTenantBudgets.Designer.cs`,
-  `RetentionAndPolicy/20261008202231_PreserveDeploymentHistory.cs`,
-  `RetentionAndPolicy/20261008202231_PreserveDeploymentHistory.Designer.cs`,
-  `RetentionAndPolicy/20261010141504_AutomaticTelemetryCollection.cs`,
-  `RetentionAndPolicy/20261010141504_AutomaticTelemetryCollection.Designer.cs`.
-- `Telemetry/` — `Telemetry/20261002144610_AddTerminalLogReplay.cs`,
-  `Telemetry/20261002144610_AddTerminalLogReplay.Designer.cs`,
-  `Telemetry/20261003161839_AddSpecializedTelemetryStorage.cs`,
-  `Telemetry/20261003161839_AddSpecializedTelemetryStorage.Designer.cs`,
-  `Telemetry/20261003170209_AddTelemetryBufferAccounting.cs`,
-  `Telemetry/20261003170209_AddTelemetryBufferAccounting.Designer.cs`,
-  `Telemetry/20261004111715_AddSaaSTelemetryAnalytics.cs`,
-  `Telemetry/20261004111715_AddSaaSTelemetryAnalytics.Designer.cs`.
+## Contents
+
+| File                                                                   | Types or asset                   | Responsibility                                                   |
+|------------------------------------------------------------------------|----------------------------------|------------------------------------------------------------------|
+| [AutoMateDbContextModelSnapshot.cs](AutoMateDbContextModelSnapshot.cs) | `AutoMateDbContextModelSnapshot` | Latest generated EF model used for future migration comparisons. |
+
+| Module                                             | Responsibility                                                      |
+|----------------------------------------------------|---------------------------------------------------------------------|
+| [AnalysisQueue](AnalysisQueue/README.md)           | AI leases, scheduled retries, receipts and failure wakeups.         |
+| [AnalysisResults](AnalysisResults/README.md)       | Diagnostic/analysis baseline, provenance and assessment results.    |
+| [Checkpoints](Checkpoints/README.md)               | GitHub/Azure cursors and cloud collector leases.                    |
+| [CloudRuns](CloudRuns/README.md)                   | SaaS run/outbox/webhook schema and admission indexes.               |
+| [Identity](Identity/README.md)                     | Initial account/project schema and connected-Azure identity fields. |
+| [RetentionAndPolicy](RetentionAndPolicy/README.md) | Owner budgets, permanent history and automatic collection policy.   |
+| [Telemetry](Telemetry/README.md)                   | Replay ordering, legacy delivery metadata and daily analytics.      |
+
+## Usage and integration
+
+Start with the subsystem folder, then follow timestamped migration IDs. Each migration's .cs file defines Up/Down and
+its .Designer.cs companion captures the historical target model. AutoMateDbContextModelSnapshot is EF's latest
+comparison baseline. Folder organization does not determine execution order.
+
+## Contracts and lifecycle
+
+Preserve migration IDs, namespace/attributes, SQL, designer pairs and generated markers. A designer is historical
+metadata, not the runtime mapping. Review schema changes against Data/AutoMateModelConfiguration and dependent workers;
+apply through the established deployment workflow after ordering compatible binaries. This documentation pass
+creates/applies no migration and changes no database.
+
+Analysis/telemetry changes include backfills and trigger installation, so an empty-schema comparison alone cannot
+establish upgrade correctness. Down operations can remove data; inspect actual SQL and recovery requirements before
+using them.
+
+## Related documentation
+
+- [Parent module](../README.md)
+- [Runtime mappings](../Data/README.md)
+- [Ordered AI upgrades](../../docs/ai-analysis.md)
+- [Archive deployment ordering](../../docs/adr/0004-permanent-deployment-history.md)
+- [Real migration-chain regressions](../../Test/Infra/Ai/Admission/AnalysisBudgetPostgresTests.cs)
+- [Disposable PostgreSQL verification](../../deploy/verification/README.md)

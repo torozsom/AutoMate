@@ -1,42 +1,35 @@
-# Hubs
+# Authorized live project streams
 
-SignalR hub and strongly typed browser callback contract for project-scoped streams. The client must authorize and join
-its project group again after a SignalR reconnect because group membership belongs to a connection, not a user.
-Joining requires a short-lived protected token minted in the authenticated Blazor circuit, project ownership, and a
-deployment
-belonging to that project. The join returns bounded redacted history after subscription, allowing clients to merge
-buffered live events by database ordering cursor without gaps or duplicates.
+SignalR LogHub and typed browser callback contract for terminal output and numeric observations.
 
-An authorized join for the latest deployment also renews a 45-second live runtime viewing lease. Project details
-renews through its existing catch-up handshake. Leaving/disconnecting removes interest; abandoned connections expire.
-Historical subscriptions do not enable collection. Runtime output is automatically collected and saved for replay while
-active, including with every browser closed.
+## Contents
 
-Connection transport buffers are capped at 64 KiB in each direction. Live sends have cancellable deadlines; one slow
-connection cannot accumulate unbounded writes or indefinitely occupy the diagnostic dispatcher. Reconnect continues to
-use bounded persisted history and event identity deduplication.
+| File                           | Types or asset | Responsibility                                                                     |
+|--------------------------------|----------------|------------------------------------------------------------------------------------|
+| [ILogClient.cs](ILogClient.cs) | `ILogClient`   | SignalR client interface for receiving real-time logs and metrics from the server. |
+| [LogHub.cs](LogHub.cs)         | `LogHub`       | Authorizes project log subscriptions and manages project-specific SignalR groups.  |
 
-If a reload or navigation disconnects during replay, the hub ends the canceled read without reporting a failed
-subscription or confirming a replay cursor. Provider cancellation on an active connection remains an error.
+## Usage and integration
 
-## Source inventory
+LogHub maps at /loghub. The authenticated Blazor presenter mints a short-lived protected subscription token;
+JoinProjectGroup validates it, resolves project ownership/deployment membership, joins the connection group and returns
+bounded redacted history. ILogClient defines stable terminal/notice/legacy metrics plus additive typed metric callbacks.
 
-- `ILogClient.cs`
-- `LogHub.cs`
+## Contracts and lifecycle
 
-## Boundary
+Group membership belongs to a connection: reconnect must authorize/join again and merge buffered live data by durable
+order/event identity. Historical subscriptions do not start collection. Latest-deployment joins renew expiring viewer
+interest, but runtime collection remains automatic with browsers closed.
 
-Keep presentation behavior here. Components, hubs, routes, and services use Application contracts; concrete
-Infrastructure types are registered only in Web/Configs.
+Transport buffers are 64 KiB each direction; live sends have cancellable deadlines. Disconnect/navigation cancellation
+ends replay without confirming a failed read cursor; provider cancellation on an active connection remains a failure.
+Tokens, connection IDs and payloads stay out of custom trace fields.
 
 ## Related documentation
 
-- [Solution navigation map](../../navigation.md)
-
-Join/leave/replay emit correlated child spans. Replay disconnects are Canceled/Unset, active-provider cancellation is
-Failed/Error and invalid tokens/access are Denied/Error. Tokens, identities, connection IDs and payloads are excluded.
-The .NET server source provides invocation parents;
-see [SignalR diagnostics](https://learn.microsoft.com/en-us/aspnet/core/signalr/diagnostics?view=aspnetcore-10.0).
-
-ILogClient.ReceiveDeploymentMetrics adds deployment-scoped numeric observations with provider timestamps.
-Existing authorized project groups and ReceiveContainerMetrics remain compatible.
+- [Parent module](../README.md)
+- [Server sends](../Services/RealTimeLogStreamer.cs)
+- [Join/replay consumer](../Components/Pages/Projects/README.md)
+- [Viewer contract](../../Application/Abstractions/Diagnostics/Delivery/README.md)
+- [Cancellation tests](../../Test/Web/Diagnostics/LogHubCancellationTests.cs)
+- [Replay tests](../../Test/Web/Projects/ProjectTerminalReplayTests.cs)

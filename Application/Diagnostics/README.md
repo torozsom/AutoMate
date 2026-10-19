@@ -1,59 +1,55 @@
-# Platform observability
+# Operational observability
 
-The [operator monitoring guide](../../docs/ai-analysis-operations.md) maps these exact metric/audit contracts to
-dashboard panels, alert formulas, queue metadata snapshots and investigation procedures. Backend name normalization,
-attempt-versus-result semantics and missing-data handling are explicit; no AI queue-depth metric is assumed.
+Shared activity sources, meters, fixed audit events, tracing wrappers and deployment diagnostic options.
 
-`AutoMateTelemetry` owns stable deployment/security activity sources and meters. Metrics use finite source/kind/channel
-labels; identifiers belong in approved log/trace correlation, never metric dimensions.
+## Contents
 
-`OperationalLog` emits structured ILogger audit events using fixed `AuditOperation` and `AuditOutcome` names and stable
-operation event IDs (1000-1005). `BeginCorrelation` accepts only deployment, analysis and project GUIDs. The event API
-accepts no free-form messages, users, paths, exception objects, provider data or diagnostic context. Invalid enum values
-produce Unknown rather than arbitrary names. Started/canceled events are Information; discarded events are Debug;
-denials/failures/invalid
-results
-are Warning; normal completion/unavailability is Information. These events do not authorize LLM egress.
+| File                                                             | Types                                                                      | Responsibility                                                                            |
+|------------------------------------------------------------------|----------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| [AnalysisTelemetry.cs](AnalysisTelemetry.cs)                     | `AnalysisOperation`, `AnalysisOutcome`, `AnalysisTelemetry`, `Measurement` | Finite analysis operations/outcomes and disposable per-step activity/metric measurements. |
+| [AutoMateTelemetry.cs](AutoMateTelemetry.cs)                     | `AutoMateTelemetry`                                                        | Owns the stable OpenTelemetry source names emitted by AutoMate deployment workflows.      |
+| [DeploymentDiagnosticOptions.cs](DeploymentDiagnosticOptions.cs) | `DeploymentDiagnosticOptions`                                              | Controls the in-memory diagnostic delivery boundary.                                      |
+| [DeploymentTracing.cs](DeploymentTracing.cs)                     | `DeploymentOperation`, `DeploymentTraceOutcome`, `DeploymentTracing`       | Fixed deployment operation/outcome vocabulary and result-preserving activity wrappers.    |
+| [OperationalLog.cs](OperationalLog.cs)                           | `AuditOperation`, `AuditOutcome`, `OperationalLog`                         | Finite audit operations/outcomes, stable event IDs and GUID-only correlation scopes.      |
 
-Web configures actual OpenTelemetry scope capture, service resources and optional console/OTLP exporters. Existing
-framework/legacy logs pass through Web/Observability allowlists before registered providers and SDK exporters. This
-helper makes
-no global safety guarantee and does not persist diagnostic logs or metrics. Loki/Mimir storage stays behind its ports.
-Tests in `Test/Web/Diagnostics/OperationalLoggingTests.cs` capture actual SDK exports; worker tests verify terminal
-outcomes and
-correlation without contacting providers.
+## Usage and integration
 
-Scope capture and record copying follow
-the [OpenTelemetry .NET logging SDK documentation](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/docs/logs/customizing-the-sdk/README.md).
-OAuth emits Prepared after ticket processing, rather than claiming final cookie sign-in is complete.
+AutoMateTelemetry owns AutoMate.Security/AutoMate.Deployments sources and meters for deployment queues, cloud
+control-plane snapshots, security and collector/pipeline measurements. DeploymentTracing wraps fixed deployment
+operations. OperationalLog emits finite AuditOperation/AuditOutcome events with GUID correlation scopes.
+AnalysisTelemetry instruments claim/process/context/provider/renew/release/publish/retry without an OpenTelemetry SDK
+dependency.
 
-## Deployment tracing
+## Contracts and lifecycle
 
-`DeploymentTracing` uses AutoMate.Deployments with fixed names, finite source/outcome labels and GUID correlation only.
-Run/RunAsync preserve results, exception identity and cancellation, without exception events/descriptions or payload
-tags.
-Success predicates handle provider responses reporting failure without throwing. Children inherit the ambient parent;
-async dispatch retains its ingestion parent. Standalone Docker builds inherit available ambient correlation. Global
-framework trace attributes are sanitized by Web/Observability before export; spans with events/links are omitted.
+Metric dimensions use finite labels; project/deployment/analysis GUIDs belong only in approved correlation, not metric
+labels. No prompts, results, credentials, provider envelopes or arbitrary exception text belong in these helpers. Web
+configures SDK collection/export and global log/trace sanitization; these classes alone do not make all host logging
+safe or authorize egress.
 
-AuditOutcome.RetryScheduled records successful durable retry scheduling using the existing finite audit contract.
-It includes no provider payload, request text or exception details.
+OperationalLog uses stable event IDs 1000–1005 for defined operations, finite outcome names and Unknown for invalid
+enums. Failed/Denied/Challenged/InvalidResult are Warning, Discarded is Debug, others Information. CanceledByOwner
+follows committed cancellation; Prepared in OAuth does not claim cookie sign-in completed.
 
-AuditOutcome.CanceledByOwner is an Information event emitted after durable cancellation commits, with GUID-only
-analysis/deployment correlation. Caller/heartbeat cancellation continues to use the existing Debug Canceled outcome.
+DeploymentTracing preserves action results/exceptions and ambient parenting; async wrappers distinguish caller
+cancellation and optional success predicates. Activities use fixed names/outcomes without exception events or prose.
+Dispose directly started activities and finish the outcome explicitly.
 
-## Analysis workflow telemetry
+AnalysisTelemetry.Measurement must be disposed; Finish selects a finite outcome and disposal records
+duration/operations, balances active processing and ends the activity once. Queue wait measures eligible-to-claim time,
+not queue depth. Process duration is per attempt, excluding later backoff; token histograms record only known
+nonnegative usage, including a later-discarded result. These metrics are not an exactly-once billing ledger.
 
-`AnalysisTelemetry` owns `AutoMate.Analysis` activities and metrics without an OpenTelemetry SDK dependency.
-Fixed claim/process/context/provider/renew/release/publish/retry spans carry deployment and analysis GUIDs when known.
-Child steps inherit the processing trace. Outcomes are completed, failed, canceled, skipped, empty, discarded or
-retry_scheduled; no provider/model names, prompts, context, results or exception text enter attributes.
+DeploymentDiagnosticOptions defaults to buffer capacity 512, persistence timeout ten seconds and delivery timeout two
+seconds. Host validation and pipeline consumers enforce bounds/deadlines; merely constructing options does not configure
+a transport.
 
-`automate.analysis.operations` and `automate.analysis.duration` count/time steps by finite operation/outcome only.
-Filter provider/failed for provider failures and retry/retry_scheduled for committed retries. Process duration is per
-attempt, not total wall time across retry backoff. `automate.analysis.active` balances processing entry/exit on every
-path. `automate.analysis.queue.wait` measures successful acquisition from initial creation or retry eligibility,
-excluding scheduled backoff; it is not queue depth. Input/output token histograms record only validated known
-provider-reported usage, including a subsequently discarded result; absent usage is not reported as zero. These are
-operational measurements, not an exactly-once billing ledger. Web explicitly registers the source/meter and safe export
-policy in both profiles. No diagnostic payload persistence or provider enablement is introduced.
+## Related documentation
+
+- [Parent module](../README.md)
+- [Host wiring and options](../../Web/Configs/Hosting/ServiceConfiguration.cs)
+- [Export policies](../../Infrastructure/Observability/README.md)
+- [Diagnostic pipeline](../../Infrastructure/Diagnostics/Delivery/DeploymentDiagnosticPipeline.cs)
+- [Actual logging exports](../../Test/Web/Diagnostics/OperationalLoggingTests.cs)
+- [Trace regressions](../../Test/Web/Diagnostics/DeploymentTracingTests.cs)
+- [Metrics and operator interpretation](../../docs/ai-analysis-operations.md)
