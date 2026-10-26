@@ -1,50 +1,42 @@
-# Web Services
+# Web adapters and operation state
 
-Web transport adapters that implement Application contracts. `RealTimeLogStreamer` receives only redacted diagnostic
-terminal data from Infrastructure's hosted dispatcher and forwards its source-aware channel to project-authorized
-SignalR groups.
-Terminal messages include deployment ID and durable order cursor/event identity; safe availability notices use a
-separate
-callback when storage or delivery fails.
-`RealTimeLogStreamer` uses the cancellable SignalR client proxy with the existing `ILogClient` callback names and
-argument shapes. `DeploymentDiagnostics:DeliveryTimeoutSeconds` defaults to 2 seconds for terminal logs, live metrics
-and availability notices. Caller cancellation propagates; expiration cancels the write and reports a safe timeout.
-Saved logs remain recoverable through the existing replay path. Hub transport buffers are 64 KiB per direction.
+Live SignalR delivery, independent Application operation scopes, connected-cloud admission and renderer-local replay
+bookkeeping.
 
-## Source inventory
+## Contents
 
-- `RealTimeLogStreamer.cs`
+| File                                                                         | Types or asset                                                                            | Responsibility                                                                                               |
+|------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| [ConnectedCloudDeploymentAdmission.cs](ConnectedCloudDeploymentAdmission.cs) | `ConnectedCloudDeploymentAdmission`, `CloudConnectionState`, `CloudDeploymentPreparation` | Scoped cloud connection preparation, finite CloudConnectionState and credential-hidden admission object.     |
+| [ProjectTerminalReplayState.cs](ProjectTerminalReplayState.cs)               | `ProjectTerminalReplayState`                                                              | Owns bounded terminal buffering and replay deduplication for one renderer-owned project view.                |
+| [RealTimeLogStreamer.cs](RealTimeLogStreamer.cs)                             | `RealTimeLogStreamer`                                                                     | Streams deployment logs and container metrics to project-specific SignalR groups.                            |
+| [ScopedApplicationOperations.cs](ScopedApplicationOperations.cs)             | `ScopedApplicationOperations`                                                             | Executes independent application operations with fresh scoped dependencies instead of sharing circuit state. |
 
-## Boundary
+## Usage and integration
 
-Keep presentation behavior here. Components, hubs, routes, and services use Application contracts; concrete
-Infrastructure types are registered only in Web/Configs.
+RealTimeLogStreamer implements ILogStreamer using project groups and stable callback shapes. ScopedApplicationOperations
+creates/disposes a new async scope per independent call. ConnectedCloudDeploymentAdmission prepares connections without
+exposing credential properties and delegates ready admission in a fresh scope. ProjectTerminalReplayState centralizes
+bounded buffering/deduplication.
+
+## Contracts and lifecycle
+
+Live sends reapply text/metric validation at the final transport boundary. Caller cancellation and configured deadline
+expiry are distinct; cancel actual pending writes. Default terminal/metric/notice delivery deadline is two seconds.
+Saved logs remain recoverable if live delivery fails.
+
+Cloud preparation preserves Azure-before-GitHub lookup order and Dashboard owner-fence rules. The preparation object is
+operational/secret-bearing internally and must not be logged. ReplayState is renderer-owned: it retains 512 buffered
+events, 2,000 live identities, negative live-only orders and overflow state. Pages still own SignalR/render/subscription
+lifetimes.
 
 ## Related documentation
 
-- [Solution navigation map](../../navigation.md)
-
-SignalR writes emit fixed child spans with project GUIDs. Caller cancellation, deadline expiry and failures remain
-separate. Existing callbacks, arguments, routing and exceptions are unchanged; payloads and names are not span tags.
-
-The shared `IDiagnosticRedactor` is also enforced at the final SignalR write boundary for terminal text/metadata,
-availability notices and live metric display strings. This protects legacy/bypassed callers as well as the normal
-redacted pipeline. GUIDs, cursor/event identity, safe channels, callback names, cancellation and deadlines stay the
-same.
-
-ReceiveDeploymentMetrics is additive to the legacy CPU/memory callback. RealTimeLogStreamer validates fixed
-metric names/units, finite nonnegative values and bounded redacted resource names before authorized group delivery.
-
-## Application operation and presentation state boundaries
-
-`ScopedApplicationOperations` creates and asynchronously disposes a fresh scope for each independent application
-operation. Repository saves can overlap across rows without sharing a circuit-owned EF context. Exceptions and
-cancellation propagate to the existing page handlers.
-
-`ConnectedCloudDeploymentAdmission` preserves Azure-before-GitHub connection lookup order and the distinct Dashboard
-owner-fence/early-exit rules. `CloudDeploymentPreparation` exposes readiness and admission, never credential properties.
-Ready admissions call the Application CloudDeploymentAdmission boundary in another operation scope.
-
-`ProjectTerminalReplayState` owns renderer-local buffering, order deduplication, cursor confirmation and overflow state.
-The existing 512 buffered-event and 2,000 live-identity bounds, negative live-only orders and replay acceptance remain
-unchanged. SignalR, rendering and subscription lifetimes remain owned by the page.
+- [Parent module](../README.md)
+- [Streaming contract](../../Application/Abstractions/Logging/README.md)
+- [Groups/callbacks](../Hubs/README.md)
+- [Admission policy](../../Application/Orchestration/Cloud/README.md)
+- [Transport tests](../../Test/Web/Diagnostics/RealTimeLogStreamerTests.cs)
+- [Scope tests](../../Test/Web/Hosting/ScopedApplicationOperationsTests.cs)
+- [State tests](../../Test/Web/Projects/ProjectTerminalReplayStateTests.cs)
+- [Connection tests](../../Test/Web/Projects/ConnectedCloudDeploymentAdmissionTests.cs)

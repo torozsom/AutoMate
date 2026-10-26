@@ -30,32 +30,40 @@ public sealed class AzureContainerAppLiveLogsTests
         var pipe = new Pipe();
         var received = new TaskCompletionSource<AzureLiveLogRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         var collector = Create(request =>
         {
             Assert.Equal("aca-token", request.Headers.Authorization!.Parameter);
             Assert.Contains("follow=true", request.RequestUri!.Query);
             Assert.Contains("tailLines=100", request.RequestUri.Query);
+
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(pipe.Reader.AsStream()) };
         });
+
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var reading = collector.ReadAsync(ConsoleEndpoint(), "aca-token", record =>
         {
             received.TrySetResult(record);
+
             return Task.CompletedTask;
         }, () =>
         {
             connected.TrySetResult();
+
             return Task.CompletedTask;
         }, cancellation.Token);
+
         await connected.Task.WaitAsync(TimeSpan.FromSeconds(3));
         // Force split JSON/UTF-8 boundaries and include an invalid line before a valid stderr envelope.
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("bad json\n{\"TimeStamp\":\"2026-10-11T12:00:00Z\","));
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("\"Log\":\"árvíz\",\"Stream\":\"stderr\"}\n"));
         var actual = await received.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
         Assert.Equal("árvíz", actual.Message);
         Assert.Equal(DeploymentDiagnosticStream.StandardError, actual.Stream);
         Assert.False(reading.IsCompleted);
-        cancellation.Cancel();
+
+        await cancellation.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => reading);
         await pipe.Writer.CompleteAsync();
     }
@@ -71,11 +79,14 @@ public sealed class AzureContainerAppLiveLogsTests
                    "{\"TimeStamp\":\"2026-10-11T12:00:00Z\",\"Log\":\"next\"}";
         var collector = Create(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(text) });
         var records = new List<AzureLiveLogRecord>();
+
         await collector.ReadAsync(ConsoleEndpoint(), "token", record =>
         {
             records.Add(record);
+
             return Task.CompletedTask;
-        }, () => Task.CompletedTask, default);
+        }, () => Task.CompletedTask, CancellationToken.None);
+
         Assert.Equal("next", Assert.Single(records).Message);
     }
 
@@ -90,9 +101,11 @@ public sealed class AzureContainerAppLiveLogsTests
         var collector = Create(request =>
         {
             Assert.Equal("arm-token", request.Headers.Authorization!.Parameter);
+
             if (request.RequestUri!.AbsolutePath.EndsWith("/replicas"))
             {
                 Assert.Contains("/revisions/rev-1/replicas", request.RequestUri.AbsolutePath);
+
                 return DelegateHttpMessageHandler.Json("""
                                                        {"value":[{"name":"pod-1","properties":{"containers":[{"name":"web"},{"name":"db"}]}},
                                                                  {"name":"pod-2","properties":{"containers":[{"name":"web"}]}}]}
@@ -101,7 +114,9 @@ public sealed class AzureContainerAppLiveLogsTests
 
             return AppResponse();
         });
-        var endpoints = await collector.DiscoverAsync(Target(), default);
+
+        var endpoints = await collector.DiscoverAsync(Target(), CancellationToken.None);
+
         Assert.Equal(4, endpoints.Count);
         Assert.Single(endpoints, e => e.System);
         Assert.Contains(endpoints, e => e.Key == "pod-2/web" &&
@@ -125,10 +140,14 @@ public sealed class AzureContainerAppLiveLogsTests
         var collector = Create(_ =>
         {
             requests++;
+
             return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new
                 { properties = new { eventStreamEndpoint = endpoint } }));
         });
-        await Assert.ThrowsAsync<InvalidOperationException>(() => collector.DiscoverAsync(Target(), default));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            collector.DiscoverAsync(Target(), CancellationToken.None));
+
         Assert.Equal(1, requests);
     }
 
@@ -144,11 +163,15 @@ public sealed class AzureContainerAppLiveLogsTests
                                                        """, true, out var record));
         Assert.Equal(DeploymentDiagnosticSeverity.Warning, record!.Severity);
         Assert.Equal(TimeSpan.Zero, record.Timestamp.Offset);
+
         var db = AzureContainerAppLiveLogs.CreateEvent(Target(), ConsoleEndpoint() with { Container = "db" }, record);
+
         Assert.Equal("azure-db", db.TerminalChannel.Target);
         Assert.Equal(DeploymentDiagnosticComponent.Database, db.SourceIdentity!.Component);
         Assert.Equal("pod-1", db.Attributes!["replica"]);
+
         var web = AzureContainerAppLiveLogs.CreateEvent(Target(), ConsoleEndpoint(), record);
+
         Assert.Equal("cloud-web", web.TerminalChannel.Target);
         Assert.Equal(web.EventId,
             AzureContainerAppLiveLogs.CreateEvent(Target(web.DeploymentId), ConsoleEndpoint(), record).EventId);
@@ -167,11 +190,13 @@ public sealed class AzureContainerAppLiveLogsTests
         var publisher = new RecordingPublisher();
         var target = Target();
         var authCalls = 0;
+
         var collector = Create(request =>
         {
             if (request.RequestUri!.Host != "management.azure.com")
             {
                 Assert.Equal("aca-token", request.Headers.Authorization!.Parameter);
+
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent("""
@@ -185,7 +210,9 @@ public sealed class AzureContainerAppLiveLogsTests
             if (request.RequestUri.AbsolutePath.EndsWith("getAuthtoken"))
             {
                 Assert.Equal(HttpMethod.Post, request.Method);
+
                 Interlocked.Increment(ref authCalls);
+
                 return DelegateHttpMessageHandler.Json(
                     """{"properties":{"token":"aca-token","expires":"2099-01-01T00:00:00Z"}}""");
             }
@@ -193,12 +220,16 @@ public sealed class AzureContainerAppLiveLogsTests
             if (request.RequestUri.AbsolutePath.EndsWith("replicas"))
                 return DelegateHttpMessageHandler.Json(
                     """{"value":[{"name":"pod-1","properties":{"containers":[{"name":"web"}]}}]}""");
+
             return AppResponse();
         }, publisher);
+
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
         collector.Update(target, lifetime.Token);
         await publisher.Delivered.Task.WaitAsync(TimeSpan.FromSeconds(3));
         await collector.StopAsync().WaitAsync(TimeSpan.FromSeconds(3));
+
         Assert.Equal(2, authCalls);
         Assert.DoesNotContain(publisher.Events, e => e.Message == "wrong");
         Assert.Contains(publisher.Events, e => e.Message == "live" && e.TerminalChannel.Target == "cloud-web" &&
@@ -218,9 +249,11 @@ public sealed class AzureContainerAppLiveLogsTests
         var collector = Create(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
             { Content = new StringContent("private-provider-secret") }, publisher);
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
         collector.Update(Target(), lifetime.Token);
         await publisher.Notice.Task.WaitAsync(TimeSpan.FromSeconds(3));
         await collector.StopAsync();
+
         Assert.Contains(publisher.Events, e => e.Message.Contains("log-stream permission") &&
                                                e.TerminalChannel.Kind == DeploymentTerminalChannelKind.System);
         Assert.DoesNotContain(publisher.Events, e => e.Message.Contains("private-provider-secret"));
@@ -245,6 +278,7 @@ public sealed class AzureContainerAppLiveLogsTests
                 if (request.RequestUri.AbsolutePath.EndsWith("logstream"))
                 {
                     if (Interlocked.Increment(ref consoleRequests) >= 2) secondConsole.TrySetResult();
+
                     return new HttpResponseMessage(HttpStatusCode.OK)
                     {
                         Content = new StringContent("""
@@ -263,20 +297,25 @@ public sealed class AzureContainerAppLiveLogsTests
             if (request.RequestUri.AbsolutePath.EndsWith("replicas"))
                 return DelegateHttpMessageHandler.Json(
                     """{"value":[{"name":"pod-1","properties":{"containers":[{"name":"web"}]}}]}""");
+
             return AppResponse();
         });
         var collector = new AzureContainerAppLiveLogs(new StubHttpClientFactory(handler), publisher,
             NullLogger.Instance, TimeSpan.FromMilliseconds(20));
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
         collector.Update(target, lifetime.Token);
         await secondConsole.Task.WaitAsync(TimeSpan.FromSeconds(3));
         var history = new AzureMonitorLogRecord(DateTimeOffset.Parse("2026-10-11T12:00:01Z"), "live",
             "web", "rev-1", "stderr", "ContainerAppConsoleLogs", ReplicaName: "pod-1");
+
         Assert.True(collector.WasConfirmedLive(target.DeploymentId, history));
         Assert.False(collector.WasConfirmedLive(target.DeploymentId, history with { ReplicaName = "pod-2" }));
         Assert.False(collector.WasConfirmedLive(target.DeploymentId, history with { ReplicaName = "" }));
         Assert.False(collector.WasConfirmedLive(target.DeploymentId, history with { Stream = "stdout" }));
+
         await collector.StopAsync();
+
         Assert.Single(publisher.Events, e => e.Message == "live");
     }
 
@@ -291,10 +330,13 @@ public sealed class AzureContainerAppLiveLogsTests
         var collector = Create(_ =>
         {
             requests++;
+
             return AppResponse();
         });
-        collector.Update(Target() with { LeaseUntil = DateTimeOffset.UtcNow.AddSeconds(-1) }, default);
+
+        collector.Update(Target() with { LeaseUntil = DateTimeOffset.UtcNow.AddSeconds(-1) }, CancellationToken.None);
         await collector.StopAsync();
+
         Assert.Equal(0, requests);
     }
 
@@ -371,6 +413,7 @@ public sealed class AzureContainerAppLiveLogsTests
         {
             Events.Enqueue(e);
             if (e.Message.Contains("log-stream permission")) Notice.TrySetResult();
+
             return ValueTask.CompletedTask;
         }
 
@@ -384,6 +427,7 @@ public sealed class AzureContainerAppLiveLogsTests
         {
             Events.Enqueue(e);
             if (e.TerminalChannel.Target == "cloud-web") Delivered.TrySetResult();
+
             return Task.FromResult(true);
         }
     }

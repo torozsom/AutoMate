@@ -350,7 +350,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
             if (paths.Length == 0) return [];
             var start = _deliveryPosition % paths.Length;
             _deliveryPosition = (start + Math.Min(32, paths.Length)) % paths.Length;
-            return paths.Skip(start).Concat(paths.Take(start)).Take(32).ToArray();
+            return [.. paths.Skip(start).Concat(paths.Take(start)).Take(32)];
         }
         finally
         {
@@ -379,11 +379,14 @@ public sealed class DiskTelemetrySpool : BackgroundService
         var events =
             JsonSerializer.Deserialize<DeploymentLogEnvelope[]>(segment.Payload, TelemetryHttpTransport.Json) ??
             throw new InvalidDataException("Invalid telemetry segment.");
-        return events.Select(envelope => envelope with
-        {
-            Event = _redactor.Redact(envelope.Event).Event,
-            Channel = envelope.Channel is null ? null : _redactor.RedactText(envelope.Channel, 128)
-        }).ToArray();
+        return
+        [
+            .. events.Select(envelope => envelope with
+            {
+                Event = _redactor.Redact(envelope.Event).Event,
+                Channel = envelope.Channel is null ? null : _redactor.RedactText(envelope.Channel, 128)
+            })
+        ];
     }
 
     /// <summary>
@@ -398,7 +401,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
         string[] expired;
         try
         {
-            expired = _segments.Where(p => p.Value <= DateTimeOffset.UtcNow).Select(p => p.Key).Take(512).ToArray();
+            expired = [.. _segments.Where(p => p.Value <= DateTimeOffset.UtcNow).Select(p => p.Key).Take(512)];
         }
         finally
         {
@@ -496,7 +499,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
                 events.AddRange(ReadSegment(group.Key).Where(e => ids.Contains(e.EventId)));
             }
 
-            return new TelemetryPendingHistory(events.OrderBy(e => e.OrderId).ToArray(),
+            return new TelemetryPendingHistory([.. events.OrderBy(e => e.OrderId)],
                 _drops.GetValueOrDefault(tenant), indexes.Length > 2000);
         }
         finally

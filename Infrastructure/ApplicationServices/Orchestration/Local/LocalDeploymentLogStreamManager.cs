@@ -69,7 +69,9 @@ public sealed class LocalDeploymentLogStreamManager(
             target.Containers.Count is < 1 or > 32)
             throw new ArgumentException("Local diagnostics require ownership and a bounded container inventory.",
                 nameof(target));
+
         TargetState state;
+
         while (true)
         {
             Task? retiring = null;
@@ -77,6 +79,7 @@ public sealed class LocalDeploymentLogStreamManager(
             try
             {
                 _shutdown.Token.ThrowIfCancellationRequested();
+
                 if (_targets.TryGetValue(target.ProjectId, out var existing))
                 {
                     if (existing.StopTask is null && existing.Target.DeploymentId == target.DeploymentId &&
@@ -93,13 +96,19 @@ public sealed class LocalDeploymentLogStreamManager(
 
                 if (retiring is null || retiring.IsCompleted)
                 {
-                    foreach (var completed in _targets.Where(t => t.Value.Task.IsCompleted).ToArray())
-                        if (completed.Value.StopTask is null && _targets.TryRemove(completed.Key, out var removed))
+                    foreach (var completed in _targets
+                                 .Where(t => t.Value.Task.IsCompleted)
+                                 .ToArray())
+                        if (completed.Value.StopTask is null
+                            && _targets.TryRemove(completed.Key, out var removed))
                             removed.Cancellation.Dispose();
+
                     if (_targets.Count >= 1024)
                         throw new InvalidOperationException("Local collector capacity has been reached.");
+
                     state = new TargetState(target, deploymentOperation,
                         CancellationTokenSource.CreateLinkedTokenSource(_shutdown.Token));
+
                     _targets[target.ProjectId] = state;
                     state.Task = RunTargetAsync(state);
                     break;
@@ -111,7 +120,7 @@ public sealed class LocalDeploymentLogStreamManager(
             }
 
             // Retain the retiring target until shutdown completes, without blocking other registry entries.
-            await retiring!.WaitAsync(cancellationToken);
+            await retiring.WaitAsync(cancellationToken);
         }
 
         // Registration-time overlap recovers events even when the daemon cannot connect before Compose starts.
@@ -199,7 +208,8 @@ public sealed class LocalDeploymentLogStreamManager(
         finally
         {
             await _shutdown.CancelAsync();
-            await _changes.WaitAsync();
+            // Shutdown has already canceled stoppingToken; cleanup must still acquire the gate.
+            await _changes.WaitAsync(CancellationToken.None);
             try
             {
                 foreach (var state in _targets.Values) await (state.StopTask ??= StopTargetAsync(state));
@@ -276,18 +286,18 @@ public sealed class LocalDeploymentLogStreamManager(
                 }
 
                 var observeLifecycle = state.Operation || policy.Runtime;
-                if (observeLifecycle && daemon is null)
+                switch (observeLifecycle)
                 {
-                    daemonCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
-                    daemon = source.MonitorDaemonAsync(state.Target, () => state.Ready.TrySetResult(),
-                        daemonCancellation.Token);
-                }
-
-                if (!observeLifecycle && daemon is not null)
-                {
-                    await CancelTasksAsync(daemonCancellation!, [daemon]);
-                    daemonCancellation = null;
-                    daemon = null;
+                    case true when daemon is null:
+                        daemonCancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        daemon = source.MonitorDaemonAsync(state.Target, () => state.Ready.TrySetResult(),
+                            daemonCancellation.Token);
+                        break;
+                    case false when daemon is not null:
+                        await CancelTasksAsync(daemonCancellation!, [daemon]);
+                        daemonCancellation = null;
+                        daemon = null;
+                        break;
                 }
 
                 if (policy.Runtime)
@@ -304,12 +314,10 @@ public sealed class LocalDeploymentLogStreamManager(
                         }
 
                         var key = container.Channel + "/metrics";
-                        if (!runtime.TryGetValue(key, out var metrics) || metrics.IsCompleted)
-                        {
-                            if (metrics is not null) await ObserveTaskAsync(metrics);
-                            runtime[key] =
-                                source.MonitorMetricsAsync(state.Target, container, runtimeCancellation.Token);
-                        }
+                        if (runtime.TryGetValue(key, out var metrics) && !metrics.IsCompleted) continue;
+                        if (metrics is not null) await ObserveTaskAsync(metrics);
+                        runtime[key] =
+                            source.MonitorMetricsAsync(state.Target, container, runtimeCancellation.Token);
                     }
                 }
                 else if (runtimeCancellation is not null)
@@ -351,10 +359,14 @@ public sealed class LocalDeploymentLogStreamManager(
         DockerDeploymentTarget target, CancellationToken token)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var latest = await scope.ServiceProvider.GetRequiredService<AutoMateDbContext>().Deployments.AsNoTracking()
-            .Where(d => d.CsProject!.AppId == target.ProjectId).OrderByDescending(d => d.CreatedAt)
+        var latest = await scope.ServiceProvider
+            .GetRequiredService<AutoMateDbContext>().Deployments
+            .AsNoTracking()
+            .Where(d => d.CsProject!.AppId == target.ProjectId)
+            .OrderByDescending(d => d.CreatedAt)
             .Select(d => new { d.Id, d.Status })
             .FirstOrDefaultAsync(token);
+
         const bool interest = true;
         return (latest?.Id == target.DeploymentId, interest, latest?.Status ?? DeploymentStatus.Stopped);
     }

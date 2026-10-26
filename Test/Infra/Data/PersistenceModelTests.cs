@@ -19,6 +19,7 @@ public sealed class PersistenceModelTests
             .UseNpgsql("Host=localhost;Database=unused_fixture")
             .UseSnakeCaseNamingConvention().Options;
         using var db = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
+
         Assert.False(db.Database.HasPendingModelChanges());
     }
 }

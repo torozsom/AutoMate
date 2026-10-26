@@ -157,7 +157,7 @@ public static class AnalysisTelemetry
     /// </exception>
     /// <exception cref="OperationCanceledException">The supplied operation observes cancellation.</exception>
     public static async Task<T> RunAsync<T>(AnalysisOperation operation, Guid? deploymentId, Guid? analysisId,
-        CancellationToken token, Func<Task<T>> action, Func<T, AnalysisOutcome>? outcome = null)
+        Func<Task<T>> action, Func<T, AnalysisOutcome>? outcome = null, CancellationToken token = default)
     {
         using var measurement = Start(operation, deploymentId, analysisId, token);
         try

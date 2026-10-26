@@ -237,9 +237,12 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
     public async Task<bool> SetAiDiagnosticEgressConsentAsync(Guid appId, Guid userId, bool consented,
         CancellationToken cancellationToken = default)
     {
-        var configuration = await context.Applications.Where(item => item.Id == appId && item.UserId == userId)
-            .SelectMany(item => item.CsProjects).Select(item => item.Configuration)
+        var configuration = await context.Applications
+            .Where(item => item.Id == appId && item.UserId == userId)
+            .SelectMany(item => item.CsProjects)
+            .Select(item => item.Configuration)
             .FirstOrDefaultAsync(item => item != null, cancellationToken);
+
         if (configuration is null)
         {
             logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId,
@@ -249,9 +252,11 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
 
         configuration.AiDiagnosticEgressConsented = consented;
         await context.SaveChangesAsync(cancellationToken);
+
         logger.LogInformation(
             "Diagnostic egress consent changed for project {ProjectId}, user {UserId}: {ConsentState}.",
             appId, userId, consented ? "enabled" : "disabled");
+
         return true;
     }
 
@@ -271,13 +276,18 @@ public sealed class ApplicationService(AutoMateDbContext context, ILogger<Applic
         CancellationToken cancellationToken = default)
     {
         var project = await context.CsProjects
-            .Include(item => item.Configuration).Include(item => item.Application)
-            .FirstOrDefaultAsync(item => item.Id == csProjectId && item.AppId == appId &&
-                                         item.Application.UserId == userId, cancellationToken);
+            .Include(item => item.Configuration)
+            .Include(item => item.Application)
+            .FirstOrDefaultAsync(item =>
+                item.Id == csProjectId
+                && item.AppId == appId
+                && item.Application.UserId == userId, cancellationToken);
+
         if (project is null || (project.Configuration is null && project.Application.SourceType != SourceType.Remote))
         {
             logger.LogWarning("Diagnostic egress consent change denied for project {ProjectId}, user {UserId}.", appId,
                 userId);
+
             return false;
         }
 

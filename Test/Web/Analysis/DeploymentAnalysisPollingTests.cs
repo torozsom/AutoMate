@@ -28,9 +28,11 @@ public sealed class DeploymentAnalysisPollingTests
         var probe = (Port)port;
         var pending =
             new TaskCompletionSource<DeploymentAnalysisView?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         probe.Read = pending.Task;
         await using var services = new ServiceCollection().AddSingleton(port).BuildServiceProvider();
         var component = new DeploymentAnalysisSection();
+
         Set(component, "OwnerId", owner);
         Set(component, "ProjectId", project);
         Set(component, "DeploymentId", deployment);
@@ -38,18 +40,27 @@ public sealed class DeploymentAnalysisPollingTests
         Set(component, "Logger", NullLogger<DeploymentAnalysisSection>.Instance);
         Set(component, "_identity", (owner, project, (Guid?)deployment));
         var saved = View(deployment, AiAnalysisStatus.Running);
+
         Set(component, "_latest", saved);
         var read = Refresh(component);
+
         await Refresh(component);
+
         Assert.Equal(1, probe.Reads);
+
         pending.SetException(new IOException("private-provider-payload"));
         await read;
+
         Assert.Same(saved, Get(component, "_latest"));
         Assert.DoesNotContain("private", (string)Get(component, "_message")!);
+
         var completed = View(deployment, AiAnalysisStatus.Completed);
+
         probe.Read = Task.FromResult<DeploymentAnalysisView?>(completed);
         await Refresh(component);
+
         Assert.Same(completed, Get(component, "_latest"));
+
         await component.DisposeAsync();
     }
 
@@ -86,6 +97,7 @@ public sealed class DeploymentAnalysisPollingTests
     {
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
         var property = component.GetType().GetProperty(name, flags);
+
         if (property is not null) property.SetValue(component, value);
         else component.GetType().GetField(name, flags)!.SetValue(component, value);
     }
@@ -131,6 +143,7 @@ public sealed class DeploymentAnalysisPollingTests
             if (method?.Name == "GetLatestAsync")
             {
                 Reads++;
+
                 return Read;
             }
 

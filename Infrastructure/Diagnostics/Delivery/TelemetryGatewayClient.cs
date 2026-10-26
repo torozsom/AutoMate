@@ -95,7 +95,11 @@ public sealed class TelemetryGatewayClient(
         long cursor, bool backwards, int limit, string? search, CancellationToken token, string? channel = null)
     {
         return await SendArchiveAsync<DeploymentLogEnvelope[]>(
-            $"archive/{tenant:N}/{project:N}/{deployment:N}?cursor={cursor}&backwards={backwards.ToString().ToLowerInvariant()}&limit={Math.Clamp(limit, 1, 2001)}&search={Uri.EscapeDataString(search ?? "")}&channel={Uri.EscapeDataString(channel ?? "")}",
+            $"archive/{tenant:N}/{project:N}/{deployment:N}?cursor={cursor}" +
+            $"&backwards={backwards.ToString().ToLowerInvariant()}" +
+            $"&limit={Math.Clamp(limit, 1, 2001)}" +
+            $"&search={Uri.EscapeDataString(search ?? "")}" +
+            $"&channel={Uri.EscapeDataString(channel ?? "")}",
             null, token);
     }
 
@@ -161,9 +165,10 @@ public sealed class TelemetryGatewayClient(
         using var request = Request(HttpMethod.Post, "ingest");
         request.Content = JsonContent.Create(new TelemetryIngestRequest(diagnosticEvent, channel));
         using var response = await clients.CreateClient("DeploymentTelemetry").SendAsync(request, cancellationToken);
+
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<DeploymentLogEnvelope>(cancellationToken) ??
-               throw new InvalidOperationException("Telemetry gateway returned no receipt.");
+        return await response.Content.ReadFromJsonAsync<DeploymentLogEnvelope>(cancellationToken)
+               ?? throw new InvalidOperationException("Telemetry gateway returned no receipt.");
     }
 
     /// <summary>
@@ -183,9 +188,10 @@ public sealed class TelemetryGatewayClient(
     {
         using var request = Request(HttpMethod.Get, $"pending/{tenant:N}/{project:N}/{deployment:N}");
         using var response = await clients.CreateClient("DeploymentTelemetry").SendAsync(request, cancellationToken);
+
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<TelemetryPendingHistory>(cancellationToken) ??
-               throw new InvalidOperationException("Telemetry gateway returned no history.");
+        return await response.Content.ReadFromJsonAsync<TelemetryPendingHistory>(cancellationToken)
+               ?? throw new InvalidOperationException("Telemetry gateway returned no history.");
     }
 
     /// <summary>
@@ -203,19 +209,27 @@ public sealed class TelemetryGatewayClient(
     private async Task<T> SendArchiveAsync<T>(string path, object? payload, CancellationToken token)
     {
         await compatibility.EnsureAsync(token);
+
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(30));
         using var request = Request(payload is null ? HttpMethod.Get : HttpMethod.Post, path);
+
         if (payload is not null) request.Content = JsonContent.Create(payload);
+
         using var response = await clients.CreateClient("DeploymentTelemetry").SendAsync(request,
             HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+
         if (response.StatusCode == HttpStatusCode.NotFound)
             throw new TelemetryCompatibilityException(TelemetryCompatibilityFailure.IncompatibleHost);
+
         response.EnsureSuccessStatusCode();
+
         await using var stream = await response.Content.ReadAsStreamAsync(deadline.Token);
         using var body = new MemoryStream();
+
         var buffer = new byte[8192];
         int count;
+
         while ((count = await stream.ReadAsync(buffer, deadline.Token)) > 0)
         {
             if (body.Length + count > 8 * 1024 * 1024)

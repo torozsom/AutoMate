@@ -9,7 +9,7 @@ public static class AnalysisBudgetPolicy
     /// <summary>
     ///     Integer monetary units per currency unit; no floating-point budget arithmetic is used.
     /// </summary>
-    public const long UnitsPerCurrency = 100_000_000;
+    private const long UnitsPerCurrency = 100_000_000;
 
     /// <summary>
     ///     Validates independent limits even when AI is disabled; zero spend is a valid deny-
@@ -39,7 +39,7 @@ public static class AnalysisBudgetPolicy
     /// </exception>
     public static long Units(decimal amount)
     {
-        return checked((long)(amount * UnitsPerCurrency));
+        return (long)(amount * UnitsPerCurrency);
     }
 
     /// <summary>

@@ -30,6 +30,7 @@ public sealed class CloudDeploymentAdmissionTests
         var receipt = new CloudDeploymentReceipt(Guid.NewGuid(), CloudRunPhase.Queued, DateTimeOffset.UtcNow, null);
         var calls = 0;
         var capabilities = Port<IDeploymentCapabilities>((_, _) => localEnabled);
+
         var queue = Port<IDeploymentJobQueue>((method, args) =>
         {
             Assert.True(localEnabled);
@@ -47,9 +48,12 @@ public sealed class CloudDeploymentAdmissionTests
             Assert.Equal("net10.0", job.Request.Metadata.TargetFramework);
             Assert.Equal("10.0", job.Request.Metadata.DotNetVersion);
             Assert.True(job.Request.Metadata.IsWebProject);
+
             calls++;
+
             return ValueTask.CompletedTask;
         });
+
         var runs = Port<ICloudDeploymentRunService>((method, args) =>
         {
             Assert.False(localEnabled);
@@ -67,12 +71,18 @@ public sealed class CloudDeploymentAdmissionTests
             Assert.Equal("net10.0", start.Metadata.TargetFramework);
             Assert.Equal("10.0", start.Metadata.DotNetVersion);
             Assert.True(start.Metadata.IsWebProject);
+
             calls++;
+
             return Task.FromResult(receipt);
         });
+
         var actual = await new CloudDeploymentAdmission(capabilities, queue, runs).StartAsync(request);
+
         Assert.Equal(1, calls);
+
         if (localEnabled) Assert.Null(actual);
+
         else Assert.Same(receipt, actual);
     }
 
@@ -85,7 +95,9 @@ public sealed class CloudDeploymentAdmissionTests
     private static T Port<T>(Func<MethodInfo?, object?[]?, object?> call) where T : class
     {
         var port = DispatchProxy.Create<T, PortProxy>();
+
         ((PortProxy)(object)port).Call = call;
+
         return port;
     }
 

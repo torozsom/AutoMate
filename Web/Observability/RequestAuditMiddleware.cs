@@ -22,14 +22,17 @@ public sealed class RequestAuditMiddleware(RequestDelegate next, ILogger<Request
         var started = Stopwatch.GetTimestamp();
         var area = Area(context.Request.Path);
         using var scope = logger.BeginScope(new Dictionary<string, object?> { ["RequestId"] = requestId });
+
         logger.LogInformation("Request started: method {HttpMethod}, area {RequestArea}, request {RequestId}.",
             context.Request.Method, area, requestId);
+
         try
         {
             await next(context);
             var userId = Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
                 ? id
                 : (Guid?)null;
+
             logger.Log(context.Response.StatusCode >= 400 ? LogLevel.Warning : LogLevel.Information,
                 "Request finished: method {HttpMethod}, area {RequestArea}, request {RequestId}, status {StatusCode}, duration {DurationMs} ms, authentication {AuthenticationState}, user {UserId}.",
                 context.Request.Method, area, requestId, context.Response.StatusCode,

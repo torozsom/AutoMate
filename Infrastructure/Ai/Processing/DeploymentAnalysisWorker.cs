@@ -38,8 +38,10 @@ public sealed class DeploymentAnalysisWorker(
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var concurrency = options.Value.MaximumConcurrency;
+
         ArgumentOutOfRangeException.ThrowIfLessThan(concurrency, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(concurrency, AiAnalysisOptions.MaximumSupportedConcurrency);
+
         return Task.WhenAll(Enumerable.Range(0, concurrency).Select(_ => RunConsumerAsync(stoppingToken)));
     }
 
@@ -56,7 +58,8 @@ public sealed class DeploymentAnalysisWorker(
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var queue = scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>();
-                var work = await AnalysisTelemetry.RunAsync(AnalysisOperation.Claim, null, null, stoppingToken,
+
+                var work = await AnalysisTelemetry.RunAsync(AnalysisOperation.Claim, null, null,
                     () => queue.ClaimNextAsync(stoppingToken),
                     result =>
                     {
@@ -64,7 +67,8 @@ public sealed class DeploymentAnalysisWorker(
                         Activity.Current?.SetTag("deployment.id", result.DeploymentId);
                         Activity.Current?.SetTag("deployment.analysis.id", result.AnalysisId);
                         return AnalysisOutcome.Completed;
-                    });
+                    }, stoppingToken);
+
                 if (work is null)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
@@ -101,6 +105,7 @@ public sealed class DeploymentAnalysisWorker(
         using var heartbeatStop = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var heartbeat = RenewLeaseAsync(work, owned, heartbeatStop.Token);
         var finished = false;
+
         try
         {
             await ProcessAsync(services, work, owned.Token);
@@ -130,9 +135,12 @@ public sealed class DeploymentAnalysisWorker(
                 {
                     await using var scope = scopeFactory.CreateAsyncScope();
                     await AnalysisTelemetry.RunAsync(AnalysisOperation.Release, work.DeploymentId, work.AnalysisId,
-                        cleanup.Token, () => scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>()
+                        () => scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>()
                             .ReleaseAsync(work, cleanup.Token),
-                        released => released ? AnalysisOutcome.Completed : AnalysisOutcome.Discarded);
+                        released => released
+                            ? AnalysisOutcome.Completed
+                            : AnalysisOutcome.Discarded,
+                        cleanup.Token);
                 }
                 catch (Exception)
                 {
@@ -161,11 +169,15 @@ public sealed class DeploymentAnalysisWorker(
             {
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
                 deadline.CancelAfter(TimeSpan.FromSeconds(10));
+
                 await using var scope = scopeFactory.CreateAsyncScope();
                 if (await AnalysisTelemetry.RunAsync(AnalysisOperation.Renew, work.DeploymentId, work.AnalysisId,
-                        deadline.Token, () => scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>()
+                        () => scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>()
                             .RenewAsync(work, deadline.Token),
-                        renewed => renewed ? AnalysisOutcome.Completed : AnalysisOutcome.Discarded)) continue;
+                        renewed => renewed
+                            ? AnalysisOutcome.Completed
+                            : AnalysisOutcome.Discarded,
+                        deadline.Token)) continue;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -192,24 +204,23 @@ public sealed class DeploymentAnalysisWorker(
     internal static Task ProcessAsync(IServiceProvider services, DeploymentAnalysisWorkItem work,
         CancellationToken cancellationToken)
     {
-        return AnalysisTelemetry.RunAsync(AnalysisOperation.Process, work.DeploymentId, work.AnalysisId,
-            cancellationToken, () =>
-            {
-                if (work.LeaseId == Guid.Empty) return Task.FromResult(AnalysisOutcome.Discarded);
-                var operationLogger = services.GetRequiredService<ILogger<DeploymentAnalysisWorker>>();
-                var db = services.GetRequiredService<AutoMateDbContext>();
-                var operationClock = services.GetRequiredService<TimeProvider>();
-                var processor = new DeploymentAnalysisProcessor(db, operationClock, operationLogger,
-                    new Lazy<IOptionsMonitor<AiAnalysisOptions>>(() =>
-                        services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()),
-                    new Lazy<IAnalysisEgressAuthorizer>(() => services.GetRequiredService<IAnalysisEgressAuthorizer>()),
-                    new Lazy<IDeploymentAnalysisContextBuilder>(() =>
-                        services.GetRequiredService<IDeploymentAnalysisContextBuilder>()),
-                    new Lazy<IAnalysisBudgetGuard>(() => services.GetRequiredService<IAnalysisBudgetGuard>()),
-                    new Lazy<ILlmAnalysisProvider>(() => services.GetRequiredService<ILlmAnalysisProvider>()),
-                    new Lazy<IAnalysisResultValidator>(() => services.GetRequiredService<IAnalysisResultValidator>()));
-                return processor.ProcessAsync(work, cancellationToken);
-            }, outcome => outcome);
+        return AnalysisTelemetry.RunAsync(AnalysisOperation.Process, work.DeploymentId, work.AnalysisId, () =>
+        {
+            if (work.LeaseId == Guid.Empty) return Task.FromResult(AnalysisOutcome.Discarded);
+            var operationLogger = services.GetRequiredService<ILogger<DeploymentAnalysisWorker>>();
+            var db = services.GetRequiredService<AutoMateDbContext>();
+            var operationClock = services.GetRequiredService<TimeProvider>();
+            var processor = new DeploymentAnalysisProcessor(db, operationClock, operationLogger,
+                new Lazy<IOptionsMonitor<AiAnalysisOptions>>(services
+                    .GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>),
+                new Lazy<IAnalysisEgressAuthorizer>(services.GetRequiredService<IAnalysisEgressAuthorizer>),
+                new Lazy<IDeploymentAnalysisContextBuilder>(services
+                    .GetRequiredService<IDeploymentAnalysisContextBuilder>),
+                new Lazy<IAnalysisBudgetGuard>(services.GetRequiredService<IAnalysisBudgetGuard>),
+                new Lazy<ILlmAnalysisProvider>(services.GetRequiredService<ILlmAnalysisProvider>),
+                new Lazy<IAnalysisResultValidator>(services.GetRequiredService<IAnalysisResultValidator>));
+            return processor.ProcessAsync(work, cancellationToken);
+        }, outcome => outcome, cancellationToken);
     }
 }
 

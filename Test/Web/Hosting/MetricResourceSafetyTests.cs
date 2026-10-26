@@ -40,6 +40,7 @@ public sealed class MetricResourceSafetyTests
                 { ["private-extra"] = "private-token" }).Clear()
             .AddDetector(new SafeResourceDetector(new DiagnosticRedactor(), service, environment, "1.0.0", "SaaS"))
             .Build().Attributes.ToDictionary(pair => pair.Key, pair => pair.Value);
+
         Assert.Equal(4, resource.Count);
         Assert.Equal(expectedService, resource["service.name"]);
         Assert.Equal(expectedEnvironment, resource["deployment.environment"]);
@@ -56,20 +57,25 @@ public sealed class MetricResourceSafetyTests
     {
         var received = new ConcurrentQueue<byte[]>();
         var appBuilder = WebApplication.CreateBuilder();
+
         appBuilder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         appBuilder.Logging.ClearProviders();
         await using var app = appBuilder.Build();
+
         app.MapPost("/{**path}", async (HttpContext context) =>
         {
             using var bytes = new MemoryStream();
+
             await context.Request.Body.CopyToAsync(bytes);
             received.Enqueue(bytes.ToArray());
+
             return Results.Bytes([], "application/x-protobuf");
         });
         await app.StartAsync();
         var builder = Sdk.CreateMeterProviderBuilder()
             .AddMeter("System.Net.Http", "AutoMate.Deployments", "AutoMate.Analysis")
             .SetExemplarFilter(ExemplarFilterType.AlwaysOn);
+
         SafeMetricPolicy.Configure(builder);
         using var provider = builder.AddOtlpExporter((exporter, reader) =>
         {
@@ -82,6 +88,7 @@ public sealed class MetricResourceSafetyTests
         var unknown = httpMeter.CreateCounter<long>("private-unknown-instrument");
         using var deploymentMeter = new Meter("AutoMate.Deployments");
         var jobs = deploymentMeter.CreateCounter<long>("automate.deployment.jobs.started");
+
         using (new Activity("fixture").SetIdFormat(ActivityIdFormat.W3C).Start())
         {
             http.Record(0.25, new KeyValuePair<string, object?>("server.address", "private-host"),
@@ -91,6 +98,7 @@ public sealed class MetricResourceSafetyTests
                 new KeyValuePair<string, object?>("ProjectId", "private-project"));
             unknown.Add(5);
             using var analysisMeter = new Meter("AutoMate.Analysis");
+
             analysisMeter.CreateCounter<long>("automate.analysis.operations").Add(1,
                 new KeyValuePair<string, object?>("analysis.operation", "provider"),
                 new KeyValuePair<string, object?>("analysis.outcome", "failed"),

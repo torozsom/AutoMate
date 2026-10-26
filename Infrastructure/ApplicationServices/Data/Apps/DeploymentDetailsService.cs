@@ -26,8 +26,13 @@ public sealed class DeploymentDetailsService(AutoMateDbContext db) : IDeployment
     /// </returns>
     public Task<Deployment?> GetAsync(Guid owner, Guid project, Guid deployment, CancellationToken token = default)
     {
-        return db.Deployments.AsNoTracking().Include(d => d.CsProject).ThenInclude(p => p!.Application)
-            .SingleOrDefaultAsync(d => d.Id == deployment && d.CsProject!.AppId == project &&
-                                       d.CsProject.Application.UserId == owner, token);
+        return db.Deployments
+            .AsNoTracking()
+            .Include(d => d.CsProject)
+            .ThenInclude(p => p!.Application)
+            .SingleOrDefaultAsync(d =>
+                d.Id == deployment
+                && d.CsProject!.AppId == project
+                && d.CsProject.Application.UserId == owner, token);
     }
 }

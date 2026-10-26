@@ -46,14 +46,21 @@ internal sealed class AzureDatabaseDiagnostics(
                 target.Databases = await databaseClient.DiscoverAsync(target.ResourceId, target.ProjectId,
                     target.ContainerAppName, target.AzureCredentials.AccessToken, cancellationToken,
                     target.DatabaseContainers);
+
                 if (target.DatabaseProviders is { } providers)
-                    target.Databases = target.Databases.Where(database => providers.Contains(database.Provider))
-                        .ToArray();
+                    target.Databases =
+                    [
+                        .. target.Databases
+                            .Where(database => providers.Contains(database.Provider))
+                    ];
+
                 availability.Clear(target, "database-inventory");
+
                 if (target.DatabaseContainers.Count > 0 && target.Databases.Count == 0)
                     await availability.ReportAsync(target, "database-inventory-empty",
                         "No owned managed database resources were found. Database containers use Container Apps logs and shared app metrics; managed services require both AutoMate ownership tags.",
                         cancellationToken);
+
                 else availability.Clear(target, "database-inventory-empty");
             }
             catch (Exception ex) when (ex is not OperationCanceledException ||
@@ -113,35 +120,53 @@ internal sealed class AzureDatabaseDiagnostics(
             target.DeploymentId, cancellationToken,
             () => databaseClient.MetricObservationsAsync(database, target.AzureCredentials.AccessToken,
                 cancellationToken));
+
         var emptyIssue = "db-" +
                          Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(database.ResourceId)))[..24] +
                          "-metrics-empty";
+
         if (observations.Count == 0)
             await availability.ReportAsync(target, emptyIssue,
                 "Azure returned no database metric samples in the recent window. Samples can be delayed or unavailable for this resource tier.",
                 cancellationToken);
+
         else availability.Clear(target, emptyIssue);
+
         foreach (var observation in observations)
         {
             var samples = observation.Samples;
-            var cpu = samples.FirstOrDefault(s => s.Name is "automate_cpu_usage_percent" or "automate_cpu_usage_cores");
+            var cpu = samples
+                .FirstOrDefault(s => s.Name is "automate_cpu_usage_percent"
+                    or "automate_cpu_usage_cores");
+
             var memory =
-                samples.FirstOrDefault(s => s.Name.StartsWith("automate_memory_used_", StringComparison.Ordinal));
+                samples.FirstOrDefault(s => s.Name
+                    .StartsWith("automate_memory_used_", StringComparison.Ordinal));
+
             await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
-                DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
-                DeploymentDiagnosticSeverity.Information, observation.Timestamp,
-                $"Azure database metrics: {database.Name}.",
-                new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, database.Name),
-                new Dictionary<string, string>
-                {
-                    ["cpu"] = cpu is null ? "n/a" :
-                        cpu.Unit == "cores" ? $"{cpu.Value:0.##} cores" : $"{cpu.Value:0.##}%",
-                    ["memory"] = memory is null ? "n/a" :
-                        memory.Unit == "bytes" ? $"{memory.Value / 1048576:0.##} MiB" : $"{memory.Value:0.##}%"
-                }, SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Database,
-                    DeploymentDiagnosticStream.Metric, database.ResourceId), Metrics: samples,
-                EventId: AzureRuntimeDiagnosticPolicy.MetricEventId(target,
-                    database.ResourceId + database.ContainerAppRevision, observation)), cancellationToken);
+                    DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Metric,
+                    DeploymentDiagnosticSeverity.Information, observation.Timestamp,
+                    $"Azure database metrics: {database.Name}.",
+                    new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, database.Name),
+                    new Dictionary<string, string>
+                    {
+                        ["cpu"] = cpu is null
+                            ? "n/a"
+                            : cpu.Unit == "cores"
+                                ? $"{cpu.Value:0.##} cores"
+                                : $"{cpu.Value:0.##}%",
+                        ["memory"] = memory is null
+                            ? "n/a"
+                            : memory.Unit == "bytes"
+                                ? $"{memory.Value / 1048576:0.##} MiB"
+                                : $"{memory.Value:0.##}%"
+                    },
+                    SourceIdentity: new DeploymentDiagnosticSourceIdentity(DeploymentDiagnosticComponent.Database,
+                        DeploymentDiagnosticStream.Metric, database.ResourceId),
+                    Metrics: samples,
+                    EventId: AzureRuntimeDiagnosticPolicy.MetricEventId(target,
+                        database.ResourceId + database.ContainerAppRevision, observation)),
+                cancellationToken);
         }
     }
 
@@ -167,13 +192,16 @@ internal sealed class AzureDatabaseDiagnostics(
         }
 
         await using var scope = scopeFactory.CreateAsyncScope();
+
         var store = new AzureContainerAppLogCheckpointStore(
             scope.ServiceProvider.GetRequiredService<AutoMateDbContext>());
+
         var checkpoint = await store.GetOrCreateAsync(target.DeploymentId, key, cancellationToken);
         var from = (checkpoint.LastIngestionTimestamp ??
                     checkpoint.LastTimestamp ?? DateTimeOffset.UtcNow - TimeSpan.FromSeconds(
                         Math.Clamp(options.Value.DatabaseInitialLookback.TotalSeconds, 60, 7 * 24 * 60 * 60))) -
                    options.Value.OverlapWindow;
+
         for (var page = 0; page < Math.Clamp(options.Value.MaximumPagesPerPoll, 1, 100); page++)
         {
             var result = await DeploymentTracing.RunAsync(DeploymentOperation.AzureLogs, target.ProjectId,
@@ -188,6 +216,7 @@ internal sealed class AzureDatabaseDiagnostics(
                         options.Value.BatchSize, checkpoint.LastIngestionTimestamp, checkpoint.LastIngestionTieBreaker,
                         cancellationToken),
                 result => result.IsSuccess);
+
             if (!result.IsSuccess)
             {
                 await availability.ReportAsync(target, key + "-logs", result.FailureReason!, cancellationToken);
@@ -195,17 +224,24 @@ internal sealed class AzureDatabaseDiagnostics(
             }
 
             availability.Clear(target, key + "-logs");
+
             if (result.Records.Count == 0 && checkpoint.LastTimestamp is null)
                 await availability.ReportAsync(target, key + "-logs-empty",
                     "No database operational logs are available yet. Verify diagnostic export to Log Analytics; an idle database may not emit events and ingestion can take several minutes.",
                     cancellationToken);
+
             else availability.Clear(target, key + "-logs-empty");
+
             var confirmed = true;
-            foreach (var record in result.Records.OrderBy(r => r.IngestionTimestampUtc ?? r.TimestampUtc)
+
+            foreach (var record in result.Records
+                         .OrderBy(r => r.IngestionTimestampUtc ?? r.TimestampUtc)
                          .ThenBy(AzureRuntimeDiagnosticPolicy.CreateTieBreaker, StringComparer.Ordinal))
             {
                 var hash = AzureRuntimeDiagnosticPolicy.CreateTieBreaker(record);
+
                 if (!AzureRuntimeDiagnosticPolicy.IsAfterCheckpoint(record, hash, checkpoint)) continue;
+
                 var diagnostic = new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
                     DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Log,
                     DeploymentDiagnosticSeverity.Information, record.TimestampUtc,
@@ -220,6 +256,7 @@ internal sealed class AzureDatabaseDiagnostics(
                         database.ResourceId),
                     EventId: new Guid(
                         SHA256.HashData(Encoding.UTF8.GetBytes($"{target.DeploymentId:N}/{key}/{hash}"))[..16]));
+
                 if (diagnostics is not IDurableDeploymentDiagnosticPublisher durable ||
                     !await durable.PublishDurablyAsync(diagnostic, cancellationToken))
                 {

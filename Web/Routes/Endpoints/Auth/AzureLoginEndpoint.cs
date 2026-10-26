@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Application.Auth;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Caching.Distributed;
 using Web.Configs.Azure;
@@ -64,26 +65,31 @@ public sealed class AzureLoginEndpoint : IEndpoint
         app.MapGet("/api/auth/azure-login/callback",
             async (HttpContext context, IConfiguration configuration, IDistributedCache cache,
                 IHttpClientFactory httpClientFactory, IAuthService authService, string? code = null,
-                string? state = null, string? error = null, string? error_description = null) =>
+                string? state = null, string? error = null,
+                [FromQuery(Name = "error_description")]
+                string? errorDescription = null) =>
             {
                 if (!string.IsNullOrWhiteSpace(error))
-                    return Results.Redirect(BuildDashboardRedirect("azure_error", error_description ?? error));
+                    return Results.Redirect(BuildDashboardRedirect("azure_error", errorDescription ?? error));
 
                 if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
                     return Results.BadRequest("Azure OAuth callback is missing code or state.");
 
                 var stateJson = await cache.GetStringAsync(GetStateCacheKey(state), context.RequestAborted);
+
                 if (string.IsNullOrWhiteSpace(stateJson))
                     return Results.BadRequest("Azure OAuth state is invalid or expired.");
 
                 await cache.RemoveAsync(GetStateCacheKey(state), context.RequestAborted);
 
                 var stateData = JsonSerializer.Deserialize<AzureOAuthState>(stateJson, JsonOptions);
+
                 if (stateData == null || string.IsNullOrWhiteSpace(stateData.UserIdentifier) ||
                     string.IsNullOrWhiteSpace(stateData.TenantId))
                     return Results.BadRequest("Azure OAuth state payload is invalid.");
 
                 AzureTokenResponse tokenResponse;
+
                 try
                 {
                     tokenResponse = await ExchangeAuthorizationCodeAsync(configuration, httpClientFactory,
@@ -123,6 +129,7 @@ public sealed class AzureLoginEndpoint : IEndpoint
                 var subscriptionId = await AzureSubscriptionResolver.GetDefaultSubscriptionIdAsync(
                     tokenResponse.AccessToken,
                     httpClientFactory, context.RequestAborted);
+
                 if (string.IsNullOrWhiteSpace(subscriptionId))
                     return Results.Redirect(BuildDashboardRedirect("azure_error",
                         "No Azure subscription was found for this account. Select the tenant that contains an active subscription."));
@@ -223,8 +230,10 @@ public sealed class AzureLoginEndpoint : IEndpoint
             throw new InvalidOperationException("Authentication:Microsoft:ClientSecret is missing from configuration.");
 
         using var httpClient = httpClientFactory.CreateClient();
+
         using var request = new HttpRequestMessage(HttpMethod.Post,
             $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token");
+
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = clientId,

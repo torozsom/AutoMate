@@ -28,11 +28,12 @@ public sealed class AzureOpenAiOptions
     /// <returns>Whether the documented approves route condition holds.</returns>
     public bool ApprovesRoute(AiAnalysisOptions settings)
     {
-        return settings.Provider == AzureOpenAiAnalysisProvider.ProviderName &&
-               ResourceName is { Length: >= 2 and <= 63 } &&
-               ResourceName[0] != '-' && ResourceName[^1] != '-' &&
-               ResourceName.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '-') &&
-               settings.Endpoint == $"https://{ResourceName}.openai.azure.com/openai/v1/";
+        return settings.Provider == AzureOpenAiAnalysisProvider.ProviderName
+               && ResourceName is { Length: >= 2 and <= 63 }
+               && ResourceName[0] != '-'
+               && ResourceName[^1] != '-'
+               && ResourceName.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '-')
+               && settings.Endpoint == $"https://{ResourceName}.openai.azure.com/openai/v1/";
     }
 
     /// <summary>

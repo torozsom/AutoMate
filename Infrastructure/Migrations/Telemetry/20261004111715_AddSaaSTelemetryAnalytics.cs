@@ -64,13 +64,13 @@ public partial class AddSaaSTelemetryAnalytics : Migration
         migrationBuilder.CreateIndex(
             "ix_deployment_daily_telemetry_deployment_id_day_utc_container_",
             "deployment_daily_telemetry",
-            new[] { "deployment_id", "day_utc", "container", "metric" },
+            ["deployment_id", "day_utc", "container", "metric"],
             unique: true);
 
         migrationBuilder.CreateIndex(
             "ix_deployment_daily_telemetry_user_id_project_id_day_utc",
             "deployment_daily_telemetry",
-            new[] { "user_id", "project_id", "day_utc" });
+            ["user_id", "project_id", "day_utc"]);
     }
 
     /// <summary>

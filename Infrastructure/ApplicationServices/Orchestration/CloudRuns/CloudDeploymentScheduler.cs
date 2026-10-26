@@ -59,8 +59,11 @@ public sealed class CloudDeploymentScheduler(
                 while (running.Count < options.Value.MaxActivePerWorker)
                 {
                     await using var scope = scopeFactory.CreateAsyncScope();
-                    var claim = await scope.ServiceProvider.GetRequiredService<CloudRunProcessor>()
+
+                    var claim = await scope.ServiceProvider
+                        .GetRequiredService<CloudRunProcessor>()
                         .TryClaimAsync(stoppingToken);
+
                     if (claim is null) break;
                     running.Add(RunClaimedAsync(claim.Value.RunId, claim.Value.LeaseOwner, stoppingToken));
                 }
@@ -96,7 +99,8 @@ public sealed class CloudDeploymentScheduler(
         try
         {
             await using var scope = scopeFactory.CreateAsyncScope();
-            await scope.ServiceProvider.GetRequiredService<CloudRunProcessor>()
+            await scope.ServiceProvider
+                .GetRequiredService<CloudRunProcessor>()
                 .ProcessAsync(runId, leaseOwner, runCancellation.Token);
         }
         catch (OperationCanceledException) when (runCancellation.IsCancellationRequested)
@@ -145,16 +149,18 @@ public sealed class CloudDeploymentScheduler(
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+
                 var updated = await db.CloudDeploymentRuns
-                    .Where(item => item.Id == runId && item.LeaseOwner == leaseOwner &&
-                                   item.Phase == CloudRunPhase.Preparing)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.LeaseUntil,
-                        _clock.GetUtcNow().AddMinutes(2)), cancellationToken);
-                if (updated == 0)
-                {
-                    await runCancellation.CancelAsync();
-                    break;
-                }
+                    .Where(item =>
+                        item.Id == runId
+                        && item.LeaseOwner == leaseOwner
+                        && item.Phase == CloudRunPhase.Preparing)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(item => item.LeaseUntil,
+                            _clock.GetUtcNow().AddMinutes(2)), cancellationToken);
+                if (updated != 0) continue;
+                await runCancellation.CancelAsync();
+                break;
             }
         }
         catch (OperationCanceledException) when (runCancellation.IsCancellationRequested)

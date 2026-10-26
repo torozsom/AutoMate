@@ -63,7 +63,7 @@ public partial class AddTerminalLogReplay : Migration
         migrationBuilder.CreateIndex(
             "ix_deployment_diagnostic_records_project_id_deployment_id_orde",
             "deployment_diagnostic_records",
-            new[] { "project_id", "deployment_id", "order_id" });
+            ["project_id", "deployment_id", "order_id"]);
     }
 
     /// <summary>

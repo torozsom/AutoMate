@@ -22,10 +22,16 @@ public sealed class ProjectDetailsQuery(AutoMateDbContext db) : IProjectDetailsQ
     public Task<Domain.Entities.Projects.Application?> GetAsync(Guid project, Guid owner,
         CancellationToken token = default)
     {
-        return db.Applications.AsNoTracking().Where(a => a.Id == project && a.UserId == owner)
-            .Include(a => a.CsProjects).ThenInclude(c => c.Configuration)
-            .Include(a => a.CsProjects).ThenInclude(c => c.Deployments.Where(d =>
-                !db.Deployments.Any(newer => newer.CsProjectId == d.CsProjectId && newer.CreatedAt > d.CreatedAt)))
+        return db.Applications
+            .AsNoTracking()
+            .Where(a => a.Id == project && a.UserId == owner)
+            .Include(a => a.CsProjects)
+            .ThenInclude(c => c.Configuration)
+            .Include(a => a.CsProjects)
+            .ThenInclude(c => c.Deployments
+                .Where(d => !db.Deployments
+                    .Any(newer => newer.CsProjectId == d.CsProjectId
+                                  && newer.CreatedAt > d.CreatedAt)))
             .FirstOrDefaultAsync(token);
     }
 
@@ -46,22 +52,36 @@ public sealed class ProjectDetailsQuery(AutoMateDbContext db) : IProjectDetailsQ
                 ? IsolationLevel.RepeatableRead
                 : IsolationLevel.Serializable, token)
             : null;
+
         var app = await GetAsync(project, owner, token);
         if (app is null) return null;
 
-        var history = db.Deployments.AsNoTracking().Where(d => d.CsProject!.AppId == project &&
-                                                               d.CsProject.Application.UserId == owner);
-        var summary = await history.GroupBy(_ => 1).Select(group => new ProjectDeploymentSummary(
-                group.Count(), group.Count(d => d.Outcome == DeploymentOutcome.Succeeded),
-                group.Count(d => d.Outcome == DeploymentOutcome.Failed),
-                group.Count(d => d.Outcome == DeploymentOutcome.Unknown), group.Min(d => (DateTimeOffset?)d.CreatedAt)))
-            .SingleOrDefaultAsync(token) ?? new ProjectDeploymentSummary(0, 0, 0, 0, null);
-        var page = await history.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
-            .Skip(historyPage * 6).Take(6).ToArrayAsync(token);
+        var history = db.Deployments
+            .AsNoTracking()
+            .Where(d => d.CsProject!.AppId == project && d.CsProject.Application.UserId == owner);
+
+        var summary = await history
+                          .GroupBy(_ => 1)
+                          .Select(group => new ProjectDeploymentSummary(
+                              group.Count(), group.Count(d => d.Outcome == DeploymentOutcome.Succeeded),
+                              group.Count(d => d.Outcome == DeploymentOutcome.Failed),
+                              group.Count(d => d.Outcome == DeploymentOutcome.Unknown),
+                              group.Min(d => (DateTimeOffset?)d.CreatedAt)))
+                          .SingleOrDefaultAsync(token)
+                      ?? new ProjectDeploymentSummary(0, 0, 0, 0, null);
+
+        var page = await history
+            .OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.Id)
+            .Skip(historyPage * 6)
+            .Take(6)
+            .ToArrayAsync(token);
+
         // Restore the legacy navigation used by history labels without adding older rows to the current graph.
         var components = app.CsProjects.ToDictionary(component => component.Id);
         foreach (var deployment in page)
             deployment.CsProject = components.GetValueOrDefault(deployment.CsProjectId);
+
         return new ProjectDetailsReadModel(app, summary, page);
     }
 }

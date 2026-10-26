@@ -19,14 +19,17 @@ internal static partial class DeploymentMetricNormalizer
     internal static IReadOnlyList<DeploymentMetricSample> Docker(string cpu, string memory)
     {
         var result = new List<DeploymentMetricSample>();
-        if (double.TryParse(cpu.Trim().TrimEnd('%'), CultureInfo.InvariantCulture, out var percent) &&
-            double.IsFinite(percent) && percent >= 0)
+        if (double.TryParse(cpu.Trim().TrimEnd('%'), CultureInfo.InvariantCulture, out var percent)
+            && double.IsFinite(percent) && percent >= 0)
             result.Add(new DeploymentMetricSample("automate_cpu_usage_cores", percent / 100, "cores"));
+
         var pieces = memory.Split('/');
         if (Bytes(pieces[0]) is { } used)
             result.Add(new DeploymentMetricSample("automate_memory_used_bytes", used, "bytes"));
+
         if (pieces.Length > 1 && Bytes(pieces[1]) is { } limit)
             result.Add(new DeploymentMetricSample("automate_memory_limit_bytes", limit, "bytes"));
+
         return result;
     }
 
@@ -38,9 +41,13 @@ internal static partial class DeploymentMetricNormalizer
     private static double? Bytes(string value)
     {
         var match = BytePattern().Match(value.Trim());
+
         if (!match.Success ||
-            !double.TryParse(match.Groups[1].Value, CultureInfo.InvariantCulture, out var amount)) return null;
+            !double.TryParse(match.Groups[1].Value, CultureInfo.InvariantCulture, out var amount))
+            return null;
+
         var unit = match.Groups[2].Value;
+
         var factor = unit switch
         {
             "B" => 1d,
@@ -54,6 +61,7 @@ internal static partial class DeploymentMetricNormalizer
             "TiB" => 1099511627776d,
             _ => double.NaN
         };
+
         var bytes = amount * factor;
         return double.IsFinite(bytes) && bytes >= 0 ? bytes : null;
     }

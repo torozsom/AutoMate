@@ -9,23 +9,34 @@ param(
 $ErrorActionPreference = 'Stop'
 $secretsRoot = [IO.Path]::GetFullPath($SecretsDirectory)
 # All SQL runs through stdin, including the generated password, never command-line arguments.
-function Invoke-CatalogSql([string]$Sql) {
+function Invoke-CatalogSql([string]$Sql)
+{
     $result = $Sql | & docker exec -i $PostgresContainer sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atq -v ON_ERROR_STOP=1'
-    if ($LASTEXITCODE -ne 0) { throw 'Could not configure the local Grafana metadata catalog.' }
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw 'Could not configure the local Grafana metadata catalog.'
+    }
     return $result
 }
 $owners = @(Invoke-CatalogSql 'SELECT id FROM public.users ORDER BY username, id;')
-if (!$owners.Count) { throw 'Create an AutoMate user before configuring its Grafana hierarchy.' }
+if (!$owners.Count)
+{
+    throw 'Create an AutoMate user before configuring its Grafana hierarchy.'
+}
 $ownerIds = @($owners | ForEach-Object { [guid]$_ })
 $grafanaDirectory = Join-Path $secretsRoot 'grafana'
 # Initialization establishes the private directory ACL before writing any additional secret.
 & "$PSScriptRoot/Initialize-Grafana.ps1" -TenantId $ownerIds[0] -SecretsDirectory $secretsRoot | Out-Null
 $passwordFile = Join-Path $grafanaDirectory 'catalog-password'
-if (!(Test-Path -LiteralPath $passwordFile)) {
-    [IO.File]::WriteAllText($passwordFile, [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)))
+if (!(Test-Path -LiteralPath $passwordFile))
+{
+    [IO.File]::WriteAllText($passwordFile,[Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32)))
 }
 $catalogPassword = [IO.File]::ReadAllText($passwordFile).Trim()
-if ($catalogPassword -notmatch '^[A-Fa-f0-9]{64}$') { throw 'Invalid generated catalog credential format.' }
+if ($catalogPassword -notmatch '^[A-Fa-f0-9]{64}$')
+{
+    throw 'Invalid generated catalog credential format.'
+}
 $catalogSql = @'
 DO $$ BEGIN
  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'automate_grafana_catalog') THEN
@@ -59,7 +70,8 @@ $catalogSource = @{
 # Reload provisioning without restarting the application, collectors, or storage services.
 $adminPassword = [IO.File]::ReadAllText((Join-Path $grafanaDirectory 'admin-password')).Trim()
 $headers = @{ Authorization = 'Basic ' + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('admin:' + $adminPassword)) }
-foreach ($kind in @('datasources', 'dashboards')) {
+foreach ($kind in @('datasources', 'dashboards'))
+{
     Invoke-RestMethod -Method Post -Uri "$GrafanaUrl/api/admin/provisioning/$kind/reload" -Headers $headers | Out-Null
 }
-Write-Output "Grafana hierarchy configured for $($ownerIds.Count) user(s). Open $GrafanaUrl/d/automate-hierarchy."
+Write-Output "Grafana hierarchy configured for $( $ownerIds.Count ) user(s). Open $GrafanaUrl/d/automate-hierarchy."

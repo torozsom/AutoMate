@@ -31,10 +31,15 @@ internal static class AzureRuntimeDiagnosticPolicy
         var hash = record.IngestionTimestampUtc is null
             ? checkpoint.LastTieBreaker
             : checkpoint.LastIngestionTieBreaker;
+
         if (previous is null) return true;
-        var timestampComparison = (record.IngestionTimestampUtc ?? record.TimestampUtc).CompareTo(previous.Value);
-        return timestampComparison > 0 || (timestampComparison == 0 &&
-                                           string.CompareOrdinal(tieBreaker, hash) > 0);
+
+        var timestampComparison = (record.IngestionTimestampUtc ?? record.TimestampUtc)
+            .CompareTo(previous.Value);
+
+        return timestampComparison > 0
+               || (timestampComparison == 0
+                   && string.CompareOrdinal(tieBreaker, hash) > 0);
     }
 
     /// <summary>
@@ -63,7 +68,12 @@ internal static class AzureRuntimeDiagnosticPolicy
         if (record.CursorHash is not null) return record.CursorHash;
         var payload = string.Join("\n", record.TimestampUtc.ToString("O"), record.SourceTable, record.Message,
             record.ContainerName, record.RevisionName, record.Stream);
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
+
+        return Convert
+            .ToHexString(SHA256
+                .HashData(Encoding.UTF8
+                    .GetBytes(payload)))
+            .ToLowerInvariant();
     }
 
     /// <summary>
@@ -78,6 +88,7 @@ internal static class AzureRuntimeDiagnosticPolicy
     {
         var isConsole = source == AzureContainerAppLogSource.Console;
         var isDatabase = isConsole && target.DatabaseContainers.Contains(record.ContainerName);
+
         var attributes = new Dictionary<string, string>
         {
             ["source_table"] = record.SourceTable,
@@ -86,23 +97,31 @@ internal static class AzureRuntimeDiagnosticPolicy
             ["container"] = record.ContainerName,
             ["replica"] = record.ReplicaName
         };
+
         return new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
             DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Log,
             isConsole ? DeploymentDiagnosticSeverity.Information : DeploymentDiagnosticSeverity.Warning,
-            record.TimestampUtc, isConsole ? record.Message : $"[Azure system] {record.Message}",
+            record.TimestampUtc, isConsole
+                ? record.Message
+                : $"[Azure system] {record.Message}",
             isConsole
                 ? new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container,
                     isDatabase ? "azure-db" : CloudWebContainerName)
                 : new DeploymentTerminalChannel(DeploymentTerminalChannelKind.System), attributes,
             Cursor: CreateTieBreaker(record),
             SourceIdentity: new DeploymentDiagnosticSourceIdentity(
-                isDatabase ? DeploymentDiagnosticComponent.Database :
-                isConsole ? DeploymentDiagnosticComponent.Container : DeploymentDiagnosticComponent.Revision,
+                isDatabase
+                    ? DeploymentDiagnosticComponent.Database
+                    : isConsole
+                        ? DeploymentDiagnosticComponent.Container
+                        : DeploymentDiagnosticComponent.Revision,
                 isConsole && string.Equals(record.Stream, "stderr", StringComparison.OrdinalIgnoreCase)
                     ? DeploymentDiagnosticStream.StandardError
                     : isConsole
                         ? DeploymentDiagnosticStream.StandardOutput
                         : DeploymentDiagnosticStream.System,
-                isConsole ? record.ContainerName : record.RevisionName));
+                isConsole
+                    ? record.ContainerName
+                    : record.RevisionName));
     }
 }

@@ -34,8 +34,10 @@ public sealed class LogHubCancellationTests
     public async Task Disconnect_during_replay_returns_unconfirmed_empty_history()
     {
         using var disconnected = new CancellationTokenSource();
+
         var (hub, project, deployment, token) = CreateHub(disconnected, true);
         var history = await hub.JoinProjectGroup(project, deployment, token);
+
         Assert.Empty(history.Events);
         Assert.False(history.CanAdvanceCursor);
     }
@@ -48,6 +50,7 @@ public sealed class LogHubCancellationTests
     public async Task Provider_cancellation_without_disconnect_is_not_swallowed()
     {
         using var disconnected = new CancellationTokenSource();
+
         var (hub, project, deployment, token) = CreateHub(disconnected, false);
         await Assert.ThrowsAsync<OperationCanceledException>(() => hub.JoinProjectGroup(project, deployment, token));
     }
@@ -60,8 +63,10 @@ public sealed class LogHubCancellationTests
     public async Task Invalid_token_is_still_rejected()
     {
         using var disconnected = new CancellationTokenSource();
+
         var (hub, project, deployment, _) = CreateHub(disconnected, true);
         await Assert.ThrowsAsync<HubException>(() => hub.JoinProjectGroup(project, deployment, "invalid"));
+
         Assert.False(disconnected.IsCancellationRequested);
     }
 
@@ -82,13 +87,16 @@ public sealed class LogHubCancellationTests
         using var provider = Sdk.CreateTracerProviderBuilder().AddSource(AutoMateTelemetry.Deployments.Name)
             .AddProcessor(new SimpleActivityExportProcessor(exporter)).Build();
         using var canceled = new CancellationTokenSource();
+
         var (hub, project, deployment, token) = CreateHub(canceled, disconnect);
         if (disconnect) await hub.JoinProjectGroup(project, deployment, token);
         else
             await Assert.ThrowsAsync<OperationCanceledException>(() =>
                 hub.JoinProjectGroup(project, deployment, token));
-        var spans = exporter.Spans.Where(span => Equals(span.Tags.GetValueOrDefault("deployment.project.id"), project))
+        var spans = exporter.Spans
+            .Where(span => Equals(span.Tags.GetValueOrDefault("deployment.project.id"), project))
             .ToArray();
+
         var join = Assert.Single(spans, span => span.Name == "deployment.signalr.join");
         var replay = Assert.Single(spans, span => span.Name == "deployment.signalr.replay");
         Assert.Equal(join.TraceId, replay.TraceId);
@@ -131,6 +139,7 @@ public sealed class LogHubCancellationTests
         var diagnostics = Stub<IDeploymentDiagnosticStore>((_, _) =>
         {
             if (disconnectDuringReplay) disconnected.Cancel();
+
             return Task.FromException<DeploymentTerminalHistory>(new OperationCanceledException());
         });
         var viewers = Stub<IDeploymentRuntimeViewers>((_, _) => null);
@@ -142,6 +151,7 @@ public sealed class LogHubCancellationTests
             Context = new CallerContext(disconnected.Token),
             Groups = Stub<IGroupManager>((_, _) => Task.CompletedTask)
         };
+
         return (hub, app.Id, deployment.Id, token);
     }
 
@@ -154,7 +164,9 @@ public sealed class LogHubCancellationTests
     private static T Stub<T>(Func<MethodInfo?, object?[]?, object?> invoke) where T : class
     {
         var proxy = DispatchProxy.Create<T, InterfaceStub>();
+
         ((InterfaceStub)(object)proxy).Handler = invoke;
+
         return proxy;
     }
 

@@ -24,6 +24,7 @@ public sealed class DeploymentTerminalPresentationTests
             Message = "MongoRequests operation=Find code=0 duration=57 RU=8"
         };
         var output = string.Concat(new[] { metric, operational }.Select(DeploymentTerminalPresentation.Format));
+
         Assert.Equal(string.Empty, DeploymentTerminalPresentation.Format(metric));
         Assert.DoesNotContain("RU usage", output);
         Assert.Contains("MongoRequests operation=Find", output);
@@ -38,6 +39,7 @@ public sealed class DeploymentTerminalPresentationTests
     public void Stderr_is_visible_and_legacy_stdout_text_remains_unchanged()
     {
         var log = new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), "build", "progress\r\n");
+
         Assert.Equal("progress\r\n", DeploymentTerminalPresentation.Format(log));
         Assert.Equal("progress\r\n",
             DeploymentTerminalPresentation.Format(log with { Stream = DeploymentDiagnosticStream.StandardOutput }));
@@ -64,6 +66,7 @@ public sealed class DeploymentTerminalPresentationTests
             Stream: stream, TimestampUtc: DateTimeOffset.Parse("2026-10-11T13:08:26.123+02:00"));
         var first = DeploymentTerminalPresentation.Format(log);
         var second = DeploymentTerminalPresentation.Format(log with { Message = "second\r\n" });
+
         Assert.Equal($"2026-10-11 11:08:26.123 UTC [{label}] first\r\n" +
                      $"2026-10-11 11:08:26.123 UTC [{label}] second\r\n", first + second);
         Assert.Equal("first", log.Message);
@@ -82,6 +85,7 @@ public sealed class DeploymentTerminalPresentationTests
         var log = new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), "azure-web",
             $"error{newline}  at Example(){newline}", Stream: DeploymentDiagnosticStream.StandardError,
             TimestampUtc: DateTimeOffset.Parse("2026-10-11T11:08:26Z"));
+
         Assert.Equal("2026-10-11 11:08:26.000 UTC [STDERR] error\r\n" +
                      "2026-10-11 11:08:26.000 UTC [STDERR]   at Example()\r\n",
             DeploymentTerminalPresentation.Format(log));
@@ -99,6 +103,7 @@ public sealed class DeploymentTerminalPresentationTests
     public void Legacy_azure_records_do_not_invent_timestamps(string channel, string label)
     {
         var log = new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), channel, "message");
+
         Assert.Equal($"[{label}] message\r\n", DeploymentTerminalPresentation.Format(log));
     }
 }

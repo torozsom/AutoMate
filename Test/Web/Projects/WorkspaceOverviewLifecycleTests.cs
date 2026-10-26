@@ -37,32 +37,43 @@ public sealed class WorkspaceOverviewLifecycleTests
         using var services = new ServiceCollection().AddSingleton<IWorkspaceQuery>(query)
             .AddSingleton(DispatchProxy.Create<IUserService, ConsoleRenderingTests.EmptyPort>()).BuildServiceProvider();
         var panel = new FixturePanel();
+
         SetField("_owner", firstOwner);
         SetProperty("Scopes", services.GetRequiredService<IServiceScopeFactory>());
         SetProperty("Authentication", authentication);
         SetProperty("Logger", NullLogger<WorkspaceOverviewPanel>.Instance);
         SetProperty("StatusNotifier", new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         var renderer = new FixtureRenderer(services);
+
         try
         {
             await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(panel));
             var oldRead = renderer.Dispatcher.InvokeAsync(() => Call("LoadAsync"));
             var oldRequest = await query.NextAsync();
+
             Assert.Equal(firstOwner, oldRequest.Owner);
+
             var switched = renderer.Dispatcher.InvokeAsync(() => Call("RefreshNotificationAsync", true));
             var currentRequest = await query.NextAsync();
+
             Assert.Equal(secondOwner, currentRequest.Owner);
+
             currentRequest.Reply.SetResult(Data(2));
             await switched;
+
             Assert.True(oldRequest.Token.IsCancellationRequested);
+
             oldRequest.Reply.TrySetResult(Data(1));
             await oldRead;
+
             Assert.Equal(2, ((WorkspaceOverview)GetField("_data")!).SavedProjects);
 
             var pending = renderer.Dispatcher.InvokeAsync(() => Call("LoadAsync"));
             var request = await query.NextAsync();
+
             await renderer.DisposeAsync();
             await pending;
+
             Assert.True(request.Token.IsCancellationRequested);
             Assert.Equal(2, ((WorkspaceOverview)GetField("_data")!).SavedProjects);
             Assert.Empty(renderer.Errors);
@@ -210,8 +221,10 @@ public sealed class WorkspaceOverviewLifecycleTests
         public Task<WorkspaceOverview> OverviewAsync(Guid owner, int days, CancellationToken token = default)
         {
             var reply = new TaskCompletionSource<WorkspaceOverview>(TaskCreationOptions.RunContinuationsAsynchronously);
+
             token.Register(() => reply.TrySetCanceled(token));
             _requests.Writer.TryWrite(new Request(owner, reply, token));
+
             return reply.Task;
         }
 

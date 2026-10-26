@@ -110,22 +110,22 @@ public partial class AddSaasCloudRuns : Migration
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_installation_id_repository_id_commit_",
             "cloud_deployment_runs",
-            new[] { "installation_id", "repository_id", "commit_sha" });
+            ["installation_id", "repository_id", "commit_sha"]);
 
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_phase_next_attempt_at_created_at",
             "cloud_deployment_runs",
-            new[] { "phase", "next_attempt_at", "created_at" });
+            ["phase", "next_attempt_at", "created_at"]);
 
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_project_id_created_at",
             "cloud_deployment_runs",
-            new[] { "project_id", "created_at" });
+            ["project_id", "created_at"]);
 
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_user_id_idempotency_key",
             "cloud_deployment_runs",
-            new[] { "user_id", "idempotency_key" },
+            ["user_id", "idempotency_key"],
             unique: true);
 
         migrationBuilder.CreateIndex(
@@ -148,7 +148,7 @@ public partial class AddSaasCloudRuns : Migration
         migrationBuilder.CreateIndex(
             "ix_cloud_webhook_deliveries_processed_at_created_at",
             "cloud_webhook_deliveries",
-            new[] { "processed_at", "created_at" });
+            ["processed_at", "created_at"]);
     }
 
     /// <summary>

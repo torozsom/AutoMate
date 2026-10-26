@@ -55,6 +55,7 @@ public sealed class DeploymentAnalysisContextBuilder(
     public async Task<DeploymentAnalysisContext> BuildAsync(Guid deploymentId, CancellationToken token = default)
     {
         if (archive is not null) return await BuildAsync(deploymentId, new AssessmentSelection(), token);
+
         // Compatibility for retained-data adapters without the richer archive selection port.
         var deployment = await db.Deployments.AsNoTracking().Where(d => d.Id == deploymentId).Select(d => new
         {
@@ -62,35 +63,45 @@ public sealed class DeploymentAnalysisContextBuilder(
             Owner = d.CsProject.Application.UserId,
             d.CreatedAt
         }).SingleOrDefaultAsync(token);
+
         if (deployment is null) return new DeploymentAnalysisContext("", []);
         var history = await diagnostics.ReadRecentAsync(deployment.Project, deploymentId,
             AnalysisContextSelector.MaximumCandidates, token);
+
         history = history with
         {
-            Events = history.Events.Where(e => e.ProjectId == deployment.Project &&
-                                               (e.DeploymentId == deploymentId || e.DeploymentId is null)).ToArray()
+            Events =
+            [
+                .. history.Events.Where(e => e.ProjectId == deployment.Project &&
+                                             (e.DeploymentId == deploymentId || e.DeploymentId is null))
+            ]
         };
+
         var unavailable = storage.Value.ManagedService && !storage.Value.ManagedDataProcessingApproved;
         IReadOnlyList<DeploymentMetricPoint> points = [];
-        if (!unavailable)
-            try
-            {
-                var now = clock.GetUtcNow();
-                var end = history.Events.Where(e => e.TimestampUtc <= now).Max(e => e.TimestampUtc) ?? now;
-                var start = end.AddHours(-1);
-                if (start < deployment.CreatedAt) start = deployment.CreatedAt;
-                if (start < now.AddDays(-30)) start = now.AddDays(-30);
-                if (start < end)
-                    points = await metrics.ReadAsync(deployment.Owner, deployment.Project, deploymentId, start, end,
-                        300, token);
-            }
-            catch (Exception) when (!token.IsCancellationRequested)
-            {
-                unavailable = true;
-            }
+        if (unavailable)
+            return new AnalysisContextSelector(redactor)
+                .Select(history, points,
+                    AnalysisContextBudget.From(options.Value), unavailable, token: token);
 
-        return new AnalysisContextSelector(redactor).Select(history, points, AnalysisContextBudget.From(options.Value),
-            unavailable, token);
+        try
+        {
+            var now = clock.GetUtcNow();
+            var end = history.Events.Where(e => e.TimestampUtc <= now).Max(e => e.TimestampUtc) ?? now;
+            var start = end.AddHours(-1);
+            if (start < deployment.CreatedAt) start = deployment.CreatedAt;
+            if (start < now.AddDays(-30)) start = now.AddDays(-30);
+            if (start < end)
+                points = await metrics.ReadAsync(deployment.Owner, deployment.Project, deploymentId, start, end,
+                    300, token);
+        }
+        catch (Exception) when (!token.IsCancellationRequested)
+        {
+            unavailable = true;
+        }
+
+        return new AnalysisContextSelector(redactor)
+            .Select(history, points, AnalysisContextBudget.From(options.Value), unavailable, token: token);
     }
 
     /// <summary>
@@ -108,36 +119,49 @@ public sealed class DeploymentAnalysisContextBuilder(
         CancellationToken token = default)
     {
         selection = selection.Normalize();
-        var deployment = await db.Deployments.AsNoTracking().Where(d => d.Id == deploymentId).Select(d => new
-        {
-            Project = d.CsProject!.AppId,
-            Owner = d.CsProject.Application.UserId,
-            d.CreatedAt,
-            d.UpdatedAt,
-            d.Status,
-            d.Outcome,
-            d.ConfigurationSnapshotJson
-        }).SingleOrDefaultAsync(token);
+        var deployment = await db.Deployments
+            .AsNoTracking()
+            .Where(d => d.Id == deploymentId)
+            .Select(d => new
+                {
+                    Project = d.CsProject!.AppId,
+                    Owner = d.CsProject.Application.UserId,
+                    d.CreatedAt,
+                    d.UpdatedAt,
+                    d.Status,
+                    d.Outcome,
+                    d.ConfigurationSnapshotJson
+                }
+            ).SingleOrDefaultAsync(token);
+
         if (deployment is null) return new DeploymentAnalysisContext("", []);
+
         var now = clock.GetUtcNow();
         var window = selection.Window(deployment.Status, deployment.CreatedAt, deployment.UpdatedAt, now);
-        var provenance = new AssessmentProvenance(selection, selection.Resolve(deployment.Status), deployment.Status,
-            deployment.Outcome, now, window);
+        var provenance = new AssessmentProvenance(selection, selection.Resolve(deployment.Status),
+            deployment.Status, deployment.Outcome, now, window);
+
         if (window.End <= window.Start ||
             (storage.Value.ManagedService && !storage.Value.ManagedDataProcessingApproved))
             return new DeploymentAnalysisContext("", [], provenance);
+
         var query = new ArchiveAssessmentQuery(deployment.Owner, deployment.Project, deploymentId, selection, window);
         var page = await AssessmentEvidenceReader.ReadAsync(db, archive, query, token, retainedLogs);
+
         IReadOnlyList<DeploymentMetricPoint> points = [];
         var unavailable = false;
+
         if (selection.IncludeMetrics)
             try
             {
-                points = archive is null
-                    ? await metrics.ReadAssessmentAsync(query, token)
-                    : archive is IDeploymentAssessmentArchive selectedArchive
-                        ? await selectedArchive.ReadAssessmentMetricsAsync(query, token)
-                        : await archive.ReadAssessmentMetricsAsync(query, token);
+                points = archive switch
+                {
+                    null => await metrics.ReadAssessmentAsync(query, token),
+                    IDeploymentAssessmentArchive selectedArchive => await selectedArchive.ReadAssessmentMetricsAsync(
+                        query, token),
+                    _ => await archive.ReadAssessmentMetricsAsync(query, token)
+                };
+
                 if (archive is not null && points.Count == 0)
                     points = await metrics.ReadAssessmentAsync(query, token);
             }
@@ -146,9 +170,12 @@ public sealed class DeploymentAnalysisContextBuilder(
                 unavailable = true;
             }
 
-        var history = new DeploymentTerminalHistory(page.Events.Select(e => redactor.RedactTerminal(
-                DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!))).ToArray(),
+        var history = new DeploymentTerminalHistory([
+                .. page.Events.Select(e => redactor.RedactTerminal(
+                    DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)))
+            ],
             page.EarlierOmitted, page.Availability);
+
         object? configuration = null;
         if (deployment.ConfigurationSnapshotJson is { } json)
             try
@@ -184,8 +211,9 @@ public sealed class DeploymentAnalysisContextBuilder(
                 source = c.Source.ToString()
             }).ToArray()
         };
+
         return new AnalysisContextSelector(redactor).Select(history, points, AnalysisContextBudget.From(options.Value),
-                unavailable, token, provenance.EffectiveKind, metadata) with
+                unavailable, provenance.EffectiveKind, metadata, token) with
             {
                 Provenance = provenance
             };

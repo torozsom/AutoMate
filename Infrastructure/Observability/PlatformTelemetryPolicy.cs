@@ -232,7 +232,7 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
             ? Convert.ToString(value, CultureInfo.InvariantCulture) ?? "[REDACTED]"
             : "[REDACTED]");
         fields["{OriginalFormat}"] = template;
-        return new SafePlatformLog(redactor.RedactText(message), fields.ToArray());
+        return new SafePlatformLog(redactor.RedactText(message), [.. fields]);
     }
 
     /// <summary>

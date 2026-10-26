@@ -24,14 +24,13 @@ namespace Infrastructure.ApplicationServices.Orchestration.CloudRuns;
 /// </param>
 /// <param name="githubApp">Provides the git hub app credentials boundary used by this operation.</param>
 /// <param name="options">Provides the configured limits and endpoint settings for this service.</param>
-public sealed class CloudDeploymentRunService(
+public sealed partial class CloudDeploymentRunService(
     AutoMateDbContext dbContext,
     IGitHubAppCredentials githubApp,
     IOptions<CloudSaasOptions> options) : ICloudDeploymentRunService
 {
     /// <summary>Accepted Azure Container Registry login server shape.</summary>
-    private static readonly Regex RegistryPattern = new(
-        "^[a-z0-9][a-z0-9-]*\\.azurecr\\.io$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex RegistryPattern = MyRegex();
 
     /// <summary>Samples deadlines and transitions at their original decision points.</summary>
     private readonly TimeProvider _clock = TimeProvider.System;
@@ -71,31 +70,54 @@ public sealed class CloudDeploymentRunService(
         if (start.UserId == Guid.Empty || start.ProjectId == Guid.Empty ||
             string.IsNullOrWhiteSpace(start.IdempotencyKey) || start.IdempotencyKey.Length > 128)
             throw new ArgumentException("A valid user, project, and idempotency key are required.");
-        var previous = await dbContext.CloudDeploymentRuns.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.UserId == start.UserId &&
-                                          item.IdempotencyKey == start.IdempotencyKey, cancellationToken);
+
+        var previous = await dbContext.CloudDeploymentRuns
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item =>
+                item.UserId == start.UserId
+                && item.IdempotencyKey == start.IdempotencyKey, cancellationToken);
+
         if (previous is not null) return ReceiptForSameRequest(previous, start);
 
-        var project = await dbContext.Applications.AsNoTracking()
-                          .SingleOrDefaultAsync(item => item.Id == start.ProjectId && item.UserId == start.UserId &&
-                                                        item.SourceType == SourceType.Remote, cancellationToken)
+        var project = await dbContext.Applications
+                          .AsNoTracking()
+                          .SingleOrDefaultAsync(item =>
+                              item.Id == start.ProjectId
+                              && item.UserId == start.UserId
+                              && item.SourceType == SourceType.Remote, cancellationToken)
                       ?? throw new UnauthorizedAccessException("The cloud project is unavailable to this user.");
-        if (!Uri.TryCreate(project.SourcePathOrUrl, UriKind.Absolute, out var uri) ||
-            uri.Host != "github.com" ||
-            !uri.AbsolutePath.Trim('/').TrimEnd('/').Equals(
-                $"{start.RepositoryOwner}/{start.RepositoryName}", StringComparison.OrdinalIgnoreCase))
+
+        if (!Uri.TryCreate(project.SourcePathOrUrl, UriKind.Absolute, out var uri)
+            || uri.Host != "github.com"
+            || !uri.AbsolutePath
+                .Trim('/')
+                .TrimEnd('/')
+                .Equals($"{start.RepositoryOwner}/{start.RepositoryName}", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The repository does not match the selected project.");
+
         if (start.Config.ProjectId != start.ProjectId)
             throw new InvalidOperationException("Deployment configuration does not match the project.");
-        var hasAzureConnection = await dbContext.Users.OfType<RemoteUser>().AsNoTracking()
-            .AnyAsync(item => item.Id == start.UserId && item.AzureRefreshToken != null &&
-                              item.AzureTenantId != null && item.AzureSubscriptionId != null,
+
+        var hasAzureConnection = await dbContext.Users
+            .OfType<RemoteUser>()
+            .AsNoTracking()
+            .AnyAsync(item =>
+                    item.Id == start.UserId
+                    && item.AzureRefreshToken != null
+                    && item.AzureTenantId != null
+                    && item.AzureSubscriptionId != null,
                 cancellationToken);
+
         if (!hasAzureConnection)
             throw new InvalidOperationException("Reconnect Azure with offline access before deploying.");
-        var registry = start.Config.CloudRegistryName.Trim().ToLowerInvariant();
+
+        var registry = start.Config.CloudRegistryName
+            .Trim()
+            .ToLowerInvariant();
+
         if (!RegistryPattern.IsMatch(registry))
             throw new InvalidOperationException("Choose a customer-owned Azure Container Registry login server.");
+
         var (installationId, repositoryId) = await githubApp.ResolveRepositoryAsync(
             start.UserGitHubAccessToken, start.RepositoryOwner, start.RepositoryName, cancellationToken);
 
@@ -107,10 +129,13 @@ public sealed class CloudDeploymentRunService(
             catch (Exception ex) when (ex is DbUpdateException or PostgresException)
             {
                 dbContext.ChangeTracker.Clear();
-                previous = await dbContext.CloudDeploymentRuns.AsNoTracking()
-                    .SingleOrDefaultAsync(item => item.UserId == start.UserId &&
-                                                  item.IdempotencyKey == start.IdempotencyKey,
+                previous = await dbContext.CloudDeploymentRuns
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(item =>
+                            item.UserId == start.UserId
+                            && item.IdempotencyKey == start.IdempotencyKey,
                         cancellationToken);
+
                 if (previous is not null) return ReceiptForSameRequest(previous, start);
                 if (ex is not PostgresException { SqlState: "40001" } || attempt == 2) throw;
                 await Task.Delay(TimeSpan.FromMilliseconds(20 * (attempt + 1)), cancellationToken);
@@ -129,8 +154,12 @@ public sealed class CloudDeploymentRunService(
     public async Task<CloudDeploymentReceipt?> GetAsync(Guid userId, Guid runId,
         CancellationToken cancellationToken = default)
     {
-        var run = await dbContext.CloudDeploymentRuns.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == runId && item.UserId == userId, cancellationToken);
+        var run = await dbContext.CloudDeploymentRuns
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item =>
+                    item.Id == runId
+                    && item.UserId == userId,
+                cancellationToken);
         return run is null ? null : Receipt(run);
     }
 
@@ -144,7 +173,8 @@ public sealed class CloudDeploymentRunService(
     public async Task<CloudDeploymentReceipt?> GetLatestForProjectAsync(Guid userId, Guid projectId,
         CancellationToken cancellationToken = default)
     {
-        var run = await dbContext.CloudDeploymentRuns.AsNoTracking()
+        var run = await dbContext.CloudDeploymentRuns
+            .AsNoTracking()
             .Where(item => item.UserId == userId && item.ProjectId == projectId)
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
@@ -166,14 +196,23 @@ public sealed class CloudDeploymentRunService(
     private async Task<CloudDeploymentReceipt> AdmitAsync(CloudDeploymentStart start, string registry,
         long installationId, long repositoryId, CancellationToken cancellationToken)
     {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(
-            IsolationLevel.Serializable, cancellationToken);
-        var previous = await dbContext.CloudDeploymentRuns.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.UserId == start.UserId &&
-                                          item.IdempotencyKey == start.IdempotencyKey, cancellationToken);
+        await using var transaction = await dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        var previous = await dbContext.CloudDeploymentRuns
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item =>
+                item.UserId == start.UserId
+                && item.IdempotencyKey == start.IdempotencyKey, cancellationToken);
+
         if (previous is not null) return ReceiptForSameRequest(previous, start);
-        var queued = await dbContext.CloudDeploymentRuns.CountAsync(item =>
-            item.UserId == start.UserId && item.Phase == CloudRunPhase.Queued, cancellationToken);
+
+        var queued = await dbContext.CloudDeploymentRuns
+            .CountAsync(item =>
+                    item.UserId == start.UserId
+                    && item.Phase == CloudRunPhase.Queued,
+                cancellationToken);
+
         if (queued >= options.Value.MaxQueuedPerUser)
         {
             AutoMateTelemetry.CloudRunsRejected.Add(1);
@@ -183,8 +222,10 @@ public sealed class CloudDeploymentRunService(
 
         var snapshot = JsonSerializer.Serialize(new CloudRunSnapshot(start.Config, start.Metadata,
             start.CsProjectName, start.RepositoryRoot));
+
         if (snapshot.Length > 262_144)
             throw new InvalidOperationException("Cloud deployment configuration is too large.");
+
         var run = new CloudDeploymentRun
         {
             UserId = start.UserId,
@@ -201,11 +242,13 @@ public sealed class CloudDeploymentRunService(
             SnapshotJson = snapshot,
             NextAttemptAt = _clock.GetUtcNow()
         };
+
         dbContext.CloudDeploymentRuns.Add(run);
         dbContext.CloudRunOutbox.Add(new CloudRunOutbox { RunId = run.Id });
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         AutoMateTelemetry.CloudRunsAdmitted.Add(1);
+
         return Receipt(run);
     }
 
@@ -237,4 +280,8 @@ public sealed class CloudDeploymentRunService(
             throw new InvalidOperationException("The idempotency key belongs to a different deployment request.");
         return Receipt(run);
     }
+
+    [GeneratedRegex(@"^[a-z0-9][a-z0-9-]*\.azurecr\.io$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MyRegex();
 }

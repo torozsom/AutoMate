@@ -79,18 +79,20 @@ internal static class TemplateModelFactory
     /// <returns>The project list selection with its documented bounds and ordering.</returns>
     private static List<object> CreateProjectList(ProjectMetadataDto metadata, string solutionRoot)
     {
-        return metadata.AllProjectPaths
-            .Select(projectPath =>
-            {
-                var relativePath = Path.GetRelativePath(solutionRoot, projectPath).Replace('\\', '/');
-                var folder = Path.GetDirectoryName(relativePath)?.Replace('\\', '/');
-                return (object)new
+        return
+        [
+            .. metadata.AllProjectPaths
+                .Select(projectPath =>
                 {
-                    relative_path = relativePath,
-                    folder = string.IsNullOrEmpty(folder) ? "." : folder
-                };
-            })
-            .ToList();
+                    var relativePath = Path.GetRelativePath(solutionRoot, projectPath).Replace('\\', '/');
+                    var folder = Path.GetDirectoryName(relativePath)?.Replace('\\', '/');
+                    return (object)new
+                    {
+                        relative_path = relativePath,
+                        folder = string.IsNullOrEmpty(folder) ? "." : folder
+                    };
+                })
+        ];
     }
 
     /// <summary>
@@ -129,10 +131,12 @@ internal static class TemplateModelFactory
     /// <returns>The database list selection with its documented bounds and ordering.</returns>
     private static List<object> CreateDatabaseList(DeploymentConfigDto config)
     {
-        return config.Databases
-            .Where(database => !string.IsNullOrWhiteSpace(database.DbType))
-            .Select((database, index) => (object)CreateDatabaseTemplateModel(database, index))
-            .ToList();
+        return
+        [
+            .. config.Databases
+                .Where(database => !string.IsNullOrWhiteSpace(database.DbType))
+                .Select((database, index) => (object)CreateDatabaseTemplateModel(database, index))
+        ];
     }
 
     /// <summary>

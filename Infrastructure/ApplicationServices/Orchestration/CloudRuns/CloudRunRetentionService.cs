@@ -33,24 +33,36 @@ public sealed class CloudRunRetentionService(
                 var cutoff = DateTimeOffset.UtcNow.AddDays(-30);
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-                var deliveryIds = await db.CloudWebhookDeliveries.AsNoTracking()
+
+                var deliveryIds = await db.CloudWebhookDeliveries
+                    .AsNoTracking()
                     .Where(item => item.CreatedAt < cutoff)
-                    .OrderBy(item => item.CreatedAt).Take(1_000)
-                    .Select(item => item.Id).ToListAsync(stoppingToken);
+                    .OrderBy(item => item.CreatedAt)
+                    .Take(1_000)
+                    .Select(item => item.Id)
+                    .ToListAsync(stoppingToken);
+
                 if (deliveryIds.Count > 0)
-                    await db.CloudWebhookDeliveries.Where(item => deliveryIds.Contains(item.Id))
+                    await db.CloudWebhookDeliveries
+                        .Where(item => deliveryIds.Contains(item.Id))
                         .ExecuteDeleteAsync(stoppingToken);
 
-                var outboxIds = await db.CloudRunOutbox.AsNoTracking()
-                    .Where(item => db.CloudDeploymentRuns.Any(run => run.Id == item.RunId &&
-                                                                     run.CompletedAt < cutoff &&
-                                                                     (run.Phase == CloudRunPhase.Succeeded ||
-                                                                      run.Phase == CloudRunPhase.Failed ||
-                                                                      run.Phase == CloudRunPhase.TimedOut)))
-                    .OrderBy(item => item.CreatedAt).Take(1_000)
-                    .Select(item => item.Id).ToListAsync(stoppingToken);
+                var outboxIds = await db.CloudRunOutbox
+                    .AsNoTracking()
+                    .Where(item => db.CloudDeploymentRuns
+                        .Any(run => run.Id == item.RunId
+                                    && run.CompletedAt < cutoff
+                                    && (run.Phase == CloudRunPhase.Succeeded
+                                        || run.Phase == CloudRunPhase.Failed
+                                        || run.Phase == CloudRunPhase.TimedOut)))
+                    .OrderBy(item => item.CreatedAt)
+                    .Take(1_000)
+                    .Select(item => item.Id)
+                    .ToListAsync(stoppingToken);
+
                 if (outboxIds.Count > 0)
-                    await db.CloudRunOutbox.Where(item => outboxIds.Contains(item.Id))
+                    await db.CloudRunOutbox
+                        .Where(item => outboxIds.Contains(item.Id))
                         .ExecuteDeleteAsync(stoppingToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)

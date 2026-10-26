@@ -29,7 +29,9 @@ public sealed class CloudDeploymentRunServiceTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var clock = new AdmissionClock();
+
         await fixture.Service(clock).StartAsync(fixture.Start("clock-fixture"));
+
         Assert.Equal(clock.GetUtcNow(), (await fixture.Db.CloudDeploymentRuns.SingleAsync()).NextAttemptAt);
     }
 
@@ -43,6 +45,7 @@ public sealed class CloudDeploymentRunServiceTests
         await using var fixture = await Fixture.CreateAsync();
         var service = fixture.Service();
         var start = fixture.Start("retry-key");
+
         start.Config.CustomEnvVars["PASSWORD"] = "very-secret-value";
 
         var first = await service.StartAsync(start);
@@ -53,9 +56,12 @@ public sealed class CloudDeploymentRunServiceTests
         fixture.Db.CloudRunOutbox.Should().ContainSingle();
         fixture.Db.CloudDeploymentRuns.Single().Phase.Should().Be(CloudRunPhase.Queued);
         fixture.Db.CloudDeploymentRuns.Single().SnapshotJson.Should().Contain("very-secret-value");
+
         await using var command = fixture.Connection.CreateCommand();
+
         command.CommandText = "SELECT SnapshotJson FROM CloudDeploymentRuns";
         var persisted = (string?)await command.ExecuteScalarAsync();
+
         persisted.Should().NotContain("very-secret-value").And.NotContain("oauth-user-token");
     }
 
@@ -67,14 +73,17 @@ public sealed class CloudDeploymentRunServiceTests
     public async Task Admission_enforces_owner_and_per_user_queue_limit()
     {
         await using var fixture = await Fixture.CreateAsync();
+
         await fixture.Service().StartAsync(fixture.Start("first"));
         var second = fixture.Start("second");
         var action = async () => await fixture.Service().StartAsync(second);
+
         await action.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*queue is full*");
 
         var foreign = fixture.Start("foreign") with { UserId = Guid.NewGuid() };
         var denied = async () => await fixture.Service().StartAsync(foreign);
+
         await denied.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
@@ -127,9 +136,11 @@ public sealed class CloudDeploymentRunServiceTests
         public static async Task<Fixture> CreateAsync()
         {
             var fixture = new Fixture();
+
             await fixture.Connection.OpenAsync();
             var options = new DbContextOptionsBuilder<AutoMateDbContext>()
                 .UseSqlite(fixture.Connection).Options;
+
             fixture.Db = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
             await fixture.Db.Database.EnsureCreatedAsync();
             fixture.Db.Users.Add(new RemoteUser
@@ -151,6 +162,7 @@ public sealed class CloudDeploymentRunServiceTests
                 SourcePathOrUrl = "https://github.com/acme/web"
             });
             await fixture.Db.SaveChangesAsync();
+
             return fixture;
         }
 

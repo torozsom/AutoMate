@@ -53,49 +53,57 @@ public sealed class MetricExplorationService(
     {
         if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
+
         query.Range.Validate(clock.GetUtcNow());
+
         if (query.Owner == Guid.Empty || query.PageSize is not (10 or 25 or 50) || query.Page < 1)
             throw new ArgumentException("Invalid metric exploration request.");
-        if (query.Project is { } project &&
-            !await db.Applications.AnyAsync(p => p.Id == project && p.UserId == query.Owner, token))
+
+        if ((query.Project is { } project
+             && !await db.Applications
+                 .AnyAsync(p => p.Id == project && p.UserId == query.Owner, token))
+            || (query.Deployment is { } deployment
+                && !await db.Deployments
+                    .AnyAsync(d => d.Id == deployment
+                                   && d.CsProject!.Application.UserId == query.Owner
+                                   && (query.Project == null || d.CsProject.AppId == query.Project), token)))
             throw new UnauthorizedAccessException("Metric access denied.");
-        if (query.Deployment is { } deployment && !await db.Deployments.AnyAsync(d => d.Id == deployment &&
-                d.CsProject!.Application.UserId == query.Owner &&
-                (query.Project == null || d.CsProject.AppId == query.Project), token))
-            throw new UnauthorizedAccessException("Metric access denied.");
+
         var rows =
             new Dictionary<(Guid Deployment, string Container, string Metric, string Unit, DateTimeOffset Time),
                 MetricObservation>();
+
         string? notice = null;
         var fullStart = new DateTimeOffset(query.Range.Start.UtcDateTime.Date, TimeSpan.Zero);
         if (fullStart < query.Range.Start) fullStart = fullStart.AddDays(1);
         var fullEnd = new DateTimeOffset(query.Range.End.UtcDateTime.Date, TimeSpan.Zero);
+
         if (query.Range.End - query.Range.Start > TimeSpan.FromDays(1) && fullStart < fullEnd)
         {
-            var daily = db.DeploymentDailyTelemetry.AsNoTracking().Where(d => d.UserId == query.Owner &&
-                                                                              d.DayUtc >= fullStart &&
-                                                                              d.DayUtc < fullEnd &&
-                                                                              (query.Project == null ||
-                                                                               d.ProjectId == query.Project) &&
-                                                                              (query.Deployment == null ||
-                                                                               d.DeploymentId == query.Deployment) &&
-                                                                              (query.Container == null ||
-                                                                               d.Container == query.Container) &&
-                                                                              db.Applications.Any(p =>
-                                                                                  p.Id == d.ProjectId &&
-                                                                                  p.UserId == query.Owner) &&
-                                                                              db.Deployments.Any(deployment =>
-                                                                                  deployment.Id == d.DeploymentId &&
-                                                                                  deployment.CsProject!.AppId ==
-                                                                                  d.ProjectId &&
-                                                                                  deployment.CsProject.Application
-                                                                                      .UserId == query.Owner) &&
-                                                                              d.SampleCount > 0);
+            var daily = db.DeploymentDailyTelemetry
+                .AsNoTracking()
+                .Where(d => d.UserId == query.Owner
+                            && d.DayUtc >= fullStart && d.DayUtc < fullEnd
+                            && (query.Project == null || d.ProjectId == query.Project)
+                            && (query.Deployment == null || d.DeploymentId == query.Deployment)
+                            && (query.Container == null || d.Container == query.Container)
+                            && db.Applications
+                                .Any(p => p.Id == d.ProjectId && p.UserId == query.Owner)
+                            && db.Deployments
+                                .Any(deployment => deployment.Id == d.DeploymentId
+                                                   && deployment.CsProject!.AppId == d.ProjectId
+                                                   && deployment.CsProject.Application.UserId == query.Owner)
+                            && d.SampleCount > 0);
+
             try
             {
                 var inspected = 0;
-                await foreach (var d in daily.OrderBy(d => d.DayUtc).ThenBy(d => d.DeploymentId)
-                                   .ThenBy(d => d.Container).ThenBy(d => d.Metric).AsAsyncEnumerable()
+                await foreach (var d in daily
+                                   .OrderBy(d => d.DayUtc)
+                                   .ThenBy(d => d.DeploymentId)
+                                   .ThenBy(d => d.Container)
+                                   .ThenBy(d => d.Metric)
+                                   .AsAsyncEnumerable()
                                    .WithCancellation(token))
                 {
                     if (++inspected > 250000)
@@ -106,8 +114,8 @@ public sealed class MetricExplorationService(
                     }
 
                     Add(new MetricObservation(d.ProjectId, d.DeploymentId, d.Container, d.Metric, d.Unit,
-                        query.Range.Bucket(d.DayUtc),
-                        d.SampleCount, d.Sum, d.Minimum ?? d.Sum / d.SampleCount,
+                        query.Range.Bucket(d.DayUtc), d.SampleCount, d.Sum,
+                        d.Minimum ?? d.Sum / d.SampleCount,
                         d.Maximum ?? d.Sum / d.SampleCount, d.Incomplete));
                 }
             }
@@ -131,51 +139,81 @@ public sealed class MetricExplorationService(
         }
 
         var allowed = new HashSet<Guid>();
-        foreach (var projects in rows.Values.Select(p => p.Project).Distinct().Chunk(500))
-        foreach (var id in await db.Applications.AsNoTracking().Where(p => projects.Contains(p.Id) &&
-                                                                           p.UserId == query.Owner)
-                     .Select(p => p.Id).ToListAsync(token))
+
+        foreach (var projects in rows.Values
+                     .Select(p => p.Project)
+                     .Distinct()
+                     .Chunk(500))
+        foreach (var id in await db.Applications
+                     .AsNoTracking()
+                     .Where(p => ((IEnumerable<Guid>)projects).Contains(p.Id)
+                                 && p.UserId == query.Owner)
+                     .Select(p => p.Id)
+                     .ToListAsync(token))
             allowed.Add(id);
-        if (query.Project is { } selectedProject && !await db.Applications.AnyAsync(p =>
-                p.Id == selectedProject && p.UserId == query.Owner, token))
+
+        if (query.Project is { } selectedProject && !await db.Applications
+                .AnyAsync(p => p.Id == selectedProject && p.UserId == query.Owner, token))
             throw new UnauthorizedAccessException("Metric access denied.");
+
         if (rows.Values.Any(p => !allowed.Contains(p.Project)))
             notice =
                 "Ownership changed during this read; affected observations are unavailable.";
-        var all = rows.Values.Where(p => allowed.Contains(p.Project)).OrderByDescending(p => p.Timestamp)
+
+        var all = rows.Values
+            .Where(p => allowed.Contains(p.Project))
+            .OrderByDescending(p => p.Timestamp)
             .ThenBy(p => p.Deployment)
-            .ThenBy(p => p.Container, StringComparer.Ordinal).ThenBy(p => p.Metric, StringComparer.Ordinal).ToArray();
+            .ThenBy(p => p.Container, StringComparer.Ordinal)
+            .ThenBy(p => p.Metric, StringComparer.Ordinal)
+            .ToArray();
+
         if (all.Any(p => p.Incomplete)) notice ??= "Some recorded observations are incomplete.";
+
         if (all.Any(p => p.ImportedIntervals > 0))
             notice =
                 (notice + " Imported backend intervals have no raw sample counts and are labeled separately.").Trim();
-        if (all.Length == 0) notice ??= "No recorded resource observations in this range.";
+
+        if (all.Length == 0)
+            notice ??= "No recorded resource observations in this range.";
+
         var page = Math.Clamp(query.Page, 1, Math.Max(1, (all.Length + query.PageSize - 1) / query.PageSize));
-        return new MetricExplorationResult(all, all.Skip((page - 1) * query.PageSize).Take(query.PageSize).ToArray(),
+
+        return new MetricExplorationResult(all, [
+                .. all
+                    .Skip((page - 1) * query.PageSize)
+                    .Take(query.PageSize)
+            ],
             all.Length, page, query.PageSize, query.Range, notice);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Combines only matching metric/deployment/container buckets, retaining real denominators.
-        /// </summary>
-        /// <param name="value">The value to normalize, redact or validate.</param>
+        /*
+         *Combines only matching metric/deployment/container buckets, retaining real denominators.
+         *
+         * @param value: The value to normalize, redact or validate.
+         */
         void Add(MetricObservation value)
         {
-            if (!MimirDeploymentMetrics.SupportedUnits.TryGetValue(value.Metric, out var unit) || value.Unit != unit ||
-                !double.IsFinite(value.Sum) || !double.IsFinite(value.Minimum) ||
-                !double.IsFinite(value.Maximum)) return;
+            if (!MimirDeploymentMetrics.SupportedUnits.TryGetValue(value.Metric, out var unit)
+                || value.Unit != unit
+                || !double.IsFinite(value.Sum)
+                || !double.IsFinite(value.Minimum)
+                || !double.IsFinite(value.Maximum))
+                return;
+
             value = value with
             {
                 Timestamp = query.Range.Bucket(value.Timestamp),
                 Container = _redactor.RedactText(value.Container, 128)
             };
+
             var key = (value.Deployment, value.Container, value.Metric, value.Unit, value.Timestamp);
             if (!rows.TryGetValue(key, out var previous))
             {
                 if (rows.Count >= 100000)
                 {
                     notice =
-                        "Metric aggregation limit reached; narrow the range or select a project/container. Results are partial.";
+                        "Metric aggregation limit reached; narrow the range or select a project/container. " +
+                        "Results are partial.";
                     return;
                 }
 
@@ -200,14 +238,12 @@ public sealed class MetricExplorationService(
                 Incomplete = previous.Incomplete || value.Incomplete
             };
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Reads authorized boundary batches and preserves usable data during archive outages.
-        /// </summary>
-        /// <param name="range">The selected frozen observation window or assessment range.</param>
-        /// <returns>A task representing completion of the asynchronous operation.</returns>
+        /*
+         * Reads archived boundary fragments in batches, combining them with daily aggregates.
+         *
+         * @param range: The UTC time range to read, which may be less than a full day.
+         */
         async Task BoundaryAsync(MetricTimeRange range)
         {
             // Boundary fragments may be under five minutes; the public enclosing window has already been validated.
@@ -251,6 +287,5 @@ public sealed class MetricExplorationService(
                 notice =
                     "Some deployment partitions exceed this query's batch budget; results are partial. Select a project.";
         }
-#pragma warning restore CS1587
     }
 }

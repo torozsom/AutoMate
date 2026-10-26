@@ -50,6 +50,7 @@ public sealed class DiagnosticRedactorTests
     {
         var redactor = new DiagnosticRedactor();
         var safe = redactor.RedactText("progress\r\n" + sensitive);
+
         Assert.StartsWith("progress\r\n", safe);
         Assert.DoesNotContain("private", safe, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("[REDACTED]", safe);
@@ -85,6 +86,7 @@ public sealed class DiagnosticRedactorTests
             ]);
         var result = new DiagnosticRedactor().Redact(original);
         var json = JsonSerializer.Serialize(result.Event);
+
         Assert.DoesNotContain("private", json, StringComparison.Ordinal);
         Assert.Equal(original.ProjectId, result.Event.ProjectId);
         Assert.Equal(original.DeploymentId, result.Event.DeploymentId);
@@ -104,8 +106,11 @@ public sealed class DiagnosticRedactorTests
     public void Text_bounds_do_not_leak_or_change_on_repeated_redaction()
     {
         var redactor = new DiagnosticRedactor();
+
         Assert.Equal("[REDACTED]", redactor.RedactText(new string('x', 131_073) + "password=private-value"));
+
         var bounded = redactor.RedactText(new string('x', 8_000) + "password=private-value");
+
         Assert.Equal(4096, bounded.Length);
         Assert.Contains("[output truncated]", bounded);
         Assert.Equal(bounded, redactor.RedactText(bounded));
@@ -166,6 +171,7 @@ public sealed class DiagnosticRedactorTests
             Options.Create(new DeploymentDiagnosticOptions { BufferCapacity = 16 }),
             NullLogger<DeploymentDiagnosticPublisher>.Instance);
         var projectId = Guid.NewGuid();
+
         for (var index = 0; index < 17; index++)
             await publisher.PublishAsync(new DeploymentDiagnosticEvent(projectId, Guid.NewGuid(),
                 DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Log,
@@ -186,6 +192,7 @@ public sealed class DiagnosticRedactorTests
         var publisher = new DeploymentDiagnosticPublisher(new DiagnosticRedactor(),
             Options.Create(new DeploymentDiagnosticOptions { BufferCapacity = 16 }),
             NullLogger<DeploymentDiagnosticPublisher>.Instance);
+
         await publisher.PublishAsync(new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(),
             DeploymentDiagnosticSource.DockerCompose, DeploymentDiagnosticKind.Log,
             DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
@@ -193,6 +200,7 @@ public sealed class DiagnosticRedactorTests
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)));
 
         var queued = await publisher.Reader.ReadAsync();
+
         queued.Message.Should().Contain("[output truncated]").And.NotContain("secret");
         queued.Message.Length.Should().BeLessThan(4_200);
     }

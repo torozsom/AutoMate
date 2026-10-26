@@ -46,6 +46,7 @@ public sealed class HostingProfileRegistrationTests
     public async Task Azure_reconnect_requests_explicit_static_consent()
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.AddApplicationServices();
         await using var provider = builder.Services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptionsMonitor<OAuthOptions>>()
@@ -56,7 +57,9 @@ public sealed class HostingProfileRegistrationTests
                 typeof(OAuthHandler<OAuthOptions>)),
             options, new AuthenticationProperties(),
             "https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?scope=https%3A%2F%2Fmanagement.azure.com%2F.default");
+
         await options.Events.OnRedirectToAuthorizationEndpoint(context);
+
         Assert.Contains("prompt=consent", http.Response.Headers.Location.ToString());
         Assert.DoesNotContain("adminconsent", http.Response.Headers.Location.ToString());
     }
@@ -72,9 +75,11 @@ public sealed class HostingProfileRegistrationTests
     public void Azure_provider_registration_uses_exact_resource_and_separate_credentials(string profile)
     {
         var certificatePath = profile == "SaaS" ? CreateTestCertificate() : null;
+
         try
         {
             var builder = CreateBuilder(profile);
+
             if (certificatePath is not null)
                 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
@@ -89,9 +94,11 @@ public sealed class HostingProfileRegistrationTests
             builder.AddApplicationServices();
             using var services = builder.Services.BuildServiceProvider();
             using var scope = services.CreateScope();
+
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<AzureOpenAiAnalysisProvider>());
             Assert.NotNull(services.GetRequiredService<ConsoleExceptionDiagnostics>());
             Assert.IsType<SafeLoggerFactory>(services.GetRequiredService<ILoggerFactory>());
+
             var catalog = services.GetRequiredService<AnalysisProviderCatalog>();
             var settings = new AiAnalysisOptions
             {
@@ -106,12 +113,17 @@ public sealed class HostingProfileRegistrationTests
                 Endpoint = "https://automate-test.openai.azure.com/openai/v1/",
                 Model = "analysis-deployment"
             };
+
             var selected = Assert.IsType<AnalysisProviderRegistration>(catalog.Select(settings));
             Assert.Equal(typeof(AzureOpenAiAnalysisProvider), selected.ImplementationType);
             Assert.False(selected.CredentialsConfigured!());
+
             builder.Configuration["AiAnalysis:AzureOpenAi:ApiKey"] = "synthetic-Azure-key";
+
             Assert.True(selected.CredentialsConfigured());
+
             builder.Configuration["AiAnalysis:AzureOpenAi:ResourceName"] = "other-resource";
+
             Assert.Null(catalog.Select(settings));
             Assert.False(services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value.Enabled);
         }
@@ -140,10 +152,12 @@ public sealed class HostingProfileRegistrationTests
     public void Startup_rejects_invalid_shared_budget_limits(string setting, string value)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { ["AiAnalysis:" + setting] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         var failure =
             Assert.Throws<OptionsValidationException>(() =>
                 services.GetRequiredService<IStartupValidator>().Validate());
@@ -172,10 +186,12 @@ public sealed class HostingProfileRegistrationTests
     public void Ai_limits_fail_startup_when_out_of_range(string setting, string value)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { ["AiAnalysis:" + setting] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         Assert.Throws<OptionsValidationException>(() => services.GetRequiredService<IStartupValidator>().Validate());
     }
 
@@ -189,6 +205,7 @@ public sealed class HostingProfileRegistrationTests
     public void Ai_limit_boundaries_are_valid_without_egress(bool maximum)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["AiAnalysis:TimeoutSeconds"] = maximum ? "300" : "5",
@@ -201,8 +218,10 @@ public sealed class HostingProfileRegistrationTests
         });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         services.GetRequiredService<IStartupValidator>().Validate();
         var options = services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>().CurrentValue;
+
         Assert.Equal(maximum ? 8192 : 1, options.MaximumOutputTokens);
         Assert.Equal(maximum ? 300 : 5, options.TimeoutSeconds);
         Assert.False(options.Enabled);
@@ -225,10 +244,12 @@ public sealed class HostingProfileRegistrationTests
     public void Otlp_invalid_endpoint_fails_safely(string endpoint)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { ["OpenTelemetry:OtlpEndpoint"] = endpoint });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         var failure =
             Assert.Throws<OptionsValidationException>(() =>
                 services.GetRequiredService<IStartupValidator>().Validate());
@@ -249,6 +270,7 @@ public sealed class HostingProfileRegistrationTests
     public void Otlp_endpoint_validation_does_not_contact_collector(string? endpoint)
     {
         var validator = new OpenTelemetryOptionsValidator();
+
         Assert.True(validator.Validate(null, new OpenTelemetryOptions { OtlpEndpoint = endpoint }).Succeeded);
     }
 
@@ -270,6 +292,7 @@ public sealed class HostingProfileRegistrationTests
             ServiceName = service ? invalid : "AutoMate",
             Environment = service ? null : invalid
         });
+
         Assert.True(result.Failed);
         Assert.DoesNotContain("private-secret", string.Join(" ", result.Failures!));
     }
@@ -281,6 +304,7 @@ public sealed class HostingProfileRegistrationTests
     private static void AssertAnalysisDefaults(IServiceProvider services)
     {
         var options = services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value;
+
         Assert.Equal(8192, options.MaximumOutputTokens);
         Assert.Equal(60, options.TimeoutSeconds);
         Assert.Null(services.GetRequiredService<IOptions<OpenTelemetryOptions>>().Value.OtlpEndpoint);
@@ -293,6 +317,7 @@ public sealed class HostingProfileRegistrationTests
     public void Ai_egress_configuration_fails_closed_when_approvals_are_missing()
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["AiAnalysis:Enabled"] = "true",
@@ -300,6 +325,7 @@ public sealed class HostingProfileRegistrationTests
         });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         Assert.Throws<OptionsValidationException>(() =>
             services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>().CurrentValue);
     }
@@ -315,9 +341,11 @@ public sealed class HostingProfileRegistrationTests
     public void Ai_result_boundaries_resolve_without_provider_credentials(string profile)
     {
         var certificatePath = profile == "SaaS" ? CreateTestCertificate() : null;
+
         try
         {
             var builder = CreateBuilder(profile);
+
             if (certificatePath is not null)
                 builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
@@ -326,10 +354,12 @@ public sealed class HostingProfileRegistrationTests
                 });
             builder.AddApplicationServices();
             using var exporter = new SnapshotExporter();
+
             builder.Logging.AddOpenTelemetry(logging =>
                 logging.AddProcessor(new SimpleLogRecordExportProcessor(exporter)));
             using var services = builder.Services.BuildServiceProvider();
             using var scope = services.CreateScope();
+
             Assert.Contains(services.GetServices<IHostedService>(),
                 hosted => hosted is DeploymentAnalysisRetentionService);
             Assert.Contains(services.GetServices<IHostedService>(),
@@ -342,17 +372,23 @@ public sealed class HostingProfileRegistrationTests
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisContextBuilder>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisReadiness>());
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAnalysisBudgetGuard>());
+
             var health = services.GetRequiredService<IOptions<HealthCheckServiceOptions>>().Value;
+
             var readiness = Assert.Single(health.Registrations, item => item.Name == "ai_analysis");
             Assert.Contains(AnalysisHealthChecks.ReadinessTag, readiness.Tags);
             Assert.Equal(TimeSpan.FromSeconds(5), readiness.Timeout);
             Assert.NotNull(scope.ServiceProvider.GetRequiredService<IAnalysisEgressAuthorizer>());
             Assert.False(services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value.Enabled);
+
             AssertAnalysisDefaults(services);
+
             Assert.IsType<SecurityAuditResultHandler>(
                 services.GetRequiredService<IAuthorizationMiddlewareResultHandler>());
+
             var deployment = Guid.NewGuid();
             var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("fixture");
+
             using (OperationalLog.BeginCorrelation(logger, deployment))
             {
                 OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Completed);
@@ -368,6 +404,7 @@ public sealed class HostingProfileRegistrationTests
                 services.GetRequiredService<TracerProvider>().GetResource().Attributes.OrderBy(pair => pair.Key));
             Assert.Equal(exporter.ResourceAttributes.OrderBy(pair => pair.Key),
                 services.GetRequiredService<MeterProvider>().GetResource().Attributes.OrderBy(pair => pair.Key));
+
             using (logger.BeginScope(new Dictionary<string, object?> { ["Cookie"] = "private-cookie" }))
             {
                 logger.LogWarning(new Exception("private-exception"), "Unreviewed private-message {Url}",
@@ -375,11 +412,14 @@ public sealed class HostingProfileRegistrationTests
             }
 
             var sanitized = exporter.Records.Last();
+
             Assert.Equal(PlatformTelemetryPolicy.UnknownMessage, sanitized.Message);
             Assert.DoesNotContain("Cookie", sanitized.Scopes.Keys);
             Assert.NotNull(services.GetRequiredService<TracerProvider>());
+
             using var signalR = new ActivitySource("Microsoft.AspNetCore.SignalR.Server");
             using var invocation = signalR.StartActivity("fixture.invocation");
+
             Assert.NotNull(invocation);
         }
         finally
@@ -400,10 +440,12 @@ public sealed class HostingProfileRegistrationTests
     public void Diagnostic_sink_bounds_are_validated_at_startup(string setting, string value)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { [$"DeploymentDiagnostics:{setting}"] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         var failure = Assert.Throws<OptionsValidationException>(() =>
             services.GetRequiredService<IOptions<DeploymentDiagnosticOptions>>().Value);
         Assert.Contains("DeploymentDiagnostics", failure.Message);
@@ -426,10 +468,12 @@ public sealed class HostingProfileRegistrationTests
     public void Startup_rejects_invalid_retry_bounds(string setting, string value)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { [$"AiAnalysis:{setting}"] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         var error = Assert.Throws<OptionsValidationException>(() =>
             services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value);
         Assert.Contains("AI retries", error.Message);
@@ -448,10 +492,12 @@ public sealed class HostingProfileRegistrationTests
     public void Startup_validates_daily_analysis_limit(int limit, bool valid)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { ["AiAnalysis:DailyProjectLimit"] = limit.ToString() });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         if (valid) Assert.Equal(0, services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value.DailyProjectLimit);
         else
             Assert.Contains("daily project admission", Assert.Throws<OptionsValidationException>(() =>
@@ -473,10 +519,12 @@ public sealed class HostingProfileRegistrationTests
     public void Startup_validates_analysis_concurrency(int concurrency, bool valid)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { ["AiAnalysis:MaximumConcurrency"] = concurrency.ToString() });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         if (valid)
             Assert.Equal(concurrency,
                 services.GetRequiredService<IOptions<AiAnalysisOptions>>().Value.MaximumConcurrency);
@@ -492,14 +540,19 @@ public sealed class HostingProfileRegistrationTests
     public void SelfHosted_resolves_shared_cloud_services_without_GitHub_App_settings()
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
         using var scope = services.CreateScope();
 
         var storage = services.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value;
+
+
         Assert.True(storage.DiskGateway);
         Assert.True(storage.Specialized);
+
         services.GetRequiredService<IStartupValidator>().Validate();
+
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IGitHubAppCredentials>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICloudDeploymentOrchestrator>());
@@ -513,10 +566,12 @@ public sealed class HostingProfileRegistrationTests
     public void SelfHosted_requires_gateway_configuration()
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             { ["TelemetryStorage:GatewayUrl"] = "" });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         var failure =
             Assert.Throws<OptionsValidationException>(() =>
                 services.GetRequiredService<IStartupValidator>().Validate());
@@ -534,6 +589,7 @@ public sealed class HostingProfileRegistrationTests
     public void SelfHosted_rejects_database_payload_persistence(string backend, string deliveryMode)
     {
         var builder = CreateBuilder("SelfHosted");
+
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["TelemetryStorage:Backend"] = backend,
@@ -541,6 +597,7 @@ public sealed class HostingProfileRegistrationTests
         });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
+
         var failure = Assert.Throws<OptionsValidationException>(() =>
             services.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value);
         Assert.Contains("both SelfHosted and SaaS", failure.Message);
@@ -553,9 +610,11 @@ public sealed class HostingProfileRegistrationTests
     public void SaaS_startup_requires_GitHub_App_settings()
     {
         var certificatePath = CreateTestCertificate();
+
         try
         {
             var builder = CreateBuilder("SaaS");
+
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["SaaS:DataProtectionCertificatePath"] = certificatePath,
@@ -587,7 +646,9 @@ public sealed class HostingProfileRegistrationTests
             new CertificateRequest("CN=AutoMate test", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         using var certificate =
             request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
+
         File.WriteAllBytes(path, certificate.Export(X509ContentType.Pfx, "test-only"));
+
         return path;
     }
 
@@ -603,6 +664,7 @@ public sealed class HostingProfileRegistrationTests
             EnvironmentName = "Testing",
             ApplicationName = typeof(ServiceConfiguration).Assembly.GetName().Name
         });
+
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -619,6 +681,7 @@ public sealed class HostingProfileRegistrationTests
             ["TelemetryStorage:MetricsWriteUrl"] = "https://metrics.example.invalid/otlp/v1/metrics",
             ["TelemetryStorage:MetricsQueryUrl"] = "https://metrics.example.invalid/prometheus"
         });
+
         return builder;
     }
 }

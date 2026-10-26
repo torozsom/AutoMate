@@ -30,6 +30,7 @@ public sealed class DockerMetricDeliveryTests
         var history = new RecordingPublisher();
         var delivery = new DockerMetricDelivery(history, live, new DiagnosticRedactor(), viewers, clock, 60,
             NullLogger.Instance);
+
         for (var second = 0; second <= 60; second++)
         {
             viewers.Renew("owner", project, deployment);
@@ -49,9 +50,11 @@ public sealed class DockerMetricDeliveryTests
         live.Snapshots.Last().Samples.Single(p => p.Name == "automate_memory_used_bytes").Value.Should().Be(104857600);
         history.Events.Should().HaveCount(2);
         history.Events.Last().Metrics!.Single(p => p.Unit == "cores").Value.Should().Be(0.6);
+
         viewers.Remove("owner");
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("80%", "100MiB / 200MiB"),
             CancellationToken.None);
+
         live.Values.Should().HaveCount(62);
         live.Snapshots.Should().HaveCount(62);
         history.Events.Should().HaveCount(2);
@@ -68,15 +71,18 @@ public sealed class DockerMetricDeliveryTests
         var viewers = new DeploymentRuntimeViewers(clock);
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
+
         viewers.Renew("owner", project, deployment);
         var live = new RecordingLive { FailNext = true };
         var history = new RecordingPublisher();
         var delivery = new DockerMetricDelivery(history, live, new DiagnosticRedactor(), viewers, clock, 60,
             NullLogger.Instance);
+
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("1%", "100MiB"),
             CancellationToken.None);
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("2%", "password=private-value"),
             CancellationToken.None);
+
         live.Values.Should().ContainSingle();
         live.Values.Single().Cpu.Should().Be("2%");
         live.Values.Single().Memory.Should().NotContain("private-value");
@@ -120,6 +126,7 @@ public sealed class DockerMetricDeliveryTests
         public ValueTask PublishAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken token = default)
         {
             Events.Add(diagnosticEvent);
+
             return ValueTask.CompletedTask;
         }
     }
@@ -147,6 +154,7 @@ public sealed class DockerMetricDeliveryTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             Snapshots.Add(snapshot);
+
             return Task.CompletedTask;
         }
 
@@ -172,6 +180,7 @@ public sealed class DockerMetricDeliveryTests
             }
 
             Values.Add((cpu, memory));
+
             return Task.CompletedTask;
         }
 

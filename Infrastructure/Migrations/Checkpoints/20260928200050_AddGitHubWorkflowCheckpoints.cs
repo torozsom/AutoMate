@@ -74,13 +74,13 @@ public partial class AddGitHubWorkflowCheckpoints : Migration
         migrationBuilder.CreateIndex(
             "ix_git_hub_workflow_checkpoints_deployment_id_workflow_run_id_",
             "git_hub_workflow_checkpoints",
-            new[] { "deployment_id", "workflow_run_id", "workflow_attempt" },
+            ["deployment_id", "workflow_run_id", "workflow_attempt"],
             unique: true);
 
         migrationBuilder.CreateIndex(
             "ix_git_hub_workflow_job_checkpoints_git_hub_workflow_checkpoin",
             "git_hub_workflow_job_checkpoints",
-            new[] { "git_hub_workflow_checkpoint_id", "job_id" },
+            ["git_hub_workflow_checkpoint_id", "job_id"],
             unique: true);
     }
 

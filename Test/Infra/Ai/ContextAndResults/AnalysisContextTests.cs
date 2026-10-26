@@ -25,11 +25,15 @@ public sealed class AnalysisContextTests
             Row(1, "fatal failure " + new string('x', 4000), DeploymentDiagnosticSeverity.Error),
             Row(2, "ready"), Row(3, "unable to connect", DeploymentDiagnosticSeverity.Warning)
         };
+
         var budget = new AnalysisContextBudget(2000, 2000, 1300);
         var context = Selector().Select(new DeploymentTerminalHistory(rows, true), [], budget, false);
+
         Assert.True(budget.Fits(context.Text));
         Assert.Contains("order:1", context.EvidenceReferences);
+
         using var document = JsonDocument.Parse(context.Text);
+
         Assert.True(document.RootElement.GetProperty("coverage").GetProperty("earlierOmitted").GetBoolean());
         Assert.Contains("fatal failure", context.Text);
     }
@@ -42,18 +46,23 @@ public sealed class AnalysisContextTests
     public void Duplicate_groups_have_stable_references_counts_and_chronological_rendering()
     {
         var id = Guid.NewGuid();
+
         var rows = new[]
         {
             Row(1, "password=private-a"), Row(2, "password=private-b") with { EventId = id, Sequence = 42 },
             Row(3, "new failure", DeploymentDiagnosticSeverity.Error)
         };
+
         var context = Selector().Select(new DeploymentTerminalHistory(rows, false), [], Budget(), false);
-        var repeated = Selector().Select(new DeploymentTerminalHistory(rows.Reverse().ToArray(), false), [], Budget(),
+        var repeated = Selector().Select(new DeploymentTerminalHistory([.. rows.Reverse()], false), [], Budget(),
             false);
+
         Assert.Equal(context.Text, repeated.Text);
         Assert.DoesNotContain("private", context.Text);
+
         using var document = JsonDocument.Parse(context.Text);
         var records = document.RootElement.GetProperty("records").EnumerateArray().ToArray();
+
         Assert.Equal(2, records.Length);
         Assert.Equal(2, records[0].GetProperty("occurrences").GetInt32());
         Assert.Equal(42, records[0].GetProperty("sequence").GetInt64());
@@ -76,10 +85,13 @@ public sealed class AnalysisContextTests
         var context = Selector()
             .Select(new DeploymentTerminalHistory([Row(1, string.Concat(Enumerable.Repeat("错误🙂\"", 1000)))], false),
                 [], budget, false);
+
         if (context.Text.Length > 0)
         {
             Assert.True(budget.Fits(context.Text));
+
             using var document = JsonDocument.Parse(context.Text);
+
             Assert.Single(context.EvidenceReferences);
         }
         else
@@ -95,8 +107,9 @@ public sealed class AnalysisContextTests
     [Fact]
     public void Metric_and_trace_evidence_are_bounded_and_do_not_claim_missing_samples_or_spans()
     {
-        var trace = "1234567890abcdef1234567890abcdef";
+        const string trace = "1234567890abcdef1234567890abcdef";
         var row = Row(1, "failure") with { TraceId = trace };
+
         var points = new[]
         {
             new DeploymentMetricPoint("private-container", "automate_cpu_usage_cores", "cores", row.TimestampUtc!.Value,
@@ -106,14 +119,18 @@ public sealed class AnalysisContextTests
             new DeploymentMetricPoint("private-container", "automate_memory_used_bytes", "bytes",
                 row.TimestampUtc.Value, double.NaN, 0, 1)
         };
+
         var context = Selector().Select(new DeploymentTerminalHistory([row], false, "private-provider-error"), points,
             Budget(), true);
+
         Assert.DoesNotContain("private", context.Text);
         Assert.Contains($"trace:{trace}", context.EvidenceReferences);
         Assert.Contains(context.EvidenceReferences,
             reference => reference.StartsWith("metric:automate_cpu_usage_cores:", StringComparison.Ordinal));
+
         using var document = JsonDocument.Parse(context.Text);
         var signal = document.RootElement.GetProperty("metricSignals").EnumerateArray().Single();
+
         Assert.Equal(1, signal.GetProperty("minimum").GetDouble());
         Assert.Equal(3, signal.GetProperty("maximum").GetDouble());
         Assert.True(document.RootElement.GetProperty("coverage").GetProperty("historyUnavailable").GetBoolean());
@@ -126,7 +143,7 @@ public sealed class AnalysisContextTests
     public void Cancelled_selection_does_not_produce_context()
     {
         Assert.Throws<OperationCanceledException>(() => Selector().Select(new DeploymentTerminalHistory([], false), [],
-            Budget(), false, new CancellationToken(true)));
+            Budget(), false, token: new CancellationToken(true)));
     }
 
     /// <summary>
@@ -142,6 +159,7 @@ public sealed class AnalysisContextTests
     public void Evidence_requires_exact_membership(string reference, bool valid)
     {
         var response = AnalysisResultTests.Valid() with { EvidenceReferences = [reference] };
+
         if (valid) Assert.Same(response, AnalysisEvidence.Validate(response, ["order:1"]));
         else Assert.Throws<InvalidAnalysisResultException>(() => AnalysisEvidence.Validate(response, ["order:1"]));
     }

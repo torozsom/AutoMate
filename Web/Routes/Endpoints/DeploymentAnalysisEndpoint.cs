@@ -20,11 +20,15 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
     {
         app.MapGet("/api/deployments/{deploymentId:guid}/analyses/preferences", PreferencesAsync)
             .RequireAuthorization();
+
         app.MapPut("/api/deployments/{deploymentId:guid}/analyses/preferences", SavePreferencesAsync)
             .RequireAuthorization();
+
         app.MapPost("/api/deployments/{deploymentId:guid}/analyses", RequestAsync).RequireAuthorization();
+
         app.MapDelete(
             "/api/deployments/{deploymentId:guid}/analyses/{analysisId:guid}", DeleteAsync).RequireAuthorization();
+
         app.MapPost(
                 "/api/deployments/{deploymentId:guid}/analyses/{analysisId:guid}/cancel", CancelAsync)
             .RequireAuthorization();
@@ -126,11 +130,16 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
         }
 
         var owner = await OwnerAsync(context, users, token);
-        if (owner == Guid.Empty) return Results.Forbid();
+
+        if (owner == Guid.Empty)
+            return Results.Forbid();
+
         if (request.Selection is null || request.RequestId == Guid.Empty)
             return Results.BadRequest("Invalid assessment request.");
+
         var result =
             await analyses.RequestManualAsync(owner, deploymentId, request.RequestId, request.Selection, token);
+
         return result.Conflict ? Results.Conflict(result) : Results.Ok(result);
     }
 
@@ -150,7 +159,10 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
         CancellationToken token)
     {
         var identifier = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(identifier)) return Results.Forbid();
+
+        if (string.IsNullOrWhiteSpace(identifier))
+            return Results.Forbid();
+
         try
         {
             await antiforgery.ValidateRequestAsync(context);
@@ -161,7 +173,10 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
         }
 
         var owner = (await users.GetUserDetailsFromIdentifierAsync(identifier, token)).UserId;
-        if (owner == Guid.Empty) return Results.Forbid();
+
+        if (owner == Guid.Empty)
+            return Results.Forbid();
+
         return await analyses.DeleteAsync(owner, deploymentId, analysisId, token) switch
         {
             DeploymentAnalysisDeletionResult.Deleted => Results.NoContent(),
@@ -186,7 +201,10 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
         CancellationToken token)
     {
         var identifier = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(identifier)) return Results.Forbid();
+
+        if (string.IsNullOrWhiteSpace(identifier))
+            return Results.Forbid();
+
         try
         {
             await antiforgery.ValidateRequestAsync(context);
@@ -197,7 +215,10 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
         }
 
         var owner = (await users.GetUserDetailsFromIdentifierAsync(identifier, token)).UserId;
-        if (owner == Guid.Empty) return Results.Forbid();
+
+        if (owner == Guid.Empty)
+            return Results.Forbid();
+
         return await analyses.CancelAsync(owner, deploymentId, analysisId, token) switch
         {
             DeploymentAnalysisCancellationResult.Cancelled => Results.NoContent(),

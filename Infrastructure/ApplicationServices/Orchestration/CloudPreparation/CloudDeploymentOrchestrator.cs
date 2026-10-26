@@ -111,17 +111,22 @@ public sealed class CloudDeploymentOrchestrator(
 
         CloudDeploymentRun? saasRun = null;
         if (request.SaasRunId is { } runId)
-            saasRun = await dbContext.CloudDeploymentRuns.SingleAsync(item => item.Id == runId, cancellationToken);
+            saasRun = await dbContext.CloudDeploymentRuns
+                .SingleAsync(item => item.Id == runId, cancellationToken);
+
         var deployment = saasRun?.DeploymentId is { } existingDeploymentId
-            ? await dbContext.Deployments.SingleAsync(item => item.Id == existingDeploymentId, cancellationToken)
+            ? await dbContext.Deployments
+                .SingleAsync(item => item.Id == existingDeploymentId, cancellationToken)
             : new Deployment { CsProjectId = csProject.Id, Status = DeploymentStatus.Starting };
+
         if (saasRun?.DeploymentId is null)
         {
             await DeploymentSnapshotCapture.CaptureAsync(dbContext, deployment, config,
                 $"https://github.com/{request.RepositoryOwner}/{request.RepositoryName}", request.BranchName,
                 cancellationToken);
+
             dbContext.Deployments.Add(deployment);
-            if (saasRun is not null) saasRun.DeploymentId = deployment.Id;
+            saasRun?.DeploymentId = deployment.Id;
             await dbContext.SaveChangesAsync(cancellationToken);
         }
         else if (deployment.ConfigurationSnapshotJson is null)
@@ -138,12 +143,14 @@ public sealed class CloudDeploymentOrchestrator(
         {
             await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
                 $"Starting cloud deployment preparation for {request.RepositoryOwner}/{request.RepositoryName}@{request.BranchName}.");
+
             // Self-hosted queued requests can contain an expired login token by the time a launch starts.
             if (saasRun is null)
                 request = request with
                 {
                     AzureCredentials = await azureCredentials.GetAsync(request.RequestingUserId, cancellationToken)
                 };
+
             var oidcSetup = await azureDeploymentOrchestrator.EnsureFederatedIdentityAsync(request.AzureCredentials,
                 config, request.RepositoryOwner, request.RepositoryName, request.BranchName, cancellationToken);
 
@@ -193,35 +200,45 @@ public sealed class CloudDeploymentOrchestrator(
                 // A recovered worker must finish checking the marker before another worker can commit
                 // this run. The transaction-scoped advisory lock also protects the uncertain-commit case.
                 await using var commitTransaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
                 var leaseBytes = saasRun.Id.ToByteArray();
                 var lockKeyA = BitConverter.ToInt32(leaseBytes, 0);
                 var lockKeyB = BitConverter.ToInt32(leaseBytes, 4);
-                await dbContext.Database.SqlQuery<int>($"""
-                                                        SELECT 1 AS "Value" FROM pg_advisory_xact_lock({lockKeyA}, {lockKeyB})
-                                                        """).SingleAsync(cancellationToken);
+
+                await dbContext.Database
+                    .SqlQuery<int>($"""SELECT 1 AS "Value" FROM pg_advisory_xact_lock({lockKeyA}, {lockKeyB})""")
+                    .SingleAsync(cancellationToken);
+
                 await dbContext.Entry(saasRun).ReloadAsync(cancellationToken);
+
                 if (saasRun.LeaseOwner != request.SaasLeaseOwner ||
                     saasRun.Phase != CloudRunPhase.Preparing)
                     throw new InvalidOperationException("The launch lease was lost before the GitHub commit.");
+
                 var marker = $"AutoMate-Run: {saasRun.Id:N}";
+
                 commitSha = saasRun.Attempt > 1
                     ? await gitHubService.FindDeploymentCommitAsync(
                         request.GitHubAccessToken, request.RepositoryOwner, request.RepositoryName,
                         request.BranchName, marker, cancellationToken) ?? string.Empty
                     : string.Empty;
+
                 if (string.IsNullOrEmpty(commitSha))
                     commitSha =
                         await gitHubService.CommitCloudDeploymentFilesAsync(request.GitHubAccessToken,
                             request.RepositoryOwner, request.RepositoryName, files, request.BranchName,
                             $"Add AutoMate Azure deployment workflow\n\n{marker}",
                             cancellationToken);
+
                 deployment.ImageTag = commitSha;
                 DeploymentSnapshotCapture.Resolve(deployment, request.Metadata.DotNetVersion, commitSha);
+
                 saasRun.CommitSha = commitSha;
                 saasRun.CommittedAt = DateTimeOffset.UtcNow;
                 saasRun.Phase = CloudRunPhase.AwaitingWorkflow;
                 saasRun.LeaseOwner = null;
                 saasRun.LeaseUntil = null;
+
                 await dbContext.SaveChangesAsync(cancellationToken);
                 await commitTransaction.CommitAsync(cancellationToken);
             }
@@ -246,48 +263,52 @@ public sealed class CloudDeploymentOrchestrator(
 
             var workflowRun = await _workflowMonitor.PollWorkflowRunAsync(request, deployment, commitSha,
                 cancellationToken);
+
             if (workflowRun != null)
             {
                 deployment.CloudGitHubActionRunId = workflowRun.Id;
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            if (workflowRun is { Status: "completed" } &&
-                !string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
+            switch (workflowRun)
             {
-                await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
-                    cancellationToken);
-                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
-                    $"GitHub Actions workflow failed. Details: {workflowRun.HtmlUrl}");
-            }
-            else if (workflowRun is { Status: "completed" } &&
-                     string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase))
-            {
-                deployment.Outcome = DeploymentOutcome.Succeeded;
-                deployment.FinishedAt = DateTimeOffset.UtcNow;
-                await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
-                    cancellationToken);
-                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
-                    $"GitHub Actions workflow completed successfully. Details: {workflowRun.HtmlUrl}");
-                deployment.CloudContainerAppName = config.CloudContainerAppName;
-                deployment.CloudContainerRevision = $"{config.CloudContainerAppName}--am-{workflowRun.Id}";
-                deployment.CloudResourceId =
-                    $"/subscriptions/{Uri.EscapeDataString(request.AzureCredentials.SubscriptionId)}/resourceGroups/{Uri.EscapeDataString(config.CloudResourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(config.CloudContainerAppName)}";
-                await dbContext.SaveChangesAsync(cancellationToken);
-                azureContainerAppRuntimeStreamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
-                {
-                    ProjectId = config.ProjectId,
-                    DeploymentId = deployment.Id,
-                    UserId = request.RequestingUserId,
-                    ExpectedRevision = $"{config.CloudContainerAppName}--am-{workflowRun.Id}",
-                    Config = config,
-                    AzureCredentials = request.AzureCredentials
-                });
-            }
-            else
-            {
-                await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
-                    "GitHub Actions workflow is still queued or running. Refresh the project details page for the latest persisted status.");
+                case { Status: "completed" } when
+                    !string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase):
+                    await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
+                        cancellationToken);
+                    await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
+                        $"GitHub Actions workflow failed. Details: {workflowRun.HtmlUrl}");
+                    break;
+                case { Status: "completed" } when
+                    string.Equals(workflowRun.Conclusion, "success", StringComparison.OrdinalIgnoreCase):
+                    deployment.Outcome = DeploymentOutcome.Succeeded;
+                    deployment.FinishedAt = DateTimeOffset.UtcNow;
+
+                    await _statusUpdater.UpdateAsync(config.ProjectId, deployment, DeploymentStatus.Running,
+                        cancellationToken);
+                    await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
+                        $"GitHub Actions workflow completed successfully. Details: {workflowRun.HtmlUrl}");
+
+                    deployment.CloudContainerAppName = config.CloudContainerAppName;
+                    deployment.CloudContainerRevision = $"{config.CloudContainerAppName}--am-{workflowRun.Id}";
+                    deployment.CloudResourceId =
+                        $"/subscriptions/{Uri.EscapeDataString(request.AzureCredentials.SubscriptionId)}/resourceGroups/{Uri.EscapeDataString(config.CloudResourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(config.CloudContainerAppName)}";
+
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                    azureContainerAppRuntimeStreamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
+                    {
+                        ProjectId = config.ProjectId,
+                        DeploymentId = deployment.Id,
+                        UserId = request.RequestingUserId,
+                        ExpectedRevision = $"{config.CloudContainerAppName}--am-{workflowRun.Id}",
+                        Config = config,
+                        AzureCredentials = request.AzureCredentials
+                    });
+                    break;
+                default:
+                    await _workflowMonitor.StreamBuildLogAsync(deployment.Id, config.ProjectId,
+                        "GitHub Actions workflow is still queued or running. Refresh the project details page for the latest persisted status.");
+                    break;
             }
 
             logger.LogInformation("Cloud deployment files committed.");

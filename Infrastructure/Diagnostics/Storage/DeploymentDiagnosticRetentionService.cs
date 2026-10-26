@@ -33,8 +33,11 @@ public sealed class DeploymentDiagnosticRetentionService(
                 do
                 {
                     await using var scope = scopeFactory.CreateAsyncScope();
-                    deleted = await scope.ServiceProvider.GetRequiredService<IDeploymentDiagnosticStore>()
+
+                    deleted = await scope.ServiceProvider
+                        .GetRequiredService<IDeploymentDiagnosticStore>()
                         .DeleteExpiredAsync(1_000, stoppingToken);
+
                     batches++;
                 } while (deleted == 1_000 && batches < 10 && !stoppingToken.IsCancellationRequested);
             }

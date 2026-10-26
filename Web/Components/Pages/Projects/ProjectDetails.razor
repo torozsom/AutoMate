@@ -4,8 +4,6 @@
 @namespace Web.Components.Pages.Projects
 @page "/project/{ProjectId:guid}"
 @using Application.Data.Apps
-@using Domain.Entities.Deployments
-@using Domain.Entities.Projects
 @using Domain.Enums.Deployments
 @using Domain.Enums.Projects
 @using Web.Components.Shared.Configuration
@@ -50,7 +48,7 @@
     {
         var isDeploying = IsDeploying();
         var queueState = DeploymentJobQueue.GetProjectState(ProjectId);
-        var isQueued = (queueState.QueuedDeployments > 0 && queueState.ActiveDeployments == 0) ||
+        var isQueued = queueState is { QueuedDeployments: > 0, ActiveDeployments: 0 } ||
                        _cloudRunReceipt?.Phase == CloudRunPhase.Queued;
         var isStopping = _isStopping || queueState.QueuedStops > 0 || queueState.ActiveStops > 0;
         var latestStatus = GetLatestStatus();
@@ -63,7 +61,7 @@
         var subProjectCount = _app.CsProjects.Count;
         var databaseCount = _databaseTabs.Count();
         var allDeployments = _app.CsProjects.SelectMany(p => p.Deployments).OrderBy(d => d.CreatedAt).ToList();
-        var recentDeployments = _projectView?.History.ToList() ?? allDeployments.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Skip(_deploymentPage * 6).Take(6).ToList();
+        var recentDeployments = _projectView?.History.ToList() ?? [.. allDeployments.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Skip(_deploymentPage * 6).Take(6)];
         var summary = _projectView?.Summary ?? new ProjectDeploymentSummary(allDeployments.Count,
             allDeployments.Count(d => d.Outcome == DeploymentOutcome.Succeeded),
             allDeployments.Count(d => d.Outcome == DeploymentOutcome.Failed),
@@ -115,7 +113,7 @@
                             @if (isStopping)
                             {
                                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                <span>@(queueState.QueuedStops > 0 && queueState.ActiveStops == 0 ? "Queued..." : "Stopping...")</span>
+                                <span>@(queueState is { QueuedStops: > 0, ActiveStops: 0 } ? "Queued..." : "Stopping...")</span>
                             }
                             else
                             {
@@ -528,116 +526,3 @@
         </section>
     }
 </div>
-
-@code {
-
-    /// <summary>Bounded six-item deployment history page.</summary>
-    private int _deploymentPage;
-
-
-    /// <summary>
-    ///     Chooses the console layout class for the project source.
-    /// </summary>
-    /// <param name="sourceType">Local or remote project source.</param>
-    /// <returns>The CSS classes for the selected state.</returns>
-    private static string GetProjectSourceClass(SourceType sourceType)
-    {
-        return sourceType == SourceType.Remote ? "project-console-remote" : "project-console-local";
-    }
-
-    /// <summary>
-    ///     Finds the first recorded web project in the current application.
-    /// </summary>
-    /// <returns>The first web project, or null when none is loaded.</returns>
-    private CsProject? GetPrimaryWebProject()
-    {
-        return _app?.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
-    }
-
-    /// <summary>
-    ///     Finds the newest deployment across the current application projects.
-    /// </summary>
-    /// <returns>The newest recorded deployment, or null when no deployment exists.</returns>
-    private Deployment? GetLatestDeployment()
-    {
-        return _app?.CsProjects
-            .SelectMany(csp => csp.Deployments)
-            .MaxBy(deployment => deployment.CreatedAt);
-    }
-
-
-    /// <summary>
-    ///     Formats an available timestamp for the project summary.
-    /// </summary>
-    /// <param name="timestamp">Recorded timestamp, if available.</param>
-    /// <returns>The formatted timestamp, or "Never" when absent.</returns>
-    private static string FormatTimestamp(DateTimeOffset? timestamp)
-    {
-        return timestamp?.ToString("yyyy. MM. dd. HH:mm") ?? "Never";
-    }
-
-    /// <summary>
-    ///     Uses the Azure revision or a shortened Docker identity for the summary.
-    /// </summary>
-    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
-    /// <returns>The recorded Azure revision, up to 12 Docker identity characters, or "None".</returns>
-    private static string GetRevisionLabel(Deployment? deployment)
-    {
-        if (!string.IsNullOrWhiteSpace(deployment?.CloudContainerRevision))
-            return deployment.CloudContainerRevision;
-
-        if (!string.IsNullOrWhiteSpace(deployment?.DockerContainerId))
-            return deployment.DockerContainerId.Length <= 12
-                ? deployment.DockerContainerId
-                : deployment.DockerContainerId[..12];
-
-        return "None";
-    }
-
-    /// <summary>
-    ///     Chooses the provider label from the current project source.
-    /// </summary>
-    /// <returns>"Azure" for remote projects; otherwise "Docker".</returns>
-    private string GetProviderLabel()
-    {
-        return _app?.SourceType == SourceType.Remote ? "Azure" : "Docker";
-    }
-
-    /// <summary>
-    ///     Displays the configured Azure region or discovered local web port.
-    /// </summary>
-    /// <param name="configuration">Deployment settings or host configuration used by this operation.</param>
-    /// <returns>The recorded region or local endpoint, with a fixed pending-configuration label when unavailable.</returns>
-    private string GetRegionOrEndpoint(Configuration? configuration)
-    {
-        if (_app?.SourceType == SourceType.Remote)
-            return string.IsNullOrWhiteSpace(configuration?.CloudAzureRegion)
-                ? "Configured during deploy"
-                : configuration.CloudAzureRegion;
-
-        return _webHostPort > 0 ? $"localhost:{_webHostPort}" : "Assigned during deploy";
-    }
-
-    /// <summary>
-    ///     Chooses recorded URL, image or container metadata, with fixed guidance when no artifact
-    ///     exists.
-    /// </summary>
-    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
-    /// <returns>Recorded artifact metadata, or fixed pending/failure guidance.</returns>
-    private static string GetDeploymentMeta(Deployment deployment)
-    {
-        if (!string.IsNullOrWhiteSpace(deployment.CloudAppUrl))
-            return deployment.CloudAppUrl;
-
-        if (!string.IsNullOrWhiteSpace(deployment.ImageTag))
-            return deployment.ImageTag;
-
-        if (!string.IsNullOrWhiteSpace(deployment.DockerContainerId))
-            return deployment.DockerContainerId;
-
-        return deployment.Status == DeploymentStatus.Failed
-            ? "Failed before an artifact was recorded; see deployment logs"
-            : "Deployment artifact not yet recorded";
-    }
-
-}

@@ -305,13 +305,13 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
     /// <param name="workingDir">The local directory containing the Compose deployment.</param>
     /// <param name="projectName">The project name used for deployment artifacts or Compose lookup.</param>
     /// <param name="projectId">The project identity used for authorization or correlation.</param>
-    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
     /// <param name="deploymentId">
     ///     The deployment identity; null is used only where legacy observations permit it.
     /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
     /// <returns>A task returning whether Compose down completed successfully.</returns>
     public async Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
-        CancellationToken cancellationToken = default, Guid? deploymentId = null)
+        Guid? deploymentId = null, CancellationToken cancellationToken = default)
     {
         var safeProjectName = DockerNameNormalizer.NormalizeProjectName(projectName);
         _logger.LogInformation("Starting Docker Compose down for project {ProjectId}, deployment {DeploymentId}.",

@@ -109,21 +109,41 @@ internal static class AssessmentEvidenceReader
 
             if (entry.TenantId != query.Tenant || entry.Event.ProjectId != query.Project ||
                 entry.Event.DeploymentId != query.Deployment) continue;
+
             if (entry.Channel is { } channel && entry.Event.Kind != DeploymentDiagnosticKind.Metric &&
                 channels.Count < 128)
                 channels.Add(new AssessmentChannel(AssessmentClassification.Source(entry.Event), channel));
+
             if (query.CatalogOnly || !AssessmentClassification.Matches(entry, query.Selection, query.Window)) continue;
             selected.TryAdd(entry.EventId, entry);
-            if (selected.Count > query.Limit)
-            {
-                var first = selected.MinBy(pair => pair.Value.OrderId);
-                selected.Remove(first.Key);
-                omitted = true;
-            }
+
+            if (selected.Count <= query.Limit) continue;
+            var first = selected.MinBy(pair => pair.Value.OrderId);
+            selected.Remove(first.Key);
+            omitted = true;
         }
 
-        if (!query.CatalogOnly && retainedLogs is not null &&
-            (archive is null || availability is not null || selected.Count == 0))
+        if (query.CatalogOnly || retainedLogs is null ||
+            (archive is not null && availability is null && selected.Count != 0))
+            return new ArchiveAssessmentPage(
+                [
+                    .. selected.Values
+                        .OrderByDescending(e => e.OrderId)
+                        .Take(query.Limit)
+                        .OrderBy(e => e.OrderId)
+                ],
+                [
+                    .. channels
+                        .OrderBy(c => c.Source)
+                        .ThenBy(c => c.Channel, StringComparer.Ordinal)
+                        .Take(128)
+                ],
+                [
+                    .. containers
+                        .Order(StringComparer.Ordinal)
+                        .Take(64)
+                ], omitted, availability);
+        {
             try
             {
                 var backend = await retainedLogs.ReadAssessmentAsync(query, token);
@@ -138,12 +158,27 @@ internal static class AssessmentEvidenceReader
             {
                 if (archive is null) availability = "Retained diagnostic backend is temporarily unavailable.";
             }
+        }
 
         // Archive persistence precedes ingestion acknowledgment. An available archive is authoritative for current
         // backend-only data; the durable backfill worker imports still-retained older provider records.
         return new ArchiveAssessmentPage(
-            selected.Values.OrderByDescending(e => e.OrderId).Take(query.Limit).OrderBy(e => e.OrderId).ToArray(),
-            channels.OrderBy(c => c.Source).ThenBy(c => c.Channel, StringComparer.Ordinal).Take(128).ToArray(),
-            containers.Order(StringComparer.Ordinal).Take(64).ToArray(), omitted, availability);
+            [
+                .. selected.Values
+                    .OrderByDescending(e => e.OrderId)
+                    .Take(query.Limit)
+                    .OrderBy(e => e.OrderId)
+            ],
+            [
+                .. channels
+                    .OrderBy(c => c.Source)
+                    .ThenBy(c => c.Channel, StringComparer.Ordinal)
+                    .Take(128)
+            ],
+            [
+                .. containers
+                    .Order(StringComparer.Ordinal)
+                    .Take(64)
+            ], omitted, availability);
     }
 }

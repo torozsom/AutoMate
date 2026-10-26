@@ -1,8 +1,28 @@
-# Web/Components/Layout
+# Layout and connection UI
 
-Related files are grouped by responsibility. Existing .NET namespaces and public identities are preserved.
+Application shell/navigation and document-level circuit recovery.
 
-- `Connection/` — `Connection/ReconnectModal.razor`, `Connection/ReconnectModal.razor.css`,
-  `Connection/ReconnectModal.razor.js`.
-- `Shell/` — `Shell/MainLayout.razor`, `Shell/MainLayout.razor.cs`, `Shell/MainLayout.razor.css`, `Shell/NavMenu.razor`,
-  `Shell/NavMenu.razor.cs`, `Shell/NavMenu.razor.css`.
+## Contents
+
+| Module                             | Responsibility                                           |
+|------------------------------------|----------------------------------------------------------|
+| [Connection](Connection/README.md) | Document-level Blazor reconnect/resume dialog.           |
+| [Shell](Shell/README.md)           | Responsive layout/navigation and host capability checks. |
+
+## Usage and integration
+
+Shell renders MainLayout/NavMenu and capability-aware navigation. Connection presents the reconnect/resume dialog and
+its collocated module. App hosts the reconnect UI while Routes chooses the layout for routed pages.
+
+## Contracts and lifecycle
+
+Layout controls presentation and local capability hints, not project authorization. Keep reconnecting the Blazor circuit
+distinct from rejoining a project SignalR stream. Scoped styles/modules must keep their generated paths and
+element/event contracts; component disposal rules are documented in each leaf guide.
+
+## Related documentation
+
+- [Parent module](../README.md)
+- [Layout selection](../Routes.razor)
+- [Document host](../App.razor)
+- [Stream reconnection](../../Hubs/README.md)

@@ -37,6 +37,7 @@ public sealed class RequestAuditTests
                 new Claim(ClaimTypes.Email, "private-email")
             ], "Cookies"))
         };
+
         context.Request.Method = "POST";
         context.Request.Path = "/api/deployments/private-path";
         context.Request.QueryString = new QueryString("?token=private-query");
@@ -44,11 +45,16 @@ public sealed class RequestAuditTests
         var middleware = new RequestAuditMiddleware(http =>
         {
             http.Response.StatusCode = status;
+
             return Task.CompletedTask;
         }, factory.CreateLogger<RequestAuditMiddleware>());
+
         await middleware.InvokeAsync(context);
+
         Assert.Equal(2, capture.Messages.Count);
+
         var text = string.Join('\n', capture.Messages);
+
         Assert.Contains("Web.Observability.RequestAuditMiddleware", text);
         Assert.Contains("method POST", text);
         Assert.Contains("area Deployments", text);
@@ -71,6 +77,7 @@ public sealed class RequestAuditTests
         var failure = new IOException("private-provider-body");
         var middleware = new RequestAuditMiddleware(_ => Task.FromException(failure),
             factory.CreateLogger<RequestAuditMiddleware>());
+
         Assert.Same(failure,
             await Assert.ThrowsAsync<IOException>(() => middleware.InvokeAsync(new DefaultHttpContext())));
         Assert.Contains("IOException", capture.Messages.Last());
@@ -156,7 +163,9 @@ public sealed class RequestAuditTests
                 Func<TState, Exception?, string> formatter)
             {
                 Assert.Null(exception);
+
                 var scopes = new List<string>();
+
                 owner._scopes.ForEachScope((scope, list) => list.Add(scope?.ToString() ?? ""), scopes);
                 owner.Messages.Add($"{category} {string.Join(' ', scopes)} {formatter(state, exception)}");
             }

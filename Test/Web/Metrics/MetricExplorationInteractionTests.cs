@@ -27,21 +27,29 @@ public sealed class MetricExplorationInteractionTests
         await using var renderer = new FixtureRenderer(services);
         var end = DateTimeOffset.UtcNow.AddSeconds(-1);
         var range = new MetricTimeRange(end.AddMinutes(-30), end);
-        var rows = Enumerable.Range(0, 40).Select(i => new MetricObservation(Guid.NewGuid(), Guid.NewGuid(),
-            "web-" + i, TelemetryPresentation.Cpu, "cores", range.Start.AddMinutes(i % 20), 1, .5, .1, .9)).ToArray();
+        var rows = Enumerable.Range(0, 40)
+            .Select(i => new MetricObservation(Guid.NewGuid(), Guid.NewGuid(),
+                "web-" + i, TelemetryPresentation.Cpu, "cores", range.Start.AddMinutes(i % 20), 1, .5, .1, .9))
+            .ToArray();
         var id = await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(new MetricStatisticsView(),
             ParameterView.FromDictionary(new Dictionary<string, object?> { ["Data"] = rows, ["Range"] = range })));
+
         Assert.Equal(25, renderer.TableRows(id));
         Assert.Equal(20, renderer.ChartPoints(id));
+
         var pager = renderer.Child(id, typeof(StatisticsPager));
+
         await renderer.Dispatcher.InvokeAsync(() => renderer.DispatchEventAsync(
             renderer.Events(pager, "onclick").Last(),
             null, new MouseEventArgs()));
+
         Assert.Equal(15, renderer.TableRows(id));
         Assert.Equal(20, renderer.ChartPoints(id));
+
         await renderer.Dispatcher.InvokeAsync(() => renderer.DispatchEventAsync(
             renderer.Events(pager, "onchange").Single(),
             null, new ChangeEventArgs { Value = "10" }));
+
         Assert.Equal(10, renderer.TableRows(id));
         Assert.Equal(20, renderer.ChartPoints(id));
         Assert.Empty(renderer.Errors);
@@ -112,7 +120,9 @@ public sealed class MetricExplorationInteractionTests
         public async Task<int> AttachAsync(IComponent component, ParameterView parameters)
         {
             var id = AssignRootComponentId(component);
+
             await RenderRootComponentAsync(id, parameters);
+
             return id;
         }
 
@@ -156,9 +166,11 @@ public sealed class MetricExplorationInteractionTests
         /// <returns>The fixture count or numeric observation.</returns>
         public int ChartPoints(int id)
         {
-            return Frames(id).Where(f => f.FrameType == RenderTreeFrameType.Attribute &&
-                                         f.AttributeName == "Points").Select(f =>
-                ((IReadOnlyList<TelemetryChartPoint>)f.AttributeValue).Count).Max();
+            return Frames(id)
+                .Where(f => f.FrameType == RenderTreeFrameType.Attribute &&
+                            f.AttributeName == "Points")
+                .Select(f =>
+                    ((IReadOnlyList<TelemetryChartPoint>)f.AttributeValue).Count).Max();
         }
 
         /// <summary>
@@ -169,8 +181,10 @@ public sealed class MetricExplorationInteractionTests
         /// <returns>Browser-dispatchable handler identifiers matching the selected event attribute.</returns>
         public IEnumerable<ulong> Events(int id, string name)
         {
-            return Frames(id).Where(f => f.FrameType == RenderTreeFrameType.Attribute &&
-                                         f.AttributeName == name).Select(f => f.AttributeEventHandlerId);
+            return Frames(id)
+                .Where(f => f.FrameType == RenderTreeFrameType.Attribute &&
+                            f.AttributeName == name)
+                .Select(f => f.AttributeEventHandlerId);
         }
 
         /// <summary>

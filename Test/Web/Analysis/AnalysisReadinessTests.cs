@@ -37,6 +37,7 @@ public sealed class AnalysisReadinessTests
         bool available, int status, string health)
     {
         var port = new ReadinessPort { Snapshot = new DeploymentAnalysisReadiness(state, available) };
+
         await VerifyHttpAsync(port, status, health, state.ToString(), available ? "Available" : "Unavailable");
     }
 
@@ -52,6 +53,7 @@ public sealed class AnalysisReadinessTests
     public async Task Exceptions_and_timeouts_do_not_disclose_details(bool timeout)
     {
         var port = new ReadinessPort { Fail = !timeout, WaitForCancellation = timeout };
+
         await VerifyHttpAsync(port, 503, "Unhealthy", "Unavailable", "Unavailable");
         if (timeout) Assert.True(port.CancellationObserved);
     }
@@ -70,6 +72,7 @@ public sealed class AnalysisReadinessTests
         string queue)
     {
         var builder = WebApplication.CreateBuilder();
+
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
         builder.Services.AddAuthentication("Cookies").AddCookie("Cookies");
@@ -79,6 +82,7 @@ public sealed class AnalysisReadinessTests
         builder.Services.AddHealthChecks().AddCheck<AnalysisReadinessHealthCheck>("ai_analysis",
             tags: [AnalysisHealthChecks.ReadinessTag], timeout: TimeSpan.FromMilliseconds(100));
         await using var app = builder.Build();
+
         app.UseAuthentication();
         app.UseAuthorization();
         app.MapApplicationHealthChecks();
@@ -88,16 +92,25 @@ public sealed class AnalysisReadinessTests
         {
             BaseAddress = new Uri(app.Urls.Single())
         };
+
         Assert.Equal(HttpStatusCode.Redirect, (await client.GetAsync("/private")).StatusCode);
+
         var live = await client.GetAsync("/health");
+
         Assert.Equal(HttpStatusCode.OK, live.StatusCode);
         Assert.Equal(0, port.Calls);
+
         var ready = await client.GetAsync("/health/ready");
+
         Assert.Equal(status, (int)ready.StatusCode);
         Assert.Equal(1, port.Calls);
+
         var body = await ready.Content.ReadAsStringAsync();
+
         Assert.DoesNotContain("private-secret", body);
+
         using var json = JsonDocument.Parse(body);
+
         Assert.Equal(3, json.RootElement.EnumerateObject().Count());
         Assert.Equal(health, json.RootElement.GetProperty("status").GetString());
         Assert.Equal(configuration, json.RootElement.GetProperty("configuration").GetString());

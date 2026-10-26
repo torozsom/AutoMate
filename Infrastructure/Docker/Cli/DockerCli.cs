@@ -60,6 +60,7 @@ internal sealed class DockerCli(
     {
         var startInfo = DockerProcessStartInfoFactory.CreateCompose(workingDir, safeProjectName, composeArguments);
         if (deploymentId is { } id) startInfo.Environment["AUTOMATE_DEPLOYMENT_ID"] = id.ToString("N");
+
         return await ExecuteProcessStreamingLogsAsync(startInfo, projectId, deploymentId, cancellationToken);
     }
 
@@ -74,6 +75,7 @@ internal sealed class DockerCli(
     public async Task<List<string>> GetRunningProjectNamesAsync(CancellationToken cancellationToken)
     {
         var startInfo = DockerProcessStartInfoFactory.CreateDocker();
+
         startInfo.ArgumentList.Add("compose");
         startInfo.ArgumentList.Add("ls");
         startInfo.ArgumentList.Add("--format");
@@ -94,7 +96,7 @@ internal sealed class DockerCli(
             await process.WaitForExitAsync(linkedCts.Token);
 
             var output = await outputTask;
-            var error = await errorTask;
+            await errorTask;
 
             if (process.ExitCode != 0)
             {
@@ -158,6 +160,7 @@ internal sealed class DockerCli(
 
             using var reader = process.StandardOutput;
             var delivery = new DockerMetricDelivery(diagnostics, live, redactor, viewers, clock, sampleSeconds, logger);
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 var line = await reader.ReadLineAsync(cancellationToken);
@@ -248,29 +251,40 @@ internal sealed class DockerCli(
         Guid? deploymentId, CancellationToken cancellationToken)
     {
         using var activity = DeploymentTracing.Start(DeploymentOperation.DockerCompose, projectId, deploymentId);
-        using var process = new Process { StartInfo = startInfo };
+        using var process = new Process();
+        process.StartInfo = startInfo;
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
         deadline.CancelAfter(TimeSpan.FromMinutes(options.ComposeTimeoutMinutes));
+
         var readers = new List<Task>();
         var composeProject = startInfo.ArgumentList[2];
         long sequence = 0;
         var publishing = new object();
+
         try
         {
             process.Start();
-            using var registration = deadline.Token.Register(() => KillProcessTree(process));
+
+            await using var registration = deadline.Token.Register(() => KillProcessTree(process));
             readers.Add(ReadOutputAsync(process.StandardOutput.BaseStream, DeploymentDiagnosticStream.StandardOutput));
             readers.Add(ReadOutputAsync(process.StandardError.BaseStream, DeploymentDiagnosticStream.StandardError));
+
             await process.WaitForExitAsync(deadline.Token);
+
             logger.LogInformation("Docker Compose process exited for project {ProjectId} with code {Code}.",
                 projectId, process.ExitCode);
+
             await Task.WhenAll(readers);
             DeploymentTracing.Finish(activity,
                 process.ExitCode == 0 ? DeploymentTraceOutcome.Completed : DeploymentTraceOutcome.Failed);
+
             await OutcomeAsync(process.ExitCode == 0 ? "completed" : "failed", process.ExitCode);
+
             if (process.ExitCode != 0)
                 AutoMateTelemetry.CollectorErrors.Add(1,
                     new KeyValuePair<string, object?>("deployment.source", "DockerCompose"));
+
             return process.ExitCode == 0;
         }
         catch (OperationCanceledException)
@@ -280,10 +294,13 @@ internal sealed class DockerCli(
                 cancellationToken.IsCancellationRequested
                     ? DeploymentTraceOutcome.Canceled
                     : DeploymentTraceOutcome.TimedOut);
+
             await OutcomeAsync(cancellationToken.IsCancellationRequested ? "cancelled" : "timed-out", null);
+
             if (!cancellationToken.IsCancellationRequested)
                 AutoMateTelemetry.CollectorErrors.Add(1,
                     new KeyValuePair<string, object?>("deployment.source", "DockerCompose"));
+
             return false;
         }
         catch (Exception exception)
@@ -291,8 +308,11 @@ internal sealed class DockerCli(
             KillProcessTree(process);
             AutoMateTelemetry.CollectorErrors.Add(1,
                 new KeyValuePair<string, object?>("deployment.source", "DockerCompose"));
+
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Failed);
+
             logger.LogWarning("Docker Compose command unavailable: {FailureType}.", exception.GetType().Name);
+
             await OutcomeAsync("unavailable", null);
             return false;
         }
@@ -311,34 +331,32 @@ internal sealed class DockerCli(
                 }
         }
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Decodes and awaits one redirected stream without asynchronous event handlers.
-        /// </summary>
-        /// <param name="stream">
-        ///     Owned input stream read within the documented payload and cancellation bounds.
-        /// </param>
-        /// <param name="output">Output stream classification or normalized process output.</param>
-        /// <returns>A task representing completion of the asynchronous operation.</returns>
+        /*
+         * Decodes and awaits one redirected stream without asynchronous event handlers.
+         * Owned input stream read within the documented payload and cancellation bounds.
+         *
+         * @param output: Output stream classification or normalized process output.
+         * @return A task representing completion of the asynchronous operation.
+         */
         async Task ReadOutputAsync(Stream stream, DeploymentDiagnosticStream output)
         {
             var decoder = new DockerLogDecoder(false, clock);
             var buffer = new byte[8192];
             int count;
+
             while ((count = await stream.ReadAsync(buffer, deadline.Token)) != 0)
                 foreach (var line in decoder.Feed(buffer.AsSpan(0, count)))
                     await PublishLineAsync(line, output);
             foreach (var line in decoder.Feed([], true)) await PublishLineAsync(line, output);
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Serializes event admission and observes asynchronous publisher completion.
-        /// </summary>
-        /// <param name="line">Decoded bounded Docker output with its timestamp and omission metadata.</param>
-        /// <param name="output">Output stream classification or normalized process output.</param>
-        /// <returns>A task representing completion of the asynchronous operation.</returns>
+        /*
+         * Serializes event admission and observes asynchronous publisher completion.
+         *
+         * @param line: Decoded bounded Docker output with its timestamp and omission metadata.
+         * @param output: Output stream classification or normalized process output.
+         * @return A task representing completion of the asynchronous operation.
+         */
         async Task PublishLineAsync(DockerLogLine line, DeploymentDiagnosticStream output)
         {
             try
@@ -364,15 +382,14 @@ internal sealed class DockerCli(
                 logger.LogWarning("Compose output diagnostic unavailable: {FailureType}.", exception.GetType().Name);
             }
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Reports a finite command outcome without persisting process error bodies.
-        /// </summary>
-        /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
-        /// <param name="exitCode">Process exit code, if the process exited.</param>
-        /// <returns>A task representing completion of the asynchronous operation.</returns>
+        /*
+         * Reports a finite command outcome without persisting process error bodies.
+         *
+         * @param state: The project queue-state snapshot or fixed attention state.
+         * @param exitCode: Process exit code, if the process exited.
+         * @return A task representing completion of the asynchronous operation.
+         */
         async Task OutcomeAsync(string state, int? exitCode)
         {
             logger.LogInformation("Docker Compose command outcome for project {ProjectId}: {ComposeOutcome}.",
@@ -380,7 +397,10 @@ internal sealed class DockerCli(
             try
             {
                 var attributes = new Dictionary<string, string> { ["phase"] = "compose", ["state"] = state };
-                if (exitCode.HasValue) attributes["exit_code"] = exitCode.Value.ToString(CultureInfo.InvariantCulture);
+
+                if (exitCode.HasValue)
+                    attributes["exit_code"] = exitCode.Value.ToString(CultureInfo.InvariantCulture);
+
                 await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(projectId, deploymentId,
                     DeploymentDiagnosticSource.DockerCompose,
                     DeploymentDiagnosticKind.Lifecycle,
@@ -398,7 +418,6 @@ internal sealed class DockerCli(
                 logger.LogWarning("Compose outcome diagnostic unavailable: {FailureType}.", exception.GetType().Name);
             }
         }
-#pragma warning restore CS1587
     }
 
     /// <summary>

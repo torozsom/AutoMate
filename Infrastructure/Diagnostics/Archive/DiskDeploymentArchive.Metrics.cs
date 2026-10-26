@@ -36,9 +36,11 @@ public sealed partial class DiskDeploymentArchive
             var partition = Partition(tenant, project, deployment);
             if (!Directory.Exists(partition)) return new ArchiveMetricBatch([], null);
             var index = Path.Combine(partition, "metric-index");
+
             Directory.CreateDirectory(index);
             var ready = Path.Combine(index, "ready");
             var incomplete = false;
+
             if (!File.Exists(ready))
             {
                 var inspected = 0;
@@ -79,11 +81,13 @@ public sealed partial class DiskDeploymentArchive
                 ? JsonSerializer.Deserialize<Dictionary<string, int>>(await ReadPayloadAsync(ready, token))!
                 : Directory.EnumerateDirectories(index).ToDictionary(day => Path.GetFileName(day),
                     day => Directory.EnumerateFiles(day, "*.ref").Count());
+
             foreach (var dayEntry in manifest)
             {
                 var day = Path.Combine(index, dayEntry.Key);
                 if (dayEntry.Key != Path.GetFileName(dayEntry.Key))
                     throw new InvalidDataException("Invalid metric day.");
+
                 if (!DateTimeOffset.TryParseExact(dayEntry.Key, "yyyyMMdd", CultureInfo.InvariantCulture,
                         DateTimeStyles.AssumeUniversal, out var date) ||
                     date >= range.End || date.AddDays(1) <= range.Start) continue;
@@ -96,17 +100,21 @@ public sealed partial class DiskDeploymentArchive
                     if (name != Path.GetFileName(name) || !(name.EndsWith(".segment", StringComparison.Ordinal) ||
                                                             name.EndsWith(".metric", StringComparison.Ordinal)))
                         throw new InvalidDataException("Invalid metric lookup.");
+
                     var source = Path.Combine(partition, name);
                     if (name.EndsWith(".segment", StringComparison.Ordinal))
                     {
                         var e = (await ReadSegmentAsync(source, token)).Event;
                         var target = e.TerminalChannel.Target ?? "unknown";
+
                         if (e.TimestampUtc < range.Start || e.TimestampUtc >= range.End ||
                             (container is not null && target != container)) continue;
+
                         foreach (var sample in e.Metrics ?? [])
                         {
                             if (!MimirDeploymentMetrics.SupportedUnits.TryGetValue(sample.Name, out var unit) ||
                                 sample.Unit != unit || !double.IsFinite(sample.Value)) continue;
+
                             Add(new MetricObservation(project, deployment, target, sample.Name, sample.Unit,
                                 range.Bucket(e.TimestampUtc),
                                 1, sample.Value, sample.Value, sample.Value));
@@ -116,8 +124,10 @@ public sealed partial class DiskDeploymentArchive
                     {
                         var p = JsonSerializer.Deserialize<DeploymentMetricPoint>(await ReadPayloadAsync(source, token),
                             TelemetryHttpTransport.Json)!;
+
                         if (p.Timestamp < range.Start || p.Timestamp >= range.End ||
                             (container is not null && p.Container != container)) continue;
+
                         Add(new MetricObservation(project, deployment, _redactor.RedactText(p.Container, 128), p.Name,
                             p.Unit,
                             range.Bucket(p.Timestamp), 0, p.Average, p.Minimum, p.Maximum, false, 1));
@@ -125,16 +135,17 @@ public sealed partial class DiskDeploymentArchive
                 }
             }
 
-            return new ArchiveMetricBatch(buckets.Values.OrderBy(p => p.Timestamp).ToArray(), null,
+            return new ArchiveMetricBatch([.. buckets.Values.OrderBy(p => p.Timestamp)], null,
                 incomplete
                     ? "Metric lookup recovery is in progress; displayed observations are partial. Refresh to continue recovery."
                     : null);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-            /// <summary>
-            ///     Raw samples supersede imported copies without changing observed sample counts.
-            /// </summary>
-            /// <param name="value">The value to normalize, redact or validate.</param>
+
+            /*
+             * Raw samples supersede imported copies without changing observed sample counts.
+             *
+             * @param value: The value to normalize, redact or validate.
+             */
             void Add(MetricObservation value)
             {
                 var key = (value.Container, value.Metric, value.Unit, value.Timestamp);
@@ -167,7 +178,6 @@ public sealed partial class DiskDeploymentArchive
                     Maximum = Math.Max(previous.Maximum, value.Maximum)
                 };
             }
-#pragma warning restore CS1587
         }
         catch (Exception error) when (error is IOException or InvalidDataException or JsonException)
         {
@@ -206,9 +216,11 @@ public sealed partial class DiskDeploymentArchive
     {
         var days = Directory.EnumerateDirectories(index).ToDictionary(day => Path.GetFileName(day),
             day => Directory.EnumerateFiles(day, "*.ref").Count());
+
         var payload = JsonSerializer.Serialize(days);
         var segment = new Segment(1, payload, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))));
         await File.WriteAllTextAsync(ready + ".tmp", JsonSerializer.Serialize(segment), token);
+
         File.Move(ready + ".tmp", ready, true);
     }
 
@@ -223,9 +235,11 @@ public sealed partial class DiskDeploymentArchive
     {
         var partition = Partition(envelope.TenantId, envelope.Event.ProjectId,
             envelope.Event.DeploymentId ?? Guid.Empty);
+
         if (envelope.Event.Metrics?.Count > 0)
             await WriteMetricReferenceAsync(partition, envelope.EventId.ToString("N") + ".segment",
                 envelope.Event.TimestampUtc, token);
+
         var index = Path.Combine(partition, "metric-index");
         Directory.CreateDirectory(index);
         await File.WriteAllTextAsync(Path.Combine(index, envelope.EventId.ToString("N") + ".segment.done"), "1", token);

@@ -31,6 +31,7 @@ public sealed class DeploymentAnalysisPanelTests
             FailureCode = AnalysisProviderAccessDeniedException.FailureCode
         };
         var html = await RenderAsync(result);
+
         Assert.Contains("provider denied access", html);
         Assert.Contains("network access", html);
         Assert.DoesNotContain("private", html);
@@ -53,6 +54,7 @@ public sealed class DeploymentAnalysisPanelTests
     {
         var result = Result(status);
         var html = await RenderAsync(result);
+
         Assert.Contains(label, html);
         Assert.Contains("aria-live=\"polite\"", html);
         Assert.Contains("type=\"button\"", html);
@@ -60,6 +62,7 @@ public sealed class DeploymentAnalysisPanelTests
         Assert.Equal(status == AiAnalysisStatus.Completed, html.Contains("&lt;script&gt;", StringComparison.Ordinal));
         Assert.Equal(status == AiAnalysisStatus.Completed,
             html.Contains("aria-label=\"AI analysis answer\"", StringComparison.Ordinal));
+
         if (status == AiAnalysisStatus.Completed)
         {
             Assert.Contains("Recommended steps", html);
@@ -74,6 +77,7 @@ public sealed class DeploymentAnalysisPanelTests
 
         var root = FindRoot();
         var preview = Path.Combine(root, ".artifacts", "analysis-preview");
+
         Directory.CreateDirectory(preview);
         await File.WriteAllTextAsync(Path.Combine(preview, status + ".html"),
             "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/analysis.css'></head><body><main style='max-width:1000px;margin:auto;padding:16px'><p>UI verification: synthetic analysis data</p>" +
@@ -101,6 +105,7 @@ public sealed class DeploymentAnalysisPanelTests
     public async Task Request_gates_are_visible(bool enabled, bool consent, bool failed, string explanation)
     {
         var html = await RenderAsync(null, enabled, consent, failed);
+
         Assert.Contains(explanation, html);
         Assert.Contains("disabled", html);
         Assert.Contains("No analysis yet", html);
@@ -114,6 +119,7 @@ public sealed class DeploymentAnalysisPanelTests
     public async Task Stale_result_is_omitted()
     {
         var html = await RenderAsync(Result(AiAnalysisStatus.Completed), deploymentId: Guid.NewGuid());
+
         Assert.Contains("No analysis yet", html);
         Assert.DoesNotContain("order:42", html);
         Assert.DoesNotContain("Cancel analysis", html);
@@ -136,6 +142,7 @@ public sealed class DeploymentAnalysisPanelTests
         var html = await RenderAsync(Result(status), false, false);
         // Razor source line wrapping is equivalent whitespace in visible button and paragraph text.
         html = Regex.Replace(html, @"\s+", " ");
+
         Assert.Equal(visible, html.Contains("Cancel analysis", StringComparison.Ordinal));
         Assert.Contains("Allow diagnostic data egress", html);
         Assert.Contains("data already sent cannot be recalled", html);
@@ -164,6 +171,7 @@ public sealed class DeploymentAnalysisPanelTests
     public async Task Skip_states_use_authored_guidance(string code, string guidance)
     {
         var html = await RenderAsync(Result(AiAnalysisStatus.Skipped) with { FailureCode = code });
+
         Assert.Contains(guidance, html);
         Assert.DoesNotContain("private-secret", html);
     }
@@ -182,6 +190,7 @@ public sealed class DeploymentAnalysisPanelTests
     public async Task Rejected_answers_have_actionable_guidance(string code, string message)
     {
         var html = await RenderAsync(Result(AiAnalysisStatus.Failed) with { FailureCode = code });
+
         Assert.Contains(message, html);
         Assert.DoesNotContain("analysis-answer", html);
     }
@@ -215,6 +224,7 @@ public sealed class DeploymentAnalysisPanelTests
     {
         using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
+
         return await renderer.Dispatcher.InvokeAsync(async () =>
             (await renderer.RenderComponentAsync<DeploymentAnalysisPanel>(
                 ParameterView.FromDictionary(new Dictionary<string, object?>
@@ -238,8 +248,10 @@ public sealed class DeploymentAnalysisPanelTests
     private static string FindRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AutoMate.slnx")))
             directory = directory.Parent;
+
         return directory?.FullName ?? throw new InvalidOperationException("Repository root unavailable.");
     }
 
@@ -270,6 +282,7 @@ public sealed class DeploymentAnalysisPanelTests
             if (method?.Name == "SetAiDiagnosticEgressConsentAsync" && args?.Length == 5)
             {
                 Target = ((Guid)args[0]!, (Guid)args[1]!, (Guid)args[2]!, (bool)args[3]!);
+
                 return Task.FromResult(true);
             }
 
@@ -338,6 +351,7 @@ public sealed class DeploymentAnalysisPanelTests
             Owner = (Guid)args[0]!;
             Deployment = (Guid)args[1]!;
             Requests.Add(id);
+
             return Requests.Count == 1
                 ? Task.FromException<DeploymentAnalysisRequestResult>(
                     new InvalidOperationException("private-provider-error"))

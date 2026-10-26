@@ -42,6 +42,7 @@ public sealed class LoginEndpoint : IEndpoint
                 {
                     OperationalLog.Record(logger, AuditOperation.Authentication, AuditOutcome.Denied);
                     var encodedError = Uri.EscapeDataString(errorMessage ?? "Invalid credentials");
+
                     // Using LocalRedirect to prevent Open Redirect vulnerability
                     return Results.LocalRedirect($"/login?error={encodedError}");
                 }
@@ -66,6 +67,7 @@ public sealed class LoginEndpoint : IEndpoint
 
                 OperationalLog.Record(logger, AuditOperation.Authentication, AuditOutcome.Completed);
                 logger.LogInformation("Login completed for user {UserId}.", user.Id);
+
                 return Results.LocalRedirect("/"); // Safe internal redirect
             })
             .AllowAnonymous();

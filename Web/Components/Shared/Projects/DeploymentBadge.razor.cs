@@ -1,0 +1,48 @@
+using Domain.Enums.Deployments;
+using Microsoft.AspNetCore.Components;
+
+namespace Web.Components.Shared.Projects;
+
+/// <summary>
+///     Presents deployment state using a consistent text, icon and badge style.
+/// </summary>
+public partial class DeploymentBadge
+{
+    /// <summary>Deployment status to present, if available.</summary>
+    [Parameter]
+    public DeploymentStatus? Status { get; set; }
+
+    /// <summary>Additional CSS classes supplied by the parent.</summary>
+    [Parameter]
+    public string AdditionalClasses { get; set; } = "";
+
+    /// <summary>Status-dependent badge CSS classes.</summary>
+    private string BadgeClass => Status switch
+    {
+        DeploymentStatus.Starting => "deployment-badge-info",
+        DeploymentStatus.Running => "deployment-badge-success",
+        DeploymentStatus.Failed => "deployment-badge-danger",
+        DeploymentStatus.Stopped => "deployment-badge-muted",
+        _ => "deployment-badge-neutral"
+    };
+
+    /// <summary>Status-dependent icon CSS classes.</summary>
+    private string IconClass => Status switch
+    {
+        DeploymentStatus.Starting => "bi-hourglass-split",
+        DeploymentStatus.Running => "bi-play-circle-fill",
+        DeploymentStatus.Failed => "bi-exclamation-triangle-fill",
+        DeploymentStatus.Stopped => "bi-stop-circle-fill",
+        _ => "bi-circle-fill text-secondary"
+    };
+
+    /// <summary>Human-readable deployment state.</summary>
+    private string StatusText => Status switch
+    {
+        DeploymentStatus.Starting => "Starting",
+        DeploymentStatus.Running => "Running",
+        DeploymentStatus.Failed => "Failed",
+        DeploymentStatus.Stopped => "Stopped",
+        _ => "Not Deployed"
+    };
+}

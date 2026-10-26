@@ -1,64 +1,39 @@
-# GitHub
+# GitHub integration
 
-GitHub API infrastructure adapter implementation.
-The SaaS GitHub App adapter validates the initiating user's repository write permission, resolves the repository
-installation, and mints short-lived installation tokens. Signed `workflow_run` deliveries are deduplicated by GitHub
-delivery ID and stored as minimal metadata. Provider throttling pauses launches for an installation.
+Repository/workflow APIs, installation credentials, secret encryption, verified webhooks and incremental progress
+checkpoints.
 
-GitHub workflow, job, and step state are normalized into deployment diagnostics while the run is active. Jobs are
-discovered page by page, and each job/step status change is shown as GitHub reports it. Text output is intentionally
-deferred until the entire workflow has completed: job-log downloads and the final run archive then supply normalized,
-redacted output through bounded chunks and persisted deduplication checkpoints. Each log download follows GitHub's
-short-lived signed redirect without forwarding the OAuth token to the download host.
+## Contents
 
-Job/step state lines are emitted only when that state changes; pending steps are not printed. No per-step log
-availability probe or runner-side forwarder is needed for the chosen progress-then-logs presentation. Diagnostic
-delivery failures are isolated from the workflow conclusion.
-Workflow poll/observation activities and source-only counters report polling failures, recovery and checkpointed
-prefix suppression. These changes retain the progress-then-completed-logs ordering.
+| Module                                     | Responsibility                                                               |
+|--------------------------------------------|------------------------------------------------------------------------------|
+| [Api](Api/README.md)                       | Repository/workflow operations, authenticated requests and repository cache. |
+| [Authentication](Authentication/README.md) | GitHub App configuration, permission checks and installation tokens.         |
+| [Secrets](Secrets/README.md)               | Sealed-box repository secret encryption and request models.                  |
+| [Webhooks](Webhooks/README.md)             | Signed ingress and metadata-only deduplicated receipts.                      |
+| [Workflows](Workflows/README.md)           | Provider projections, bounded log parsing and progress checkpoints.          |
 
-## Source inventory
+## Usage and integration
 
-- `Api/GitHubApiRequestFactory.cs`
-- `Api/GitHubRepositoryCache.cs`
-- `Secrets/GitHubRepositorySecretModels.cs`
-- `Secrets/GitHubSecretEncryptor.cs`
-- `Api/GitHubService.cs`
-- `Workflows/GitHubWorkflowLogReader.cs`
-- `Workflows/GitHubWorkflowLogNormalizer.cs`
-- `Workflows/GitHubWorkflowJobMapper.cs`
-- `Workflows/GitHubWorkflowJobModels.cs`
-- `Workflows/GitHubWorkflowCheckpointStore.cs`
-- `Workflows/GitHubWorkflowRunMapper.cs`
-- `Workflows/GitHubWorkflowRunModels.cs`
+Api implements IGitHubService. Authentication validates initiating-user repository permission and issues GitHub App
+tokens. Secrets builds encrypted repository-secret requests. Webhooks verifies signed ingress and stores minimal
+receipts. Workflows maps provider responses and handles bounded completed-run logs/checkpoints; lifecycle monitoring
+consumes them.
 
-## Boundary
+## Contracts and lifecycle
 
-Infrastructure may reference Application and Domain, but never Web. It implements ports and owns provider-specific
-behavior.
+While a workflow runs, publish changed job/step status. Download job logs/final archive only after completion and
+process bounded normalized/redacted chunks. Diagnostic delivery failures must not change workflow conclusion. Signed
+download redirects must not receive the OAuth header.
+
+Tokens, repository/branch names, signed URLs, secrets and output are excluded from custom telemetry. Repository cache
+stores DTO metadata only, not workflow logs or AI context. SaaS launch throttles are shared per installation through
+durable cooldown metadata.
 
 ## Related documentation
 
-- [Solution navigation map](../../navigation.md)
-
-Workflow/job queries and completed log downloads have correlated child spans. Tokens, repository/branch names, signed
-URLs and output are excluded. Existing retry, checkpoint and progress-then-completed-logs behavior remains unchanged.
-
-API/cache operational logs omit repository/branch/secret names and exception bodies. Cache failures retain API fallback;
-cancellation and return contracts stay unchanged. Real SDK export regressions in
-Test/Web/Diagnostics/OperationalLoggingTests.cs
-verify sensitive failure text never enters attributes or exception exports.
-
-## Folder organization
-
-Folders group related files while retaining the module's existing .NET namespaces and public contracts.
-
-- `Api/` — `Api/GitHubApiRequestFactory.cs`, `Api/GitHubRateLimitException.cs`, `Api/GitHubRepositoryCache.cs`,
-  `Api/GitHubService.cs`.
-- `Authentication/` — `Authentication/GitHubAppCredentials.cs`, `Authentication/GitHubAppOptions.cs`.
-- `Secrets/` — `Secrets/GitHubRepositorySecretModels.cs`, `Secrets/GitHubSecretEncryptor.cs`.
-- `Webhooks/` — `Webhooks/GitHubWebhookReceiver.cs`.
-- `Workflows/` — `Workflows/GitHubWorkflowCheckpointStore.cs`, `Workflows/GitHubWorkflowJobMapper.cs`,
-  `Workflows/GitHubWorkflowJobModels.cs`, `Workflows/GitHubWorkflowLogNormalizer.cs`,
-  `Workflows/GitHubWorkflowLogReader.cs`, `Workflows/GitHubWorkflowRunMapper.cs`,
-  `Workflows/GitHubWorkflowRunModels.cs`.
+- [Parent module](../README.md)
+- [GitHub ports](../../Application/Abstractions/GitHub/README.md)
+- [Shared projections](../../Domain/DTO/GitHub/README.md)
+- [Workflow consumer](../ApplicationServices/Orchestration/Lifecycle/README.md)
+- [Monitor tests](../../Test/Infra/GitHub/GitHubWorkflowMonitorTests.cs)

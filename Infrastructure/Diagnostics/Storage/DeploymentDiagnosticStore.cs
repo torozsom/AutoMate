@@ -52,25 +52,36 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext, IDiag
     {
         var boundedLimit = Math.Clamp(limit, 1, 2_000);
         var now = DateTimeOffset.UtcNow;
+
         // Older cloud preparation and local build messages were stored without a deployment ID.
         // Confine those records to this deployment's lifetime within the authorized project.
-        var deploymentStart = await dbContext.Deployments.AsNoTracking()
-            .Where(item => item.Id == deploymentId && item.CsProject!.AppId == projectId)
+        var deploymentStart = await dbContext.Deployments
+            .AsNoTracking()
+            .Where(item => item.Id == deploymentId
+                           && item.CsProject!.AppId == projectId)
             .Select(item => (DateTimeOffset?)item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
         if (deploymentStart is null) return new DeploymentTerminalHistory([], false);
-        var nextDeploymentStart = await dbContext.Deployments.AsNoTracking()
-            .Where(item => item.CsProject!.AppId == projectId && item.CreatedAt > deploymentStart.Value)
+
+        var nextDeploymentStart = await dbContext.Deployments
+            .AsNoTracking()
+            .Where(item => item.CsProject!.AppId == projectId
+                           && item.CreatedAt > deploymentStart.Value)
             .OrderBy(item => item.CreatedAt)
             .Select(item => (DateTimeOffset?)item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
-        var rows = await dbContext.DeploymentDiagnosticRecords.AsNoTracking()
-            .Where(item => item.ProjectId == projectId && item.ExpiresAt > now &&
-                           ((item.DeploymentId == deploymentId && item.TerminalChannel != null) ||
-                            (item.DeploymentId == null &&
-                             (item.Source == "GitHubActions" || item.Source == "DockerCompose") &&
-                             item.TimestampUtc >= deploymentStart.Value &&
-                             (nextDeploymentStart == null || item.TimestampUtc < nextDeploymentStart.Value))))
+
+        var rows = await dbContext.DeploymentDiagnosticRecords
+            .AsNoTracking()
+            .Where(item =>
+                item.ProjectId == projectId
+                && item.ExpiresAt > now
+                && ((item.DeploymentId == deploymentId && item.TerminalChannel != null)
+                    || (item.DeploymentId == null
+                        && (item.Source == "GitHubActions" || item.Source == "DockerCompose")
+                        && item.TimestampUtc >= deploymentStart.Value
+                        && (nextDeploymentStart == null || item.TimestampUtc < nextDeploymentStart.Value))))
             .OrderByDescending(item => item.OrderId)
             .Take(boundedLimit + 1)
             .Select(item => new DeploymentTerminalLog(item.OrderId, item.ProjectId, item.DeploymentId,
@@ -83,10 +94,11 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext, IDiag
                 item.Severity == "Trace" ? DeploymentDiagnosticSeverity.Trace : null,
                 item.TimestampUtc, null, null, item.TraceId, item.SpanId, item.Sequence))
             .ToListAsync(cancellationToken);
+
         var earlierOmitted = rows.Count > boundedLimit;
         if (earlierOmitted) rows.RemoveAt(rows.Count - 1);
         rows.Reverse();
-        return new DeploymentTerminalHistory(rows.Select(redactor.RedactTerminal).ToArray(), earlierOmitted);
+        return new DeploymentTerminalHistory([.. rows.Select(redactor.RedactTerminal)], earlierOmitted);
     }
 
     /// <summary>
@@ -129,7 +141,7 @@ public sealed class DeploymentDiagnosticStore(AutoMateDbContext dbContext, IDiag
             .ToListAsync(cancellationToken);
         var moreAvailable = rows.Count > boundedLimit;
         if (moreAvailable) rows.RemoveAt(rows.Count - 1);
-        return new DeploymentTerminalHistory(rows.Select(redactor.RedactTerminal).ToArray(), moreAvailable);
+        return new DeploymentTerminalHistory([.. rows.Select(redactor.RedactTerminal)], moreAvailable);
     }
 
     /// <summary>

@@ -53,9 +53,11 @@ public sealed class DeploymentHistoryService(
     {
         await AuthorizeAsync(user, project, deployment, token);
         if (search?.Length > 256) throw new ArgumentException("Log search is limited to 256 characters.");
+
         var history = await store.ReadPageAsync(project, deployment,
             TelemetryHistoryCursor.Decode(cursor, project, deployment),
             backwards, limit, token, search, channel);
+
         return TelemetryHistoryCursor.Page(history, project, deployment);
     }
 
@@ -73,8 +75,12 @@ public sealed class DeploymentHistoryService(
     public async Task<DeploymentTelemetryPreferences> GetPreferencesAsync(Guid userId, Guid projectId,
         CancellationToken cancellationToken = default)
     {
-        var project = await db.Applications.AsNoTracking()
-            .SingleOrDefaultAsync(p => p.Id == projectId && p.UserId == userId, cancellationToken);
+        var project = await db.Applications
+            .AsNoTracking()
+            .SingleOrDefaultAsync(p => p.Id == projectId
+                                       && p.UserId == userId,
+                cancellationToken);
+
         if (project is null) throw new UnauthorizedAccessException("Project access denied.");
         return new DeploymentTelemetryPreferences(true, true,
             options.Value.ManagedService, options.Value.ProcessingRegion);
@@ -96,8 +102,11 @@ public sealed class DeploymentHistoryService(
     {
         if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
             throw new InvalidOperationException("Managed provider onboarding is not configured.");
-        var changed = await db.Applications.Where(p => p.Id == projectId && p.UserId == userId)
-            .ExecuteUpdateAsync(u => u.SetProperty(p => p.ManagedTelemetryConsent, true), cancellationToken);
+        var changed = await db.Applications
+            .Where(p => p.Id == projectId && p.UserId == userId)
+            .ExecuteUpdateAsync(u => u
+                .SetProperty(p => p.ManagedTelemetryConsent, true), cancellationToken);
+
         if (changed == 0) throw new UnauthorizedAccessException("Project access denied.");
     }
 
@@ -139,12 +148,17 @@ public sealed class DeploymentHistoryService(
     {
         await AuthorizeAsync(userId, projectId, deploymentId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
+
         if (end <= start)
             throw new ArgumentException("Metric range must be positive.");
+
         if (archive is null) start = start < now.AddDays(-30) ? now.AddDays(-30) : start;
+
         end = end > now ? now : end;
         if (end <= start) return new DeploymentMetricHistory([], "Metric history has expired.");
+
         maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
+
         if (archive is not null && options.Value.DiskGateway)
         {
             var saved = await archive.ReadMetricsAsync(userId, projectId, deploymentId, start, end, maximumPoints,
@@ -155,6 +169,7 @@ public sealed class DeploymentHistoryService(
         IReadOnlyList<DeploymentMetricPoint> remote = [];
         string? availability = null;
         var specialized = options.Value.Specialized;
+
         if (specialized)
             try
             {
@@ -167,30 +182,46 @@ public sealed class DeploymentHistoryService(
                 availability = "Metric storage is temporarily unavailable; only buffered samples are shown.";
             }
 
-        var rows = await db.DeploymentDiagnosticRecords.AsNoTracking().Where(r => r.ProjectId == projectId &&
-                r.DeploymentId == deploymentId && r.ExpiresAt > now && r.TimestampUtc >= start &&
-                r.TimestampUtc <= end &&
-                r.MetricSamplesJson != null).OrderBy(r => r.TimestampUtc).Take(10001)
+        var rows = await db.DeploymentDiagnosticRecords
+            .AsNoTracking()
+            .Where(r => r.ProjectId == projectId
+                        && r.DeploymentId == deploymentId
+                        && r.ExpiresAt > now
+                        && r.TimestampUtc >= start
+                        && r.TimestampUtc <= end
+                        && r.MetricSamplesJson != null)
+            .OrderBy(r => r.TimestampUtc)
+            .Take(10001)
             .Select(r => new { r.TimestampUtc, r.MetricSamplesJson, r.SourceIdentityJson, r.DeliveryJson, r.Cursor })
             .ToListAsync(cancellationToken);
+
         var interval = Math.Max(60, (int)Math.Ceiling((end - start).TotalSeconds / maximumPoints));
         if (options.Value.DiskGateway)
             try
             {
                 var pending = await gateway!.ReadPendingAsync(userId, projectId, deploymentId, cancellationToken);
-                var buffered = pending.Events.Where(e => e.Event.TimestampUtc >= start && e.Event.TimestampUtc <= end)
-                    .SelectMany(e => (e.Event.Metrics ?? []).Select(m => new
-                    {
-                        Sample = m,
-                        Container = e.Event.TerminalChannel.Target ?? "unknown",
-                        Time = end.AddSeconds(-Math.Floor((end - e.Event.TimestampUtc).TotalSeconds / interval) *
-                                              interval)
-                    }))
+
+                var buffered = pending.Events
+                    .Where(e => e.Event.TimestampUtc >= start
+                                && e.Event.TimestampUtc <= end)
+                    .SelectMany(e => (e.Event.Metrics ?? [])
+                        .Select(m => new
+                        {
+                            Sample = m,
+                            Time = end.AddSeconds(-Math.Floor((end - e.Event.TimestampUtc).TotalSeconds / interval) *
+                                                  interval),
+                            Container = e.Event.TerminalChannel.Target ?? "unknown"
+                        }))
                     .GroupBy(p => (p.Container, p.Sample.Name, p.Sample.Unit, p.Time))
-                    .Select(g => new DeploymentMetricPoint(g.Key.Container, g.Key.Name, g.Key.Unit, g.Key.Time,
-                        g.Average(p => p.Sample.Value), g.Min(p => p.Sample.Value), g.Max(p => p.Sample.Value)))
+                    .Select(g =>
+                        new DeploymentMetricPoint(g.Key.Container, g.Key.Name, g.Key.Unit, g.Key.Time,
+                            g.Average(p => p.Sample.Value),
+                            g.Min(p => p.Sample.Value),
+                            g.Max(p => p.Sample.Value)))
                     .ToArray();
-                remote = buffered.Concat(remote).DistinctBy(p => (p.Container, p.Name, p.Timestamp)).ToArray();
+
+                remote = [.. buffered.Concat(remote).DistinctBy(p => (p.Container, p.Name, p.Timestamp))];
+
                 if (buffered.Length > 0)
                     availability = "Recent metric intervals are pending ingestion and may be incomplete.";
                 if (pending.DroppedEvents > 0 || pending.Truncated)
@@ -211,6 +242,7 @@ public sealed class DeploymentHistoryService(
         if (specialized && rows.Any(r => r.DeliveryJson != null))
             availability =
                 (availability + " Recent metric intervals are pending ingestion and may be incomplete.").Trim();
+
         var local = rows.SelectMany(r => JsonSerializer.Deserialize<List<DeploymentMetricSample>>(r.MetricSamplesJson!)!
                 .Select(m => new
                 {
@@ -226,17 +258,25 @@ public sealed class DeploymentHistoryService(
                                 ? JsonSerializer.Deserialize<DeploymentDiagnosticSourceIdentity>(r.SourceIdentityJson)
                                     ?.InstanceId ?? "unknown"
                                 : "unknown"
-                })).GroupBy(p => new { p.Container, p.Sample.Name, p.Sample.Unit, p.Time })
-            .Select(g => new DeploymentMetricPoint(g.Key.Container, g.Key.Name, g.Key.Unit, g.Key.Time,
-                g.Average(p => p.Sample.Value), g.Min(p => p.Sample.Value), g.Max(p => p.Sample.Value)));
+                }))
+            .GroupBy(p => new { p.Container, p.Sample.Name, p.Sample.Unit, p.Time })
+            .Select(g =>
+                new DeploymentMetricPoint(g.Key.Container, g.Key.Name, g.Key.Unit, g.Key.Time,
+                    g.Average(p => p.Sample.Value),
+                    g.Min(p => p.Sample.Value),
+                    g.Max(p => p.Sample.Value)));
+
         // Pending samples take precedence over eventual backend copies for their bucket.
         if (options.Value.Specialized &&
             await db.TelemetryTenantStates.AnyAsync(s => s.TenantId == userId && s.DroppedEvents > 0,
                 cancellationToken))
             availability = (availability + " Some diagnostics were omitted because storage limits were reached.")
                 .Trim();
-        return new DeploymentMetricHistory(local.Concat(remote).DistinctBy(p => (p.Container, p.Name, p.Timestamp))
-            .OrderBy(p => p.Timestamp).ToArray(), availability);
+
+        return new DeploymentMetricHistory([
+            .. local.Concat(remote).DistinctBy(p => (p.Container, p.Name, p.Timestamp))
+                .OrderBy(p => p.Timestamp)
+        ], availability);
     }
 
     /// <summary>
@@ -253,8 +293,11 @@ public sealed class DeploymentHistoryService(
     public async Task SetRuntimeCollectionAsync(Guid userId, Guid projectId, bool enabled,
         CancellationToken cancellationToken = default)
     {
-        var changed = await db.Applications.Where(p => p.Id == projectId && p.UserId == userId)
-            .ExecuteUpdateAsync(u => u.SetProperty(p => p.RuntimeDiagnosticsEnabled, true), cancellationToken);
+        var changed = await db.Applications
+            .Where(p => p.Id == projectId && p.UserId == userId)
+            .ExecuteUpdateAsync(u => u
+                .SetProperty(p => p.RuntimeDiagnosticsEnabled, true), cancellationToken);
+
         if (changed == 0) throw new UnauthorizedAccessException("Project access denied.");
     }
 

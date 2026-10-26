@@ -49,6 +49,7 @@ public sealed class CloudDeploymentAdmission(
     {
         var metadata = new ProjectMetadataDto
             { TargetFramework = "net10.0", DotNetVersion = "10.0", IsWebProject = true };
+
         if (!capabilities.LocalDeploymentsEnabled)
             return await runs.StartAsync(new CloudDeploymentStart(request.Owner, request.Config.ProjectId,
                 request.IdempotencyKey!, request.RepositoryOwner, request.RepositoryName, request.GitHubToken,
@@ -67,6 +68,7 @@ public sealed class CloudDeploymentAdmission(
             RepositoryOwner = request.RepositoryOwner,
             RepositoryName = request.RepositoryName
         }), token);
+
         return null;
     }
 }

@@ -32,6 +32,7 @@ public sealed class AnalysisReadinessHealthCheck(IDeploymentAnalysisReadiness re
                 : snapshot.Configuration is AnalysisConfigurationState.Ready or AnalysisConfigurationState.Disabled
                     ? HealthStatus.Healthy
                     : HealthStatus.Degraded;
+
             return new HealthCheckResult(status, data: new Dictionary<string, object> { ["readiness"] = snapshot });
         }
         catch (Exception)
@@ -62,6 +63,7 @@ public static class AnalysisHealthChecks
         {
             Predicate = registration => !registration.Tags.Contains(ReadinessTag)
         }).AllowAnonymous();
+
         app.MapHealthChecks("/health/ready", new HealthCheckOptions
         {
             Predicate = registration => registration.Tags.Contains(ReadinessTag),
@@ -89,9 +91,11 @@ public static class AnalysisHealthChecks
                        value is DeploymentAnalysisReadiness result
             ? result
             : new DeploymentAnalysisReadiness(AnalysisConfigurationState.Unavailable, false);
+
         var configuration = Enum.IsDefined(snapshot.Configuration)
             ? snapshot.Configuration.ToString()
-            : AnalysisConfigurationState.Unavailable.ToString();
+            : nameof(AnalysisConfigurationState.Unavailable);
+
         return context.Response.WriteAsJsonAsync(new
         {
             status = report.Status.ToString(),

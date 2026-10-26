@@ -52,9 +52,11 @@ public sealed class DeploymentAnalysisReadinessService(
                 item.Analysis.Status,
                 item.Analysis.ExpiresAt
             }).Take(1).ToListAsync(cancellationToken);
+
             await db.FailedDeploymentAnalysisEvents.AsNoTracking()
                 .Select(item => new { item.DeploymentId, item.CreatedAt, item.CompletedAt })
                 .Take(1).ToListAsync(cancellationToken);
+
             await db.AiAnalysisBudgetEntries.AsNoTracking()
                 .Select(item => new
                 {
@@ -69,6 +71,7 @@ public sealed class DeploymentAnalysisReadinessService(
                     item.Currency
                 })
                 .Take(1).ToListAsync(cancellationToken);
+
             return new DeploymentAnalysisReadiness(configuration, true);
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
@@ -90,11 +93,13 @@ public sealed class DeploymentAnalysisReadinessService(
             var settings = options.CurrentValue;
             if (!settings.Enabled) return AnalysisConfigurationState.Disabled;
             if (!settings.ProviderEgressEnabled) return AnalysisConfigurationState.EgressDisabled;
+
             var provider = catalog.Select(settings);
             if (!AnalysisBudgetPolicy.IsValid(settings)) return AnalysisConfigurationState.Invalid;
             if (settings.DailyTenantCostBudget <= 0 || settings.MaximumProviderAttemptCost <= 0 ||
                 settings.MaximumProviderAttemptCost > settings.DailyTenantCostBudget)
                 return AnalysisConfigurationState.Unavailable;
+
             return provider?.CredentialsConfigured?.Invoke() == true
                 ? AnalysisConfigurationState.Ready
                 : AnalysisConfigurationState.Unavailable;

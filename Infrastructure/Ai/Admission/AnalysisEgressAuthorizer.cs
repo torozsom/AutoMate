@@ -47,6 +47,7 @@ public sealed class AnalysisEgressAuthorizer(
             redactor.RedactText(settings.Model, 128) != settings.Model ||
             trigger is not (AiAnalysisTrigger.Manual or AiAnalysisTrigger.DeploymentFailed) ||
             (trigger == AiAnalysisTrigger.DeploymentFailed && !settings.AutomaticAnalysisEnabled)) return false;
+
         var deployment = await db.Deployments.AsNoTracking().Where(item => item.Id == deploymentId)
             .Select(item => new
             {
@@ -54,6 +55,7 @@ public sealed class AnalysisEgressAuthorizer(
                 Consent = item.CsProject.Configuration != null &&
                           item.CsProject.Configuration.AiDiagnosticEgressConsented
             }).SingleOrDefaultAsync(cancellationToken);
+
         return ReferenceEquals(settings, options.CurrentValue) && deployment is not null && deployment.Consent &&
                settings.ApprovedTenantIds.Contains(deployment.Owner);
     }

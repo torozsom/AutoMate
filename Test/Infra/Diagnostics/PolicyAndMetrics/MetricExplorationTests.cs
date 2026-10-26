@@ -19,17 +19,24 @@ public sealed class MetricExplorationTests
     public void Windows_validate_calendar_bounds_and_keep_charts_bounded()
     {
         var now = new DateTimeOffset(2024, 2, 29, 12, 0, 0, TimeSpan.Zero);
+
         foreach (var preset in new[] { "10m", "30m", "1h", "6h", "24h", "7d", "30d", "90d", "1y", "5y" })
         {
             var range = MetricTimeRange.Preset(preset, now);
+
             range.Validate(now);
-            var buckets = Enumerable.Range(0, 10000).Select(i => range.Bucket(range.Start.AddTicks(
-                (range.End - range.Start).Ticks / 10000 * i))).Distinct().Count();
+            var buckets = Enumerable.Range(0, 10000)
+                .Select(i => range.Bucket(range.Start.AddTicks(
+                    (range.End - range.Start).Ticks / 10000 * i)))
+                .Distinct().Count();
+
             Assert.InRange(buckets, 1, 240);
         }
 
         Assert.Equal(now.AddYears(-5), MetricTimeRange.Preset("5y", now).Start);
+
         new MetricTimeRange(now.AddMinutes(-5), now).Validate(now);
+
         Assert.Throws<ArgumentException>(() => new MetricTimeRange(now.AddMinutes(-4), now).Validate(now));
         Assert.Throws<ArgumentException>(() => new MetricTimeRange(now.AddYears(-5).AddDays(-1), now).Validate(now));
         Assert.Throws<ArgumentException>(() =>
@@ -51,18 +58,22 @@ public sealed class MetricExplorationTests
         var now = DateTimeOffset.UtcNow.AddSeconds(-2);
         var range = new MetricTimeRange(now.AddMinutes(-10), now);
         var sample = Entry(tenant, project, deployment, now.AddMinutes(-1), "web", .1);
+
         try
         {
             using (var archive = Create(path))
             {
-                await archive.AppendAsync(sample, default);
-                await archive.AppendAsync(sample, default);
+                await archive.AppendAsync(sample, CancellationToken.None);
+                await archive.AppendAsync(sample, CancellationToken.None);
                 await archive.AppendAsync(Entry(tenant, project, deployment, sample.Event.TimestampUtc, "web", .9),
-                    default);
+                    CancellationToken.None);
                 await archive.AppendAsync(Entry(tenant, project, deployment, sample.Event.TimestampUtc, "database", .7),
-                    default);
-                await archive.AppendAsync(Entry(tenant, project, deployment, now.AddDays(-40), "web", 99), default);
-                var page = await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, "web", default);
+                    CancellationToken.None);
+                await archive.AppendAsync(Entry(tenant, project, deployment, now.AddDays(-40), "web", 99),
+                    CancellationToken.None);
+                var page = await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, "web",
+                    CancellationToken.None);
+
                 var row = Assert.Single(page.Items);
                 Assert.Equal(2, row.Samples);
                 Assert.Equal(.5, row.Average, 8);
@@ -70,21 +81,32 @@ public sealed class MetricExplorationTests
                 Assert.Equal(.9, row.Maximum);
                 Assert.Null(page.Availability);
                 Assert.Empty(
-                    (await archive.ReadIndexedMetricsAsync(Guid.NewGuid(), project, deployment, range, null, default))
+                    (await archive.ReadIndexedMetricsAsync(Guid.NewGuid(), project, deployment, range, null,
+                        CancellationToken.None))
                     .Items);
             }
 
             var index = Directory.GetDirectories(path, "metric-index", SearchOption.AllDirectories).Single();
+
             Directory.Delete(index, true);
             using var reopened = Create(path);
-            var rebuilt = await reopened.ReadIndexedMetricsAsync(tenant, project, deployment, range, null, default);
+            var rebuilt =
+                await reopened.ReadIndexedMetricsAsync(tenant, project, deployment, range, null,
+                    CancellationToken.None);
+
             Assert.Equal(2, rebuilt.Items.Count);
             Assert.Equal(3, rebuilt.Items.Sum(p => p.Samples));
+
             var old = await reopened.ReadIndexedMetricsAsync(tenant, project, deployment,
-                new MetricTimeRange(now.AddYears(-5), now), "web", default);
+                new MetricTimeRange(now.AddYears(-5), now), "web", CancellationToken.None);
+
             Assert.Equal(3, old.Items.Sum(p => p.Samples));
-            await reopened.DeleteProjectAsync(tenant, project, default);
-            Assert.Empty((await reopened.ReadIndexedMetricsAsync(tenant, project, deployment, range, null, default))
+
+            await reopened.DeleteProjectAsync(tenant, project, CancellationToken.None);
+
+            Assert.Empty(
+                (await reopened.ReadIndexedMetricsAsync(tenant, project, deployment, range, null,
+                    CancellationToken.None))
                 .Items);
         }
         finally
@@ -105,18 +127,27 @@ public sealed class MetricExplorationTests
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow.AddSeconds(-2);
+
         try
         {
             using var archive = Create(path);
-            await archive.AppendAsync(Entry(tenant, project, deployment, now.AddMinutes(-1), "web", .2), default);
+
+            await archive.AppendAsync(Entry(tenant, project, deployment, now.AddMinutes(-1), "web", .2),
+                CancellationToken.None);
             var range = new MetricTimeRange(now.AddMinutes(-10), now);
-            await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, null, default);
+
+            await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, null, CancellationToken.None);
             var reference = Directory.GetFiles(path, "*.ref", SearchOption.AllDirectories).Single();
+
             await File.WriteAllTextAsync(reference, "damaged lookup");
-            var partial = await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, null, default);
+            var partial =
+                await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, null, CancellationToken.None);
+
             Assert.Empty(partial.Items);
             Assert.Contains("rebuilt", partial.Availability);
-            Assert.Single((await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, null, default))
+            Assert.Single(
+                (await archive.ReadIndexedMetricsAsync(tenant, project, deployment, range, null,
+                    CancellationToken.None))
                 .Items);
             Assert.Single(Directory.GetFiles(path, "*.segment", SearchOption.AllDirectories));
         }

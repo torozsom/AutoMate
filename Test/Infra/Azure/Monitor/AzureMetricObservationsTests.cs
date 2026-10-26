@@ -19,6 +19,7 @@ public sealed class AzureMetricObservationsTests
                                               {"data":[{"timeStamp":"2026-10-10T10:00:00Z","average":1000000000},{"timeStamp":"2026-10-10T10:01:00Z"}]},
                                               {"data":[{"timeStamp":"2026-10-10T10:00:00Z","average":500000000}]}]}]}
                                             """);
+
         var sample = Assert.Single(AzureMetricObservations.Parse(json.RootElement, "Average", true));
         Assert.Equal(DateTimeOffset.Parse("2026-10-10T10:00:00Z"), sample.Timestamp);
         Assert.Equal(1.5, Assert.Single(sample.Samples).Value);
@@ -35,6 +36,7 @@ public sealed class AzureMetricObservationsTests
                                               {"data":[{"timeStamp":"2026-10-10T10:00:00Z","maximum":25}]},
                                               {"data":[{"timeStamp":"2026-10-10T10:00:00Z","maximum":70}]}]}]}
                                             """);
+
         var sample = Assert.Single(Assert.Single(AzureMetricObservations.Parse(json.RootElement, "Maximum", false))
             .Samples);
         Assert.Equal("automate_database_ru_usage_percent", sample.Name);

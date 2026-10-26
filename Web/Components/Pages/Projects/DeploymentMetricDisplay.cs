@@ -17,7 +17,11 @@ public static class DeploymentMetricDisplay
     public static (string Cpu, string Memory) Latest(IEnumerable<DeploymentMetricPoint> points,
         bool showCpuCores = false)
     {
-        var latest = points.GroupBy(p => p.Name).ToDictionary(g => g.Key, g => g.MaxBy(p => p.Timestamp)!);
+        var latest = points
+            .GroupBy(p => p.Name)
+            .ToDictionary(g => g.Key,
+                g => g.MaxBy(p => p.Timestamp)!);
+
         var cpu = latest.TryGetValue("automate_cpu_usage_cores", out var cores)
             ? showCpuCores
                 ? cores.Average.ToString("0.#####", CultureInfo.InvariantCulture) + " cores"
@@ -25,13 +29,16 @@ public static class DeploymentMetricDisplay
             : latest.TryGetValue("automate_cpu_usage_percent", out var cpuPercent)
                 ? cpuPercent.Average.ToString("0.##", CultureInfo.InvariantCulture) + "%"
                 : "unknown";
+
         var memory = latest.TryGetValue("automate_memory_used_bytes", out var used)
             ? (used.Average / 1048576).ToString("0.##", CultureInfo.InvariantCulture) + " MiB"
             : latest.TryGetValue("automate_memory_used_percent", out var memoryPercent)
                 ? memoryPercent.Average.ToString("0.##", CultureInfo.InvariantCulture) + "%"
                 : "unknown";
+
         if (latest.TryGetValue("automate_memory_limit_bytes", out var limit))
             memory += " / " + (limit.Average / 1048576).ToString("0.##", CultureInfo.InvariantCulture) + " MiB";
+
         return (cpu, memory);
     }
 
@@ -51,7 +58,7 @@ public static class DeploymentMetricDisplay
             return "width: 0%;";
 
         var normalized = Math.Clamp(percent.Value, 0, 100);
-        if (normalized > 0 && normalized < 1)
+        if (normalized is > 0 and < 1)
             normalized = 1;
 
         return $"width: {normalized.ToString("0.##", CultureInfo.InvariantCulture)}%;";

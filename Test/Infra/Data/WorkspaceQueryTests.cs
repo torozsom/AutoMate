@@ -46,16 +46,20 @@ public sealed class WorkspaceQueryTests
             .GetAppByIdAsync(fixture.PrimaryProject, fixture.Owner);
         var newest = legacy!.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt)!;
         var tied = new Deployment { CsProjectId = newest.CsProjectId, Status = DeploymentStatus.Stopped };
+
         db.Deployments.Add(tied);
         await db.SaveChangesAsync();
-        await db.Deployments.Where(d => d.Id == tied.Id).ExecuteUpdateAsync(update =>
-            update.SetProperty(d => d.CreatedAt, newest.CreatedAt));
+        await db.Deployments
+            .Where(d => d.Id == tied.Id)
+            .ExecuteUpdateAsync(update =>
+                update.SetProperty(d => d.CreatedAt, newest.CreatedAt));
         db.ChangeTracker.Clear();
         legacy = await new ApplicationService(db,
                 NullLogger<ApplicationService>.Instance)
             .GetAppByIdAsync(fixture.PrimaryProject, fixture.Owner);
         var expected = legacy!.CsProjects.SelectMany(p => p.Deployments).ToArray();
         var query = new ProjectDetailsQuery(db);
+
         var view = Assert.IsType<ProjectDetailsReadModel>(await query.ReadAsync(fixture.PrimaryProject, fixture.Owner,
             0));
         Assert.Equal(expected.Length, view.Summary.Total);
@@ -67,7 +71,10 @@ public sealed class WorkspaceQueryTests
             view.Project.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt)!.Id);
         Assert.Equal(expected.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Take(6).Select(d => d.Id),
             view.History.Select(d => d.Id));
-        Assert.Equal(expected.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id).Take(6)
+        Assert.Equal(expected
+            .OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.Id)
+            .Take(6)
             .Select(d => d.CsProject?.Name), view.History.Select(d => d.CsProject?.Name));
         Assert.Null(await query.ReadAsync(fixture.PrimaryProject, fixture.OtherOwner, 0));
         Assert.Empty(db.ChangeTracker.Entries());
@@ -84,14 +91,19 @@ public sealed class WorkspaceQueryTests
         await using var db = fixture.Db();
         var service = new WorkspaceQuery(db, fixture.Clock);
         var first = await service.ProjectsAsync(fixture.Owner, new ProjectInventoryRequest());
+
         Assert.Equal(23, first.SavedProjects);
         Assert.Equal(20, first.Items.Count);
         Assert.Equal(23, first.Total);
+
         var second = await service.ProjectsAsync(fixture.Owner, new ProjectInventoryRequest(Page: 2));
+
         Assert.Equal(3, second.Items.Count);
         Assert.Empty(first.Items.Select(i => i.Id).Intersect(second.Items.Select(i => i.Id)));
+
         var filtered = await service.ProjectsAsync(fixture.Owner,
             new ProjectInventoryRequest("API", SourceType.Remote, DeploymentStatus.Starting, "name", 100));
+
         var row = Assert.Single(filtered.Items);
         Assert.Equal("API service", row.Name);
         Assert.Equal(1, filtered.Page);
@@ -114,6 +126,7 @@ public sealed class WorkspaceQueryTests
         await using var db = fixture.Db();
         var service = new WorkspaceQuery(db, fixture.Clock);
         var result = await service.OverviewAsync(fixture.Owner, 30);
+
         Assert.Equal(4, result.Attempts);
         Assert.Equal(1, result.Succeeded);
         Assert.Equal(1, result.Failed);
@@ -132,15 +145,19 @@ public sealed class WorkspaceQueryTests
         Assert.Contains(result.Attention, item => item.State == "Starting");
         var unknown = Assert.Single(result.Recent, r => r.Project == "No duration");
         Assert.Null(unknown.DurationSeconds);
+
         var empty = await service.OverviewAsync(Guid.NewGuid(), 7);
+
         Assert.Empty(empty.Recent);
         Assert.Empty(empty.Resources);
         Assert.Equal(0, empty.Attempts);
         Assert.Null(empty.AverageDurationSeconds);
+
         var project =
             await new ProjectTelemetryAnalyticsService(db, new DiagnosticRedactor(), clock: fixture.Clock).ReadAsync(
                 fixture.Owner,
                 fixture.PrimaryProject, result.Start, result.End);
+
         Assert.Equal(1, project.SuccessfulDeployments);
         Assert.Equal(1, project.FailedDeployments);
     }
@@ -154,12 +171,15 @@ public sealed class WorkspaceQueryTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.Db();
+
         await db.Database.ExecuteSqlRawAsync("DROP TABLE deployment_daily_telemetry");
         var service = new WorkspaceQuery(db, fixture.Clock);
         var result = await service.OverviewAsync(fixture.Owner, 90);
+
         Assert.Equal(4, result.Attempts);
         Assert.Empty(result.Resources);
         Assert.Contains("temporarily unavailable", result.ResourceNotice);
+
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.OverviewAsync(Guid.Empty, 30));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.OverviewAsync(fixture.Owner, 365));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -176,6 +196,7 @@ public sealed class WorkspaceQueryTests
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.Db();
         var path = Path.Combine(Path.GetTempPath(), "automate-range-sql-" + Guid.NewGuid().ToString("N"));
+
         try
         {
             using var disk = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
@@ -184,14 +205,18 @@ public sealed class WorkspaceQueryTests
             var reader = new ArchiveMetricBatchReader(db, disk, settings);
             var port = new BatchPort(reader, disk);
             var service = new MetricExplorationService(db, port, settings, TimeProvider.System);
-            var deployment = await db.Deployments.Where(d => d.CsProject!.AppId == fixture.PrimaryProject)
-                .OrderBy(d => d.CreatedAt).Select(d => d.Id).FirstAsync();
+            var deployment = await db.Deployments
+                .Where(d => d.CsProject!.AppId == fixture.PrimaryProject)
+                .OrderBy(d => d.CreatedAt)
+                .Select(d => d.Id).FirstAsync();
             var now = DateTimeOffset.UtcNow.AddSeconds(-1);
             var range = new MetricTimeRange(now.AddMinutes(-10), now);
+
             for (var i = 0; i < 60; i++)
             {
                 var id = Guid.NewGuid();
                 var time = now.AddMinutes(-2);
+
                 await disk.AppendAsync(new DeploymentLogEnvelope(id, fixture.Owner, i + 1, time, time.AddDays(30),
                     new DeploymentDiagnosticEvent(fixture.PrimaryProject, deployment,
                         DeploymentDiagnosticSource.DockerContainer,
@@ -201,7 +226,7 @@ public sealed class WorkspaceQueryTests
                         [
                             new DeploymentMetricSample("automate_cpu_usage_cores", .5, "cores"),
                             new DeploymentMetricSample("automate_memory_used_bytes", 1024, "bytes")
-                        ], EventId: id), "web-" + i), default);
+                        ], EventId: id), "web-" + i), CancellationToken.None);
             }
 
             var first = await service.ReadAsync(
@@ -209,37 +234,45 @@ public sealed class WorkspaceQueryTests
             var second =
                 await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, fixture.PrimaryProject,
                     Page: 2));
+
             Assert.Equal(120, first.Total);
             Assert.Equal(25, first.Items.Count);
             Assert.Equal(25, second.Items.Count);
             Assert.Empty(first.Items.Intersect(second.Items));
             Assert.Equal(first.Chart, second.Chart);
+
             var selected = await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range,
                 fixture.PrimaryProject, Container: "web-59"));
+
             Assert.Equal(2, selected.Total);
             Assert.All(selected.Items, p => Assert.Equal("web-59", p.Container));
+
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
                 service.ReadAsync(new MetricExplorationQuery(fixture.OtherOwner, range, fixture.PrimaryProject)));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
                 reader.ReadAsync(
                     new ArchiveMetricBatchRequest(fixture.OtherOwner, range, fixture.PrimaryProject, deployment),
-                    default));
+                    CancellationToken.None));
             var overview = await new WorkspaceQuery(db, TimeProvider.System, exploration: service)
                 .OverviewAsync(fixture.Owner, range);
+
             Assert.Equal(60, overview.Resources.Single(p => p.Metric == "automate_cpu_usage_cores").Samples);
+
             var consent = new MetricExplorationService(db, port,
                 Options.Create(new TelemetryStorageOptions
                     { ManagedService = true, ManagedDataProcessingApproved = true }), TimeProvider.System);
             var privateReader = new ArchiveMetricBatchReader(db, disk,
                 Options.Create(new TelemetryStorageOptions
                     { ManagedService = true, ManagedDataProcessingApproved = true }));
+
             Assert.NotEmpty(
                 (await privateReader.ReadAsync(
-                    new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject), default)).Items);
+                    new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject),
+                    CancellationToken.None)).Items);
             Assert.Null(
                 (await privateReader.ReadAsync(
                     new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject),
-                    default)).Availability);
+                    CancellationToken.None)).Availability);
         }
         finally
         {
@@ -260,6 +293,7 @@ public sealed class WorkspaceQueryTests
         var day = new DateTimeOffset(DateTimeOffset.UtcNow.UtcDateTime.Date, TimeSpan.Zero).AddDays(-1);
         var deployment = await db.Deployments.Where(d => d.CsProject!.AppId == fixture.PrimaryProject)
             .Select(d => d.Id).FirstAsync();
+
         db.DeploymentDailyTelemetry.Add(new DeploymentDailyTelemetry
         {
             UserId = fixture.Owner,
@@ -275,9 +309,11 @@ public sealed class WorkspaceQueryTests
             Maximum = .9
         });
         await db.SaveChangesAsync();
-        await db.DeploymentDailyTelemetry.Where(d => d.UserId == fixture.OtherOwner)
+        await db.DeploymentDailyTelemetry
+            .Where(d => d.UserId == fixture.OtherOwner)
             .ExecuteUpdateAsync(update => update.SetProperty(d => d.DayUtc, day));
         var path = Path.Combine(Path.GetTempPath(), "automate-day-sql-" + Guid.NewGuid().ToString("N"));
+
         try
         {
             using var disk = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
@@ -289,6 +325,7 @@ public sealed class WorkspaceQueryTests
             var range = new MetricTimeRange(day.AddDays(-1).AddHours(12), DateTimeOffset.UtcNow.AddSeconds(-1));
             var result =
                 await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, fixture.PrimaryProject));
+
             var row = Assert.Single(result.Chart);
             Assert.Equal(day, row.Timestamp);
             Assert.Equal(4, row.Samples);
@@ -297,17 +334,20 @@ public sealed class WorkspaceQueryTests
             Assert.Empty((await service.ReadAsync(new MetricExplorationQuery(fixture.OtherOwner, range))).Chart);
 
             Assert.DoesNotContain(result.Chart, p => p.Timestamp == day.AddDays(1));
+
             var offline = new MetricExplorationService(db,
                 new BatchPort(new ArchiveMetricBatchReader(db, disk, settings), disk, true),
                 settings, TimeProvider.System);
             var partial =
                 await offline.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, fixture.PrimaryProject));
+
             Assert.Equal(4, Assert.Single(partial.Chart).Samples);
             Assert.Contains("unavailable", partial.Availability);
 
             var fiveYears = new MetricTimeRange(range.End.AddYears(-5), range.End);
             var longResult =
                 await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, fiveYears, fixture.PrimaryProject));
+
             Assert.Equal(4, Assert.Single(longResult.Chart).Samples);
         }
         finally
@@ -462,8 +502,10 @@ public sealed class WorkspaceQueryTests
         public async ValueTask DisposeAsync()
         {
             await using var db = new NpgsqlConnection(connection);
+
             await db.OpenAsync();
             await using var command = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", db);
+
             await command.ExecuteNonQueryAsync();
         }
 
@@ -478,6 +520,7 @@ public sealed class WorkspaceQueryTests
                     npgsql => npgsql.MigrationsHistoryTable("__EFMigrationsHistory", schema))
                 .UseSnakeCaseNamingConvention()
                 .Options;
+
             return new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
         }
 
@@ -490,22 +533,27 @@ public sealed class WorkspaceQueryTests
             var fixture = new Fixture(Environment.GetEnvironmentVariable("AUTOMATE_AI_TEST_DB")!,
                 "ui_test_" + Guid.NewGuid().ToString("N"));
             await using var admin = new NpgsqlConnection(fixture.Connection);
+
             await admin.OpenAsync();
             await using var command = new NpgsqlCommand($"CREATE SCHEMA {fixture.Schema}", admin);
+
             await command.ExecuteNonQueryAsync();
             try
             {
                 await using var db = fixture.Db();
+
                 await db.Database.MigrateAsync();
                 var owner = new LocalUser { Username = "owner", Email = "owner@example.invalid" };
                 var other = new LocalUser { Username = "other", Email = "other@example.invalid" };
-                var apps = Enumerable.Range(0, 23).Select(index => new Domain.Entities.Projects.Application
-                {
-                    Name = index == 0 ? "API service" : $"Project {index:00}",
-                    User = owner,
-                    SourceType = index == 0 ? SourceType.Remote : SourceType.Local,
-                    SourcePathOrUrl = "fixture"
-                }).ToArray();
+                var apps = Enumerable.Range(0, 23)
+                    .Select(index => new Domain.Entities.Projects.Application
+                    {
+                        Name = index == 0 ? "API service" : $"Project {index:00}",
+                        User = owner,
+                        SourceType = index == 0 ? SourceType.Remote : SourceType.Local,
+                        SourcePathOrUrl = "fixture"
+                    })
+                    .ToArray();
                 var outsider = new Domain.Entities.Projects.Application
                 {
                     Name = "Private outsider",
@@ -521,28 +569,37 @@ public sealed class WorkspaceQueryTests
                     { CsProject = component, Status = DeploymentStatus.Failed, Outcome = DeploymentOutcome.Failed };
                 var component2 = new CsProject { Name = "Worker", Path = "worker.csproj", Application = apps[0] };
                 var starting = new Deployment { CsProject = component2, Status = DeploymentStatus.Starting };
+
                 apps[1].Name = "No duration";
                 var unknown = new Deployment
                 {
                     CsProject = new CsProject { Name = "Web", Path = "app.csproj", Application = apps[1] },
                     Status = DeploymentStatus.Stopped
                 };
+
                 db.Applications.AddRange(apps.Append(outsider));
                 db.Deployments.AddRange(successful, failed, starting, unknown);
                 await db.SaveChangesAsync();
                 var now = DateTimeOffset.UtcNow;
-                await db.Deployments.Where(d => d.Id == successful.Id).ExecuteUpdateAsync(u =>
-                    u.SetProperty(d => d.CreatedAt, now.AddMinutes(-10))
-                        .SetProperty(d => d.FinishedAt, now.AddMinutes(-10).AddSeconds(10)));
-                await db.Deployments.Where(d => d.Id == failed.Id).ExecuteUpdateAsync(u =>
-                    u.SetProperty(d => d.CreatedAt, now.AddMinutes(-20))
-                        .SetProperty(d => d.FinishedAt, now.AddMinutes(-20).AddSeconds(30)));
-                await db.Deployments.Where(d => d.Id == starting.Id)
+
+                await db.Deployments
+                    .Where(d => d.Id == successful.Id)
+                    .ExecuteUpdateAsync(u =>
+                        u.SetProperty(d => d.CreatedAt, now.AddMinutes(-10))
+                            .SetProperty(d => d.FinishedAt, now.AddMinutes(-10).AddSeconds(10)));
+                await db.Deployments
+                    .Where(d => d.Id == failed.Id)
+                    .ExecuteUpdateAsync(u =>
+                        u.SetProperty(d => d.CreatedAt, now.AddMinutes(-20))
+                            .SetProperty(d => d.FinishedAt, now.AddMinutes(-20).AddSeconds(30)));
+                await db.Deployments
+                    .Where(d => d.Id == starting.Id)
                     .ExecuteUpdateAsync(u => u.SetProperty(d => d.CreatedAt, now.AddMinutes(-5)));
                 fixture.Owner = owner.Id;
                 fixture.OtherOwner = other.Id;
                 fixture.PrimaryProject = apps[0].Id;
                 var day = new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero);
+
                 db.DeploymentDailyTelemetry.AddRange(
                     new DeploymentDailyTelemetry
                     {
@@ -593,6 +650,7 @@ public sealed class WorkspaceQueryTests
                     Phase = CloudRunPhase.Queued
                 });
                 await db.SaveChangesAsync();
+
                 return fixture;
             }
             catch

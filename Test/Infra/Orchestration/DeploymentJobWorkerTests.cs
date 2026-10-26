@@ -32,17 +32,23 @@ public sealed class DeploymentJobWorkerTests
     public async Task Independent_stops_progress_while_the_first_stop_is_waiting()
     {
         await using var harness = new Harness(new DeploymentConcurrencyOptions { MaxLocalStops = 4 });
+
         harness.Tracker.HoldStops = true;
         var projects = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToArray();
+
         foreach (var (project, index) in projects.Select((project, index) => (project, index)))
             await harness.Queue.EnqueueAsync(new StopLocalDeploymentJob(project, $"stop-{index}", "web.csproj"));
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(4);
+
         started.Should().OnlyContain(item => item.Kind == "stop");
         harness.Queue.GetProjectState(projects[4]).QueuedStops.Should().Be(1);
+
         harness.Tracker.Release(projects[1]);
+
         (await harness.ReadStartAsync()).ProjectId.Should().Be(projects[4]);
         harness.Queue.GetProjectState(projects[0]).ActiveStops.Should().Be(1);
+
         foreach (var project in projects) harness.Tracker.Release(project);
         foreach (var project in projects)
             await harness.WaitForStateAsync(project, state => state.QueuedStops == 0 && state.ActiveStops == 0);
@@ -57,19 +63,23 @@ public sealed class DeploymentJobWorkerTests
     {
         await using var harness = new Harness();
         var projects = Enumerable.Range(1, 3).Select(_ => Guid.NewGuid()).ToArray();
+
         foreach (var (project, index) in projects.Select((project, index) => (project, index)))
             await harness.Queue.EnqueueAsync(Local(project, $"app-{index}", 18000 + index));
         var cloud = Guid.NewGuid();
+
         await harness.Queue.EnqueueAsync(Cloud(cloud, "cloud-app"));
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(3);
+
         started.Count(item => item.Kind == "local").Should().Be(2);
         started.Count(item => item.Kind == "cloud").Should().Be(1);
         harness.Queue.GetProjectState(projects[2]).Queued.Should().Be(1);
         started.Select(item => item.ScopeId).Distinct().Should().HaveCount(3);
 
         harness.Tracker.Release(started.First(item => item.Kind == "local").ProjectId);
+
         (await harness.ReadStartAsync()).ProjectId.Should().Be(projects[2]);
     }
 
@@ -82,15 +92,18 @@ public sealed class DeploymentJobWorkerTests
     {
         await using var harness = new Harness();
         var projects = Enumerable.Range(1, 5).Select(_ => Guid.NewGuid()).ToArray();
+
         foreach (var (project, index) in projects.Select((project, index) => (project, index)))
             await harness.Queue.EnqueueAsync(Cloud(project, $"repo-{index}"));
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(4);
+
         started.Should().OnlyContain(item => item.Kind == "cloud");
         harness.Queue.GetProjectState(projects[4]).Queued.Should().Be(1);
 
         harness.Tracker.Release(started[0].ProjectId);
+
         (await harness.ReadStartAsync()).ProjectId.Should().Be(projects[4]);
     }
 
@@ -108,6 +121,7 @@ public sealed class DeploymentJobWorkerTests
         });
         var locals = Enumerable.Range(1, 2).Select(_ => Guid.NewGuid()).ToArray();
         var clouds = Enumerable.Range(1, 3).Select(_ => Guid.NewGuid()).ToArray();
+
         for (var index = 0; index < locals.Length; index++)
             await harness.Queue.EnqueueAsync(Local(locals[index], $"local-{index}", 18600 + index));
         for (var index = 0; index < clouds.Length; index++)
@@ -115,6 +129,7 @@ public sealed class DeploymentJobWorkerTests
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(3);
+
         started.Count(item => item.Kind == "local").Should().Be(1);
         started.Count(item => item.Kind == "cloud").Should().Be(2);
         harness.Queue.GetProjectState(locals[1]).Queued.Should().Be(1);
@@ -130,11 +145,13 @@ public sealed class DeploymentJobWorkerTests
     {
         await using var harness = new Harness(new DeploymentConcurrencyOptions { MaxLocalBuilds = 0 });
         var projects = Enumerable.Range(0, 12).Select(_ => Guid.NewGuid()).ToArray();
+
         for (var index = 0; index < projects.Length; index++)
             await harness.Queue.EnqueueAsync(Local(projects[index], $"unlimited-{index}", 18700 + index));
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(projects.Length);
+
         started.Select(item => item.ProjectId).Should().BeEquivalentTo(projects);
         started.Should().OnlyContain(item => item.Kind == "local");
     }
@@ -150,14 +167,17 @@ public sealed class DeploymentJobWorkerTests
     public async Task Default_local_lanes_are_uncapped(int count, bool stop)
     {
         await using var harness = new Harness(new DeploymentConcurrencyOptions());
+
         harness.Tracker.HoldStops = true;
         var projects = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToArray();
+
         for (var index = 0; index < count; index++)
             await harness.Queue.EnqueueAsync(stop
                 ? new StopLocalDeploymentJob(projects[index], $"stop-{index}", "project.csproj")
                 : Local(projects[index], $"build-{index}", 18800 + index));
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(count);
+
         started.Select(item => item.ProjectId).Should().BeEquivalentTo(projects);
     }
 
@@ -166,15 +186,18 @@ public sealed class DeploymentJobWorkerTests
     public async Task Applies_optional_stop_limit()
     {
         await using var harness = new Harness(new DeploymentConcurrencyOptions { MaxLocalStops = 1 });
+
         harness.Tracker.HoldStops = true;
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
         var build = Guid.NewGuid();
+
         await harness.Queue.EnqueueAsync(new StopLocalDeploymentJob(first, "first", "first.csproj"));
         await harness.Queue.EnqueueAsync(new StopLocalDeploymentJob(second, "second", "second.csproj"));
         await harness.Queue.EnqueueAsync(Local(build, "build", 18830));
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(2);
+
         started.Select(item => item.ProjectId).Should().BeEquivalentTo([first, build]);
         harness.Queue.GetProjectState(second).QueuedStops.Should().Be(1);
     }
@@ -189,16 +212,20 @@ public sealed class DeploymentJobWorkerTests
         await using var harness = new Harness();
         var first = Guid.NewGuid();
         var other = Guid.NewGuid();
+
         await harness.Queue.EnqueueAsync(Local(first, "first", 18100));
         await harness.Queue.EnqueueAsync(new StopLocalDeploymentJob(first, "first", "first.csproj"));
         await harness.Queue.EnqueueAsync(Local(other, "other", 18101));
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(2);
+
         started.Select(item => item.ProjectId).Should().BeEquivalentTo([first, other]);
         harness.Queue.GetProjectState(first).Queued.Should().Be(1);
+
         harness.Tracker.Release(first);
         var stop = await harness.ReadStartAsync();
+
         stop.ProjectId.Should().Be(first);
         stop.Kind.Should().Be("stop");
     }
@@ -214,15 +241,19 @@ public sealed class DeploymentJobWorkerTests
         var first = Guid.NewGuid();
         var conflict = Guid.NewGuid();
         var independent = Guid.NewGuid();
+
         await harness.Queue.EnqueueAsync(Local(first, "first", 18200));
         await harness.Queue.EnqueueAsync(Local(conflict, "conflict", 18200));
         await harness.Queue.EnqueueAsync(Local(independent, "independent", 18201));
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(2);
+
         started.Select(item => item.ProjectId).Should().BeEquivalentTo([first, independent]);
         harness.Queue.GetProjectState(conflict).Queued.Should().Be(1);
+
         harness.Tracker.Release(first);
+
         (await harness.ReadStartAsync()).ProjectId.Should().Be(conflict);
     }
 
@@ -237,15 +268,19 @@ public sealed class DeploymentJobWorkerTests
         var first = Guid.NewGuid();
         var conflict = Guid.NewGuid();
         var independent = Guid.NewGuid();
+
         await harness.Queue.EnqueueAsync(Cloud(first, "shared"));
         await harness.Queue.EnqueueAsync(Cloud(conflict, "shared"));
         await harness.Queue.EnqueueAsync(Cloud(independent, "other"));
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(2);
+
         started.Select(item => item.ProjectId).Should().BeEquivalentTo([first, independent]);
         harness.Queue.GetProjectState(conflict).Queued.Should().Be(1);
+
         harness.Tracker.Release(first);
+
         (await harness.ReadStartAsync()).ProjectId.Should().Be(conflict);
     }
 
@@ -257,9 +292,11 @@ public sealed class DeploymentJobWorkerTests
     public async Task Rejects_jobs_beyond_the_configured_queue_bound()
     {
         var queue = new DeploymentJobQueue(Options.Create(new DeploymentConcurrencyOptions { MaxQueuedJobs = 2 }));
+
         await queue.EnqueueAsync(Local(Guid.NewGuid(), "one", 18300));
         await queue.EnqueueAsync(Local(Guid.NewGuid(), "two", 18301));
         var enqueue = async () => await queue.EnqueueAsync(Local(Guid.NewGuid(), "three", 18302));
+
         await enqueue.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*queue is full*");
     }
@@ -274,15 +311,20 @@ public sealed class DeploymentJobWorkerTests
         await using var harness = new Harness();
         var failed = Guid.NewGuid();
         var other = Guid.NewGuid();
+
         harness.Tracker.FailProjects.Add(failed);
         await harness.Queue.EnqueueAsync(Local(failed, "broken", 18400));
         await harness.Queue.EnqueueAsync(Local(other, "healthy", 18401));
 
         await harness.Worker.StartAsync(CancellationToken.None);
         var started = await harness.ReadStartsAsync(2);
+
         started.Select(item => item.ProjectId).Should().BeEquivalentTo([failed, other]);
+
         await harness.WaitForStateAsync(failed, state => state.Active == 0);
+
         harness.Queue.GetProjectState(other).Active.Should().Be(1);
+
         harness.Tracker.Release(other);
         await harness.WaitForStateAsync(other, state => state.Active == 0);
     }
@@ -296,13 +338,17 @@ public sealed class DeploymentJobWorkerTests
     {
         await using var harness = new Harness();
         var project = Guid.NewGuid();
+
         await harness.Queue.EnqueueAsync(Local(project, "cancelled", 18500));
         await harness.Worker.StartAsync(CancellationToken.None);
         await harness.ReadStartAsync();
 
         await harness.Worker.StopAsync(new CancellationTokenSource(TimeSpan.FromSeconds(5)).Token);
+
         harness.Queue.GetProjectState(project).Active.Should().Be(0);
+
         await harness.Worker.ExecuteTask!;
+
         harness.Worker.ExecuteTask!.IsCompletedSuccessfully.Should().BeTrue();
     }
 
@@ -317,16 +363,19 @@ public sealed class DeploymentJobWorkerTests
         var queue = new DelayedReadQueue();
         await using var harness = new Harness(queue: queue);
         var project = Guid.NewGuid();
+
         await queue.EnqueueAsync(Local(project, "shutdown", 18510));
-        await harness.Worker.StartAsync(default);
+        await harness.Worker.StartAsync(CancellationToken.None);
         await harness.ReadStartAsync();
         await queue.Reader.Pending.Task.WaitAsync(TimeSpan.FromSeconds(5));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var stopping = harness.Worker.StopAsync(timeout.Token);
+
         try
         {
             await queue.Reader.Cancelled.Task.WaitAsync(timeout.Token);
             await harness.WaitForStateAsync(project, state => state.Active == 0);
+
             queue.Reader.Disposed.Should().BeFalse();
             stopping.IsCompleted.Should().BeFalse();
         }
@@ -337,6 +386,7 @@ public sealed class DeploymentJobWorkerTests
 
         await stopping;
         await harness.Worker.ExecuteTask!;
+
         queue.Reader.Disposed.Should().BeTrue();
         harness.Worker.ExecuteTask!.IsCompletedSuccessfully.Should().BeTrue();
     }
@@ -390,6 +440,7 @@ public sealed class DeploymentJobWorkerTests
         public IAsyncEnumerator<QueuedDeploymentJob> GetAsyncEnumerator(CancellationToken token = default)
         {
             Reader.Token = token;
+
             return Reader;
         }
 
@@ -409,6 +460,7 @@ public sealed class DeploymentJobWorkerTests
         public ValueTask EnqueueAsync(DeploymentJob job, CancellationToken token = default)
         {
             Reader.Job = new QueuedDeploymentJob(job, Stopwatch.GetTimestamp());
+
             return _inner.EnqueueAsync(job, token);
         }
 
@@ -492,6 +544,7 @@ public sealed class DeploymentJobWorkerTests
             if (!_started)
             {
                 _started = true;
+
                 return ValueTask.FromResult(true);
             }
 
@@ -507,6 +560,7 @@ public sealed class DeploymentJobWorkerTests
         {
             Disposed = true;
             if (_pending) throw new NotSupportedException("Disposal during read");
+
             return ValueTask.CompletedTask;
         }
 
@@ -519,10 +573,12 @@ public sealed class DeploymentJobWorkerTests
             _pending = true;
             Pending.TrySetResult();
             using var registration = Token.Register(() => Cancelled.TrySetResult());
+
             await Cancelled.Task;
             await Settle.Task;
             _pending = false;
             Token.ThrowIfCancellationRequested();
+
             return false;
         }
     }
@@ -546,6 +602,7 @@ public sealed class DeploymentJobWorkerTests
         public Harness(DeploymentConcurrencyOptions? options = null, IDeploymentJobQueue? queue = null)
         {
             var services = new ServiceCollection();
+
             services.AddSingleton(Tracker);
             services.AddScoped<ILocalDeploymentOrchestrator, FakeLocal>();
             services.AddScoped<ICloudDeploymentOrchestrator, FakeCloud>();
@@ -600,7 +657,9 @@ public sealed class DeploymentJobWorkerTests
         public async Task<List<Start>> ReadStartsAsync(int count)
         {
             var starts = new List<Start>();
+
             for (var index = 0; index < count; index++) starts.Add(await ReadStartAsync());
+
             return starts;
         }
 
@@ -615,6 +674,7 @@ public sealed class DeploymentJobWorkerTests
         public async Task WaitForStateAsync(Guid projectId, Func<DeploymentQueueState, bool> predicate)
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
             while (!predicate(Queue.GetProjectState(projectId)))
                 await Task.Delay(10, timeout.Token);
         }
@@ -699,6 +759,7 @@ public sealed class DeploymentJobWorkerTests
             if (tracker.FailProjects.Contains(config.ProjectId))
                 throw new InvalidOperationException("simulated failure");
             await tracker.WaitAsync(config.ProjectId, cancellationToken);
+
             return new Deployment();
         }
 
@@ -741,6 +802,7 @@ public sealed class DeploymentJobWorkerTests
             await tracker.Started.Writer.WriteAsync(new Start(request.Config.ProjectId, "cloud", _scopeId),
                 cancellationToken);
             await tracker.WaitAsync(request.Config.ProjectId, cancellationToken);
+
             return new Deployment();
         }
     }

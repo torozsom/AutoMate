@@ -33,6 +33,7 @@ public sealed class RealTimeLogStreamerTests
         var streamer = Create(project, (method, args, _) =>
         {
             calls.Add((method, args));
+
             return Task.CompletedTask;
         });
         var snapshot = new DeploymentRuntimeMetricSnapshot(project, Guid.NewGuid(), "cosmos",
@@ -44,7 +45,9 @@ public sealed class RealTimeLogStreamerTests
                 new DeploymentMetricSample("automate_cpu_usage_cores", double.NaN, "cores"),
                 new DeploymentMetricSample("automate_memory_used_bytes", 1, "percent")
             ]);
+
         await streamer.StreamDeploymentMetricsAsync(snapshot);
+
         var call = Assert.Single(calls);
         Assert.Equal(nameof(ILogClient.ReceiveDeploymentMetrics), call.Method);
         var delivered = Assert.IsType<DeploymentRuntimeMetricSnapshot>(call.Arguments[0]);
@@ -68,15 +71,18 @@ public sealed class RealTimeLogStreamerTests
         var streamer = Create(project, (method, args, _) =>
         {
             calls.Add((method, args));
+
             return Task.CompletedTask;
         });
         var deployment = Guid.NewGuid();
         var log = new DeploymentTerminalLog(17, project, deployment, "web", "{\"password\":\"private-text\"}",
             SourceInstanceId: "Bearer private-instance", SourceCursor: "token=private-cursor");
+
         await streamer.StreamTerminalLogAsync(log);
         await streamer.StreamTerminalNoticeAsync(project, "Cookie: private-notice");
         await streamer.StreamContainerMetricsAsync(project, "api_key=private-name", "password=private-cpu",
             "token=private-memory");
+
         Assert.Equal(3, calls.Count);
         Assert.DoesNotContain("private", JsonSerializer.Serialize(calls.Select(call => call.Arguments)));
         var delivered = Assert.IsType<DeploymentTerminalLog>(calls[0].Arguments[0]);
@@ -100,12 +106,15 @@ public sealed class RealTimeLogStreamerTests
         var streamer = Create(project, (method, args, _) =>
         {
             calls.Add((method, args));
+
             return Task.CompletedTask;
         });
         var log = new DeploymentTerminalLog(1, project, Guid.NewGuid(), "build", "safe output");
+
         await streamer.StreamTerminalLogAsync(log);
         await streamer.StreamTerminalNoticeAsync(project, "notice");
         await streamer.StreamContainerMetricsAsync(project, "web", "1%", "2MiB");
+
         Assert.Equal([
             nameof(ILogClient.ReceiveTerminalLog), nameof(ILogClient.ReceiveTerminalNotice),
             nameof(ILogClient.ReceiveContainerMetrics)
@@ -137,9 +146,13 @@ public sealed class RealTimeLogStreamerTests
                 Interlocked.Decrement(ref pending);
             }
         });
+
         await Assert.ThrowsAsync<TimeoutException>(() => streamer.StreamTerminalNoticeAsync(project, "slow"));
+
         Assert.Equal(0, pending);
+
         await streamer.StreamTerminalNoticeAsync(project, "later");
+
         Assert.Equal(2, writes);
     }
 
@@ -159,8 +172,9 @@ public sealed class RealTimeLogStreamerTests
         });
         using var canceled = new CancellationTokenSource();
         var send = streamer.StreamTerminalNoticeAsync(project, "cancel", canceled.Token);
+
         await entered.Task;
-        canceled.Cancel();
+        await canceled.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send);
     }
 
@@ -185,15 +199,17 @@ public sealed class RealTimeLogStreamerTests
         using var canceled = new CancellationTokenSource();
         var streamer = Create(project, async (_, _, token) =>
         {
-            if (cancel) canceled.Cancel();
+            if (cancel) await canceled.CancelAsync();
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         });
+
         if (cancel)
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 streamer.StreamTerminalNoticeAsync(project, "private-message", canceled.Token));
         else
             await Assert.ThrowsAsync<TimeoutException>(() =>
                 streamer.StreamTerminalNoticeAsync(project, "private-message", canceled.Token));
+
         var span = Assert.Single(exporter.Spans,
             span => Equals(span.Tags.GetValueOrDefault("deployment.project.id"), project));
         Assert.Equal("deployment.signalr.send", span.Name);
@@ -213,13 +229,17 @@ public sealed class RealTimeLogStreamerTests
     {
         var proxy = Stub<IClientProxy>((_, args) => send((string)args![0]!, (object?[])args[1]!,
             (CancellationToken)args[2]!));
+
         var clients = Stub<IHubClients>((method, args) =>
         {
             Assert.Equal("Group", method!.Name);
             Assert.Equal($"project-{project}", args![0]);
+
             return proxy;
         });
+
         var context = Stub<IHubContext<LogHub>>((_, _) => clients);
+
         return new RealTimeLogStreamer(context,
             Options.Create(new DeploymentDiagnosticOptions { DeliveryTimeoutSeconds = 1 }),
             new DiagnosticRedactor());
@@ -234,7 +254,9 @@ public sealed class RealTimeLogStreamerTests
     private static T Stub<T>(Func<MethodInfo?, object?[]?, object?> handler) where T : class
     {
         var proxy = DispatchProxy.Create<T, InterfaceStub>();
+
         ((InterfaceStub)(object)proxy).Handler = handler;
+
         return proxy;
     }
 

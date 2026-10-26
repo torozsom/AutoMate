@@ -93,8 +93,8 @@ public sealed class LocalDeploymentOrchestrator(
         using var projectScope = OperationalLog.BeginCorrelation(logger, projectId: config.ProjectId);
         logger.LogInformation("Starting local deployment process.");
 
-        var csProject = await dbContext.CsProjects.FirstOrDefaultAsync(csp => csp.Id == config.CsProjectId,
-            cancellationToken);
+        var csProject = await dbContext.CsProjects
+            .FirstOrDefaultAsync(csp => csp.Id == config.CsProjectId, cancellationToken);
 
         if (csProject == null)
         {
@@ -114,8 +114,10 @@ public sealed class LocalDeploymentOrchestrator(
         await DeploymentSnapshotCapture.CaptureAsync(dbContext, deployment, config, null, null, cancellationToken);
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync(cancellationToken);
+
         using var activity = DeploymentTracing.Start(DeploymentOperation.LocalDeploy, config.ProjectId, deployment.Id);
         using var deploymentScope = OperationalLog.BeginCorrelation(logger, deployment.Id);
+
         statusNotifier.NotifyStatusChanged(config.ProjectId, deployment.Status);
 
         try
@@ -124,6 +126,7 @@ public sealed class LocalDeploymentOrchestrator(
                 "Checking local deployment resources.", cancellationToken);
             await ValidateLocalResourcesAsync(config, cancellationToken);
             await ExecuteDeploymentStepsAsync(config, csProject, deployment, cancellationToken);
+
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
             return deployment;
         }
@@ -133,6 +136,7 @@ public sealed class LocalDeploymentOrchestrator(
                 ex is OperationCanceledException && cancellationToken.IsCancellationRequested
                     ? DeploymentTraceOutcome.Canceled
                     : DeploymentTraceOutcome.Failed);
+
             if (ex is DeploymentResourceConflictException conflict)
                 try
                 {
@@ -150,12 +154,15 @@ public sealed class LocalDeploymentOrchestrator(
                 }
 
             logger.LogError(ex, "Local deployment failed: {FailureType}.", ex.GetType().Name);
+
             await PublishPhaseAsync(config.ProjectId, deployment.Id, "outcome",
                 "Local deployment failed. Review the preceding build and lifecycle diagnostics.",
                 CancellationToken.None,
                 DeploymentDiagnosticSeverity.Error);
+
             await _statusUpdater.SafeUpdateAsync(config.ProjectId, deployment, DeploymentStatus.Failed,
                 CancellationToken.None);
+
             await localDiagnostics.SetOperationAsync(config.ProjectId, deployment.Id, false, cancellationToken);
             throw;
         }
@@ -190,9 +197,13 @@ public sealed class LocalDeploymentOrchestrator(
             return;
         }
 
-        var latestDeployment = await dbContext.Deployments.Include(d => d.CsProject!).ThenInclude(p => p.Application)
-            .Where(d => d.CsProject!.AppId == projectId).OrderByDescending(d => d.CreatedAt)
+        var latestDeployment = await dbContext.Deployments
+            .Include(d => d.CsProject!)
+            .ThenInclude(p => p.Application)
+            .Where(d => d.CsProject!.AppId == projectId)
+            .OrderByDescending(d => d.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+
         if (latestDeployment?.CsProject?.Application is { } app)
             try
             {
@@ -205,6 +216,7 @@ public sealed class LocalDeploymentOrchestrator(
                     var config =
                         await projectScanner.AnalyzeDependenciesAsync(app, latestDeployment.CsProject,
                             cancellationToken);
+
                     await localDiagnostics.RegisterAsync(LocalDockerTargets.Create(config,
                         latestDeployment.CsProject.Name,
                         latestDeployment.Id), true, cancellationToken);
@@ -216,8 +228,8 @@ public sealed class LocalDeploymentOrchestrator(
                     exception.GetType().Name);
             }
 
-        var isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName, projectId,
-            cancellationToken, latestDeployment?.Id);
+        var isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName,
+            projectId, latestDeployment?.Id, cancellationToken);
 
         if (isStopped)
         {
@@ -270,10 +282,12 @@ public sealed class LocalDeploymentOrchestrator(
     private async Task ValidateLocalResourcesAsync(DeploymentConfigDto config, CancellationToken cancellationToken)
     {
         var composeName = DockerNameNormalizer.NormalizeProjectName(config.ProjectName);
-        var names = await dbContext.Applications.AsNoTracking()
+        var names = await dbContext.Applications
+            .AsNoTracking()
             .Where(app => app.Id != config.ProjectId && app.SourceType == SourceType.Local)
             .Select(app => app.Name)
             .ToListAsync(cancellationToken);
+
         if (names.Any(name => DockerNameNormalizer.NormalizeProjectName(name) == composeName))
             throw new DeploymentResourceConflictException(
                 $"Docker Compose name '{composeName}' is also used by another AutoMate project. Rename one project before deploying.");
@@ -284,6 +298,7 @@ public sealed class LocalDeploymentOrchestrator(
         // A redeploy may legitimately reuse its own currently bound port. The scheduler
         // separately reserves ports while different local deployments are in progress.
         var runningProjects = await dockerService.GetRunningProjectNamesAsync(cancellationToken);
+
         if (runningProjects.Contains(composeName, StringComparer.OrdinalIgnoreCase))
         {
             var ownsRunningDeployment = await dbContext.Deployments.AsNoTracking().AnyAsync(

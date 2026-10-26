@@ -27,6 +27,7 @@ public sealed class ProjectTerminalReplayTests
         var project = Guid.NewGuid();
         var deployment = new Deployment { Status = status };
         var page = new ProjectDetails();
+
         typeof(ProjectDetails).GetProperty("ProjectId")!.SetValue(page, project);
         Set(page, "_app", new Domain.Entities.Projects.Application
         {
@@ -38,11 +39,14 @@ public sealed class ProjectTerminalReplayTests
         });
         Set(page, "_terminalDeploymentId", (Guid?)deployment.Id);
         Set(page, "_pageGeneration", 2L);
+
         Assert.Equal(expected, Current(page, project, deployment.Id, 2));
         Assert.False(Current(page, Guid.NewGuid(), deployment.Id, 2));
         Assert.False(Current(page, project, Guid.NewGuid(), 2));
         Assert.False(Current(page, project, deployment.Id, 1));
+
         Set(page, "_analysisDisposed", true);
+
         Assert.False(Current(page, project, deployment.Id, 2));
     }
 

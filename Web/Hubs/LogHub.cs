@@ -52,6 +52,7 @@ public sealed class LogHub(
         using var activity = DeploymentTracing.Start(DeploymentOperation.SignalRJoin, projectId, deploymentId);
         using var correlation = OperationalLog.BeginCorrelation(logger, deploymentId, projectId: projectId);
         var empty = new DeploymentTerminalHistory([], false);
+
         if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(secureToken))
         {
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Denied);
@@ -66,21 +67,21 @@ public sealed class LogHub(
             var parts = payload.Split(':');
             if (parts.Length != 2
                 || !Guid.TryParse(parts[0], out var tokenProjectId)
-                || !Guid.TryParse(parts[1], out var userId))
-                throw new HubException("Invalid log subscription.");
-
-            if (tokenProjectId != projectId)
+                || !Guid.TryParse(parts[1], out var userId) || tokenProjectId != projectId)
                 throw new HubException("Invalid log subscription.");
 
             var app = await applicationService.GetAppByIdAsync(projectId, userId, Context.ConnectionAborted);
             if (app is null)
                 throw new HubException("Project log access denied.");
-            if (deploymentId.HasValue && !app.CsProjects.SelectMany(project => project.Deployments)
-                    .Any(deployment => deployment.Id == deploymentId.Value))
+
+            if (deploymentId.HasValue && app.CsProjects
+                    .SelectMany(project => project.Deployments)
+                    .All(deployment => deployment.Id != deploymentId.Value))
                 throw new HubException("Deployment log access denied.");
 
             await Groups.AddToGroupAsync(Context.ConnectionId, GetProjectGroupName(projectId),
                 Context.ConnectionAborted);
+
             if (!deploymentId.HasValue)
             {
                 DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
@@ -88,21 +89,27 @@ public sealed class LogHub(
             }
 
             // Only a latest deployment can collect live output; historical subscriptions remain read-only.
-            var latest = app.CsProjects.SelectMany(p => p.Deployments).MaxBy(d => d.CreatedAt);
+            var latest = app.CsProjects
+                .SelectMany(p => p.Deployments)
+                .MaxBy(d => d.CreatedAt);
+
             if (latest?.Id == deploymentId && latest.Status is DeploymentStatus.Starting
                     or DeploymentStatus.Running)
                 viewers.Renew(Context.ConnectionId, projectId, deploymentId.Value);
+
             var history = await DeploymentTracing.RunAsync(DeploymentOperation.SignalRReplay, projectId, deploymentId,
                 Context.ConnectionAborted, () => afterOrderId > 0
                     ? diagnosticStore.ReadAfterAsync(projectId, deploymentId.Value, afterOrderId, 500,
                         Context.ConnectionAborted)
                     : diagnosticStore.ReadRecentAsync(projectId, deploymentId.Value, 500, Context.ConnectionAborted));
+
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
             return history;
         }
         catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested)
         {
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Canceled);
+
             // A reload/navigation can disconnect while replay is awaiting storage. No replay cursor was confirmed.
             logger.LogDebug("Log replay canceled because the project connection closed.");
             return new DeploymentTerminalHistory([], false, CanAdvanceCursor: false);

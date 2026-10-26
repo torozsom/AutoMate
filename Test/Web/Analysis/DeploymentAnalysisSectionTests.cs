@@ -33,9 +33,11 @@ public sealed class DeploymentAnalysisSectionTests
         var port = (Port)service;
         var pending =
             new TaskCompletionSource<DeploymentAnalysisView?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         port.Read = pending.Task;
         using var services = new ServiceCollection().AddSingleton(service).BuildServiceProvider();
         var component = new DeploymentAnalysisSection();
+
         Set(component, "OwnerId", owner);
         Set(component, "ProjectId", project);
         Set(component, "DeploymentId", deployment);
@@ -43,7 +45,9 @@ public sealed class DeploymentAnalysisSectionTests
         Set(component, "Logger", NullLogger<DeploymentAnalysisSection>.Instance);
         Set(component, "_identity", (owner, project, (Guid?)deployment));
         var read = (Task)typeof(DeploymentAnalysisSection).GetMethod("RefreshAsync", Flags)!.Invoke(component, null)!;
+
         Assert.Equal(1, port.ReadCalls);
+
         if (dispose)
         {
             await component.DisposeAsync();
@@ -58,7 +62,9 @@ public sealed class DeploymentAnalysisSectionTests
             AiAnalysisTrigger.Manual, "old deployment guidance", [], [], null, DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow));
         await read;
+
         Assert.Null(typeof(DeploymentAnalysisSection).GetField("_latest", Flags)!.GetValue(component));
+
         if (!dispose) await component.DisposeAsync();
     }
 
@@ -71,6 +77,7 @@ public sealed class DeploymentAnalysisSectionTests
     private static void Set(object component, string member, object value)
     {
         var property = component.GetType().GetProperty(member, Flags);
+
         if (property is not null) property.SetValue(component, value);
         else component.GetType().GetField(member, Flags)!.SetValue(component, value);
     }
@@ -120,6 +127,7 @@ public sealed class DeploymentAnalysisSectionTests
         private Task<DeploymentAnalysisView?> ReadLatest()
         {
             ReadCalls++;
+
             return Read;
         }
     }

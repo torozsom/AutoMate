@@ -52,12 +52,16 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
     {
         var principalId = identity.Data.PrincipalId?.ToString()
                           ?? throw new InvalidOperationException("Azure managed identity principal ID is missing.");
+
         var assignmentName = CreateDeterministicGuid($"{scope}:{principalId}:{roleId}");
+
         var requestUri = $"{AzureConstants.ManagementEndpoint}{scope}/providers/Microsoft.Authorization/" +
                          $"roleAssignments/{assignmentName}?api-version={AzureConstants.RoleAssignmentApiVersion}";
+
         var subscriptionScope = scope[..scope.IndexOf("/resourceGroups/", StringComparison.OrdinalIgnoreCase)];
         using var request = new HttpRequestMessage(HttpMethod.Put, requestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
         request.Content = JsonContent.Create(new
         {
             properties = new
@@ -67,6 +71,7 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
                 principalType = AzureConstants.ContributorPrincipalType
             }
         });
+
         using var response = await httpClientFactory.CreateClient().SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException(
@@ -92,13 +97,17 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
             throw new InvalidOperationException("Azure managed identity principal ID could not be loaded.");
 
         var scope = resourceGroup.Id.ToString();
+
         var assignmentName = CreateDeterministicGuid(
             $"{scope}:{principalId}:{AzureConstants.ContributorRoleDefinitionId}");
+
         var requestUri =
-            $"{AzureConstants.ManagementEndpoint}{scope}/providers/Microsoft.Authorization/roleAssignments/{assignmentName}?api-version={AzureConstants.RoleAssignmentApiVersion}";
+            $"{AzureConstants.ManagementEndpoint}{scope}/providers/Microsoft.Authorization/roleAssignments/" +
+            $"{assignmentName}?api-version={AzureConstants.RoleAssignmentApiVersion}";
 
         using var request = new HttpRequestMessage(HttpMethod.Put, requestUri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
         request.Content = JsonContent.Create(new
         {
             properties = new
@@ -115,6 +124,7 @@ internal sealed class AzureRoleAssignmentService(IHttpClientFactory httpClientFa
             return;
 
         var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+
         if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
             throw new InvalidOperationException(
                 "AutoMate created the Azure managed identity, but the connected Azure account cannot assign the Contributor role to it. " +

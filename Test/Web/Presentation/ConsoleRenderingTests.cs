@@ -59,6 +59,7 @@ public sealed class ConsoleRenderingTests
             .AddSingleton<IConfiguration>(new ConfigurationBuilder().Build())
             .AddSingleton<IWorkspaceQuery, PreviewQuery>()
             .AddSingleton<IDeploymentCapabilities>(new PreviewCapabilities(localEnabled));
+
         foreach (var type in new[]
                  {
                      typeof(Dashboard), typeof(GitHubRepos), typeof(LocalGitRepos), typeof(MainLayout), typeof(NavMenu),
@@ -80,6 +81,7 @@ public sealed class ConsoleRenderingTests
         await using var renderer = new HtmlRenderer(provider, provider.GetRequiredService<ILoggerFactory>());
         var root = Root();
         var directory = Path.Combine(root, ".artifacts", "console-preview");
+
         Directory.CreateDirectory(directory);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
             Path.Combine(directory, "bootstrap.css"), true);
@@ -87,6 +89,7 @@ public sealed class ConsoleRenderingTests
                                 .GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration
                             ?? throw new InvalidOperationException(
                                 "The test assembly must declare its build configuration.");
+
         File.Copy(Path.Combine(root, "Web", "obj", configuration, "net10.0", "scopedcss", "bundle", "Web.styles.css"),
             Path.Combine(directory, "Web.styles.css"), true);
         foreach (var (name, type, authenticated) in new[]
@@ -106,12 +109,14 @@ public sealed class ConsoleRenderingTests
                 (await renderer.RenderComponentAsync<PreviewRoot>(
                     ParameterView.FromDictionary(new Dictionary<string, object?>
                         { [nameof(PreviewRoot.Page)] = type }))).ToHtmlString());
+
             if (name == "overview")
             {
                 Assert.Contains("Success rate", html);
                 Assert.Contains("UTC", html);
                 Assert.DoesNotContain("All systems operational", html);
                 Assert.Contains("Not recorded", html);
+
                 if (!localEnabled)
                 {
                     Assert.Contains("Azure deployment workspace", html);
@@ -151,11 +156,14 @@ public sealed class ConsoleRenderingTests
 
         var absent = new WorkspaceOverview(DateTimeOffset.UtcNow.AddDays(-6), DateTimeOffset.UtcNow, 0, 0, 0, 0, 0, 0,
             null,
-            Enumerable.Range(0, 7).Select(i => new WorkspaceActivity(DateTimeOffset.UtcNow.AddDays(-6 + i), 0, 0, 0))
-                .ToArray(), [], [], [], "No recorded resource observations in this period.");
+            [
+                .. Enumerable.Range(0, 7)
+                    .Select(i => new WorkspaceActivity(DateTimeOffset.UtcNow.AddDays(-6 + i), 0, 0, 0))
+            ], [], [], [], "No recorded resource observations in this period.");
         var empty = await renderer.Dispatcher.InvokeAsync(async () =>
             (await renderer.RenderComponentAsync<WorkspaceOverviewView>(
                 ParameterView.FromDictionary(new Dictionary<string, object?> { ["Data"] = absent }))).ToHtmlString());
+
         Assert.DoesNotContain("NaN", empty);
         Assert.Contains("No observations", empty);
         Assert.Contains("Your deployment activity", empty);
@@ -169,17 +177,24 @@ public sealed class ConsoleRenderingTests
     {
         var now = DateTimeOffset.UtcNow;
         var start = new DateTimeOffset(now.UtcDateTime.Date.AddDays(-29), TimeSpan.Zero);
+
         return new WorkspaceOverview(start, now, 12, 3, 28, 22, 4, 2, 83,
-            Enumerable.Range(0, 30)
-                .Select(i => new WorkspaceActivity(start.AddDays(i), i % 4, i % 11 == 0 ? 1 : 0, i == 12 ? 2 : 0))
-                .ToArray(),
-            Enumerable.Range(0, 30).Where(i => i != 14).SelectMany(i => new[]
-            {
-                new WorkspaceResource(start.AddDays(i), TelemetryPresentation.Cpu, "cores", 100, .07 + i * .004, .01,
-                    .35, i == 18),
-                new WorkspaceResource(start.AddDays(i), TelemetryPresentation.Memory, "bytes", 100,
-                    (70 + i) * 1024 * 1024, 50 * 1024 * 1024, 160 * 1024 * 1024, i == 18)
-            }).ToArray(),
+            [
+                .. Enumerable.Range(0, 30)
+                    .Select(i => new WorkspaceActivity(start.AddDays(i), i % 4, i % 11 == 0 ? 1 : 0, i == 12 ? 2 : 0))
+            ],
+            [
+                .. Enumerable.Range(0, 30)
+                    .Where(i => i != 14)
+                    .SelectMany(i => new[]
+                    {
+                        new WorkspaceResource(start.AddDays(i), TelemetryPresentation.Cpu, "cores", 100, .07 + i * .004,
+                            .01,
+                            .35, i == 18),
+                        new WorkspaceResource(start.AddDays(i), TelemetryPresentation.Memory, "bytes", 100,
+                            (70 + i) * 1024 * 1024, 50 * 1024 * 1024, 160 * 1024 * 1024, i == 18)
+                    })
+            ],
             [
                 new WorkspaceRun(Guid.NewGuid(), Guid.NewGuid(), "Commerce API", "Azure", now.AddMinutes(-14),
                     DeploymentOutcome.Succeeded, DeploymentStatus.Running, 74),
@@ -232,8 +247,10 @@ public sealed class ConsoleRenderingTests
     private static string Root()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AutoMate.slnx")))
             directory = directory.Parent;
+
         return directory!.FullName;
     }
 
@@ -373,6 +390,7 @@ public sealed class ConsoleRenderingTests
             Set(typeof(Dashboard), this, "_inventory", Inventory());
             Set(typeof(Dashboard), this, "_isLoading", false);
             Set(typeof(Dashboard), this, "_isAzureConnected", true);
+
             return Task.CompletedTask;
         }
 
@@ -430,6 +448,7 @@ public sealed class ConsoleRenderingTests
                         HtmlUrl = "https://github.com/example/frontend", UpdatedAt = DateTimeOffset.UtcNow
                     }
                 });
+
             return Task.CompletedTask;
         }
     }
@@ -460,6 +479,7 @@ public sealed class ConsoleRenderingTests
                         ]
                     }
                 });
+
             return Task.CompletedTask;
         }
     }
@@ -506,6 +526,7 @@ public sealed class ConsoleRenderingTests
         protected override Task OnInitializedAsync()
         {
             CheckEmail = true;
+
             return Task.CompletedTask;
         }
     }
@@ -541,6 +562,7 @@ public sealed class ConsoleRenderingTests
                             ? Activator.CreateInstance(method.ReturnType.GetGenericArguments()[0])
                             : null
                     ]);
+
             return null;
         }
     }

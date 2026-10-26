@@ -29,28 +29,42 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
         IReadOnlySet<string>? databaseComponents = null)
     {
         var group = appResourceId[..appResourceId.IndexOf("/providers/", StringComparison.OrdinalIgnoreCase)];
-        var resources = await ListAsync(group + "/resources?api-version=2021-04-01", group, token, cancellationToken);
-        foreach (var server in resources.Where(r => string.Equals(r.GetProperty("type").GetString(),
-                     "Microsoft.Sql/servers", StringComparison.OrdinalIgnoreCase)).ToArray())
+
+        var resources = await ListAsync(group +
+                                        "/resources?api-version=2021-04-01", group, token, cancellationToken);
+
+        foreach (var server in resources
+                     .Where(r => string.Equals(
+                         r.GetProperty("type").GetString(),
+                         "Microsoft.Sql/servers", StringComparison.OrdinalIgnoreCase))
+                     .ToArray())
         {
             var id = server.GetProperty("id").GetString()!;
+
             if (id.StartsWith(group + "/providers/Microsoft.Sql/servers/", StringComparison.OrdinalIgnoreCase))
                 resources.AddRange(await ListAsync(id + "/databases?api-version=2023-08-01", group, token,
                     cancellationToken));
         }
 
         var result = new List<AzureManagedDatabase>();
+
         foreach (var resource in resources)
         {
-            if (!resource.TryGetProperty("tags", out var tags) || tags.ValueKind != JsonValueKind.Object ||
-                !tags.TryGetProperty("automate-project-id", out var owner) ||
-                owner.GetString() != projectId.ToString("N") ||
-                !tags.TryGetProperty("automate-container-app", out var app) || app.GetString() != appName) continue;
+            if (!resource.TryGetProperty("tags", out var tags)
+                || tags.ValueKind != JsonValueKind.Object
+                || !tags.TryGetProperty("automate-project-id", out var owner)
+                || owner.GetString() != projectId.ToString("N")
+                || !tags.TryGetProperty("automate-container-app", out var app)
+                || app.GetString() != appName) continue;
+
             var id = resource.GetProperty("id").GetString()!;
+
             if (!id.StartsWith(group + "/providers/", StringComparison.OrdinalIgnoreCase)) continue;
             if (result.Any(database =>
                     string.Equals(database.ResourceId, id, StringComparison.OrdinalIgnoreCase))) continue;
+
             var type = resource.GetProperty("type").GetString()!.ToLowerInvariant();
+
             if (type == "microsoft.app/containerapps")
             {
                 // Dedicated database apps require explicit component association, never a name heuristic.
@@ -60,18 +74,23 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
                     !tags.TryGetProperty("automate-database-provider", out var provider) ||
                     provider.GetString() is not ("PostgreSQL" or "MySQL" or "SQLServer" or "Redis" or "MongoDB"))
                     continue;
+
                 if (result.Count == 100)
                     throw new InvalidOperationException("Database inventory exceeds the collection limit.");
+
                 var client = new AzureContainerAppClient(httpClientFactory);
                 var state = await client.GetStateAsync(id, token, cancellationToken);
+
                 if (string.IsNullOrWhiteSpace(state?.LatestRevision))
                     throw new InvalidOperationException("Associated database app has no verified ready revision.");
+
                 var logScope = string.IsNullOrWhiteSpace(state.ManagedEnvironmentId)
                     ? null
                     : await client.GetEnvironmentLogScopeAsync(state.ManagedEnvironmentId, token, cancellationToken);
+
                 var name = resource.GetProperty("name").GetString()!;
-                result.Add(new AzureManagedDatabase(id, name, "UsageNanoCores,WorkingSetBytes", provider.GetString(),
-                    state.LatestRevision, logScope));
+                result.Add(new AzureManagedDatabase(id, name, "UsageNanoCores,WorkingSetBytes",
+                    provider.GetString(), state.LatestRevision, logScope));
                 continue;
             }
 
@@ -84,8 +103,10 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
                 "microsoft.documentdb/databaseaccounts" => "NormalizedRUConsumption",
                 _ => null
             };
+
             if (metrics is null ||
                 result.Any(d => string.Equals(d.ResourceId, id, StringComparison.OrdinalIgnoreCase))) continue;
+
             if (result.Count == 100)
                 throw new InvalidOperationException("Database inventory exceeds the collection limit.");
             result.Add(new AzureManagedDatabase(id, resource.GetProperty("name").GetString()!, metrics));
@@ -122,16 +143,20 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
         string token, CancellationToken cancellationToken)
     {
         var end = AzureMetricObservations.CompletedMinute();
+
         // Azure Cache for Redis supports Maximum rather than Average for these gauges.
-        var aggregation = database.MetricNames.Contains("percentProcessorTime", StringComparison.Ordinal) ||
-                          database.MetricNames == "NormalizedRUConsumption"
+        var aggregation = database.MetricNames
+                              .Contains("percentProcessorTime", StringComparison.Ordinal)
+                          || database.MetricNames == "NormalizedRUConsumption"
             ? "Maximum"
             : "Average";
+
         var revisionFilter = database.ContainerAppRevision is { } revision
             ? "&$filter=" + Uri.EscapeDataString("revisionName eq '" +
                                                  revision.Replace("'", "''", StringComparison.Ordinal) +
                                                  "' and podName eq '*'")
             : string.Empty;
+
         using var document = await GetAsync(database.ResourceId +
                                             "/providers/microsoft.insights/metrics?api-version=2023-10-01&metricnames=" +
                                             database.MetricNames +
@@ -140,6 +165,7 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
                                                 $"{end.AddMinutes(-5).UtcDateTime:O}/{end.UtcDateTime:O}") +
                                             "&interval=PT1M&aggregation=" + aggregation + revisionFilter,
             token, cancellationToken);
+
         return AzureMetricObservations.Parse(document.RootElement, aggregation,
             database.ContainerAppRevision is not null);
     }
@@ -159,12 +185,17 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
         for (var page = 0; page < 10; page++)
         {
             using var document = await GetAsync(path, token, ct);
+
             if (document.RootElement.TryGetProperty("value", out var resources))
                 result.AddRange(resources.EnumerateArray().Select(r => r.Clone()));
+
             if (result.Count > 1000) throw new InvalidOperationException("Azure inventory exceeds the resource limit.");
+
             if (!document.RootElement.TryGetProperty("nextLink", out var next) ||
                 string.IsNullOrEmpty(next.GetString())) return result;
+
             var uri = new Uri(next.GetString()!, UriKind.Absolute);
+
             if (uri.Scheme != "https" || uri.Host != "management.azure.com" || !uri.IsDefaultPort ||
                 uri.UserInfo.Length > 0 ||
                 !uri.AbsolutePath.StartsWith(group + "/", StringComparison.OrdinalIgnoreCase))
@@ -186,8 +217,10 @@ internal sealed class AzureManagedDatabaseClient(IHttpClientFactory httpClientFa
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, AzureConstants.ManagementEndpoint + path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
         using var response = await httpClientFactory.CreateClient("AzureRuntime").SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
+
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
     }

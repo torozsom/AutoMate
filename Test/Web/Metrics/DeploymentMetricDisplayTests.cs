@@ -54,6 +54,7 @@ public sealed class DeploymentMetricDisplayTests
             Point("automate_memory_used_bytes", "bytes", 104857600, now),
             Point("automate_memory_limit_bytes", "bytes", 209715200, now)
         ]);
+
         Assert.Equal("250%", display.Cpu);
         Assert.Equal("2.5 cores", DeploymentMetricDisplay.Latest([
             Point("automate_cpu_usage_cores", "cores", 2.5, now)
@@ -73,6 +74,7 @@ public sealed class DeploymentMetricDisplayTests
             new DeploymentMetricPoint("db", "automate_cpu_usage_percent", "percent", now, 42, 42, 42),
             new DeploymentMetricPoint("db", "automate_memory_used_percent", "percent", now, 65, 65, 65)
         ]);
+
         Assert.Equal(("42%", "65%"), display);
         Assert.Equal("42%", TelemetryPresentation.Format(42, "automate_cpu_usage_percent"));
     }

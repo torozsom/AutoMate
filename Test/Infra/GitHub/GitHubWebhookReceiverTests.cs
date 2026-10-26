@@ -28,9 +28,11 @@ public sealed class GitHubWebhookReceiverTests
     public async Task Receiver_verifies_signature_and_deduplicates_delivery_id()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var dbOptions = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         await using var db = new AutoMateDbContext(dbOptions, new EphemeralDataProtectionProvider());
+
         await db.Database.EnsureCreatedAsync();
         var user = new RemoteUser { AccountId = "123", Email = "user@example.test", Username = "user" };
         var project = new Domain.Entities.Projects.Application
@@ -40,6 +42,7 @@ public sealed class GitHubWebhookReceiverTests
             SourceType = SourceType.Remote,
             SourcePathOrUrl = "https://github.com/acme/web"
         };
+
         db.Users.Add(user);
         db.Applications.Add(project);
         db.CloudDeploymentRuns.Add(new CloudDeploymentRun
@@ -83,7 +86,9 @@ public sealed class GitHubWebhookReceiverTests
 
         var invalid = async () => await receiver.ReceiveAsync(body, "sha256=00", "delivery-1",
             "workflow_run", CancellationToken.None);
+
         await invalid.Should().ThrowAsync<UnauthorizedAccessException>();
+
         await receiver.ReceiveAsync(body, signature, "delivery-1", "workflow_run", CancellationToken.None);
         await receiver.ReceiveAsync(body, signature, "delivery-1", "workflow_run", CancellationToken.None);
 

@@ -1,20 +1,39 @@
 # Test
 
-The solution's single .NET test project is `Test.csproj`. It references Application, Domain, Infrastructure, Web and
-Telemetry and shares one xUnit runner and dependency set. Production dependencies and test assertions are preserved.
+The solution's single .NET 10 xUnit project, with Node-only JavaScript and Playwright browser suites alongside it.
+Test.csproj references Application, Domain, Infrastructure, Web and Telemetry.
 
-## Modules
+## Contents
 
-- [Infra](Infra/README.md): adapters and persistence, subdivided into Auth, Data, Scanning, Ai, Azure, Diagnostics,
-  GitHub, Orchestration and Templating. Infra/TestSupport contains synthetic HTTP fixtures.
-- [App](App/README.md): application policies and use cases, subdivided into Ai/Policy and Orchestration.
-- [Web](Web/README.md): Analysis, Diagnostics, Hosting, Metrics, Presentation and Projects, with JavaScript and Browser
-  suites alongside the .NET coverage.
+| File                               | Test or fixture types | Responsibility                                                                       |
+|------------------------------------|-----------------------|--------------------------------------------------------------------------------------|
+| [GlobalUsings.cs](GlobalUsings.cs) | Test setup            | Global xUnit imports shared by the .NET test modules.                                |
+| [Test.csproj](Test.csproj)         | Runner configuration  | .NET 10 xUnit test project, solution references and shared test dependency versions. |
 
-Namespaces begin with `Test.Infra`, `Test.App` or `Test.Web`. Add new tests to the matching business submodule;
-do not create another test project. GlobalUsings.cs shares xUnit attributes and assertions across all modules.
+| Module                   | Coverage                                                                  |
+|--------------------------|---------------------------------------------------------------------------|
+| [App](App/README.md)     | Application policy and cloud-admission tests.                             |
+| [Infra](Infra/README.md) | Adapters, relational persistence, durability and provider protocol tests. |
+| [Web](Web/README.md)     | Host, route, component, browser and JavaScript tests.                     |
 
-## Verification
+## Coverage and navigation
+
+Choose App for portable policy/use-case tests, Infra for adapters/persistence, and Web for host/HTTP/component/browser
+behavior. Folder-aligned Test.App/Test.Infra/Test.Web namespaces provide the filters in each guide. GlobalUsings shares
+xUnit attributes/assertions; production assemblies expose selected internals to this test assembly.
+
+## Fixtures and boundaries
+
+Most .NET coverage uses synthetic ports/HTTP, temporary SQLite/files and in-process or ephemeral loopback hosts. With
+integration gates unset, it does not invoke live Docker/cloud/LLM services. Explicit gates enable destructive fixture
+operations only against isolated test resources. A skipped integration case is not evidence of external-system
+correctness.
+
+Keep tests in the matching business submodule rather than add another test project. Preserve assertions, fixture
+ownership, public constructors and opt-in behavior. Build outputs, TestResults, node_modules and ignored preview
+artifacts are generated, not source modules.
+
+## Running
 
 From the repository root:
 
@@ -23,10 +42,33 @@ dotnet test Test/Test.csproj --configuration Release
 dotnet test Test/Test.csproj --filter FullyQualifiedName~Test.App
 dotnet test Test/Test.csproj --filter FullyQualifiedName~Test.Infra
 dotnet test Test/Test.csproj --filter FullyQualifiedName~Test.Web
-node --test Test/Web/JavaScript/*.test.cjs
+node --test Test/Web/JavaScript/telemetry-chart.test.cjs Test/Web/JavaScript/xterm-wrapper.test.cjs
 ```
 
-Database, Docker and external telemetry tests retain their existing explicit opt-in environment variables. Browser
-checks consume previews produced by the rendering tests; see [browser verification](Web/Browser/README.md).
+For --no-build, first build the solution in the same configuration. Playwright has separate dependencies/preview
+prerequisites; follow the Browser guide.
 
-The repository-root `docs/` folder is local documentation, ignored by Git. Project and module READMEs remain tracked.
+## Execution boundaries
+
+| Suite                           | Requirement                                                                                |
+|---------------------------------|--------------------------------------------------------------------------------------------|
+| AI PostgreSQL and workspace SQL | AUTOMATE_AI_TEST_DB targeting an isolated database; owned runners are linked below.        |
+| Real telemetry acceptance       | AUTOMATE_TELEMETRY_TEST_DB plus the isolated Loki/Mimir endpoints expected by the fixture. |
+| Real Docker/Compose smoke       | AUTOMATE_DOCKER_SMOKE=1 and a suitable already-cached image; see Docker tests.             |
+| Extended spool load             | AUTOMATE_TELEMETRY_EXTENDED_LOAD=1 extends the synthetic load duration.                    |
+| Playwright                      | Pinned npm dependency, selected browser and generated fixture HTML.                        |
+
+## Source documentation
+
+Document test scenarios/fakes/helpers with concise multiline XML contracts, including actual fixture behavior and owned
+cleanup. Assertion callbacks describe expected failures, not escaping test API guarantees. Browser/Node callbacks use
+JSDoc. Comments must not imply a fake supports cancellation, persistence or provider semantics that it deliberately
+ignores.
+
+## Related documentation
+
+- [Application map](../Application/README.md)
+- [Adapter map](../Infrastructure/README.md)
+- [Presentation map](../Web/README.md)
+- [Actual CI commands](../.github/workflows/verify.yml)
+- [Isolated database runner](../deploy/verification/README.md)

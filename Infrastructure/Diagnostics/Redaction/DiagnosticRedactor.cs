@@ -180,14 +180,17 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
         var safe = PrivateKeyPattern().Replace(value, RedactedMarker);
         safe = CookiePattern().Replace(safe, "${prefix}" + RedactedMarker);
         safe = AuthorizationPattern().Replace(safe, "${prefix}" + RedactedMarker);
+
         safe = NamedSecretPattern().Replace(safe, match =>
         {
             var content = match.Groups["value"].Value;
             var quote = content.StartsWith('"') ? "\"" : content.StartsWith('\'') ? "'" : "";
             return match.Groups["prefix"].Value + quote + RedactedMarker + quote;
         });
+
         safe = UrlCredentialsPattern().Replace(safe, "${scheme}" + RedactedMarker + "@");
         safe = JwtPattern().Replace(safe, RedactedMarker);
+
         return ProviderTokenPattern().Replace(safe, RedactedMarker);
     }
 
@@ -215,7 +218,7 @@ public sealed partial class DiagnosticRedactor : IDiagnosticRedactor
     ///     Matches the documented unsafe terminal escape or control sequence for removal.
     /// </summary>
     /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
-    [GeneratedRegex("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", RegexOptions.CultureInvariant, 100)]
+    [GeneratedRegex(@"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", RegexOptions.CultureInvariant, 100)]
     private static partial Regex UnsafeControlPattern();
 
     /// <summary>

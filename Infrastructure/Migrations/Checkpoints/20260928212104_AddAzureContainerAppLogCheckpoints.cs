@@ -43,7 +43,7 @@ public partial class AddAzureContainerAppLogCheckpoints : Migration
         migrationBuilder.CreateIndex(
             "ix_azure_container_app_log_checkpoints_deployment_id_source",
             "azure_container_app_log_checkpoints",
-            new[] { "deployment_id", "source" },
+            ["deployment_id", "source"],
             unique: true);
     }
 

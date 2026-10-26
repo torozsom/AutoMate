@@ -37,14 +37,17 @@ public sealed class DiagnosticDeliveryTests
         var publisher = Publisher(services);
         using var worker = new DeploymentDiagnosticDispatcher(publisher, live,
             services.GetRequiredService<IServiceScopeFactory>(), NullLogger<DeploymentDiagnosticDispatcher>.Instance);
+
         await worker.StartAsync(CancellationToken.None);
         try
         {
             await publisher.PublishAsync(Event() with { Message = "first" });
             await publisher.PublishAsync(Event() with { Message = "password=private-value" });
             await live.Recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
             Assert.Contains(live.Delivered, log => log.Message == "password=[REDACTED]");
             Assert.DoesNotContain(store.Saved, e => e.Message.Contains("private-value", StringComparison.Ordinal));
+
             if (failure == "delivery-timeout") Assert.Equal(2, store.Saved.Count);
             else Assert.Single(store.Saved);
         }
@@ -66,6 +69,7 @@ public sealed class DiagnosticDeliveryTests
         var live = new TestLive { StallNext = true };
         await using var services = Services(store, live);
         var publisher = Publisher(services);
+
         Assert.True(await publisher.PublishDurablyAsync(Event() with { Message = "password=private-value" },
             CancellationToken.None));
         var saved = Assert.Single(store.Saved);
@@ -73,7 +77,9 @@ public sealed class DiagnosticDeliveryTests
         Assert.NotNull(saved.TraceId);
         Assert.NotNull(saved.SpanId);
         Assert.NotNull(saved.EventId);
+
         store.Failure = "storage-timeout";
+
         Assert.False(await publisher.PublishDurablyAsync(Event() with { Message = "retry later" },
             CancellationToken.None));
         Assert.Single(store.Saved);
@@ -91,9 +97,11 @@ public sealed class DiagnosticDeliveryTests
         await using var services = Services(store, new TestLive());
         using var canceled = new CancellationTokenSource();
         var pending = Publisher(services).PublishDurablyAsync(Event() with { Message = "cancel" }, canceled.Token);
+
         await store.Entered.Task;
-        canceled.Cancel();
+        await canceled.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+
         Assert.Empty(store.Saved);
     }
 
@@ -112,6 +120,7 @@ public sealed class DiagnosticDeliveryTests
             ShouldListenTo = source => source.Name == "AutoMate.Deployments",
             Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded
         };
+
         ActivitySource.AddActivityListener(listener);
         var store = new TestStore();
         var live = new TestLive();
@@ -119,17 +128,22 @@ public sealed class DiagnosticDeliveryTests
         var publisher = Publisher(services);
         using var worker = new DeploymentDiagnosticDispatcher(publisher, live,
             services.GetRequiredService<IServiceScopeFactory>(), NullLogger<DeploymentDiagnosticDispatcher>.Instance);
+
         await worker.StartAsync(CancellationToken.None);
         try
         {
             await publisher.PublishAsync(Event() with { Message = "password=private-value" });
             await live.Recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
             var saved = Assert.Single(store.Saved);
             Assert.Equal(saved.TraceId, store.DispatchTrace);
+
             var owned = spans.Where(span => Equals(span.GetTagItem("deployment.id"), saved.DeploymentId)).ToArray();
+
             foreach (var name in new[] { "deployment.diagnostic.redact", "deployment.diagnostic.persist" })
                 Assert.Contains(owned, span => span.OperationName == name && span.TraceId.ToString() == saved.TraceId &&
                                                span.Status == ActivityStatusCode.Ok);
+
             Assert.All(owned,
                 span => Assert.DoesNotContain("private-value",
                     string.Join(" ", span.TagObjects.Select(tag => tag.Value))));
@@ -153,13 +167,16 @@ public sealed class DiagnosticDeliveryTests
         await using var services = Services(store, live);
         var publisher = Publisher(services);
         var original = Event() with { Message = "build", EventId = Guid.NewGuid() };
+
         for (var index = 0; index < 513; index++) await publisher.PublishAsync(original);
         using var worker = new DeploymentDiagnosticDispatcher(publisher, live,
             services.GetRequiredService<IServiceScopeFactory>(), NullLogger<DeploymentDiagnosticDispatcher>.Instance);
+
         await worker.StartAsync(CancellationToken.None);
         try
         {
             var marker = await store.Marker.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
             Assert.NotEqual(original.EventId, marker.EventId);
             Assert.NotNull(marker.EventId);
             Assert.Null(marker.Metrics);
@@ -244,12 +261,14 @@ public sealed class DiagnosticDeliveryTests
         {
             Entered.TrySetResult();
             var failure = Failure;
+
             Failure = null;
             if (failure == "storage-timeout") await Task.Delay(Timeout.InfiniteTimeSpan, token);
             if (failure == "storage-cancellation") throw new OperationCanceledException("provider canceled");
             DispatchTrace = Activity.Current?.TraceId.ToString();
             Saved.Enqueue(e);
             if (e.Kind == DeploymentDiagnosticKind.Annotation) Marker.TrySetResult(e);
+
             return Saved.Count;
         }
 

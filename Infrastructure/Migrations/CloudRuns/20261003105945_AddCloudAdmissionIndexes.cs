@@ -18,22 +18,22 @@ public partial class AddCloudAdmissionIndexes : Migration
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_installation_id_phase_lease_until",
             "cloud_deployment_runs",
-            new[] { "installation_id", "phase", "lease_until" });
+            ["installation_id", "phase", "lease_until"]);
 
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_repository_id_branch_name_environment",
             "cloud_deployment_runs",
-            new[] { "repository_id", "branch_name", "environment_name", "created_at" });
+            ["repository_id", "branch_name", "environment_name", "created_at"]);
 
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_user_id_launch_started_at",
             "cloud_deployment_runs",
-            new[] { "user_id", "launch_started_at" });
+            ["user_id", "launch_started_at"]);
 
         migrationBuilder.CreateIndex(
             "ix_cloud_deployment_runs_user_id_phase_lease_until",
             "cloud_deployment_runs",
-            new[] { "user_id", "phase", "lease_until" });
+            ["user_id", "phase", "lease_until"]);
     }
 
     /// <summary>

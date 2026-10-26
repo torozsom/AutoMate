@@ -60,10 +60,14 @@ public sealed class TelemetryDailyAggregationWorker(
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
         var now = DateTimeOffset.UtcNow;
-        var deployments = await db.Deployments.AsNoTracking().Where(d =>
+
+        var deployments = await db.Deployments
+            .AsNoTracking()
+            .Where(d =>
                 d.Status == DeploymentStatus.Running || d.UpdatedAt >= now.AddDays(-2))
             .Select(d => new { d.Id, d.CreatedAt, d.CsProject!.AppId, d.CsProject.Application.UserId })
             .ToListAsync(token);
+
         foreach (var deployment in deployments)
             for (var offset = -2; offset <= 0; offset++)
             {
@@ -71,29 +75,46 @@ public sealed class TelemetryDailyAggregationWorker(
                 var end = day.AddDays(1) < now ? day.AddDays(1) : now;
                 if (end <= deployment.CreatedAt) continue;
                 var start = deployment.CreatedAt > day ? deployment.CreatedAt : day;
+
                 try
                 {
-                    var metrics = await scope.ServiceProvider.GetRequiredService<IDailyDeploymentMetricQuery>()
+                    var metrics = await scope.ServiceProvider
+                        .GetRequiredService<IDailyDeploymentMetricQuery>()
                         .ReadDailyAsync(deployment.UserId, deployment.AppId, deployment.Id, start, end, token);
-                    metrics = metrics.Select(metric => metric with
-                    {
-                        Container = redactor.RedactText(metric.Container, 128),
-                        Name = redactor.RedactText(metric.Name, 128),
-                        Unit = redactor.RedactText(metric.Unit, 64)
-                    }).ToArray();
-                    var errors = await scope.ServiceProvider.GetRequiredService<IDeploymentErrorCountQuery>()
+
+                    metrics =
+                    [
+                        .. metrics.Select(metric => metric with
+                        {
+                            Container = redactor.RedactText(metric.Container, 128),
+                            Name = redactor.RedactText(metric.Name, 128),
+                            Unit = redactor.RedactText(metric.Unit, 64)
+                        })
+                    ];
+
+                    var errors = await scope.ServiceProvider
+                        .GetRequiredService<IDeploymentErrorCountQuery>()
                         .CountErrorsAsync(deployment.UserId, deployment.AppId, deployment.Id, start, end, token);
+
                     var rows = await db.DeploymentDailyTelemetry
-                        .Where(d => d.DeploymentId == deployment.Id && d.DayUtc == day).ToListAsync(token);
+                        .Where(d => d.DeploymentId == deployment.Id && d.DayUtc == day)
+                        .ToListAsync(token);
+
                     // Preserve previously observed values, but disclose a later missing series rather than claiming fresh completeness.
-                    foreach (var row in rows.Where(row => row.Metric != "observed_log_errors" &&
-                                                          !metrics.Any(metric =>
-                                                              metric.Name == row.Metric &&
-                                                              metric.Container == row.Container)))
+                    foreach (var row in rows
+                                 .Where(row =>
+                                     row.Metric != "observed_log_errors"
+                                     && !metrics.Any(metric =>
+                                         metric.Name == row.Metric
+                                         && metric.Container == row.Container)))
                         row.Incomplete = true;
+
                     foreach (var metric in metrics)
                     {
-                        var row = rows.SingleOrDefault(d => d.Metric == metric.Name && d.Container == metric.Container);
+                        var row = rows
+                            .SingleOrDefault(d => d.Metric == metric.Name
+                                                  && d.Container == metric.Container);
+
                         if (row is null)
                         {
                             row = new DeploymentDailyTelemetry
@@ -117,7 +138,9 @@ public sealed class TelemetryDailyAggregationWorker(
                                          (end - start).TotalSeconds / options.Value.RuntimeSampleSeconds;
                     }
 
-                    var errorRow = rows.SingleOrDefault(d => d.Metric == "observed_log_errors");
+                    var errorRow = rows
+                        .SingleOrDefault(d => d.Metric == "observed_log_errors");
+
                     if (errorRow is null)
                     {
                         errorRow = new DeploymentDailyTelemetry
@@ -134,6 +157,7 @@ public sealed class TelemetryDailyAggregationWorker(
                     }
 
                     errorRow.ObservedErrors = errors;
+
                     // At-least-once delivery and collection gaps prevent claiming an exact application error total.
                     errorRow.Incomplete = true;
                     await db.SaveChangesAsync(token);

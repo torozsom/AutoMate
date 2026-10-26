@@ -28,9 +28,11 @@ public sealed class AzureArmCredentialsProviderTests
     public async Task Launch_refreshes_expired_credentials_and_handles_revocation(bool success)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         await using var db = new AutoMateDbContext(new DbContextOptionsBuilder<AutoMateDbContext>()
             .UseSqlite(connection).Options, new EphemeralDataProtectionProvider());
+
         await db.Database.EnsureCreatedAsync();
         var user = new RemoteUser
         {
@@ -43,12 +45,14 @@ public sealed class AzureArmCredentialsProviderTests
             AzureRefreshToken = "refresh",
             AzureTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(-2)
         };
+
         db.Users.Add(user);
         await db.SaveChangesAsync();
         var handler = new DelegateHttpMessageHandler(request =>
         {
             request.Content!.ReadAsStringAsync().GetAwaiter().GetResult().Should()
                 .Contain("grant_type=refresh_token").And.Contain("refresh_token=refresh").And.NotContain("expired");
+
             return success
                 ? DelegateHttpMessageHandler.Json(
                     "{\"access_token\":\"fresh\",\"refresh_token\":\"rotated\",\"expires_in\":3600}")
@@ -57,12 +61,16 @@ public sealed class AzureArmCredentialsProviderTests
         var provider = new AzureArmCredentialsProvider(db, new StubHttpClientFactory(handler),
             Options.Create(new AzureMonitorLogsOptions
                 { TokenEndpoint = "https://example.invalid/token", ClientId = "client", ClientSecret = "secret" }));
+
         if (success)
         {
             var credentials = await provider.GetAsync(user.Id, CancellationToken.None);
+
             credentials.AccessToken.Should().Be("fresh");
+
             db.ChangeTracker.Clear();
             var saved = await db.Users.OfType<RemoteUser>().SingleAsync();
+
             saved.AzureRefreshToken.Should().Be("rotated");
             saved.AzureAccessToken.Should().Be("fresh");
             saved.AzureTokenExpiresAt.Should().BeAfter(DateTimeOffset.UtcNow.AddMinutes(55));

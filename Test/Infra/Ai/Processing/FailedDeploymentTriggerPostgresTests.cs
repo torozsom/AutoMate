@@ -19,9 +19,12 @@ public sealed class FailedDeploymentTriggerPostgresTests
     public async Task Production_trigger_captures_only_committed_failure_once()
     {
         Assert.Equal(3, (int)DeploymentStatus.Failed);
+
         await using var connection = new NpgsqlConnection(Environment.GetEnvironmentVariable("AUTOMATE_AI_TEST_DB"));
+
         await connection.OpenAsync();
         var schema = "ai_failure_test_" + Guid.NewGuid().ToString("N");
+
         await ExecuteAsync(connection, $"CREATE SCHEMA {schema}; SET search_path TO {schema};");
         try
         {
@@ -34,22 +37,30 @@ public sealed class FailedDeploymentTriggerPostgresTests
             await ExecuteAsync(connection, FailedDeploymentAnalysisTrigger.CreateSql);
             var first = Guid.NewGuid();
             var second = Guid.NewGuid();
+
             await ExecuteAsync(connection, $"INSERT INTO deployments VALUES ('{first}', 0), ('{second}', 0);");
             await using (var transaction = await connection.BeginTransactionAsync())
             {
                 await ExecuteAsync(connection, $"UPDATE deployments SET status = 3 WHERE id = '{first}';");
+
                 Assert.Equal(1L, await CountAsync(connection));
+
                 await transaction.RollbackAsync();
             }
 
             Assert.Equal(0L, await CountAsync(connection));
+
             await ExecuteAsync(connection, "UPDATE deployments SET status = 3;");
+
             Assert.Equal(2L, await CountAsync(connection));
+
             await ExecuteAsync(connection,
                 "UPDATE failed_deployment_analysis_events SET completed_at = CURRENT_TIMESTAMP;");
             await ExecuteAsync(connection,
                 "UPDATE deployments SET status = 3; UPDATE deployments SET status = 1; UPDATE deployments SET status = 3;");
+
             Assert.Equal(2L, await CountAsync(connection));
+
             await using (var command =
                          new NpgsqlCommand(
                              "SELECT COUNT(*) FROM failed_deployment_analysis_events WHERE completed_at IS NULL",
@@ -59,9 +70,13 @@ public sealed class FailedDeploymentTriggerPostgresTests
             }
 
             var insertedFailed = Guid.NewGuid();
+
             await ExecuteAsync(connection, $"INSERT INTO deployments VALUES ('{insertedFailed}', 3);");
+
             Assert.Equal(3L, await CountAsync(connection));
+
             await ExecuteAsync(connection, "DELETE FROM deployments;");
+
             Assert.Equal(0L, await CountAsync(connection));
         }
         finally
@@ -79,6 +94,7 @@ public sealed class FailedDeploymentTriggerPostgresTests
     private static async Task ExecuteAsync(NpgsqlConnection connection, string sql)
     {
         await using var command = new NpgsqlCommand(sql, connection);
+
         await command.ExecuteNonQueryAsync();
     }
 

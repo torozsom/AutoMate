@@ -196,7 +196,10 @@ public partial class Dashboard : ComponentBase, IDisposable
         _disposed = true;
         _lifetime.Cancel();
         _lifetime.Dispose();
-        if (AuthStateProvider is not null) AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationChanged;
+
+        if (AuthStateProvider is not null)
+            AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationChanged;
+
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
         GC.SuppressFinalize(this);
@@ -287,6 +290,7 @@ public partial class Dashboard : ComponentBase, IDisposable
     private async Task ApplyStatusChangedAsync(Guid appId, DeploymentStatus status)
     {
         var app = _apps?.FirstOrDefault(p => p.Id == appId);
+
         if (app is null)
         {
             if (_inventory?.Items.Any(p => p.Id == appId) == true)
@@ -347,12 +351,15 @@ public partial class Dashboard : ComponentBase, IDisposable
         try
         {
             using var scope = ServiceScopes.CreateScope();
+
             var request = new ProjectInventoryRequest(_search,
                 Enum.TryParse<SourceType>(_source, out var source) && Enum.IsDefined(source) ? source : null,
                 Enum.TryParse<DeploymentStatus>(_status, out var status) && Enum.IsDefined(status) ? status : null,
                 _sort, Page ?? 1);
+
             var result = await scope.ServiceProvider.GetRequiredService<IWorkspaceQuery>()
                 .ProjectsAsync(_currentUserId, request, _lifetime.Token);
+
             if (!_disposed && version == _inventoryVersion && !_inventoryRefreshPending)
             {
                 _inventory = result;
@@ -505,17 +512,21 @@ public partial class Dashboard : ComponentBase, IDisposable
 
             var preparation = await CloudAdmission.PrepareAsync(owner, AuthStateProvider,
                 true, () => !_disposed && owner == _currentUserId);
-            if (preparation.State == CloudConnectionState.Obsolete) return;
-            if (preparation.State == CloudConnectionState.MissingAzure)
-            {
-                _globalErrorMessage = "Connect your Azure account before deploying GitHub projects to the cloud.";
-                return;
-            }
 
-            if (preparation.State == CloudConnectionState.MissingGitHub)
+            switch (preparation.State)
             {
-                _globalErrorMessage = "Connect your GitHub account before deploying GitHub projects to the cloud.";
-                return;
+                case CloudConnectionState.Obsolete:
+                    return;
+                case CloudConnectionState.MissingAzure:
+                    _globalErrorMessage = "Connect your Azure account before deploying GitHub projects to the cloud.";
+                    return;
+                case CloudConnectionState.MissingGitHub:
+                    _globalErrorMessage = "Connect your GitHub account before deploying GitHub projects to the cloud.";
+                    return;
+                case CloudConnectionState.Ready:
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(finalConfig), preparation.State, null);
             }
 
             SetDeployingState(finalConfig.ProjectId, true);
@@ -791,7 +802,11 @@ public partial class Dashboard : ComponentBase, IDisposable
     private string InventoryUrl(int page)
     {
         return
-            $"/dashboard?q={Uri.EscapeDataString(_search)}&source={Uri.EscapeDataString(_source)}&status={Uri.EscapeDataString(_status)}&sort={_sort}&page={Math.Max(1, page)}";
+            $"/dashboard?q={Uri.EscapeDataString(_search)}" +
+            $"&source={Uri.EscapeDataString(_source)}" +
+            $"&status={Uri.EscapeDataString(_status)}" +
+            $"&sort={_sort}" +
+            $"&page={Math.Max(1, page)}";
     }
 
     /// <summary>
@@ -812,11 +827,15 @@ public partial class Dashboard : ComponentBase, IDisposable
         if (_disposed || _preparingProject is not null || IsStopping(id)) return;
         _preparingProject = id;
         var owner = _currentUserId;
+
         try
         {
             using var scope = ServiceScopes.CreateScope();
             var app = await ReadActionProjectAsync(scope.ServiceProvider, id, owner, _lifetime.Token);
-            if (_disposed || owner != _currentUserId) return;
+
+            if (_disposed || owner != _currentUserId)
+                return;
+
             if (app is null)
             {
                 _globalErrorMessage = "This project is no longer available.";
@@ -848,14 +867,19 @@ public partial class Dashboard : ComponentBase, IDisposable
     {
         if (_disposed || _currentUserId == Guid.Empty || IsDeploying(id) || IsStopping(id)) return;
         _preparingStops.Add(id);
+
         var owner = _currentUserId;
         _globalErrorMessage = null;
         _globalSuccessMessage = null;
+
         try
         {
             using var scope = ServiceScopes.CreateScope();
             var app = await ReadActionProjectAsync(scope.ServiceProvider, id, owner, _lifetime.Token);
-            if (_disposed || owner != _currentUserId) return;
+
+            if (_disposed || owner != _currentUserId)
+                return;
+
             if (app is null || app.UserId != owner)
             {
                 _globalErrorMessage = "This project is no longer available.";
@@ -874,9 +898,13 @@ public partial class Dashboard : ComponentBase, IDisposable
                 return;
             }
 
-            var latest = app.CsProjects.SelectMany(project => project.Deployments)
-                .OrderByDescending(deployment => deployment.CreatedAt).FirstOrDefault();
+            var latest = app.CsProjects
+                .SelectMany(project => project.Deployments)
+                .OrderByDescending(deployment => deployment.CreatedAt)
+                .FirstOrDefault();
+
             var webProject = app.CsProjects.FirstOrDefault(project => project.IsWebProject);
+
             if (latest?.Status != DeploymentStatus.Running || webProject is null || IsDeploying(id))
             {
                 _globalErrorMessage = "This project has no running deployment to stop.";
@@ -885,7 +913,9 @@ public partial class Dashboard : ComponentBase, IDisposable
 
             await DeploymentJobQueue.EnqueueAsync(new StopLocalDeploymentJob(id, app.Name, webProject.Path),
                 _lifetime.Token);
-            if (!_disposed && owner == _currentUserId) _globalSuccessMessage = "Deployment stop queued.";
+
+            if (!_disposed && owner == _currentUserId)
+                _globalSuccessMessage = "Deployment stop queued.";
         }
         catch (OperationCanceledException) when (_disposed)
         {
@@ -959,6 +989,7 @@ public partial class Dashboard : ComponentBase, IDisposable
             {
                 if (_disposed) return;
                 var version = ++_inventoryVersion;
+
                 _currentUserId = Guid.Empty;
                 _inventory = null;
                 _apps = null;
@@ -968,19 +999,27 @@ public partial class Dashboard : ComponentBase, IDisposable
                 _pendingCloudIdempotencyKey = null;
                 _pendingCloudProjectId = Guid.Empty;
                 _deployingStates.Clear();
+
                 HideConfigModal();
                 ClearMessages();
                 StateHasChanged();
+
                 using var scope = ServiceScopes.CreateScope();
                 var users = scope.ServiceProvider.GetRequiredService<IUserService>();
                 var owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider, users,
                     _lifetime.Token);
+
                 var connected = owner != Guid.Empty && await users.HasAzureConnectionAsync(owner, _lifetime.Token);
-                if (_disposed || version != _inventoryVersion) return;
+
+                if (_disposed || version != _inventoryVersion)
+                    return;
+
                 _currentUserId = owner;
                 _isAzureConnected = connected;
                 await RefreshAppsAsync();
-                if (!_disposed) StateHasChanged();
+
+                if (!_disposed)
+                    StateHasChanged();
             });
         }
         catch (OperationCanceledException) when (_disposed)

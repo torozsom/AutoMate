@@ -30,17 +30,22 @@ public sealed class ScopedApplicationOperationsTests
             {
                 probes.Add(probe);
                 await release.Task;
+
                 Assert.False(probe.Disposed);
+
                 return probe;
             });
         }
 #pragma warning restore CS1587
         var first = Start();
         var second = Start();
+
         Assert.Equal(2, probes.Count);
         Assert.NotSame(probes[0], probes[1]);
+
         release.SetResult();
         var results = await Task.WhenAll(first, second);
+
         Assert.All(results, probe => Assert.True(probe.Disposed));
     }
 
@@ -53,6 +58,7 @@ public sealed class ScopedApplicationOperationsTests
     {
         await using var provider = new ServiceCollection().AddScoped<Probe>().BuildServiceProvider();
         var operations = new ScopedApplicationOperations(provider.GetRequiredService<IServiceScopeFactory>());
+
         foreach (var exception in new Exception[]
                      { new InvalidOperationException("fixture"), new OperationCanceledException() })
         {
@@ -60,8 +66,10 @@ public sealed class ScopedApplicationOperationsTests
             var actual = await Record.ExceptionAsync(() => operations.RunAsync<Probe, bool>(probe =>
             {
                 captured = probe;
+
                 return Task.FromException<bool>(exception);
             }));
+
             Assert.Same(exception, actual);
             Assert.True(captured!.Disposed);
         }
@@ -82,6 +90,7 @@ public sealed class ScopedApplicationOperationsTests
         public ValueTask DisposeAsync()
         {
             Disposed = true;
+
             return ValueTask.CompletedTask;
         }
     }

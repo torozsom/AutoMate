@@ -24,6 +24,7 @@ public sealed class GitHubSaasCommitRecoveryTests
         var handler = new DelegateHttpMessageHandler(request =>
         {
             request.RequestUri!.Query.Should().Contain("sha=automate%2Fazure-deployment");
+
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""
@@ -52,8 +53,10 @@ public sealed class GitHubSaasCommitRecoveryTests
         var handler = new DelegateHttpMessageHandler(_ =>
         {
             var response = new HttpResponseMessage(HttpStatusCode.Forbidden);
+
             response.Headers.Add("X-RateLimit-Remaining", "0");
             response.Headers.Add("X-RateLimit-Reset", reset.ToString());
+
             return response;
         });
         var service = new GitHubService(new HttpClient(handler),
@@ -64,6 +67,7 @@ public sealed class GitHubSaasCommitRecoveryTests
             "automate/azure-deployment", "AutoMate-Run: marker");
 
         var failure = await call.Should().ThrowAsync<GitHubRateLimitException>();
+
         failure.Which.RetryAt.ToUnixTimeSeconds().Should().Be(reset);
     }
 }

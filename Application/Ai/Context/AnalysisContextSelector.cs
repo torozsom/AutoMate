@@ -19,6 +19,13 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     /// <summary>Caps CPU/memory work independently of provider text limits.</summary>
     public const int MaximumCandidates = 1000;
 
+    /// <summary>Preserves camel-case evidence fields independently of C# member naming.</summary>
+    private static readonly JsonSerializerOptions ContextJson = new()
+        { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    /// <summary>Failure terms used to rank diagnostic evidence.</summary>
+    private static readonly string[] SourceArray = ["error", "fail", "exception", "timeout", "denied", "unable"];
+
     /// <summary>
     ///     Serializes a bounded structured data document with stable IDs and explicit partial
     ///     coverage.
@@ -27,63 +34,157 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     /// <param name="metrics">Recorded numeric samples or aggregate points.</param>
     /// <param name="budget">The character, UTF-8 byte and conservative token limits.</param>
     /// <param name="metricsUnavailable">Whether metric collection reported an availability failure.</param>
-    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
     /// <param name="kind">The assessment focus requested or resolved for the deployment.</param>
     /// <param name="metadata">
     ///     The non-secret project metadata supplied to evidence or artifact generation.
     /// </param>
+    /// <param name="token">Cancels the operation when supported by the underlying work.</param>
     /// <returns>Bounded redacted context with an exact permitted-evidence reference catalog.</returns>
     /// <exception cref="OperationCanceledException">Evidence selection is canceled.</exception>
     public DeploymentAnalysisContext Select(DeploymentTerminalHistory history,
         IReadOnlyList<DeploymentMetricPoint> metrics,
-        AnalysisContextBudget budget, bool metricsUnavailable, CancellationToken token = default,
-        AssessmentKind kind = AssessmentKind.FailureDiagnosis, object? metadata = null)
+        AnalysisContextBudget budget, bool metricsUnavailable,
+        AssessmentKind kind = AssessmentKind.FailureDiagnosis,
+        object? metadata = null, CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested();
+
+        // Select the most recent events with the highest order IDs.
         var rows = history.Events.Take(MaximumCandidates).Where(row => row.OrderId > 0)
             .GroupBy(row =>
                 row.EventId is { } id && id != Guid.Empty
                     ? $"event:{id:N}"
                     : $"order:{row.OrderId.ToString(CultureInfo.InvariantCulture)}")
-            .Select(group => redactor.RedactTerminal(group.OrderByDescending(row => row.OrderId).First()))
+            .Select(group => redactor
+                .RedactTerminal(group.OrderByDescending(row => row.OrderId).First()))
             .Where(row => !string.IsNullOrWhiteSpace(row.Message)).ToArray();
+
+        // Group by message, severity, stream and channel to avoid repeated evidence; keep the most recent representative.
         var groups = rows.GroupBy(row => (row.Message, row.Severity, row.Stream, row.TerminalChannel))
             .Select(group => (
-                Row: group.OrderByDescending(row => row.TimestampUtc).ThenByDescending(row => row.OrderId).First(),
-                Count: group.Count(), First: group.Min(row => row.TimestampUtc),
+                Row: group.OrderByDescending(row => row.TimestampUtc)
+                    .ThenByDescending(row => row.OrderId).First(),
+                Count: group.Count(),
+                First: group.Min(row => row.TimestampUtc),
                 Last: group.Max(row => row.TimestampUtc)))
             .OrderByDescending(group => kind == AssessmentKind.FailureDiagnosis ? Severity(group.Row) : 0)
             .ThenByDescending(group => kind == AssessmentKind.FailureDiagnosis && Relevant(group.Row.Message))
-            .ThenByDescending(group => group.Row.TimestampUtc).ThenByDescending(group => group.Row.OrderId).ToArray();
+            .ThenByDescending(group => group.Row.TimestampUtc)
+            .ThenByDescending(group => group.Row.OrderId).ToArray();
+
         if (kind != AssessmentKind.FailureDiagnosis)
             // Give each selected channel one representative before allocating the remaining budget by recency.
-            groups = groups.GroupBy(g => g.Row.TerminalChannel).Select(g => g.First())
-                .Concat(groups.Where(g => g.Row.Severity is DeploymentDiagnosticSeverity.Warning
-                        or DeploymentDiagnosticSeverity.Error or DeploymentDiagnosticSeverity.Critical)
-                    .GroupBy(g => g.Row.TerminalChannel).Select(g => g.First()))
-                .Concat(groups).Distinct().ToArray();
+            groups =
+            [
+                .. groups.GroupBy(g => g.Row.TerminalChannel).Select(g => g.First())
+                    .Concat(groups.Where(g => g.Row.Severity is DeploymentDiagnosticSeverity.Warning
+                            or DeploymentDiagnosticSeverity.Error or DeploymentDiagnosticSeverity.Critical)
+                        .GroupBy(g => g.Row.TerminalChannel).Select(g => g.First()))
+                    .Concat(groups).Distinct()
+            ];
+
         var selected = new List<Line>();
         var signals = new List<MetricSignal>();
         var traces = new List<TraceSignal>();
+
+        // Limit the number of metric groups to avoid excessive CPU/memory work and ensure a stable JSON document.
         var allMetricGroups = metrics.Take(20000).Where(SafeMetric)
             .GroupBy(point => (point.Container, point.Name, point.Unit)).ToArray();
+
         var metricGroups = allMetricGroups.Take(24).ToArray();
-        var availableTraces = rows.Where(row => ValidTrace(row.TraceId)).Select(row => row.TraceId).Distinct().Count();
+
+        // Count the number of unique valid traces in the original rows to report coverage.
+        var availableTraces = rows
+            .Where(row => ValidTrace(row.TraceId))
+            .Select(row => row.TraceId)
+            .Distinct()
+            .Count();
+
+        // Reduce the budget for logs when metrics or traces are present, but never below 1 character/byte/token.
         var logBudget = metricGroups.Length > 0 || availableTraces > 0
-            ? budget with
-            {
-                Characters = Math.Max(1, budget.Characters * 3 / 4),
-                Bytes = Math.Max(1, budget.Bytes * 3 / 4),
-                Tokens = Math.Max(1, budget.Tokens * 3 / 4)
-            }
+            ? new AnalysisContextBudget(
+                Math.Max(1, budget.Characters * 3 / 4),
+                Math.Max(1, budget.Bytes * 3 / 4),
+                Math.Max(1, budget.Tokens * 3 / 4))
             : budget;
 
-        // Rebuild the complete document so coverage and escaping are charged before accepting any evidence.
-#pragma warning disable CS1587 // C# does not emit XML documentation for local functions.
-        /// <summary>
-        ///     Serializes the current bounded evidence selection, metadata and coverage notices.
-        /// </summary>
-        /// <returns>JSON for the current evidence selection and its coverage metadata.</returns>
+        foreach (var group in groups)
+        {
+            token.ThrowIfCancellationRequested();
+
+            var row = group.Row;
+            var message = redactor.RedactText(row.Message, 1024);
+
+            var line = new Line(
+                Reference(row), row.OrderId, row.TimestampUtc, row.Sequence, row.Severity
+                    is { } severity && Enum.IsDefined(severity)
+                    ? Enum.GetName(severity)!
+                    : "Unknown",
+                message, group.Count, group.First, group.Last,
+                "channel-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(row.TerminalChannel)))[..12]);
+
+            selected.Add(line);
+
+            // Shorten only message data, keeping the evidence identity and coverage document intact.
+            while (!logBudget.Fits(Render()) && message.Length > 64)
+            {
+                message = redactor.RedactText(row.Message, message.Length / 2);
+                selected[^1] = line with { Message = message };
+            }
+
+            if (!logBudget.Fits(Render())) selected.RemoveAt(selected.Count - 1);
+        }
+
+        foreach (var group in metricGroups)
+        {
+            token.ThrowIfCancellationRequested();
+
+            var points = group.ToArray();
+            var first = points.Min(point => point.Timestamp);
+            var last = points.Max(point => point.Timestamp);
+
+            var containerId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(group.Key.Container)))[..12];
+
+            signals.Add(new MetricSignal($"metric:{group.Key.Name}:{containerId}:{first.UtcTicks}:{last.UtcTicks}",
+                group.Key.Name,
+                group.Key.Unit,
+                first, last, points.Length,
+                points.Min(point => point.Minimum), points.Max(point => point.Maximum),
+                "container-" + containerId, points.Average(point => point.Average),
+                points.Length > 1
+                    ? points.OrderBy(point => point.Timestamp).Last().Average -
+                      points.OrderBy(point => point.Timestamp).First().Average
+                    : null));
+
+            if (!budget.Fits(Render())) signals.RemoveAt(signals.Count - 1);
+        }
+
+        var selectedIds = selected.Select(line => line.Reference).ToHashSet(StringComparer.Ordinal);
+
+        // Filter and group the rows by trace ID, taking the first 20 groups.
+        foreach (var group in rows
+                     .Where(row => selectedIds.Contains(Reference(row)) && ValidTrace(row.TraceId))
+                     .GroupBy(row => row.TraceId).Take(20))
+        {
+            traces.Add(new TraceSignal($"trace:{group.Key}", group.Count()));
+            if (!budget.Fits(Render())) traces.RemoveAt(traces.Count - 1);
+        }
+
+        if (selected.Count == 0 && signals.Count == 0) return new DeploymentAnalysisContext("", []);
+
+        var text = Render();
+
+        // Return the bounded context with stable evidence references, even if the document is truncated.
+        return new DeploymentAnalysisContext(text, Array.AsReadOnly([
+            .. selected.Select(line => line.Reference),
+            .. signals.Select(signal => signal.Reference),
+            .. traces.Select(trace => trace.Reference)
+        ]));
+
+        /*
+         * Render the bounded context as a JSON document with stable IDs and explicit coverage.
+         * The document is truncated to fit the budget, but the evidence references remain intact.
+         */
         string Render()
         {
             return JsonSerializer.Serialize(new
@@ -103,65 +204,11 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                     metricCandidatesTruncated = metrics.Count > 20000,
                     traceGroupsOmitted = availableTraces - traces.Count
                 },
-                records = selected.OrderBy(line => line.timestamp).ThenBy(line => line.order).ToArray(),
+                records = selected.OrderBy(line => line.Timestamp).ThenBy(line => line.Order).ToArray(),
                 metricSignals = signals,
                 traceSignals = traces
-            });
+            }, ContextJson);
         }
-#pragma warning restore CS1587
-
-        foreach (var group in groups)
-        {
-            token.ThrowIfCancellationRequested();
-            var row = group.Row;
-            var message = redactor.RedactText(row.Message, 1024);
-            var line = new Line(Reference(row), row.OrderId, row.TimestampUtc, row.Sequence,
-                row.Severity is { } severity && Enum.IsDefined(severity) ? Enum.GetName(severity)! : "Unknown",
-                message, group.Count, group.First, group.Last,
-                "channel-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(row.TerminalChannel)))[..12]);
-            selected.Add(line);
-            // Shorten only message data, keeping the evidence identity and coverage document intact.
-            while (!logBudget.Fits(Render()) && message.Length > 64)
-            {
-                message = redactor.RedactText(row.Message, message.Length / 2);
-                selected[^1] = line with { message = message };
-            }
-
-            if (!logBudget.Fits(Render())) selected.RemoveAt(selected.Count - 1);
-        }
-
-        foreach (var group in metricGroups)
-        {
-            token.ThrowIfCancellationRequested();
-            var points = group.ToArray();
-            var first = points.Min(point => point.Timestamp);
-            var last = points.Max(point => point.Timestamp);
-            var containerId = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(group.Key.Container)))[..12];
-            signals.Add(new MetricSignal($"metric:{group.Key.Name}:{containerId}:{first.UtcTicks}:{last.UtcTicks}",
-                group.Key.Name,
-                group.Key.Unit,
-                first, last, points.Length, points.Min(point => point.Minimum), points.Max(point => point.Maximum),
-                "container-" + containerId, points.Average(point => point.Average),
-                points.Length > 1
-                    ? points.OrderBy(point => point.Timestamp).Last().Average -
-                      points.OrderBy(point => point.Timestamp).First().Average
-                    : null));
-            if (!budget.Fits(Render())) signals.RemoveAt(signals.Count - 1);
-        }
-
-        var selectedIds = selected.Select(line => line.reference).ToHashSet(StringComparer.Ordinal);
-        foreach (var group in rows.Where(row => selectedIds.Contains(Reference(row)) && ValidTrace(row.TraceId))
-                     .GroupBy(row => row.TraceId).Take(20))
-        {
-            traces.Add(new TraceSignal($"trace:{group.Key}", group.Count()));
-            if (!budget.Fits(Render())) traces.RemoveAt(traces.Count - 1);
-        }
-
-        if (selected.Count == 0 && signals.Count == 0) return new DeploymentAnalysisContext("", []);
-        var text = Render();
-        return new DeploymentAnalysisContext(text, Array.AsReadOnly(selected.Select(line => line.reference)
-            .Concat(signals.Select(signal => signal.reference))
-            .Concat(traces.Select(trace => trace.reference)).ToArray()));
     }
 
     /// <summary>
@@ -198,8 +245,7 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     /// <returns>Whether the text contains a reviewed operational-failure keyword.</returns>
     private static bool Relevant(string text)
     {
-        return new[] { "error", "fail", "exception", "timeout", "denied", "unable" }
-            .Any(word => text.Contains(word, StringComparison.OrdinalIgnoreCase));
+        return SourceArray.Any(word => text.Contains(word, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -240,7 +286,9 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     {
         if (metadata is null) return null;
         var json = JsonSerializer.Serialize(metadata);
+
         if (json.Length > 4096) return JsonSerializer.SerializeToElement(new { configurationOmitted = true });
+
         using var document = JsonDocument.Parse(json);
         using var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
@@ -271,14 +319,23 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
 
                 writer.WriteEndObject();
                 break;
+
             case JsonValueKind.Array:
                 writer.WriteStartArray();
                 foreach (var item in value.EnumerateArray()) WriteMetadata(writer, item);
                 writer.WriteEndArray();
                 break;
+
             case JsonValueKind.String:
                 writer.WriteStringValue(redactor.RedactText(value.GetString()!, 256));
                 break;
+
+            case JsonValueKind.Undefined:
+            case JsonValueKind.Number:
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+            case JsonValueKind.Null:
+
             default: value.WriteTo(writer); break;
         }
     }
@@ -286,64 +343,64 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     /// <summary>
     ///     Bounded evidence group retaining the representative actual event and window timestamps.
     /// </summary>
-    /// <param name="reference">The exact evidence identifier being validated.</param>
-    /// <param name="order">The durable log position encoded in the cursor.</param>
-    /// <param name="timestamp">The provider observation timestamp, if known.</param>
-    /// <param name="sequence">The optional provider-local sequence number.</param>
-    /// <param name="severity">The normalized severity used to rank a context group.</param>
-    /// <param name="message">The message supplied to the operation.</param>
-    /// <param name="occurrences">The number of repeated observations represented by the group.</param>
-    /// <param name="firstTimestamp">The first observation time in the returned selection, if known.</param>
-    /// <param name="lastTimestamp">The last observation time in the returned selection, if known.</param>
-    /// <param name="channel">The stable terminal channel used for routing.</param>
+    /// <param name="Reference">The exact evidence identifier being validated.</param>
+    /// <param name="Order">The durable log position encoded in the cursor.</param>
+    /// <param name="Timestamp">The provider observation timestamp, if known.</param>
+    /// <param name="Sequence">The optional provider-local sequence number.</param>
+    /// <param name="Severity">The normalized severity used to rank a context group.</param>
+    /// <param name="Message">The message supplied to the operation.</param>
+    /// <param name="Occurrences">The number of repeated observations represented by the group.</param>
+    /// <param name="FirstTimestamp">The first observation time in the returned selection, if known.</param>
+    /// <param name="LastTimestamp">The last observation time in the returned selection, if known.</param>
+    /// <param name="Channel">The stable terminal channel used for routing.</param>
     private sealed record Line(
-        string reference,
-        long order,
-        DateTimeOffset? timestamp,
-        long? sequence,
-        string severity,
-        string message,
-        int occurrences,
-        DateTimeOffset? firstTimestamp,
-        DateTimeOffset? lastTimestamp,
-        string channel);
+        string Reference,
+        long Order,
+        DateTimeOffset? Timestamp,
+        long? Sequence,
+        string Severity,
+        string Message,
+        int Occurrences,
+        DateTimeOffset? FirstTimestamp,
+        DateTimeOffset? LastTimestamp,
+        string Channel);
 
     /// <summary>
     ///     Range over returned aggregate points; does not fabricate individual samples or causal
     ///     conclusions.
     /// </summary>
-    /// <param name="reference">The exact evidence identifier being validated.</param>
-    /// <param name="name">The recorded display name or fixed metric identity.</param>
-    /// <param name="unit">The native metric unit associated with the sample.</param>
-    /// <param name="firstTimestamp">The first observation time in the returned selection, if known.</param>
-    /// <param name="lastTimestamp">The last observation time in the returned selection, if known.</param>
-    /// <param name="returnedPoints">The number of points included in the bounded selection.</param>
-    /// <param name="minimum">The observed minimum in the recorded native unit.</param>
-    /// <param name="maximum">The observed maximum in the recorded native unit.</param>
-    /// <param name="container">
+    /// <param name="Reference">The exact evidence identifier being validated.</param>
+    /// <param name="Name">The recorded display name or fixed metric identity.</param>
+    /// <param name="Unit">The native metric unit associated with the sample.</param>
+    /// <param name="FirstTimestamp">The first observation time in the returned selection, if known.</param>
+    /// <param name="LastTimestamp">The last observation time in the returned selection, if known.</param>
+    /// <param name="ReturnedPoints">The number of points included in the bounded selection.</param>
+    /// <param name="Minimum">The observed minimum in the recorded native unit.</param>
+    /// <param name="Maximum">The observed maximum in the recorded native unit.</param>
+    /// <param name="Container">
     ///     The recorded container identity; null selects all containers where supported.
     /// </param>
-    /// <param name="average">The observed arithmetic mean; absent values remain unknown.</param>
-    /// <param name="changeAcrossReturnedIntervals">
+    /// <param name="Average">The observed arithmetic mean; absent values remain unknown.</param>
+    /// <param name="ChangeAcrossReturnedIntervals">
     ///     The observed change across returned intervals, if known.
     /// </param>
     private sealed record MetricSignal(
-        string reference,
-        string name,
-        string unit,
-        DateTimeOffset firstTimestamp,
-        DateTimeOffset lastTimestamp,
-        int returnedPoints,
-        double minimum,
-        double maximum,
-        string container,
-        double average,
-        double? changeAcrossReturnedIntervals);
+        string Reference,
+        string Name,
+        string Unit,
+        DateTimeOffset FirstTimestamp,
+        DateTimeOffset LastTimestamp,
+        int ReturnedPoints,
+        double Minimum,
+        double Maximum,
+        string Container,
+        double Average,
+        double? ChangeAcrossReturnedIntervals);
 
     /// <summary>
     ///     Correlation observed in selected diagnostics, not a fetched span or error-status claim.
     /// </summary>
-    /// <param name="reference">The exact evidence identifier being validated.</param>
-    /// <param name="selectedEvents">The number of diagnostic observations included in context.</param>
-    private sealed record TraceSignal(string reference, int selectedEvents);
+    /// <param name="Reference">The exact evidence identifier being validated.</param>
+    /// <param name="SelectedEvents">The number of diagnostic observations included in context.</param>
+    private sealed record TraceSignal(string Reference, int SelectedEvents);
 }

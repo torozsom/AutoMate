@@ -31,15 +31,20 @@ public sealed class LocalDiagnosticSupervisionTests
     public async Task Slow_project_shutdown_does_not_block_another_project_or_overlap_its_replacement()
     {
         await using var harness = await Harness.CreateAsync(false);
+
         harness.Source.CleanupGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await harness.Manager.RegisterAsync(harness.Target, true);
         var stop = harness.Manager.StopProjectAsync(harness.Target.ProjectId);
+
         await harness.Source.CleanupStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
         var replacement = harness.Manager.RegisterAsync(harness.Target, true);
+
         try
         {
             var other = harness.Target with { ProjectId = Guid.NewGuid(), DeploymentId = Guid.NewGuid() };
+
             await harness.Manager.RegisterAsync(other, true).WaitAsync(TimeSpan.FromSeconds(2));
+
             Assert.False(stop.IsCompleted);
             Assert.False(replacement.IsCompleted);
             Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon");
@@ -50,6 +55,7 @@ public sealed class LocalDiagnosticSupervisionTests
         }
 
         await Task.WhenAll(stop, replacement).WaitAsync(TimeSpan.FromSeconds(3));
+
         Assert.True(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
         Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon" && !s.Stopped.Task.IsCompleted);
     }
@@ -63,12 +69,16 @@ public sealed class LocalDiagnosticSupervisionTests
     public async Task Operation_starts_daemon_before_return_and_host_shutdown_awaits_it()
     {
         await using var harness = await Harness.CreateAsync(false);
+
         await harness.Manager.RegisterAsync(harness.Target, true);
         await harness.Source.RuntimeStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
         Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon");
         Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "logs");
         Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "metrics");
+
         await harness.Manager.StopAsync(CancellationToken.None);
+
         Assert.All(harness.Source.Subscriptions, s => Assert.True(s.Stopped.Task.IsCompletedSuccessfully));
         Assert.False(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
     }
@@ -81,14 +91,17 @@ public sealed class LocalDiagnosticSupervisionTests
     public async Task Replacement_awaits_old_sources_and_keeps_new_target_active()
     {
         await using var harness = await Harness.CreateAsync(false);
+
         await harness.Manager.RegisterAsync(harness.Target, true);
         await harness.Source.RuntimeStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
         var first = harness.Source.Subscriptions.ToArray();
         var next = harness.Target with { DeploymentId = Guid.NewGuid(), RegisteredAt = DateTimeOffset.UtcNow };
+
         await using (var scope = harness.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
             var previous = await db.Deployments.SingleAsync();
+
             db.Deployments.Add(new Deployment
             {
                 Id = next.DeploymentId,
@@ -100,10 +113,13 @@ public sealed class LocalDiagnosticSupervisionTests
         }
 
         await harness.Manager.RegisterAsync(next, true);
+
         Assert.All(first, source => Assert.True(source.Stopped.Task.IsCompletedSuccessfully));
         Assert.True(harness.Manager.IsActive(next.ProjectId, next.DeploymentId));
         Assert.False(harness.Manager.IsActive(next.ProjectId, harness.Target.DeploymentId));
+
         await harness.Manager.StopProjectAsync(next.ProjectId);
+
         Assert.All(harness.Source.Subscriptions, s => Assert.True(s.Stopped.Task.IsCompletedSuccessfully));
         Assert.False(harness.Manager.IsActive(next.ProjectId, next.DeploymentId));
     }
@@ -117,22 +133,30 @@ public sealed class LocalDiagnosticSupervisionTests
     public async Task Legacy_flag_cannot_disable_runtime_collection()
     {
         await using var harness = await Harness.CreateAsync(true);
+
         await harness.Manager.RegisterAsync(harness.Target, false);
         await harness.Source.RuntimeStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+
         Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "logs");
         Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "metrics");
+
         await using (var scope = harness.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+
             (await db.Applications.SingleAsync()).RuntimeDiagnosticsEnabled = false;
             await db.SaveChangesAsync();
         }
 
         Assert.All(harness.Source.Subscriptions, s => Assert.False(s.Stopped.Task.IsCompleted));
+
         await harness.Manager.StopProjectAsync(harness.Target.ProjectId);
+
         Assert.All(harness.Source.Subscriptions, s => Assert.True(s.Stopped.Task.IsCompletedSuccessfully));
         Assert.False(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
+
         await using var check = harness.Services.CreateAsyncScope();
+
         Assert.Equal(DeploymentStatus.Running,
             (await check.ServiceProvider.GetRequiredService<AutoMateDbContext>().Deployments.SingleAsync()).Status);
     }
@@ -146,9 +170,11 @@ public sealed class LocalDiagnosticSupervisionTests
     public async Task Completed_log_source_is_retried_while_metrics_continue()
     {
         await using var harness = await Harness.CreateAsync(true);
+
         harness.Source.FailFirstLog = true;
         await harness.Manager.RegisterAsync(harness.Target, false);
         await harness.Source.LogRestarted.Task.WaitAsync(TimeSpan.FromSeconds(8));
+
         Assert.Single(harness.Source.Subscriptions, s => s.Kind == "metrics");
         Assert.Equal(2, harness.Source.Subscriptions.Count(s => s.Kind == "logs"));
         Assert.True(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
@@ -202,6 +228,7 @@ public sealed class LocalDiagnosticSupervisionTests
         {
             var connection = "Data Source=supervisor-" + Guid.NewGuid().ToString("N") + ";Mode=Memory;Cache=Shared";
             var keeper = new SqliteConnection(connection);
+
             await keeper.OpenAsync();
             var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
             var source = new TestSource();
@@ -212,9 +239,11 @@ public sealed class LocalDiagnosticSupervisionTests
                 .BuildServiceProvider();
             var target = new DockerDeploymentTarget(Guid.NewGuid(), Guid.NewGuid(), "sample",
                 [new DockerContainerTarget("sample-web", "web")], DateTimeOffset.UtcNow);
+
             await using (var scope = services.CreateAsyncScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+
                 await db.Database.EnsureCreatedAsync();
                 db.Deployments.Add(new Deployment
                 {
@@ -240,7 +269,9 @@ public sealed class LocalDiagnosticSupervisionTests
 
             var manager = new LocalDeploymentLogStreamManager(services.GetRequiredService<IServiceScopeFactory>(),
                 NullLogger<LocalDeploymentLogStreamManager>.Instance);
+
             await manager.StartAsync(CancellationToken.None);
+
             return new Harness(services, keeper, target, source, manager);
         }
     }
@@ -299,7 +330,9 @@ public sealed class LocalDiagnosticSupervisionTests
             CancellationToken cancellationToken)
         {
             var task = RunAsync("daemon", cancellationToken);
+
             subscribed();
+
             return task;
         }
 
@@ -327,7 +360,9 @@ public sealed class LocalDiagnosticSupervisionTests
             CancellationToken cancellationToken)
         {
             var task = RunAsync("metrics", cancellationToken);
+
             RuntimeStarted.TrySetResult();
+
             return task;
         }
 
@@ -341,6 +376,7 @@ public sealed class LocalDiagnosticSupervisionTests
         private async Task RunAsync(string kind, CancellationToken token)
         {
             var subscription = new Subscription(kind);
+
             Subscriptions.Enqueue(subscription);
             if (kind == "logs" && Subscriptions.Count(s => s.Kind == "logs") > 1) LogRestarted.TrySetResult();
             if (kind == "logs" && FailFirstLog)

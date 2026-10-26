@@ -40,12 +40,14 @@ public sealed class TelemetryAdmissionPolicy(IServiceScopeFactory scopes) : IDis
         if (_cache.TryGetValue(key, out TelemetryProjectPolicy? value)) return value;
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        value = await db.Applications.AsNoTracking().Where(p => p.Id == project &&
-                                                                (deployment == null || db.Deployments.Any(d =>
-                                                                    d.Id == deployment &&
-                                                                    d.CsProject!.AppId == project)))
+        value = await db.Applications
+            .AsNoTracking()
+            .Where(p => p.Id == project
+                        && (deployment == null || db.Deployments
+                            .Any(d => d.Id == deployment && d.CsProject!.AppId == project)))
             .Select(p => new TelemetryProjectPolicy(p.UserId, true, true))
             .SingleOrDefaultAsync(token);
+
         _cache.Set(key, value,
             new MemoryCacheEntryOptions { Size = 1, AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5) });
         return value;

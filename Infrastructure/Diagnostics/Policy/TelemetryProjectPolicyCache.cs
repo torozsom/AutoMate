@@ -47,9 +47,15 @@ public sealed class TelemetryProjectPolicyCache(IServiceScopeFactory scopes) : I
     {
         if (_cache.TryGetValue(project, out TelemetryProjectPolicy? value)) return value;
         await using var scope = scopes.CreateAsyncScope();
-        value = await scope.ServiceProvider.GetRequiredService<AutoMateDbContext>().Applications.AsNoTracking()
-            .Where(p => p.Id == project).Select(p => new TelemetryProjectPolicy(p.UserId,
-                true, true)).SingleOrDefaultAsync(token);
+
+        value = await scope.ServiceProvider
+            .GetRequiredService<AutoMateDbContext>().Applications
+            .AsNoTracking()
+            .Where(p => p.Id == project)
+            .Select(p => new TelemetryProjectPolicy(p.UserId,
+                true, true))
+            .SingleOrDefaultAsync(token);
+
         _cache.Set(project, value,
             new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(5), Size = 1 });
         return value;

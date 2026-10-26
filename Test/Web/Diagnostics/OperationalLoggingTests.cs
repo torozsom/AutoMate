@@ -61,6 +61,7 @@ public sealed class OperationalLoggingTests
         var deployment = Guid.NewGuid();
         var analysis = Guid.NewGuid();
         using var activity = new Activity("fixture").SetIdFormat(ActivityIdFormat.W3C).Start();
+
         using (OperationalLog.BeginCorrelation(logger, deployment, analysis))
         {
             OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.InvalidResult);
@@ -74,8 +75,10 @@ public sealed class OperationalLoggingTests
         Assert.Equal(activity.TraceId, record.TraceId);
         Assert.Null(record.Exception);
         Assert.Equal(1003, record.EventId.Id);
+
         exporter.Fail = true;
         OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Completed);
+
         Assert.Equal(2, exporter.Records.Count);
         Assert.Empty(exporter.Records.Last().Scopes);
     }
@@ -96,23 +99,28 @@ public sealed class OperationalLoggingTests
     {
         using var exporter = new SnapshotExporter();
         var authentication = DispatchProxy.Create<IAuthenticationService, PortProxy>();
+
         ((PortProxy)authentication).Call = (method, args) =>
         {
             ((HttpContext)args![0]!).Response.StatusCode = method!.Name == "ChallengeAsync" ? 401 : 403;
+
             return Task.CompletedTask;
         };
         await using var services = new ServiceCollection().AddSingleton(authentication)
             .AddLogging(logging => logging.AddOpenTelemetry(options =>
                 options.AddProcessor(new SimpleLogRecordExportProcessor(exporter)))).BuildServiceProvider();
         var context = new DefaultHttpContext { RequestServices = services };
+
         context.Request.QueryString = new QueryString("?token=private-query");
         context.Request.Headers.Authorization = "Bearer private-credential";
         var handler =
             new SecurityAuditResultHandler(services.GetRequiredService<ILogger<SecurityAuditResultHandler>>());
         var nextCalled = false;
+
         await handler.HandleAsync(_ =>
             {
                 nextCalled = true;
+
                 return Task.CompletedTask;
             }, context,
             new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build(), result switch
@@ -121,8 +129,10 @@ public sealed class OperationalLoggingTests
                 "forbid" => PolicyAuthorizationResult.Forbid(),
                 _ => PolicyAuthorizationResult.Success()
             });
+
         Assert.Equal(status, context.Response.StatusCode);
         Assert.Equal(result == "success", nextCalled);
+
         if (outcome is null)
         {
             Assert.Empty(exporter.Records);
@@ -147,9 +157,11 @@ public sealed class OperationalLoggingTests
     {
         using var exporter = new SnapshotExporter();
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
+
         ((PortProxy)store).Call = (_, _) =>
             Task.FromException<long>(new InvalidOperationException("password=private-storage-body"));
         var live = DispatchProxy.Create<ILogStreamer, PortProxy>();
+
         ((PortProxy)live).Call = (_, _) => Task.CompletedTask;
         await using var services = new ServiceCollection().AddSingleton(store).AddSingleton(live)
             .AddSingleton(Options.Create(new TelemetryStorageOptions
@@ -169,6 +181,7 @@ public sealed class OperationalLoggingTests
             factory.CreateLogger<DeploymentDiagnosticDispatcher>());
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
+
         await worker.StartAsync(CancellationToken.None);
         try
         {
@@ -177,6 +190,7 @@ public sealed class OperationalLoggingTests
                 DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
                 "password=private-terminal-body", new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build)));
             await exporter.Warning.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
             var record = Assert.Single(exporter.Records, item => item.Level == LogLevel.Warning);
             Assert.Null(record.Exception);
             Assert.DoesNotContain("private", record.Message!);
@@ -207,15 +221,19 @@ public sealed class OperationalLoggingTests
         var delivered =
             new TaskCompletionSource<DeploymentTerminalLog>(TaskCreationOptions.RunContinuationsAsynchronously);
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
+
         ((PortProxy)store).Call = (_, args) =>
         {
             persisted.TrySetResult((DeploymentDiagnosticEvent)args![0]!);
+
             return Task.FromResult(1L);
         };
         var live = DispatchProxy.Create<ILogStreamer, PortProxy>();
+
         ((PortProxy)live).Call = (_, args) =>
         {
             delivered.TrySetResult((DeploymentTerminalLog)args![0]!);
+
             return Task.CompletedTask;
         };
         await using var services = new ServiceCollection().AddSingleton(store).AddSingleton(live)
@@ -242,12 +260,14 @@ public sealed class OperationalLoggingTests
             DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
             "private-terminal-body password=private-value",
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Build));
+
         await worker.StartAsync(CancellationToken.None);
         try
         {
             await publisher.PublishAsync(observation);
             var saved = await persisted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var terminal = await delivered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
             Assert.Equal("private-terminal-body password=[REDACTED]", saved.Message);
             Assert.Equal(saved.Message, terminal.Message);
             Assert.Equal(observation.ProjectId, terminal.ProjectId);
@@ -258,6 +278,7 @@ public sealed class OperationalLoggingTests
         }
 
         var exported = JsonSerializer.Serialize(exporter.Records);
+
         Assert.DoesNotContain("private-terminal-body", exported);
         Assert.DoesNotContain("private-value", exported);
         Assert.DoesNotContain("DiagnosticMessage", exported);
@@ -277,11 +298,13 @@ public sealed class OperationalLoggingTests
     {
         using var exporter = new SnapshotExporter();
         var auth = DispatchProxy.Create<IAuthService, PortProxy>();
+
         ((PortProxy)auth).Call = (method, args) =>
         {
             Assert.Equal("LoginAsync", method!.Name);
             Assert.Equal("private-email@example.invalid", args![0]);
             Assert.Equal("private-password", args[1]);
+
             return Task.FromResult<(LocalUser?, string?)>(accepted
                 ? (
                     new LocalUser
@@ -290,6 +313,7 @@ public sealed class OperationalLoggingTests
                 : (null, "private-auth-error"));
         };
         var builder = WebApplication.CreateBuilder();
+
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
         builder.Logging.AddOpenTelemetry(options =>
@@ -302,6 +326,7 @@ public sealed class OperationalLoggingTests
         builder.Services.AddAuthorization();
         builder.Services.AddAntiforgery();
         await using var app = builder.Build();
+
         app.UseAuthentication();
         app.UseAuthorization();
         app.UseAntiforgery();
@@ -320,6 +345,7 @@ public sealed class OperationalLoggingTests
                 ["password"] = "private-password",
                 ["__RequestVerificationToken"] = token
             }));
+
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal(accepted ? "/" : "/login?error=private-auth-error", response.Headers.Location!.OriginalString);
         Assert.Equal(accepted, response.Headers.Contains("Set-Cookie"));
@@ -346,10 +372,12 @@ public sealed class OperationalLoggingTests
         var notifier = new DeploymentStatusNotifier(factory.CreateLogger<DeploymentStatusNotifier>());
         var projectId = Guid.NewGuid();
         var delivered = false;
+
         notifier.OnStatusChanged += (_, _) => throw new InvalidOperationException("private-circuit-token");
         notifier.OnStatusChanged += (id, status) =>
             delivered = id == projectId && status == DeploymentStatus.Failed;
         notifier.NotifyStatusChanged(projectId, DeploymentStatus.Failed);
+
         Assert.True(delivered);
         var warning = Assert.Single(exporter.Records);
         Assert.Equal(projectId, warning.Attributes["ProjectId"]);
@@ -383,14 +411,17 @@ public sealed class OperationalLoggingTests
             ? new OperationCanceledException("private-cache-password")
             : new IOException("private-cache-password", new Exception("private-inner-token"));
         var cache = DispatchProxy.Create<IDistributedCache, PortProxy>();
+
         ((PortProxy)cache).Call = (method, _) =>
         {
             if (method!.Name == (write ? "SetAsync" : "GetAsync")) throw failure;
+
             return method.Name == "GetAsync" ? Task.FromResult<byte[]?>(null) : Task.CompletedTask;
         };
         using var handler = new RepositoryHandler();
         using var client = new HttpClient(handler);
         var service = new GitHubService(client, cache, factory.CreateLogger<GitHubService>());
+
         if (canceled && !write)
         {
             var thrown = await Assert.ThrowsAsync<OperationCanceledException>(() =>
@@ -401,6 +432,7 @@ public sealed class OperationalLoggingTests
         else
         {
             var repositories = await service.GetUserRepositoriesAsync("private-access-token", false);
+
             Assert.Equal(canceled ? 0 : 1, repositories.Count);
             Assert.Equal(1, handler.Calls);
         }
@@ -431,6 +463,7 @@ public sealed class OperationalLoggingTests
             options.AddProcessor(new SimpleLogRecordExportProcessor(exporter));
         }));
         var cache = DispatchProxy.Create<IDistributedCache, PortProxy>();
+
         ((PortProxy)cache).Call = (_, _) => Task.FromResult<byte[]?>(null);
         using var handler = new RepositoryHandler
         {
@@ -438,6 +471,7 @@ public sealed class OperationalLoggingTests
         };
         using var client = new HttpClient(handler);
         var service = new GitHubService(client, cache, factory.CreateLogger<GitHubService>());
+
         Assert.Empty(await service.GetUserRepositoriesAsync("private-access-token", false));
         var error = Assert.Single(exporter.Records, record => record.Level == LogLevel.Error);
         Assert.Equal(nameof(HttpRequestException), error.Attributes["FailureType"]);
@@ -468,6 +502,7 @@ public sealed class OperationalLoggingTests
         {
             Calls++;
             if (Failure is not null) throw Failure;
+
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""[{"id":42,"name":"fixture"}]""",
@@ -530,6 +565,7 @@ internal sealed class SnapshotExporter : BaseExporter<LogRecord>
         foreach (var log in batch)
         {
             var scopes = new Dictionary<string, object?>();
+
             log.ForEachScope((scope, state) =>
             {
                 foreach (var pair in scope) state[pair.Key] = pair.Value;

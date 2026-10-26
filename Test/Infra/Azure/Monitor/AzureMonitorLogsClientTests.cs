@@ -21,10 +21,12 @@ public sealed class AzureMonitorLogsClientTests
     public async Task Query_preserves_delayed_event_time_and_equal_ingestion_hash_cursor()
     {
         var ingestion = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+
         var client = new AzureMonitorLogsClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(request =>
         {
             var query = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult()).RootElement
                 .GetProperty("query").GetString()!;
+
             Assert.Contains("IngestedAt > datetime", query);
             Assert.Contains("strcmp(CursorHash, 'hash-a') > 0", query);
             Assert.Contains("order by IngestedAt asc, CursorHash asc", query);
@@ -33,14 +35,18 @@ public sealed class AzureMonitorLogsClientTests
             Assert.Contains("1microsecond", query);
             Assert.Contains("EnvironmentName_s", query);
             Assert.Contains("'verified-env'", query);
+
             return DelegateHttpMessageHandler.Json("""
                                                    {"tables":[{"columns":[{"name":"TimeGenerated"},{"name":"IngestedAt"},{"name":"Message"},{"name":"CursorHash"}],"rows":[["2026-10-10T09:00:00Z","2026-10-10T11:00:00Z","delayed","hash-b"]]}]}
                                                    """);
         })));
+
         var result = await client.QueryAsync("/subscriptions/sub/providers/Microsoft.App/managedEnvironments/env",
             "token",
-            AzureContainerAppLogSource.Console, "app", ingestion.AddMinutes(-1), 10, default, "rev", ingestion,
+            AzureContainerAppLogSource.Console, "app", ingestion.AddMinutes(-1), 10, CancellationToken.None, "rev",
+            ingestion,
             "hash-a", "verified-env", "arm-env");
+
         var record = Assert.Single(result.Records);
         Assert.Equal(ingestion.AddHours(-2), record.TimestampUtc);
         Assert.Equal(ingestion, record.IngestionTimestampUtc);
@@ -60,6 +66,7 @@ public sealed class AzureMonitorLogsClientTests
         {
             sentRequest = request;
             sentBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+
             return DelegateHttpMessageHandler.Json("""
                                                    { "tables": [{ "columns": [
                                                      { "name": "TimeGenerated" }, { "name": "Message" }, { "name": "ContainerName" },
@@ -112,7 +119,8 @@ public sealed class AzureMonitorLogsClientTests
         var client = new AzureMonitorLogsClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(_ =>
             DelegateHttpMessageHandler.Json("""{"tables": [], "error": {"message": "secret-provider-detail"}}"""))));
         var result = await client.QueryAsync("/subscriptions/sub/providers/Microsoft.App/managedEnvironments/env",
-            "token", AzureContainerAppLogSource.Console, "app", DateTimeOffset.UtcNow, 10, default);
+            "token", AzureContainerAppLogSource.Console, "app", DateTimeOffset.UtcNow, 10, CancellationToken.None);
+
         Assert.False(result.IsSuccess);
         Assert.Empty(result.Records);
         Assert.DoesNotContain("secret-provider-detail", result.FailureReason);

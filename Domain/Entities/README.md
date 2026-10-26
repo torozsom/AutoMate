@@ -1,91 +1,36 @@
-# Entities
+# Persisted domain models
 
-`AiAnalysisBudgetEntry` stores owner-account admission/attempt accounting independently of project/deployment/result
-lifetime. It holds analysis/lease IDs, kind, accounting day/time and conservative integer monetary reservation/currency.
-Only account deletion cascades. It contains no diagnostic payload or provider response. Ninety-day bounded retention
-is implemented in Infrastructure; these reservations do not assert provider billing or actual model cost.
+Business state for accounts, projects, deployment history, durable cloud execution, diagnostics and AI analysis.
 
-Persisted business entities with no EF Core or transport dependencies.
+## Contents
 
-## Source inventory
+| File or module                       | Responsibility                                                        |
+|--------------------------------------|-----------------------------------------------------------------------|
+| [BaseEntity.cs](BaseEntity.cs)       | BaseEntity: generated GUID identity and creation/update audit fields. |
+| [Ai](Ai/README.md)                   | Results, receipts, budgets, queue leases and failure wakeups.         |
+| [Cloud](Cloud/README.md)             | Durable SaaS launches, outbox wakeups, webhooks and cooldowns.        |
+| [Deployments](Deployments/README.md) | Launch history, snapshots and archive cleanup.                        |
+| [Diagnostics](Diagnostics/README.md) | Collector progress, legacy storage and telemetry metadata.            |
+| [Projects](Projects/README.md)       | Application/C# project hierarchy and saved configuration.             |
+| [Users](Users/README.md)             | Local/remote accounts and connected-provider credentials.             |
 
-- `Projects/Application.cs`
-- `Diagnostics/AzureContainerAppLogCheckpoint.cs`
-- `BaseEntity.cs`
-- `Projects/Configuration.cs`
-- `Projects/CsProject.cs`
-- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`,
-  `Cloud/CloudInstallationBudget.cs` — SaaS
-  control-plane state, verified webhook inbox, and installation cooldowns.
-- `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudRunOutbox.cs`, `Cloud/CloudWebhookDelivery.cs`,
-  `Cloud/CloudInstallationBudget.cs` — SaaS
-  control-plane state, verified webhook inbox, and installation cooldowns.
-- `Deployments/Deployment.cs`
-- `Diagnostics/GitHubWorkflowCheckpoint.cs`
-- `Diagnostics/GitHubWorkflowJobCheckpoint.cs`
-- `Users/LocalUser.cs`
-- `Users/RemoteUser.cs`
-- `Users/User.cs`
+## Usage and integration
 
-## Boundary
+Navigate the child guides for models and consumers. [AutoMateDbContext](../../Infrastructure/Data/AutoMateDbContext.cs)
+exposes DbSets and save-time audit
+handling. [AutoMateModelConfiguration](../../Infrastructure/Data/AutoMateModelConfiguration.cs) owns indexes,
+relationships, subtype mappings and protected-value conversions.
 
-Keep this module independent of Application, Infrastructure, Web, framework APIs, and provider SDKs.
+## Contracts and lifecycle
+
+BaseEntity assigns a new GUID on construction; the data layer supplies CreatedAt and UpdatedAt during saves. Several
+metadata models intentionally use domain-specific keys instead of BaseEntity. Navigation properties describe
+relationships; they do not load data, authorize callers or enforce database constraints by themselves. Keep EF Core and
+provider behavior outside Domain.
 
 ## Related documentation
 
-- [Solution navigation map](../../navigation.md)
-
-`Diagnostics/TelemetryTenantState.cs` owns provider-neutral leases, rate windows and bounded loss/series state.
-Application runtime
-and managed-storage flags default to true and remain temporary compatibility fields. Diagnostic collection and approved
-storage are automatic; AI egress consent remains separate.
-
-`AiDeploymentAnalysis` stores validated/redacted analysis guidance with optional requested/returned model provenance,
-explicit model revision, prompt/result schema versions, token counts and decimal cost/currency metadata. Legacy optional
-metadata remains null. It holds analysis results, not new diagnostic log or metric payloads.
-
-DeploymentAnalysisWorkItem stores analysis identity, latest claim time, nullable lease token/expiry, acquisition count
-and terminal completion time. It contains no diagnostic context, log payloads or metric samples.
-
-DeploymentAnalysisWorkItem additionally stores ProviderRetryCount and nullable NextAttemptAt. A scheduled retry resets
-AttemptCount for its separately bounded interruption recovery. These are queue scheduling metadata, never payloads.
-
-Owner cancellation preserves analysis identity/timestamps, marks its state Cancelled and atomically retires unfinished
-work by completing it and clearing lease/future retry metadata. Deployment state and diagnostic history are unchanged.
-
-AiAnalysisRequest holds metadata-only admission receipts: project/deployment/analysis GUIDs, bounded request key, UTC
-admission day, ConsumesQuota and ninety-day expiry. Only Project has a cascading foreign key. Result/deployment deletion
-therefore preserves quota/idempotency history; project deletion removes it. Context, result text and payloads are
-excluded.
-
-FailedDeploymentAnalysisEvent stores only DeploymentId (primary key/FK), CreatedAt and nullable CompletedAt. Database
-capture creates at most one marker per deployment; completion survives result/receipt retention and deletion. Deployment
-deletion cascades the marker. It contains neither diagnostic context nor log/metric samples.
-
-## Deployment history update (2026-10-08)
-
-Deployment records own non-secret configuration snapshots, resolved artifacts, an outcome independent of runtime status,
-and completion time. Legacy snapshots remain absent. DeploymentArchiveCleanup is a durable deletion outbox without
-foreign keys to deleted owners.
-
-Azure runtime checkpoints also support hashed managed-database source identities; rows contain cursor metadata only,
-with no database connection strings or log content. Deployment/source uniqueness remains unchanged.
-Nullable ingestion timestamp/hash fields distinguish delayed arrivals from event time; apply AzureLogIngestionCursors
-without clearing existing cursor rows or archived history.
-
-## Folder organization
-
-Folders group related files while retaining the module's existing .NET namespaces and public contracts.
-
-- `Ai/` — `Ai/AiAnalysisBudgetEntry.cs`, `Ai/AiAnalysisRequest.cs`, `Ai/AiDeploymentAnalysis.cs`,
-  `Ai/DeploymentAnalysisWorkItem.cs`, `Ai/FailedDeploymentAnalysisEvent.cs`.
-- `Cloud/` — `Cloud/CloudDeploymentRun.cs`, `Cloud/CloudInstallationBudget.cs`, `Cloud/CloudRunOutbox.cs`,
-  `Cloud/CloudWebhookDelivery.cs`.
-- `Deployments/` — `Deployments/Deployment.cs`, `Deployments/DeploymentConfigurationSnapshot.cs`,
-  `Deployments/DeploymentArchiveCleanup.cs`.
-- `Diagnostics/` — `Diagnostics/AzureContainerAppLogCheckpoint.cs`, `Diagnostics/GitHubWorkflowCheckpoint.cs`,
-  `Diagnostics/GitHubWorkflowJobCheckpoint.cs`, `Diagnostics/DeploymentDailyTelemetry.cs`,
-  `Diagnostics/DeploymentDiagnosticRecord.cs`, `Diagnostics/DeploymentDiagnosticSnapshot.cs`,
-  `Diagnostics/TelemetryTenantState.cs`.
-- `Projects/` — `Projects/Application.cs`, `Projects/Configuration.cs`, `Projects/CsProject.cs`.
-- `Users/` — `Users/User.cs`, `Users/LocalUser.cs`, `Users/RemoteUser.cs`.
+- [Domain](../README.md)
+- [Persistence guide](../../Infrastructure/Data/README.md)
+- [Workflow DTOs](../DTO/README.md)
+- [Shared enums](../Enums/README.md)

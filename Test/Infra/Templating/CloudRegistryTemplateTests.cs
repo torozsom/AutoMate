@@ -25,6 +25,7 @@ public sealed class CloudRegistryTemplateTests
             new DeploymentConfigDto { IsCloudDeployment = true, ProjectName = "app", CloudRegistryName = registry },
             new ProjectMetadataDto { DotNetVersion = "10.0", IsWebProject = true }, "app", ".");
         var workflow = files.Single(f => f.Path == ".github/workflows/deploy.yml").Content;
+
         workflow.Should().Contain("Start deployed container app")
             .And.Contain("/start?api-version=2025-07-01")
             .And.Contain("--only-show-errors --output none");
@@ -51,6 +52,7 @@ public sealed class CloudRegistryTemplateTests
 
         var workflow = files.Single(item => item.Path == ".github/workflows/deploy.yml").Content;
         var bicep = files.Single(item => item.Path == "infra/main.bicep").Content;
+
         workflow.Should().Contain("az acr login --name customer");
         workflow.Should().Contain("customer.azurecr.io/sample-web");
         workflow.Should().Contain("AZURE_ACR_PULL_IDENTITY_ID");
@@ -86,12 +88,16 @@ public sealed class CloudRegistryTemplateTests
             new ProjectMetadataDto { DotNetVersion = "10.0", IsWebProject = true }, "app", ".");
         var bicep = files.Single(f => f.Path == "infra/main.bicep").Content;
         var root = new DirectoryInfo(AppContext.BaseDirectory);
+
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "AutoMate.slnx"))) root = root.Parent;
         var directory = Path.Combine(root!.FullName, ".artifacts", "azure-runtime");
+
         Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(Path.Combine(directory, type + ".bicep"), bicep);
+
         bicep.Should().Contain("'automate-project-id': '" + project.ToString("N") + "'")
             .And.Contain("tags: telemetryTags").And.NotContain("categoryGroup: 'allLogs'");
+
         if (type is "MySQL" or "Redis") bicep.Should().NotContain("diagnosticSettings");
         else
             bicep.Should().Contain("scope: " + scope).And.Contain("workspaceId: logAnalytics.id")

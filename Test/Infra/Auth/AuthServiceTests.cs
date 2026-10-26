@@ -26,19 +26,24 @@ public sealed class AuthServiceTests
     public async Task Registration_delivery_compensation_and_verification_boundary(bool failEmail)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         await using var db = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
+
         await db.Database.EnsureCreatedAsync();
         var clock = new Clock();
         var email = new Email(db, failEmail);
         var auth = new AuthService(db, email, new PasswordHasher<LocalUser>(), NullLogger<AuthService>.Instance, clock);
+
         Assert.Equal(!failEmail, await auth.RegisterAsync("fixture", " OWNER@example.invalid ", "synthetic-password",
             token => "https://example.invalid/verify/" + token));
         Assert.Equal(1, email.AccountsDuringDelivery);
+
         if (failEmail)
         {
             Assert.Empty(await db.Users.ToListAsync());
+
             return;
         }
 
@@ -47,7 +52,9 @@ public sealed class AuthServiceTests
         Assert.Equal(clock.Now.AddHours(24), user.VerificationTokenExpiry);
         Assert.Equal("Email not verified", (await auth.LoginAsync(user.Email, "synthetic-password")).ErrorMessage);
         Assert.Equal("Invalid credentials", (await auth.LoginAsync(user.Email, "wrong-password")).ErrorMessage);
+
         clock.Now = user.VerificationTokenExpiry!.Value;
+
         Assert.True(await auth.VerifyEmailAsync(user.EmailVerificationToken!));
         Assert.Null(user.EmailVerificationToken);
         Assert.Null(user.VerificationTokenExpiry);
@@ -77,7 +84,9 @@ public sealed class AuthServiceTests
             CancellationToken cancellationToken = default)
         {
             AccountsDuringDelivery = await db.Users.CountAsync(cancellationToken);
+
             Assert.Contains("https://example.invalid/verify/", message);
+
             if (fail) throw new IOException("synthetic-delivery-failure");
         }
     }

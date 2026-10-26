@@ -39,8 +39,10 @@ public sealed class DeploymentAnalysisRetentionService(
             try
             {
                 await using var scope = scopes.CreateAsyncScope();
+
                 var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
                 var removed = 0;
+
                 for (var batch = 0; batch < 10; batch++)
                 {
                     var count = await DeleteBatchAsync(db, clock.GetUtcNow(), stoppingToken);
@@ -85,14 +87,27 @@ public sealed class DeploymentAnalysisRetentionService(
     /// <returns>A task returning the numeric position, count or status described by this operation.</returns>
     internal static async Task<int> DeleteBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
-        var expiredWork = db.AiDeploymentAnalyses.Where(item => item.RetainUntilDeleted && item.ExpiresAt <= now &&
-                                                                (item.Status == AiAnalysisStatus.Queued ||
-                                                                 item.Status == AiAnalysisStatus.Running));
-        await expiredWork.OrderBy(item => item.ExpiresAt).Take(BatchSize).ExecuteUpdateAsync(update => update
-            .SetProperty(item => item.Status, AiAnalysisStatus.Cancelled)
-            .SetProperty(item => item.CompletedAt, now), token);
-        return await db.AiDeploymentAnalyses.Where(item => item.ExpiresAt <= now && !item.RetainUntilDeleted)
-            .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
+        var expiredWork = db.AiDeploymentAnalyses
+            .Where(item => item.RetainUntilDeleted
+                           && item.ExpiresAt <= now
+                           && (item.Status == AiAnalysisStatus.Queued
+                               || item.Status == AiAnalysisStatus.Running));
+
+        await expiredWork
+            .OrderBy(item => item.ExpiresAt)
+            .Take(BatchSize)
+            .ExecuteUpdateAsync(update => update
+                .SetProperty(item => item.Status, AiAnalysisStatus.Cancelled)
+                .SetProperty(item => item.CompletedAt, now), token);
+
+        return await db.AiDeploymentAnalyses
+            .Where(item =>
+                item.ExpiresAt <= now
+                && !item.RetainUntilDeleted)
+            .OrderBy(item => item.ExpiresAt)
+            .ThenBy(item => item.Id)
+            .Take(BatchSize)
+            .ExecuteDeleteAsync(token);
     }
 
     /// <summary>
@@ -105,8 +120,12 @@ public sealed class DeploymentAnalysisRetentionService(
     /// <returns>A task returning the numeric position, count or status described by this operation.</returns>
     internal static Task<int> DeleteRequestBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
-        return db.AiAnalysisRequests.Where(item => item.ExpiresAt <= now)
-            .OrderBy(item => item.ExpiresAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
+        return db.AiAnalysisRequests
+            .Where(item => item.ExpiresAt <= now)
+            .OrderBy(item => item.ExpiresAt)
+            .ThenBy(item => item.Id)
+            .Take(BatchSize)
+            .ExecuteDeleteAsync(token);
     }
 
     /// <summary>
@@ -117,9 +136,13 @@ public sealed class DeploymentAnalysisRetentionService(
     /// <param name="now">The current time used for window validation or duration calculation.</param>
     /// <param name="token">Cancels the underlying operation when observed.</param>
     /// <returns>A task returning the numeric position, count or status described by this operation.</returns>
-    internal static Task<int> DeleteBudgetBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
+    private static Task<int> DeleteBudgetBatchAsync(AutoMateDbContext db, DateTimeOffset now, CancellationToken token)
     {
-        return db.AiAnalysisBudgetEntries.Where(item => item.OccurredAt < now.AddDays(-90))
-            .OrderBy(item => item.OccurredAt).ThenBy(item => item.Id).Take(BatchSize).ExecuteDeleteAsync(token);
+        return db.AiAnalysisBudgetEntries
+            .Where(item => item.OccurredAt < now.AddDays(-90))
+            .OrderBy(item => item.OccurredAt)
+            .ThenBy(item => item.Id)
+            .Take(BatchSize)
+            .ExecuteDeleteAsync(token);
     }
 }

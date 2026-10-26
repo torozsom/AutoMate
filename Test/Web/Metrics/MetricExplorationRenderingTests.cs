@@ -28,19 +28,24 @@ public sealed class MetricExplorationRenderingTests
             .AddSingleton<IJSRuntime>(DispatchProxy.Create<IJSRuntime, ConsoleRenderingTests.EmptyPort>())
             .BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
+
         await renderer.Dispatcher.InvokeAsync(async () =>
         {
             var picker = (await renderer.RenderComponentAsync<MetricRangePicker>()).ToHtmlString();
+
             foreach (var value in new[] { "10m", "30m", "1h", "6h", "24h", "7d", "30d", "90d", "1y", "5y", "custom" })
                 Assert.Contains($"value=\"{value}\"", picker);
             var end = DateTimeOffset.UtcNow.AddSeconds(-1);
             var range = new MetricTimeRange(end.AddMinutes(-30), end);
-            var rows = Enumerable.Range(0, 40).Select(i => new MetricObservation(Guid.NewGuid(), Guid.NewGuid(),
-                "web-" + i, TelemetryPresentation.Cpu, "cores", range.Start.AddMinutes(i % 20),
-                1, .5, .1, .9)).ToArray();
+            var rows = Enumerable.Range(0, 40)
+                .Select(i => new MetricObservation(Guid.NewGuid(), Guid.NewGuid(),
+                    "web-" + i, TelemetryPresentation.Cpu, "cores", range.Start.AddMinutes(i % 20),
+                    1, .5, .1, .9))
+                .ToArray();
             var root = await renderer.RenderComponentAsync<MetricStatisticsView>(ParameterView.FromDictionary(
                 new Dictionary<string, object?> { ["Data"] = rows, ["Range"] = range }));
             var html = root.ToHtmlString();
+
             Assert.Equal(25, Regex.Matches(html, "<tr><td>").Count);
             Assert.Equal(20, Regex.Matches(html, "class=\"telemetry-point\"").Count);
             Assert.Contains("Page 1 of 2", html);
@@ -58,6 +63,7 @@ public sealed class MetricExplorationRenderingTests
     {
         var published = new List<MetricTimeRange>();
         var picker = new MetricRangePicker();
+
         ParameterView.FromDictionary(new Dictionary<string, object?>
             {
                 ["Changed"] =
@@ -65,20 +71,28 @@ public sealed class MetricExplorationRenderingTests
             })
             .SetParameterProperties(picker);
         var end = DateTimeOffset.UtcNow.AddMinutes(-1).UtcDateTime;
+
         Set("_choice", "custom");
         Set("_end", end);
         Set("_start", end.AddMinutes(-4));
         await Apply();
+
         Assert.Empty(published);
+
         Set("_start", end.AddMinutes(-5));
         await Apply();
+
         Assert.Single(published);
         Assert.Null(Get("_notice"));
         Assert.Equal(TimeSpan.FromMinutes(5), published[0].End - published[0].Start);
+
         Set("_end", DateTime.UtcNow.AddHours(1));
         await Apply();
+
         Assert.Single(published);
+
         var lifetimeEnd = DateTimeOffset.UtcNow.AddDays(-1);
+
         ParameterView.FromDictionary(new Dictionary<string, object?>
         {
             ["LifetimeStart"] = lifetimeEnd.AddYears(-7),
@@ -86,6 +100,7 @@ public sealed class MetricExplorationRenderingTests
         }).SetParameterProperties(picker);
         Set("_choice", "lifetime");
         await Apply();
+
         Assert.Equal(lifetimeEnd.AddYears(-5), published[1].Start);
         Assert.Contains("truncated", (string)Get("_notice")!);
 

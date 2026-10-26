@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Application.Abstractions.Ai.Policy;
 using Application.Ai.Policy;
 using Domain.Enums.Ai;
@@ -10,6 +12,24 @@ namespace Test.Infra.Ai.Admission;
 /// </summary>
 public sealed class AnalysisEgressPolicyTests
 {
+    /// <summary>
+    ///     Explicit null approval lists from configuration deny egress without throwing.
+    /// </summary>
+    /// <param name="property">Approval collection replaced by null in the configuration payload.</param>
+    [Theory]
+    [InlineData("ApprovedRegions")]
+    [InlineData("ApprovedTenantIds")]
+    [InlineData("AllowedDataCategories")]
+    public void Null_approval_collections_fail_closed(string property)
+    {
+        var configuration = JsonNode.Parse(
+            JsonSerializer.Serialize(Approved(Guid.NewGuid())))!.AsObject();
+        configuration[property] = null;
+        var options = JsonSerializer.Deserialize<AiAnalysisOptions>(configuration.ToJsonString())!;
+
+        Assert.False(AnalysisEgressPolicy.IsConfigured(options));
+    }
+
     /// <summary>
     ///     Creates explicit synthetic approvals; these never enable any deployed environment.
     /// </summary>
@@ -112,10 +132,12 @@ public sealed class AnalysisEgressPolicyTests
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), model: "password=private-value")));
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), model: new string('x', 129))));
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), egressEnabled: false)));
+
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), regionalApproval: false)));
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), provider: null)));
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), provider: "unknown")));
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), approvedRegions: [])));
+
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), retentionDays: 91)));
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.Empty)));
         Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), false)));
@@ -179,6 +201,7 @@ public sealed class AnalysisEgressPolicyTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             onCheck?.Invoke();
+
             return Task.FromResult(allowed && deploymentId != Guid.Empty);
         }
     }

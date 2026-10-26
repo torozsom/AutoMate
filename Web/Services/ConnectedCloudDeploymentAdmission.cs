@@ -26,17 +26,25 @@ public sealed class ConnectedCloudDeploymentAdmission(ScopedApplicationOperation
     {
         var azure = await operations.RunAsync<IUserService, AzureCloudCredentialsDto?>(users =>
             users.GetAzureCloudCredentialsAsync(owner));
-        if (!isCurrent()) return new CloudDeploymentPreparation(CloudConnectionState.Obsolete);
+
+        if (!isCurrent())
+            return new CloudDeploymentPreparation(CloudConnectionState.Obsolete);
+
         if (enforceOwnerFence && azure is null)
             return new CloudDeploymentPreparation(CloudConnectionState.MissingAzure);
+
         var details = await operations.RunAsync<IUserService, AuthenticatedUserDetails>(users =>
             AuthenticatedUserResolver.GetCurrentUserDetailsAsync(authentication, users));
+
         if (!isCurrent() || (enforceOwnerFence && details.UserId != owner))
             return new CloudDeploymentPreparation(CloudConnectionState.Obsolete);
-        if (azure is null) return new CloudDeploymentPreparation(CloudConnectionState.MissingAzure);
-        if (string.IsNullOrWhiteSpace(details.AccessToken))
-            return new CloudDeploymentPreparation(CloudConnectionState.MissingGitHub);
-        return new CloudDeploymentPreparation(operations, owner, details.AccessToken, azure);
+
+        if (azure is null)
+            return new CloudDeploymentPreparation(CloudConnectionState.MissingAzure);
+
+        return string.IsNullOrWhiteSpace(details.AccessToken)
+            ? new CloudDeploymentPreparation(CloudConnectionState.MissingGitHub)
+            : new CloudDeploymentPreparation(operations, owner, details.AccessToken, azure);
     }
 }
 
@@ -119,6 +127,7 @@ public sealed class CloudDeploymentPreparation
     {
         if (State != CloudConnectionState.Ready)
             throw new InvalidOperationException("Cloud connections must be ready before admission.");
+
         return _operations!.RunAsync<CloudDeploymentAdmission, CloudDeploymentReceipt?>(admission =>
             admission.StartAsync(
                 new CloudDeploymentAdmissionRequest(_owner, config, repositoryOwner, repositoryName, projectName,

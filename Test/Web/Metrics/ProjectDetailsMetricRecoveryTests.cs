@@ -46,12 +46,14 @@ public sealed class ProjectDetailsMetricRecoveryTests
         for (var second = 1; second <= 5; second++)
         {
             Receive(restored.AddSeconds(second), second / 10d, 104857600 + second * 1048576);
+
             Assert.Equal(second / 10d, state["web"]["automate_cpu_usage_cores"].Average);
             Assert.Equal(restored.AddSeconds(second), state["web"]["automate_cpu_usage_cores"].Timestamp);
             Assert.Equal(104857600 + second * 1048576, state["web"]["automate_memory_used_bytes"].Average);
         }
 
         Receive(restored, 0.1, 104857600);
+
         Assert.Equal(0.5, state["web"]["automate_cpu_usage_cores"].Average);
         Assert.Equal(restored.AddSeconds(5), state["web"]["automate_memory_used_bytes"].Timestamp);
     }
@@ -66,6 +68,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         var apply = typeof(ProjectDetails).GetMethod("ApplyTypedMetrics",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
         var now = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+
         apply.Invoke(page,
         [
             "cosmos",
@@ -85,6 +88,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         ]);
         var state = (Dictionary<string, Dictionary<string, DeploymentMetricPoint>>)typeof(ProjectDetails)
             .GetField("_typedMetrics", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(page)!;
+
         var point = Assert.Single(state["cosmos"]).Value;
         Assert.Equal(42, point.Average);
         Assert.Equal(now, point.Timestamp);
@@ -100,6 +104,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
     {
         var page = new ProjectDetails();
         var deployment = new Deployment { Status = DeploymentStatus.Running };
+
         Field(page, "_app", new Domain.Entities.Projects.Application
         {
             Name = "fixture",
@@ -129,6 +134,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         var logger = new RecordingLogger();
         var page = new ProjectDetails();
         var deployment = new Deployment { Status = DeploymentStatus.Running };
+
         Field(page, "_app", new Domain.Entities.Projects.Application
         {
             Name = "fixture",
@@ -140,6 +146,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         Property(page, "ScopeFactory", services.GetRequiredService<IServiceScopeFactory>());
         Property(page, "Logger", logger);
         var pending = RecoverAsync(page);
+
         await proxy.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Field(page, "_analysisDisposed", true);
         await Cancellation(page).CancelAsync();
@@ -147,6 +154,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         if (failure) proxy.Result.SetException(new ObjectDisposedException("closed provider"));
         else proxy.Result.SetResult(new DeploymentMetricHistory([]));
         await pending;
+
         Assert.Empty(logger.Exceptions);
         Assert.Equal(1, proxy.Reads);
     }
@@ -230,6 +238,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
             if (method?.Name != nameof(IDeploymentHistoryService.ReadMetricsAsync)) throw new NotSupportedException();
             Reads++;
             Started.TrySetResult();
+
             return Result.Task;
         }
     }

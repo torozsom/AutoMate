@@ -58,6 +58,7 @@ public sealed class TelemetryPageRenderingTests
             .AddSingleton<IDeploymentDetailsService, FixtureDetails>()
             .AddSingleton(DispatchProxy.Create<IDeploymentAnalysisService, FixtureAssessments>())
             .AddSingleton<NavigationManager, FixtureNavigation>();
+
         foreach (var componentType in new[] { typeof(ProjectDetails), typeof(MainLayout), typeof(NavMenu) })
         foreach (var property in componentType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
                      .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
@@ -76,26 +77,35 @@ public sealed class TelemetryPageRenderingTests
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid(), ["UserId"] = Guid.NewGuid() });
         var history = await Render<DeploymentHistory>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid(), ["DeploymentId"] = Guid.NewGuid() });
+
         Assert.Contains("Per observed container", Regex.Replace(project, @"\s+", " "));
+
         var details = await Render<FixtureProject>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid() });
+
         Assert.Contains("Azure Databases", details);
         Assert.Contains("azure-db-term", details);
         Assert.Contains("aria-haspopup=\"dialog\"", details);
         Assert.DoesNotContain("id=\"ai-analysis\"", details);
         Assert.DoesNotContain("href=\"#ai-analysis\"", details);
+
         var analysisDialog = await Render<FixtureProject>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid(), ["AnalysisOpen"] = true });
+
         Assert.Contains("role=\"dialog\"", analysisDialog);
         Assert.Contains("assessment-context", analysisDialog);
+
         var anchors = new[]
             { "overview", "logs", "metrics", "analytics", "configuration", "deployments" };
         var previous = -1;
+
         foreach (var anchor in anchors)
         {
             var position = details.IndexOf($"id=\"{anchor}\"", StringComparison.Ordinal);
+
             Assert.True(position > previous);
             Assert.Contains($"href=\"#{anchor}\"", details);
+
             previous = position;
         }
 
@@ -111,13 +121,17 @@ public sealed class TelemetryPageRenderingTests
         Assert.Contains("Collection settings", history);
         Assert.DoesNotContain("<details open", history);
         Assert.DoesNotContain("E+", history);
+
         var root = FindRoot();
         var directory = Path.Combine(root, ".artifacts", "metrics-preview");
+
         Directory.CreateDirectory(directory);
-        var css = new[] { Path.Combine(root, "Web", "obj"), Path.Combine(root, ".artifacts") }.Where(Directory.Exists)
+        var css = new[] { Path.Combine(root, "Web", "obj"), Path.Combine(root, ".artifacts") }
+            .Where(Directory.Exists)
             .SelectMany(path => Directory.GetFiles(path, "Web.styles.css", SearchOption.AllDirectories))
             .Where(path => path.Replace('\\', '/').Contains("/scopedcss/bundle/"))
             .OrderByDescending(File.GetLastWriteTimeUtc).First();
+
         File.Copy(css, Path.Combine(directory, "Web.styles.css"), true);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
             Path.Combine(directory, "bootstrap.css"), true);
@@ -169,8 +183,10 @@ public sealed class TelemetryPageRenderingTests
     private static string FindRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "AutoMate.slnx")))
             directory = directory.Parent;
+
         return directory!.FullName;
     }
 
@@ -200,27 +216,32 @@ public sealed class TelemetryPageRenderingTests
                 SourcePathOrUrl = "https://github.com/example/history-demo",
                 CsProjects = [project]
             };
+
             project.Application = app;
-            project.Deployments = Enumerable.Range(0, 8).Select(i => new Deployment
-            {
-                CsProject = project,
-                CsProjectId = project.Id,
-                CreatedAt = DateTimeOffset.UtcNow.AddDays(-8 + i),
-                Status = i == 7 ? DeploymentStatus.Running : DeploymentStatus.Stopped,
-                Outcome = DeploymentOutcome.Succeeded,
-                CloudGitHubActionRunId = 42,
-                CloudAppUrl = "https://example.invalid",
-                ConfigurationSnapshotJson = JsonSerializer.Serialize(new DeploymentConfigurationSnapshot("Web",
-                    "Azure Container Apps",
-                    app.SourcePathOrUrl, "main", "abc123", "Production", "10.0", 8080, true,
-                    "swedencentral", "demo-rg", "demo-app", "demo.azurecr.io"))
-            }).ToList();
+            project.Deployments =
+            [
+                .. Enumerable.Range(0, 8).Select(i => new Deployment
+                {
+                    CsProject = project,
+                    CsProjectId = project.Id,
+                    CreatedAt = DateTimeOffset.UtcNow.AddDays(-8 + i),
+                    Status = i == 7 ? DeploymentStatus.Running : DeploymentStatus.Stopped,
+                    Outcome = DeploymentOutcome.Succeeded,
+                    CloudGitHubActionRunId = 42,
+                    CloudAppUrl = "https://example.invalid",
+                    ConfigurationSnapshotJson = JsonSerializer.Serialize(new DeploymentConfigurationSnapshot("Web",
+                        "Azure Container Apps",
+                        app.SourcePathOrUrl, "main", "abc123", "Production", "10.0", 8080, true,
+                        "swedencentral", "demo-rg", "demo-app", "demo.azurecr.io"))
+                })
+            ];
             typeof(ProjectDetails).GetField("_app", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(this, app);
             typeof(ProjectDetails).GetField("_isLoading", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(this, false);
             typeof(ProjectDetails).GetField("_showAnalysisDialog", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(this, AnalysisOpen);
+
             return Task.CompletedTask;
         }
 
@@ -288,14 +309,17 @@ public sealed class TelemetryPageRenderingTests
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             var type = method!.ReturnType;
+
             if (type == typeof(void)) return null;
             if (type == typeof(Task)) return Task.CompletedTask;
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Task<>))
             {
                 var result = type.GenericTypeArguments[0];
                 var value = result.IsValueType ? Activator.CreateInstance(result) : null;
+
                 if (result.IsGenericType && result.GetGenericTypeDefinition() == typeof(IReadOnlyList<>))
                     value = Activator.CreateInstance(typeof(List<>).MakeGenericType(result.GenericTypeArguments));
+
                 return typeof(Task).GetMethod(nameof(Task.FromResult))!.MakeGenericMethod(result).Invoke(null, [value]);
             }
 

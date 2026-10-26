@@ -20,6 +20,7 @@ public sealed class AzureRuntimeDiagnosticPolicyTests
         var record = new AzureMonitorLogRecord(DateTimeOffset.UtcNow, "safe output", container, "rev-1", stream,
             "ContainerAppConsoleLogs");
         var result = AzureRuntimeDiagnosticPolicy.CreateLogEvent(target, AzureContainerAppLogSource.Console, record);
+
         Assert.Equal(terminal, result.TerminalChannel.Target);
         Assert.Equal(component, result.SourceIdentity!.Component);
         Assert.Equal(
@@ -37,14 +38,18 @@ public sealed class AzureRuntimeDiagnosticPolicyTests
         var publisher = new Publisher();
         var availability = new AzureRuntimeAvailability(publisher);
         var target = Target();
-        await availability.ReportAsync(target, issue, "Fixed guidance.", default);
-        await availability.ReportAsync(target, issue, "Fixed guidance.", default);
+
+        await availability.ReportAsync(target, issue, "Fixed guidance.", CancellationToken.None);
+        await availability.ReportAsync(target, issue, "Fixed guidance.", CancellationToken.None);
+
         var observation = Assert.Single(publisher.Events);
         Assert.Equal("azure-db", observation.TerminalChannel.Target);
         Assert.Equal(DeploymentDiagnosticComponent.Database, observation.SourceIdentity!.Component);
         Assert.Equal(DeploymentDiagnosticSeverity.Information, observation.Severity);
+
         availability.Clear(target, issue);
-        await availability.ReportAsync(target, issue, "Fixed guidance.", default);
+        await availability.ReportAsync(target, issue, "Fixed guidance.", CancellationToken.None);
+
         Assert.Equal(2, publisher.Events.Count);
     }
 
@@ -70,6 +75,7 @@ public sealed class AzureRuntimeDiagnosticPolicyTests
             CancellationToken cancellationToken = default)
         {
             Events.Add(diagnosticEvent);
+
             return ValueTask.CompletedTask;
         }
     }

@@ -41,7 +41,7 @@ public partial class AddAnalysisQueueLeases : Migration
         migrationBuilder.CreateIndex(
             "ix_deployment_analysis_work_items_completed_at_lease_until_cre",
             "deployment_analysis_work_items",
-            new[] { "completed_at", "lease_until", "created_at" });
+            ["completed_at", "lease_until", "created_at"]);
     }
 
     /// <summary>
@@ -70,6 +70,6 @@ public partial class AddAnalysisQueueLeases : Migration
         migrationBuilder.CreateIndex(
             "ix_deployment_analysis_work_items_completed_at_claimed_at",
             "deployment_analysis_work_items",
-            new[] { "completed_at", "claimed_at" });
+            ["completed_at", "claimed_at"]);
     }
 }

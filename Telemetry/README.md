@@ -1,113 +1,160 @@
-# Deployment telemetry service (SelfHosted and SaaS)
+# Telemetry host
 
-The private archive log route accepts an optional `channel` query parameter and filters it before selecting the
-bounded page. This host advertises `channel-logs`; deploy it before the matching Web build. Existing spool/archive
-volumes remain compatible, and no database migration or credential rotation is required for channel paging.
+Private ASP.NET Core host for durable deployment diagnostics in SelfHosted and SaaS installations. It owns the
+single-writer spool/archive volume, delivers redacted observations to Loki/Mimir and maintains daily metric summaries.
+Web replicas call this process over authenticated HTTP and do not mount its telemetry volume.
 
-This separate private ASP.NET Core process owns the single disk-spool writer, Loki/Mimir delivery and hourly daily
-aggregation. Web replicas hold no telemetry disk volume. Application contracts are in
-`Application/Abstractions/Diagnostics`; filesystem, provider and EF implementations remain in Infrastructure.
+## Contents
 
-Run only one active instance against a spool volume. The exclusive volume lock rejects another writer. Ingestion
-requires a server-only bearer credential (`TelemetryStorage:GatewayToken`, at least 32 random characters), a private
-TLS endpoint and `DiskSpool:Directory` pointing to an encrypted persistent volume. No customer browser receives this
-credential. Incoming tenant headers are ignored; a bounded five-second database policy cache determines ownership.
-Apply Web's EF migrations before starting this process; this service never migrates the application database.
+| File                                               | Responsibility                                                                                                      |
+|----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
+| [Program.cs](Program.cs)                           | Builds the host through `TelemetryApplication.Build(args)` and runs it.                                             |
+| [TelemetryApplication.cs](TelemetryApplication.cs) | `TelemetryApplication`: service composition, safe logging, bearer authentication and private routes.                |
+| [Telemetry.csproj](Telemetry.csproj)               | .NET 10 Web SDK project; references Infrastructure and EF Core snake-case naming support.                           |
+| [Dockerfile](Dockerfile)                           | Builds from the solution root; publishes the host and runs the ASP.NET runtime image as UID/GID 10001 on port 8080. |
+| [Dockerfile.dockerignore](Dockerfile.dockerignore) | Limits the Docker context to the four required projects, excluding generated outputs and environment files.         |
 
-`POST /ingest` receives a normalized diagnostic with a stable event ID. It redacts again, validates metric names/units
-and owner/deployment membership, then acknowledges only after immutable checksummed segment and clock state flushes.
-Queue admission bounds bytes, bytes/minute and retained metric identities. Delivery waits for query visibility, retries
-without changing payloads and sweeps expired segments independently of backend availability. No raw PostgreSQL fallback
-exists. The persistent loss counter is conservative and account-wide. At-least-once retries can duplicate a previously
-delivered event after a lost receipt; history deduplicates event IDs, while error totals remain explicitly approximate.
+This is the project's only maintained source folder. Generated `bin` and `obj` directories are excluded from the
+folder documentation map.
 
-The spool keeps only pending-event indexes in memory. Versioned JSON segment files contain redacted payloads, a SHA-256
-checksum and version; partial unacknowledged temporary segments are discarded, acknowledged corruption fails startup
-closed and keeps the file for operator recovery. Clock, series budgets and loss counters are separate state files.
-Disk loss is outside this pilot's guarantee. Do not manually remove files from a running spool.
+## Composition and module boundaries
 
-Authenticated `GET /status` reports queued events, charged bytes, segment count, oldest pending age and loss count.
-Alert on rising losses, age near the 24-hour limit, failed delivery and service restarts.
-`GET /pending/{tenant}/{project}/{deployment}`
-returns a bounded pending read for AutoMate's authorized history merge. The read limit is reported as truncation.
+`TelemetryApplication.Build(string[] args, Action<WebApplicationBuilder>? configure = null)` returns an **unstarted**
+application. The optional callback runs after production registrations and before construction; tests use it to replace
+background dependencies. The caller owns startup, shutdown and disposal. Option validation and exclusive volume
+ownership happen at startup; construction and startup failures propagate to the caller.
 
-Hourly aggregation replaces deployment/day/container/metric rows, rereads the current and previous two UTC dates and
-retains daily summaries until project deletion. It does not claim data before collection started or exact error counts.
+The project directly references [Infrastructure](../Infrastructure/README.md). Application contracts and Domain models
+are available through that dependency; provider and persistence implementation stays outside this composition root.
 
-See [SaaS telemetry rollout](../docs/saas-telemetry.md) and [navigation](../navigation.md).
+| Concern                     | Implementation and consumers                                                                                                                                                                                                                      |
+|-----------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Event and history contracts | [Application diagnostics](../Application/Abstractions/Diagnostics/README.md) defines the HTTP payloads, archive and metric ports.                                                                                                                 |
+| Web-to-host transport       | [TelemetryGatewayClient](../Infrastructure/Diagnostics/Delivery/TelemetryGatewayClient.cs) sends observations; [TelemetryGatewayCompatibility](../Infrastructure/Diagnostics/Delivery/TelemetryGatewayCompatibility.cs) verifies archive support. |
+| Durable ingestion           | [DiskTelemetrySpool](../Infrastructure/Diagnostics/Storage/DiskTelemetrySpool.cs), also declaring `DiskSpoolOptions`, owns bounded admission, receipts and replay.                                                                                |
+| Permanent history           | [Archive module](../Infrastructure/Diagnostics/Archive/README.md) supplies `DiskDeploymentArchive`, metric batch reads, backfill and cleanup workers.                                                                                             |
+| Backend delivery            | [Delivery module](../Infrastructure/Diagnostics/Delivery/README.md) supplies `DiskTelemetryDeliveryWorker` and HTTP transport; [Storage](../Infrastructure/Diagnostics/Storage/README.md) supplies Loki/Mimir adapters.                           |
+| Ownership and configuration | [Policy module](../Infrastructure/Diagnostics/Policy/README.md) supplies bounded database-backed ownership caches and storage options.                                                                                                            |
+| Daily summaries             | [Metrics module](../Infrastructure/Diagnostics/Metrics/README.md) supplies `TelemetryDailyAggregationWorker`.                                                                                                                                     |
+| Metadata persistence        | [AutoMateDbContext](../Infrastructure/Data/AutoMateDbContext.cs) reads ownership/cleanup metadata and writes daily summaries.                                                                                                                     |
+| Platform logs               | [Observability](../Infrastructure/Observability/README.md) supplies `AddSafePlatformLogging` before the host is built.                                                                                                                            |
 
-The M5 central policy also masks the separate ingestion channel before spool persistence. Existing authentication,
-owner admission, metric validation, event identity and durable confirmation are unchanged. Production encryption and
-operational retention drills remain rollout work.
+## Private HTTP interface
 
-The spool itself now snapshots/redacts event payloads and channel before channel admission, including direct callers.
-Backlog reads verify checksums first, then mask with the current policy for delivery/replay without rewriting files.
-The shared stateless redactor is a singleton. Durable receipt, quotas and cancellation behavior remain unchanged.
+Every route, including status and capabilities, requires `Authorization: Bearer <server credential>`. Authentication
+compares SHA-256 hashes in fixed time and returns 401 for a missing/incorrect credential. Kestrel limits request bodies
+to 1 MiB. The middleware preserves `TelemetryProviderException` status codes without forwarding provider error text.
+Ownership comes from database relationships, never an incoming tenant header.
 
-## Host safety and composition
+| Method and path                                | Behavior and important bounds                                                                                                                                                                                                                                                             |
+|------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `GET /status`                                  | Bounded queue status: events, charged bytes, segments, oldest age and persistent loss count.                                                                                                                                                                                              |
+| `GET /capabilities`                            | Protocol version and supported archive operation names, without tenant evidence or credentials.                                                                                                                                                                                           |
+| `POST /ingest`                                 | Validates identifiers/enums, message/channel sizes, timestamps and supported finite nonnegative metrics; resolves project/deployment ownership, redacts again and returns a durable receipt. Ordinary ingestion accepts timestamps from the preceding 30 days through five minutes ahead. |
+| `GET /pending/{tenant}/{project}/{deployment}` | Checks ownership and returns bounded pending history with truncation metadata for authorized history merging.                                                                                                                                                                             |
+| `GET /archive/{tenant}/{project}/{deployment}` | Checks ownership; defaults to a backward page of 500 log records. Optional cursor, direction, limit, search and channel select the page; channel filtering precedes the bounded read.                                                                                                     |
+| `POST /archive/assessment`                     | Checks ownership and reads an immutable assessment selection with absolute UTC bounds; invalid archive arguments return 400.                                                                                                                                                              |
+| `POST /archive/assessment-metrics`             | Checks ownership and selected metric evidence; requires a positive window of at most 365 days.                                                                                                                                                                                            |
+| `POST /archive/metric-batch`                   | Resolves authorized partitions in SQL; reads ten partitions per continuation and at most 4,000 aggregates. Private UTC boundary fragments may be shorter than the public five-minute minimum; the range may span up to five calendar years. Partial-output metadata must be preserved.    |
+| `POST /archive/metrics`                        | Checks ownership, positive bounds and a requested maximum of 1–1,000 points.                                                                                                                                                                                                              |
+| `POST /archive/import`                         | Imports historical log envelopes with positive ordering and stable identity; validates payloads and ownership separately from ordinary ingestion's 30-day lower bound.                                                                                                                    |
+| `POST /archive/import-metrics`                 | Checks ownership and imports at most 3,000 points per request.                                                                                                                                                                                                                            |
+| `POST /archive/delete`                         | Deletes project history only after the application project is absent and an owner-matching durable cleanup request exists.                                                                                                                                                                |
 
-Program delegates to TelemetryApplication.Build, which contains the existing services, authentication and routes and
-installs Infrastructure/Observability's AddSafePlatformLogging before building. Framework/EF/HTTP and worker logs cross
-that factory before console/debug/custom providers. Unknown templates/categories, URLs/SQL, raw exceptions and arbitrary
-scope values are omitted; reviewed delivery/spool/daily alerts retain fixed messages and finite metadata. There is no
-SDK
-exporter registration in this host. Future exporters require processor/view/resource review before enablement.
+Request/response types are linked from the [delivery](../Application/Abstractions/Diagnostics/Delivery/README.md),
+[history](../Application/Abstractions/Diagnostics/History/README.md) and
+[metrics](../Application/Abstractions/Diagnostics/Metrics/README.md) contract inventories. Exact validation and status
+handling live in [TelemetryApplication.cs](TelemetryApplication.cs) and the delegated archive implementations.
 
-TelemetryApplication exposes optional builder customization for deployment/test hosting; normal startup passes only
-args. Loopback tests use the production composition, replace background dependencies and retain auth/route/option
-policy:
-missing credentials return 401 and malformed authenticated JSON returns 400 without leaking values to captured
-providers.
-Loki/Mimir adapters apply mandatory final redaction even for direct calls. Legacy PostgreSQL diagnostic writers now
-reject
-new payloads at the method boundary; existing reads/draining remain available through Web.
+## Configuration and startup
 
-## Deployment history update (2026-10-08)
+Apply the application's [EF migrations](../Infrastructure/Migrations/README.md) through the Web deployment before
+starting this host. Telemetry configures PostgreSQL access but **does not apply migrations**.
 
-The host registers DiskDeploymentArchive before ingesting events: acknowledgments require archive and spool persistence.
-Authenticated archive routes recheck deployment ownership and operator processing approval. Backfill and cleanup workers
-run on the same
-exclusive persistent volume. Daily aggregates now retain until project deletion. See ADR 0004 for storage growth, backup
-and rollout requirements.
+| Setting                                                                                | Requirement                                                                                                                                                 |
+|----------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ConnectionStrings:DefaultConnection`                                                  | Application metadata database, already migrated.                                                                                                            |
+| `TelemetryStorage:Backend` / `DeliveryMode`                                            | Explicitly select `LokiMimir` / `DiskGateway`; legacy defaults do not satisfy this host's startup validation.                                               |
+| `TelemetryStorage:GatewayUrl` / `GatewayToken`                                         | Private gateway URL and server-only credential of at least 32 characters; provision a random secret through environment/secret storage.                     |
+| `TelemetryStorage:LokiUrl`, `MetricsWriteUrl`, `MetricsQueryUrl`                       | Complete backend endpoint configuration. Production endpoints require HTTPS without embedded credentials.                                                   |
+| `TelemetryStorage:CaCertificatePath`                                                   | Optional existing public CA certificate for the named telemetry HTTP client's custom trust store.                                                           |
+| `TelemetryStorage:ManagedService`, `ManagedDataProcessingApproved`, `ProcessingRegion` | Managed storage requires explicit operator processing approval and a disclosed region. These are operator settings, not per-project collection preferences. |
+| `DiskSpool:Directory`                                                                  | Absolute path on an encrypted persistent volume; provisioning encryption, permissions and backups is an operator responsibility.                            |
+| `DiskSpool:BatchSize`                                                                  | Write-batch maximum; defaults to 100.                                                                                                                       |
 
-## Assessment filtering (2026-10-09)
+[TelemetryStorageOptions](../Infrastructure/Diagnostics/Policy/TelemetryStorageOptions.cs) defines validated resource
+bounds: the buffer age defaults to 24 hours, tenant/global byte budgets to 128 MiB/2 GiB and tenant ingestion to
+8 MiB per rolling minute. `AllowInsecureDevelopment` permits HTTP only for non-managed development configuration;
+it does not provision transport security. Never expose the private credential to browsers or logs.
 
-Private authenticated POST `/archive/assessment` and `/archive/assessment-metrics` carry an absolute UTC window and
-immutable selection. Both recheck current database ownership and operator processing approval. Invalid bounds return
-400;
-source/container filters precede read limits. Catalog-only reads contain bounded recorded channel metadata. Deploy this
-filter-capable host before updated Web/workers, preserving the archive volume. See
-[status-aware assessments](../docs/status-aware-assessments.md).
+From the repository root, with the required configuration supplied:
 
-## Chart metric batches
+```powershell
+dotnet run --project Telemetry/Telemetry.csproj
+docker build -f Telemetry/Dockerfile -t automate-telemetry .
+```
 
-Authenticated POST /archive/metric-batch resolves owner/project/deployment membership in SQL, reads
-ten partitions per continuation, and returns at most 4,000 metric aggregates. It accepts positive private boundary
-fragments through five calendar years; public Web ranges require at least five minutes. The derived metric-index
-directory and sealed day manifest are rebuildable from checksummed archive segments. Deploy this host before updated
-Web; no database migration or AI secret changes are needed. See ../docs/metric-exploration.md.
+The [application Compose definition](../deploy/app/compose.yaml) wires the private networks, non-root volume permissions
+and persistent volume. Consult [deployment guidance](../deploy/README.md) and the
+[telemetry stack guide](../deploy/telemetry/README.md) before running it.
 
-## Archive capability protocol
+## Persistence, lifecycle and operational limits
 
-Authenticated `GET /capabilities` returns protocol version 1 and supported archive operation names without tenant
-evidence or credentials. Updated Web requires logs, metrics, metric-batch, assessment, assessment-metrics, import,
-import-metrics and delete. Deploy the matching host with its existing persistent volume before updated Web. Collection
-and persistence are automatic; project preference flags never gate ingestion, delivery or archive reads. Ownership and
-operator processing approval remain required.
+Run **one active host per volume**. Startup acquires an exclusive spool lock and rejects a second writer. The production
+composition requires both permanent archive and spool persistence before acknowledging ingestion. Versioned segment
+files contain redacted payloads and SHA-256 checksums; pending indexes stay in memory. Separate state preserves clocks,
+metric identity budgets and losses. Incomplete unacknowledged temporary segments can be discarded; acknowledged segment
+corruption fails startup closed and preserves the file for recovery. Do not manually remove files from a running spool.
+Disk loss is outside the receipt guarantee; encryption and recovery are deployment responsibilities.
 
-## Source organization
+The shared singleton redactor snapshots/masks payloads and the separate channel before spool admission. Replay verifies
+checksums, then applies the current masking policy without rewriting the stored backlog. Byte/rate/metric identity
+quotas bound acceptance. Backend delivery retries stable identities and waits for query visibility; expiry sweeping
+continues during backend outages. A lost receipt can cause duplicate delivery: history deduplicates event IDs, while
+loss/error totals remain conservative or approximate. New payloads have no raw PostgreSQL fallback.
 
-See the [solution folder map](../navigation.md#responsibility-folders) for module subdivisions. Folder moves preserve
-existing .NET namespaces and public contracts. Generated build outputs and third-party assets retain their standard
-layouts.
+The delivery buffer's bounded outage lifetime is separate from permanent history. Archive history and daily summaries
+are retained until project deletion and cleanup; deployment status changes do not delete that history. Derived metric
+indexes/day manifests are rebuildable from checksummed archive segments. Hourly aggregation revisits the current and
+previous two UTC dates for running or recently updated deployments and replaces daily observations; missing evidence
+is not zero-filled and pre-collection history is not invented.
 
-## Source documentation
+Ownership caches are bounded and expire after five seconds. Collection and persistence are automatic; legacy project
+preference flags do not gate ingestion, delivery or archive access. Database ownership checks and managed-provider
+operator approval still apply. The host installs safe platform logging before ordinary providers; it registers no
+OpenTelemetry SDK exporter. Future exporters require equivalent processor, view and resource-policy review.
 
-Handwritten types and callables use multiline XML summaries, matching parameter/type-parameter tags and return
-descriptions for value-returning or asynchronous operations. Document confirmed escaping exceptions and keep field
-and property summaries concise. Top-level startup statements and anonymous route handlers use ordinary comments;
-XML documentation does not attach to those statements. Host construction returns an unstarted application, while
-option validation and exclusive spool ownership are startup responsibilities.
+Monitor rising loss counts, persistent delivery failures, restarts and oldest pending age approaching the configured
+buffer limit. See [storage operations](../docs/deployment-telemetry.md) and the
+[permanent history decision](../docs/adr/0004-permanent-deployment-history.md) for recovery and retention context.
 
-The file-by-file review and unchanged-token verification are recorded in the ignored
-`.artifacts/telemetry-doc-audit/report.md` artifact.
+## Compatibility and verification
+
+[TelemetryCapabilities](../Application/Abstractions/Diagnostics/Delivery/TelemetryCapabilities.cs) currently advertises
+protocol version 1 with `logs`, `channel-logs`, `metrics`, `metric-batch`, `assessment`, `assessment-metrics`, `import`,
+`import-metrics` and `delete`. Deploy this matching host before updated Web/workers and preserve the existing volume;
+Web verifies the required operation set. Filtering must happen before limits, and consumers must retain continuation,
+truncation and availability metadata.
+
+| Tests                                                                                                          | Coverage                                                                                                                                                                                                            |
+|----------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [TelemetryHostSafetyTests](../Test/Web/Hosting/TelemetryHostSafetyTests.cs)                                    | Production composition over loopback with background services removed; missing credentials, capabilities, malformed authenticated JSON and safe provider output. Does not exercise external stores or real workers. |
+| [TelemetryGatewayCompatibilityTests](../Test/Infra/Diagnostics/Delivery/TelemetryGatewayCompatibilityTests.cs) | Required capability negotiation and incompatible gateway handling.                                                                                                                                                  |
+| [DiskTelemetrySpoolTests](../Test/Infra/Diagnostics/Archive/DiskTelemetrySpoolTests.cs)                        | Durable spool behavior, replay, admission, redaction and recovery regressions.                                                                                                                                      |
+| [DiskDeploymentArchiveTests](../Test/Infra/Diagnostics/Archive/DiskDeploymentArchiveTests.cs)                  | Permanent archive reads, filtering, metric evidence and retained history.                                                                                                                                           |
+
+```powershell
+dotnet build Telemetry/Telemetry.csproj --no-restore
+dotnet test Test/Test.csproj --filter FullyQualifiedName~Test.Web.Hosting.TelemetryHostSafetyTests
+```
+
+## Related documentation
+
+- [Solution navigation](../navigation.md) and [Web host](../Web/README.md)
+- [Infrastructure diagnostics](../Infrastructure/Diagnostics/README.md)
+  and [test map](../Test/Infra/Diagnostics/README.md)
+- [SaaS telemetry rollout](../docs/saas-telemetry.md)
+- [Assessment filtering](../docs/status-aware-assessments.md) and [metric exploration](../docs/metric-exploration.md)
+
+Handwritten types/members use multiline XML documentation; top-level startup statements and anonymous route handlers
+use ordinary comments. Keep host details here and storage/provider behavior in the linked implementation guides.

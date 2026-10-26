@@ -89,26 +89,43 @@ public sealed class DiskTelemetryDeliveryWorker(
         var events = spool.ReadSegment(path);
         var lost = new List<DeploymentLogEnvelope>();
         var complete = true;
+
         await using var scope = scopes.CreateAsyncScope();
+
         foreach (var group in events.GroupBy(e => (e.TenantId, e.Event.ProjectId)))
         {
             var policy = await scope.ServiceProvider.GetRequiredService<TelemetryProjectPolicyCache>()
                 .GetAsync(group.Key.ProjectId, token);
+
             var allowed = policy?.UserId == group.Key.TenantId;
-            var expired = group.Where(e =>
-                e.StoredAt.AddHours(options.Value.BufferHours) <= DateTimeOffset.UtcNow || !allowed).ToArray();
+            var expired = group
+                .Where(e =>
+                    e.StoredAt.AddHours(options.Value.BufferHours) <= DateTimeOffset.UtcNow || !allowed)
+                .ToArray();
+
             lost.AddRange(expired);
+
             var active = group.Except(expired).ToArray();
             if (active.Length == 0) continue;
+
             try
             {
-                var logs = active.Where(e => e.Channel is not null).ToArray();
-                var metrics = active.Where(e => e.Event.Metrics is { Count: > 0 }).ToArray();
+                var logs = active
+                    .Where(e => e.Channel is not null)
+                    .ToArray();
+
+                var metrics = active
+                    .Where(e => e.Event.Metrics is { Count: > 0 })
+                    .ToArray();
+
                 await scope.ServiceProvider.GetRequiredService<IDeploymentLogWriter>().WriteAsync(logs, token);
                 await scope.ServiceProvider.GetRequiredService<IDeploymentMetricWriter>().WriteAsync(metrics, token);
-                complete &= await scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>()
+
+                complete &= await scope.ServiceProvider
+                                .GetRequiredService<IDeploymentLogQuery>()
                                 .ContainsAsync(logs, token) &&
-                            await scope.ServiceProvider.GetRequiredService<IDeploymentMetricQuery>()
+                            await scope.ServiceProvider
+                                .GetRequiredService<IDeploymentMetricQuery>()
                                 .ContainsAsync(metrics, token);
             }
             catch (Exception) when (!token.IsCancellationRequested)
@@ -117,11 +134,10 @@ public sealed class DiskTelemetryDeliveryWorker(
             }
         }
 
-        if (complete)
-        {
-            await spool.RemoveAsync(path, lost, token);
-            if (lost.Count > 0) TelemetryStorageMetrics.Dropped.Add(lost.Count);
-        }
+        if (!complete) return complete;
+
+        await spool.RemoveAsync(path, lost, token);
+        if (lost.Count > 0) TelemetryStorageMetrics.Dropped.Add(lost.Count);
 
         return complete;
     }

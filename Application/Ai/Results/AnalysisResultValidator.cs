@@ -42,14 +42,15 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     public LlmAnalysisResponse Validate(LlmAnalysisResponse response)
     {
         if (response is null || response.ResultSchemaVersion is not (null or 1 or SchemaVersion) ||
-            (response.ResultSchemaVersion == SchemaVersion && response.Sections is null) ||
-            (response.ResultSchemaVersion == 1 && response.Sections is not null) ||
+            response is { ResultSchemaVersion: SchemaVersion, Sections: null } ||
+            response is { ResultSchemaVersion: 1, Sections: not null } ||
             response.InputTokens < 0 || response.OutputTokens < 0 ||
             response.EstimatedCost < 0 || response.EstimatedCost > 9_999_999_999.99999999m ||
             (response.EstimatedCost is { } cost && decimal.Round(cost, 8) != cost) ||
             response.EstimatedCost.HasValue != response.CostCurrency is not null ||
             (response.CostCurrency is { } currency && (currency.Length != 3 || currency.Any(c => c is < 'A' or > 'Z'))))
             throw new InvalidAnalysisResultException();
+
         // Materialize every field before the caller can mutate a tracked entity with any provider output.
         return response with
         {
@@ -109,12 +110,16 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     {
         if (string.IsNullOrWhiteSpace(value)) throw new InvalidAnalysisResultException();
         if (value.Length > maximum) throw new InvalidAnalysisResultException(AnalysisResultRejection.FieldLimits);
+
         var safe = redactor.Redact(new DeploymentDiagnosticEvent(Guid.Empty, null, DeploymentDiagnosticSource.AutoMate,
             DeploymentDiagnosticKind.Annotation, DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
             value, new DeploymentTerminalChannel(DeploymentTerminalChannelKind.System))).Event.Message.Trim();
+
         if (string.IsNullOrWhiteSpace(safe)) throw new InvalidAnalysisResultException();
-        if (safe.Length > maximum) throw new InvalidAnalysisResultException(AnalysisResultRejection.FieldLimits);
-        return safe;
+
+        return safe.Length > maximum
+            ? throw new InvalidAnalysisResultException(AnalysisResultRejection.FieldLimits)
+            : safe;
     }
 
     /// <summary>

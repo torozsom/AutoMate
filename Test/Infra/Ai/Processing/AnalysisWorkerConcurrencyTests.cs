@@ -48,7 +48,8 @@ public sealed class AnalysisWorkerConcurrencyTests
     {
         await using var fixture = await Fixture.CreateAsync(concurrency, concurrency + 2, failFirst);
         using var worker = fixture.Services.GetRequiredService<DeploymentAnalysisWorker>();
-        await worker.StartAsync(default);
+
+        await worker.StartAsync(CancellationToken.None);
         try
         {
             await WaitUntilAsync(() => Task.FromResult(fixture.Gate.Starts.Count == concurrency));
@@ -61,8 +62,10 @@ public sealed class AnalysisWorkerConcurrencyTests
 
             fixture.Gate.Permits.Release();
             await WaitUntilAsync(() => Task.FromResult(fixture.Gate.Starts.Count == concurrency + 1));
+
             Assert.Equal(concurrency, fixture.Gate.Active);
             Assert.Equal(concurrency, fixture.Gate.Peak);
+
             fixture.Gate.Permits.Release(concurrency + 2);
             await WaitUntilAsync(async () =>
             {
@@ -71,6 +74,7 @@ public sealed class AnalysisWorkerConcurrencyTests
                        concurrency + 2;
             });
             await using var check = fixture.NewDb();
+
             Assert.Equal(concurrency + 2,
                 await check.DeploymentAnalysisWorkItems.CountAsync(item => item.AttemptCount == 1));
             Assert.Equal(failFirst ? 1 : 0,
@@ -82,7 +86,7 @@ public sealed class AnalysisWorkerConcurrencyTests
         }
         finally
         {
-            await worker.StopAsync(default);
+            await worker.StopAsync(CancellationToken.None);
         }
 
         Assert.Equal(0, fixture.Gate.Active);
@@ -98,22 +102,27 @@ public sealed class AnalysisWorkerConcurrencyTests
     {
         await using var fixture = await Fixture.CreateAsync(3, 5);
         using var worker = fixture.Services.GetRequiredService<DeploymentAnalysisWorker>();
-        await worker.StartAsync(default);
+
+        await worker.StartAsync(CancellationToken.None);
         try
         {
             await WaitUntilAsync(() => Task.FromResult(fixture.Gate.Starts.Count == 3));
         }
         finally
         {
-            await worker.StopAsync(default);
+            await worker.StopAsync(CancellationToken.None);
         }
 
         Assert.Equal(0, fixture.Gate.Active);
+
         await using var check = fixture.NewDb();
+
         Assert.Equal(0, await check.DeploymentAnalysisWorkItems.CountAsync(item => item.LeaseId != null));
         Assert.Equal(0, await check.DeploymentAnalysisWorkItems.CountAsync(item => item.CompletedAt != null));
         Assert.Equal(2, await check.DeploymentAnalysisWorkItems.CountAsync(item => item.AttemptCount == 0));
+
         await using var recovery = fixture.Services.CreateAsyncScope();
+
         Assert.NotNull(await recovery.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync());
     }
 
@@ -128,20 +137,24 @@ public sealed class AnalysisWorkerConcurrencyTests
         await using var fixture = await Fixture.CreateAsync(2, 6);
         using var first = fixture.Services.GetRequiredService<DeploymentAnalysisWorker>();
         using var second = fixture.Services.GetRequiredService<DeploymentAnalysisWorker>();
-        await first.StartAsync(default);
-        await second.StartAsync(default);
+
+        await first.StartAsync(CancellationToken.None);
+        await second.StartAsync(CancellationToken.None);
         try
         {
             await WaitUntilAsync(() => Task.FromResult(fixture.Gate.Starts.Count == 4));
+
             Assert.Equal(4, fixture.Gate.Starts.Select(item => item.Deployment).Distinct().Count());
             Assert.Equal(4, fixture.Gate.Peak);
+
             await using var db = fixture.NewDb();
+
             Assert.Equal(4, await db.DeploymentAnalysisWorkItems.CountAsync(item => item.AttemptCount == 1));
             Assert.Equal(2, await db.DeploymentAnalysisWorkItems.CountAsync(item => item.AttemptCount == 0));
         }
         finally
         {
-            await Task.WhenAll(first.StopAsync(default), second.StopAsync(default));
+            await Task.WhenAll(first.StopAsync(CancellationToken.None), second.StopAsync(CancellationToken.None));
         }
 
         Assert.Equal(0, fixture.Gate.Active);
@@ -156,6 +169,7 @@ public sealed class AnalysisWorkerConcurrencyTests
     private static async Task WaitUntilAsync(Func<Task<bool>> condition)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
         while (!await condition()) await Task.Delay(20, deadline.Token);
     }
 
@@ -202,6 +216,7 @@ public sealed class AnalysisWorkerConcurrencyTests
         {
             var active = Interlocked.Increment(ref _active);
             int prior;
+
             do
             {
                 prior = Volatile.Read(ref _peak);
@@ -213,6 +228,7 @@ public sealed class AnalysisWorkerConcurrencyTests
                 await Permits.WaitAsync(token);
                 if (failFirst && Starts.TryPeek(out var first) && first.Scope == scope)
                     throw new InvalidOperationException("Synthetic provider failure.");
+
                 return new LlmAnalysisResponse("openai", "gpt-5-mini", "Inspect startup configuration.", [], []);
             }
             finally
@@ -239,6 +255,7 @@ public sealed class AnalysisWorkerConcurrencyTests
             CancellationToken cancellationToken = default)
         {
             gate.ContextScopes.Add(db.ContextId.InstanceId);
+
             return Task.FromResult(new DeploymentAnalysisContext("Safe startup diagnostics", []));
         }
     }
@@ -317,6 +334,7 @@ public sealed class AnalysisWorkerConcurrencyTests
             var fixture = new Fixture(Path.Combine(Path.GetTempPath(),
                 "automate-ai-slots-" + Guid.NewGuid().ToString("N") + ".sqlite"));
             await using var db = fixture.NewDb();
+
             await db.Database.EnsureCreatedAsync();
             var owner = new LocalUser { Username = "test", Email = "test@example.invalid" };
             var project = new CsProject
@@ -327,6 +345,7 @@ public sealed class AnalysisWorkerConcurrencyTests
                 Application = new Domain.Entities.Projects.Application
                     { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
             };
+
             for (var i = 0; i < count; i++)
                 db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem
                 {
@@ -344,6 +363,7 @@ public sealed class AnalysisWorkerConcurrencyTests
             await db.SaveChangesAsync();
             fixture.Gate = new Gate(failFirst);
             var settings = AnalysisEgressPolicyTests.Approved(owner.Id, concurrency: concurrency);
+
             fixture.Services = new ServiceCollection().AddLogging().AddSingleton(TimeProvider.System)
                 .AddSingleton(fixture.Gate).AddSingleton(Options.Create(settings))
                 .AddSingleton<IOptionsMonitor<AiAnalysisOptions>>(new AnalysisEgressPolicyTests.Monitor(settings))
@@ -356,6 +376,7 @@ public sealed class AnalysisWorkerConcurrencyTests
                 .AddScoped<IDeploymentAnalysisContextBuilder, Context>().AddScoped<ILlmAnalysisProvider, Provider>()
                 .AddTransient<DeploymentAnalysisWorker>()
                 .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+
             return fixture;
         }
     }
@@ -374,7 +395,8 @@ public sealed class AnalysisWorkerConcurrencyTests
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
-            foreach (var property in builder.Model.GetEntityTypes().SelectMany(entity => entity.GetProperties())
+            foreach (var property in builder.Model.GetEntityTypes()
+                         .SelectMany(entity => entity.GetProperties())
                          .Where(property =>
                              property.ClrType == typeof(DateTimeOffset) || property.ClrType == typeof(DateTimeOffset?)))
                 property.SetValueConverter(new ValueConverter<DateTimeOffset, long>(value => value.UtcTicks,

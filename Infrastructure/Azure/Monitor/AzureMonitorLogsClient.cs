@@ -41,6 +41,7 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
     {
         var query = CreateQuery(source, containerAppName, fromUtc, batchSize, revision, afterTimestamp, afterHash,
             environmentName, environmentResourceName, includeAppEvents);
+
         return await SendQueryAsync(resourceId, accessToken, query, cancellationToken);
     }
 
@@ -63,20 +64,22 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         var tables = resourceId.Contains("/Microsoft.DocumentDB/", StringComparison.OrdinalIgnoreCase)
             ? "union isfuzzy=true AzureDiagnostics, CDBMongoRequests"
             : "AzureDiagnostics";
-        var query = $$"""
-                      {{tables}}
-                      | where _ResourceId =~ '{{id}}'
-                      | extend IngestedAt=bin(coalesce(ingestion_time(), TimeGenerated), 1microsecond)
-                      | where IngestedAt >= datetime({{fromUtc.UtcDateTime:O}})
-                      | extend Category=coalesce(tostring(column_ifexists("Category", "")), "MongoRequests")
-                      | where Category in ("MongoRequests", "PostgreSQLLogs", "Errors", "Timeouts", "Deadlocks")
-                      | extend Operation=coalesce(tostring(column_ifexists("OperationName", "")), tostring(column_ifexists("operationName_s", ""))), ErrorCode=coalesce(tostring(column_ifexists("ErrorCode", "")), tostring(column_ifexists("errorCode_s", "")), tostring(column_ifexists("statusCode_s", ""))), Duration=coalesce(tostring(column_ifexists("DurationMs", "")), tostring(column_ifexists("duration_s", ""))), RU=coalesce(tostring(column_ifexists("RequestCharge", "")), tostring(column_ifexists("requestCharge_s", "")))
-                      | project TimeGenerated, IngestedAt, Message=strcat(Category, " operation=", substring(Operation, 0, 128), " code=", substring(ErrorCode, 0, 64), " duration=", substring(Duration, 0, 64), " RU=", substring(RU, 0, 64)), ContainerName=tostring(column_ifexists("Resource", "")), RevisionName="", Stream="system", SourceTable=Category, RecordIdentity=coalesce(tostring(column_ifexists("ActivityId", "")), tostring(column_ifexists("activityId_g", "")))
-                      | extend CursorHash=hash_sha256(strcat(tostring(TimeGenerated), Message, ContainerName, RecordIdentity))
-                      {{CursorFilter(afterTimestamp, afterHash)}}
-                      | order by IngestedAt asc, CursorHash asc
-                      | take {{Math.Clamp(batchSize, 1, 2000)}}
-                      """;
+
+        var query = $"""
+                     {tables}
+                     | where _ResourceId =~ '{id}'
+                     | extend IngestedAt=bin(coalesce(ingestion_time(), TimeGenerated), 1microsecond)
+                     | where IngestedAt >= datetime({fromUtc.UtcDateTime:O})
+                     | extend Category=coalesce(tostring(column_ifexists("Category", "")), "MongoRequests")
+                     | where Category in ("MongoRequests", "PostgreSQLLogs", "Errors", "Timeouts", "Deadlocks")
+                     | extend Operation=coalesce(tostring(column_ifexists("OperationName", "")), tostring(column_ifexists("operationName_s", ""))), ErrorCode=coalesce(tostring(column_ifexists("ErrorCode", "")), tostring(column_ifexists("errorCode_s", "")), tostring(column_ifexists("statusCode_s", ""))), Duration=coalesce(tostring(column_ifexists("DurationMs", "")), tostring(column_ifexists("duration_s", ""))), RU=coalesce(tostring(column_ifexists("RequestCharge", "")), tostring(column_ifexists("requestCharge_s", "")))
+                     | project TimeGenerated, IngestedAt, Message=strcat(Category, " operation=", substring(Operation, 0, 128), " code=", substring(ErrorCode, 0, 64), " duration=", substring(Duration, 0, 64), " RU=", substring(RU, 0, 64)), ContainerName=tostring(column_ifexists("Resource", "")), RevisionName="", Stream="system", SourceTable=Category, RecordIdentity=coalesce(tostring(column_ifexists("ActivityId", "")), tostring(column_ifexists("activityId_g", "")))
+                     | extend CursorHash=hash_sha256(strcat(tostring(TimeGenerated), Message, ContainerName, RecordIdentity))
+                     {CursorFilter(afterTimestamp, afterHash)}
+                     | order by IngestedAt asc, CursorHash asc
+                     | take {Math.Clamp(batchSize, 1, 2000)}
+                     """;
+
         return SendQueryAsync(resourceId, accessToken, query, cancellationToken);
     }
 
@@ -93,14 +96,15 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         string query, CancellationToken cancellationToken)
     {
         var uri = $"{Endpoint}{resourceId}/query";
-        using var request = new HttpRequestMessage(HttpMethod.Post, uri)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(new { query }), Encoding.UTF8, "application/json")
-        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, uri);
+        request.Content = new StringContent(JsonSerializer.Serialize(new { query }), Encoding.UTF8, "application/json");
+
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         request.Headers.TryAddWithoutValidation("Prefer", "include-permissions=true");
 
         using var response = await httpClientFactory.CreateClient("AzureRuntime").SendAsync(request, cancellationToken);
+
         if (!response.IsSuccessStatusCode)
             return AzureMonitorLogQueryResult.Failed(response.StatusCode,
                 response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized
@@ -109,9 +113,11 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
         if (document.RootElement.TryGetProperty("error", out _))
             return AzureMonitorLogQueryResult.Failed(response.StatusCode,
                 "Azure Monitor Logs returned an incomplete query. Collection will retry without advancing its checkpoint.");
+
         return AzureMonitorLogQueryResult.Succeeded(ParseRecords(document.RootElement));
     }
 
@@ -127,10 +133,13 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         if (!root.TryGetProperty("tables", out var tables) || tables.ValueKind != JsonValueKind.Array ||
             tables.GetArrayLength() == 0)
             return [];
+
         var table = tables[0];
         if (!table.TryGetProperty("columns", out var columns) || !table.TryGetProperty("rows", out var rows))
             return [];
-        var indexes = columns.EnumerateArray().Select((column, index) => new
+
+        var indexes = columns.EnumerateArray()
+            .Select((column, index) => new
                 { Name = column.GetProperty("name").GetString(), Index = index })
             .Where(item => !string.IsNullOrWhiteSpace(item.Name))
             .ToDictionary(item => item.Name!, item => item.Index, StringComparer.OrdinalIgnoreCase);
@@ -141,6 +150,7 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
             var values = row.EnumerateArray().ToArray();
             var timestampText = GetValue(values, indexes, "TimeGenerated");
             if (!DateTimeOffset.TryParse(timestampText, out var timestamp)) continue;
+
             records.Add(new AzureMonitorLogRecord(timestamp.ToUniversalTime(), GetValue(values, indexes, "Message"),
                 GetValue(values, indexes, "ContainerName"), GetValue(values, indexes, "RevisionName"),
                 GetValue(values, indexes, "Stream"), GetValue(values, indexes, "SourceTable"),
@@ -160,7 +170,7 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
     /// <param name="indexes">Column-name to position mapping from the provider result.</param>
     /// <param name="name">The recorded display name or fixed metric identity.</param>
     /// <returns>The value derived from the validated input.</returns>
-    private static string GetValue(JsonElement[] values, IReadOnlyDictionary<string, int> indexes, string name)
+    private static string GetValue(JsonElement[] values, Dictionary<string, int> indexes, string name)
     {
         return indexes.TryGetValue(name, out var index) && index < values.Length &&
                values[index].ValueKind != JsonValueKind.Null
@@ -189,39 +199,46 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         var appName = containerAppName.Replace("'", "''", StringComparison.Ordinal);
         var from = fromUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
         var safeBatchSize = Math.Clamp(batchSize, 1, 2_000);
+
         var environmentFilter = string.IsNullOrWhiteSpace(environmentName)
             ? ""
             : "| where coalesce(tostring(column_ifexists('EnvironmentName', '')), tostring(column_ifexists('EnvironmentName_s', ''))) in ('" +
               environmentName.Replace("'", "''", StringComparison.Ordinal) + "', '" +
               (environmentResourceName ?? environmentName).Replace("'", "''", StringComparison.Ordinal) + "')";
+
         var tablePattern = source == AzureContainerAppLogSource.Console
             ? "ContainerAppConsoleLogs*"
             : "ContainerAppSystemLogs*";
+
         var stream = source == AzureContainerAppLogSource.Console
             ? "coalesce(tostring(column_ifexists(\"Stream\", \"\")), tostring(column_ifexists(\"Stream_s\", \"\")))"
             : "'system'";
-        var branches = $$"""
-                         union withsource=SourceTable {{tablePattern}}
-                         {{environmentFilter}}
-                         | extend AppName=coalesce(tostring(column_ifexists("ContainerAppName", "")), tostring(column_ifexists("ContainerAppName_s", "")))
-                         | where AppName == '{{appName}}'
-                         | extend IngestedAt=bin(coalesce(ingestion_time(), TimeGenerated), 1microsecond)
-                         | project TimeGenerated, IngestedAt, Message=coalesce(tostring(column_ifexists("Log", "")), tostring(column_ifexists("Log_s", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Message_s", "")), tostring(column_ifexists("Reason", "")), tostring(column_ifexists("Reason_s", ""))), ContainerName=coalesce(tostring(column_ifexists("ContainerName", "")), tostring(column_ifexists("ContainerName_s", ""))), RevisionName=coalesce(tostring(column_ifexists("RevisionName", "")), tostring(column_ifexists("RevisionName_s", ""))), Stream={{stream}}, ReplicaName=coalesce(tostring(column_ifexists("ReplicaName", "")), tostring(column_ifexists("ReplicaName_s", "")), tostring(column_ifexists("ContainerGroupName_s", "")), tostring(column_ifexists("ContainerGroupName_g", ""))), SourceTable
-                         """;
+
+        var branches = $"""
+                        union withsource=SourceTable {tablePattern}
+                        {environmentFilter}
+                        | extend AppName=coalesce(tostring(column_ifexists("ContainerAppName", "")), tostring(column_ifexists("ContainerAppName_s", "")))
+                        | where AppName == '{appName}'
+                        | extend IngestedAt=bin(coalesce(ingestion_time(), TimeGenerated), 1microsecond)
+                        | project TimeGenerated, IngestedAt, Message=coalesce(tostring(column_ifexists("Log", "")), tostring(column_ifexists("Log_s", "")), tostring(column_ifexists("Message", "")), tostring(column_ifexists("Message_s", "")), tostring(column_ifexists("Reason", "")), tostring(column_ifexists("Reason_s", ""))), ContainerName=coalesce(tostring(column_ifexists("ContainerName", "")), tostring(column_ifexists("ContainerName_s", ""))), RevisionName=coalesce(tostring(column_ifexists("RevisionName", "")), tostring(column_ifexists("RevisionName_s", ""))), Stream={stream}, ReplicaName=coalesce(tostring(column_ifexists("ReplicaName", "")), tostring(column_ifexists("ReplicaName_s", "")), tostring(column_ifexists("ContainerGroupName_s", "")), tostring(column_ifexists("ContainerGroupName_g", ""))), SourceTable
+                        """;
+
         var revisionFilter = string.IsNullOrWhiteSpace(revision)
             ? ""
             : "| where RevisionName == '" + revision.Replace("'", "''", StringComparison.Ordinal) + "'" +
               (source == AzureContainerAppLogSource.System && includeAppEvents ? " or isempty(RevisionName)" : "");
+
         var cursorFilter = CursorFilter(afterTimestamp, afterHash);
-        return $$"""
-                 {{branches}}
-                 | where IngestedAt >= datetime({{from}})
-                 {{revisionFilter}}
-                 | extend CursorHash=hash_sha256(strcat(tostring(TimeGenerated), '\n', SourceTable, '\n', Message, '\n', ContainerName, '\n', RevisionName, '\n', Stream))
-                 {{cursorFilter}}
-                 | order by IngestedAt asc, CursorHash asc
-                 | take {{safeBatchSize}}
-                 """;
+
+        return $"""
+                {branches}
+                | where IngestedAt >= datetime({from})
+                {revisionFilter}
+                | extend CursorHash=hash_sha256(strcat(tostring(TimeGenerated), '\n', SourceTable, '\n', Message, '\n', ContainerName, '\n', RevisionName, '\n', Stream))
+                {cursorFilter}
+                | order by IngestedAt asc, CursorHash asc
+                | take {safeBatchSize}
+                """;
     }
 
     /// <summary>
