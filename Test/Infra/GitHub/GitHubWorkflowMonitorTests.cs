@@ -41,11 +41,14 @@ public sealed class GitHubWorkflowMonitorTests
             Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = spans.Enqueue
         };
+
         ActivitySource.AddActivityListener(listener);
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         await using var dbContext = new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
+
         await dbContext.Database.EnsureCreatedAsync();
 
         var deployment = new Deployment
@@ -63,6 +66,7 @@ public sealed class GitHubWorkflowMonitorTests
                 }
             }
         };
+
         dbContext.Deployments.Add(deployment);
         await dbContext.SaveChangesAsync();
 
@@ -80,11 +84,13 @@ public sealed class GitHubWorkflowMonitorTests
         };
 
         await monitor.StreamBuildLogAsync(deployment.Id, request.Config.ProjectId, "preparation");
+
         publisher.Events.Single().DeploymentId.Should().Be(deployment.Id);
 
         var run = await monitor.PollWorkflowRunAsync(request, deployment, "commit", CancellationToken.None);
 
         var ownedSpans = spans.Where(span => Equals(span.GetTagItem("deployment.id"), deployment.Id)).ToArray();
+
         Assert.Contains(ownedSpans,
             span => span.OperationName == "github.workflow.query" && span.Status == ActivityStatusCode.Ok);
         Assert.Contains(ownedSpans, span => span.OperationName == "github.jobs.query");
@@ -125,6 +131,7 @@ public sealed class GitHubWorkflowMonitorTests
             CancellationToken cancellationToken = default)
         {
             Events.Add(diagnosticEvent);
+
             return ValueTask.CompletedTask;
         }
     }
@@ -218,6 +225,7 @@ public sealed class GitHubWorkflowMonitorTests
             CancellationToken cancellationToken = default)
         {
             _runPolls++;
+
             return Task.FromResult<GitHubWorkflowRunDto?>(new GitHubWorkflowRunDto
             {
                 Id = 123,
@@ -259,6 +267,7 @@ public sealed class GitHubWorkflowMonitorTests
                     ]
                 }
             ];
+
             return Task.FromResult(jobs);
         }
 
@@ -280,6 +289,7 @@ public sealed class GitHubWorkflowMonitorTests
                                                    item.Kind == DeploymentDiagnosticKind.StepState &&
                                                    item.Message.Contains("completed/success",
                                                        StringComparison.Ordinal));
+
             return Task.FromResult(new GitHubWorkflowJobLogDownload(GitHubWorkflowLogAvailability.Available,
                 "build output"));
         }

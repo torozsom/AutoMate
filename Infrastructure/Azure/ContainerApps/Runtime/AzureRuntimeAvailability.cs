@@ -26,13 +26,18 @@ internal sealed class AzureRuntimeAvailability(IDeploymentDiagnosticPublisher di
     {
         var key = $"{target.DeploymentId:N}:{issue}";
         if (!_reportedIssues.TryAdd(key, message)) return;
-        var database = issue.StartsWith("db-", StringComparison.Ordinal) ||
-                       issue.StartsWith("database-", StringComparison.Ordinal);
-        var informational = database && (issue.EndsWith("-empty", StringComparison.Ordinal) ||
-                                         issue.EndsWith("-metrics-only", StringComparison.Ordinal));
+
+        var database = issue.StartsWith("db-", StringComparison.Ordinal)
+                       || issue.StartsWith("database-", StringComparison.Ordinal);
+
+        var informational = database
+                            && (issue.EndsWith("-empty", StringComparison.Ordinal)
+                                || issue.EndsWith("-metrics-only", StringComparison.Ordinal));
+
         if (issue is "token" or "console" or "system" or "coordinator")
             AutoMateTelemetry.CollectorErrors.Add(1,
                 new KeyValuePair<string, object?>("deployment.source", "AzureContainerApps"));
+
         await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
             DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Annotation,
             informational ? DeploymentDiagnosticSeverity.Information : DeploymentDiagnosticSeverity.Warning,

@@ -36,29 +36,45 @@ public sealed class AnalysisBudgetPostgresTests
     public async Task Concurrent_admission_and_project_deletion_preserve_owner_allowance()
     {
         await using var fixture = await Fixture.CreateAsync();
+
         fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], tenantLimit: 1);
-        var requests = fixture.Deployments.Take(4).Select(_ => Guid.NewGuid()).ToArray();
+
+        var requests = fixture.Deployments
+            .Take(4)
+            .Select(_ => Guid.NewGuid())
+            .ToArray();
+
         var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(async index =>
         {
             await using var db = fixture.Db();
             return await fixture.Service(db).RequestManualAsync(fixture.Owners[0], fixture.Deployments[index],
                 requests[index]);
         }));
+
         var accepted = Assert.Single(results, result => result.Accepted).Analysis!;
         Assert.All(results.Where(result => !result.Accepted), result =>
             Assert.Equal("tenant_quota_exceeded", result.Analysis!.FailureCode));
+
         await using var check = fixture.Db();
         var index = Array.IndexOf(fixture.Deployments, accepted.DeploymentId);
+
         Assert.True((await fixture.Service(check).RequestManualAsync(fixture.Owners[0], accepted.DeploymentId,
             requests[index])).Accepted);
         Assert.Single(await check.AiAnalysisBudgetEntries.ToListAsync());
-        var project = await check.Deployments.Where(item => item.Id == accepted.DeploymentId)
-            .Select(item => item.CsProjectId).SingleAsync();
+
+        var project = await check.Deployments
+            .Where(item => item.Id == accepted.DeploymentId)
+            .Select(item => item.CsProjectId)
+            .SingleAsync();
+
         await check.CsProjects.Where(item => item.Id == project).ExecuteDeleteAsync();
         await using var restarted = fixture.Db();
+
         Assert.Single(await restarted.AiAnalysisBudgetEntries.ToListAsync());
+
         var remaining = fixture.Deployments.Take(4).First(id => id != accepted.DeploymentId);
         var denied = await fixture.Service(restarted).RequestManualAsync(fixture.Owners[0], remaining, Guid.NewGuid());
+
         Assert.Equal("tenant_quota_exceeded", denied.Analysis!.FailureCode);
     }
 
@@ -71,29 +87,42 @@ public sealed class AnalysisBudgetPostgresTests
     public async Task Concurrent_spending_and_recovery_preserve_conservative_reservations()
     {
         await using var fixture = await Fixture.CreateAsync();
+
         fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], dailyBudget: 1,
             attemptCost: 1);
+
         var work = await fixture.WorkAsync(0, 1, 2, 3);
         var results = await fixture.ReserveConcurrentlyAsync(work);
+
         Assert.Single(results, result => result is null);
         Assert.Equal(3, results.Count(result => result == AnalysisSkipReason.BudgetExceeded));
+
         await using var check = fixture.Db();
         var entry = await check.AiAnalysisBudgetEntries.SingleAsync();
         var charged = work.Single(item => item.LeaseId == entry.LeaseId);
+
         Assert.Null(await new AnalysisBudgetGuard(check, fixture.Settings, TimeProvider.System)
             .ReserveAttemptAsync(charged));
         Assert.Equal(AnalysisBudgetPolicy.Units(1), entry.ReservedCostUnits);
+
         var recovered = charged with { LeaseId = Guid.NewGuid() };
-        await check.DeploymentAnalysisWorkItems.Where(item => item.AnalysisId == charged.AnalysisId)
+
+        await check.DeploymentAnalysisWorkItems
+            .Where(item => item.AnalysisId == charged.AnalysisId)
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.LeaseId, recovered.LeaseId));
+
         Assert.Equal(AnalysisSkipReason.BudgetExceeded,
             await new AnalysisBudgetGuard(check, fixture.Settings, TimeProvider.System).ReserveAttemptAsync(recovered));
+
         fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], dailyBudget: 2,
             attemptCost: 1);
+
         Assert.Null(
             await new AnalysisBudgetGuard(check, fixture.Settings, TimeProvider.System).ReserveAttemptAsync(recovered));
         Assert.Equal(2, await check.AiAnalysisBudgetEntries.CountAsync());
+
         await check.AiDeploymentAnalyses.Where(item => item.Id == charged.AnalysisId).ExecuteDeleteAsync();
+
         Assert.Equal(2, await check.AiAnalysisBudgetEntries.CountAsync());
         Assert.Equal(AnalysisSkipReason.BudgetExceeded,
             await new AnalysisBudgetGuard(check, fixture.Settings, TimeProvider.System)
@@ -111,22 +140,32 @@ public sealed class AnalysisBudgetPostgresTests
         foreach (var global in new[] { 1, 2 })
         {
             await using var fixture = await Fixture.CreateAsync();
+
             fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], tenantConcurrency: 1,
                 globalConcurrency: global);
+
             var work = await fixture.WorkAsync(0, 1, 4, 5);
             var results = await fixture.ReserveConcurrentlyAsync(work);
+
             Assert.Equal(global, results.Count(result => result is null));
             Assert.Equal(4 - global, results.Count(result => result == AnalysisSkipReason.ConcurrencyExceeded));
+
             await using var check = fixture.Db();
             var entries = await check.AiAnalysisBudgetEntries.ToListAsync();
+
             Assert.All(entries.GroupBy(entry => entry.TenantId), group => Assert.Single(group));
+
             var released = entries[0];
-            await check.DeploymentAnalysisWorkItems.Where(item => item.AnalysisId == released.AnalysisId)
+
+            await check.DeploymentAnalysisWorkItems
+                .Where(item => item.AnalysisId == released.AnalysisId)
                 .ExecuteUpdateAsync(update => update.SetProperty(item => item.LeaseUntil,
                     DateTimeOffset.UtcNow.AddSeconds(-1)));
+
             var ownerIndex = released.TenantId == fixture.Owners[0] ? 0 : 4;
             var next = work.First(item => item.AnalysisId != released.AnalysisId &&
                                           fixture.Deployments.Skip(ownerIndex).Take(2).Contains(item.DeploymentId));
+
             Assert.Null(
                 await new AnalysisBudgetGuard(check, fixture.Settings, TimeProvider.System).ReserveAttemptAsync(next));
             Assert.Equal(global + 1, await check.AiAnalysisBudgetEntries.CountAsync());
@@ -143,39 +182,50 @@ public sealed class AnalysisBudgetPostgresTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var work = (await fixture.WorkAsync(0))[0];
+
         await using var blocker = fixture.Db();
         await using var transaction = await blocker.Database.BeginTransactionAsync();
+
         await blocker.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(716204950121)");
         await using var waiting = fixture.Db();
+
         await waiting.Database.OpenConnectionAsync();
+
         var pid = ((NpgsqlConnection)waiting.Database.GetDbConnection()).ProcessID;
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var pending = new AnalysisBudgetGuard(waiting, fixture.Settings, TimeProvider.System)
             .ReserveAttemptAsync(work, cancellation.Token);
+
         var observedWait = false;
+
         for (var attempt = 0; attempt < 100; attempt++)
         {
             await using var command = new NpgsqlCommand(
                 "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE pid = @pid AND locktype = 'advisory' AND NOT granted)",
                 (NpgsqlConnection)blocker.Database.GetDbConnection());
+
             command.Parameters.AddWithValue("pid", pid);
-            if ((bool)(await command.ExecuteScalarAsync())!)
+            if ((bool)(await command.ExecuteScalarAsync(cancellation.Token))!)
             {
                 observedWait = true;
                 break;
             }
 
-            await Task.Delay(25);
+            await Task.Delay(25, cancellation.Token);
         }
 
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await pending);
+
         Assert.True(observedWait, "The reservation must actually wait on the production advisory lock.");
-        await transaction.RollbackAsync();
-        Assert.Empty(await waiting.AiAnalysisBudgetEntries.ToListAsync());
+
+        await transaction.RollbackAsync(CancellationToken.None);
+
+        Assert.Empty(await waiting.AiAnalysisBudgetEntries.ToListAsync(CancellationToken.None));
         Assert.Null(
-            await new AnalysisBudgetGuard(waiting, fixture.Settings, TimeProvider.System).ReserveAttemptAsync(work));
-        Assert.Single(await waiting.AiAnalysisBudgetEntries.ToListAsync());
+            await new AnalysisBudgetGuard(waiting, fixture.Settings, TimeProvider.System)
+                .ReserveAttemptAsync(work, CancellationToken.None));
+        Assert.Single(await waiting.AiAnalysisBudgetEntries.ToListAsync(CancellationToken.None));
     }
 
     /// <summary>
@@ -188,10 +238,15 @@ public sealed class AnalysisBudgetPostgresTests
     {
         await using var fixture = await Fixture.CreateAsync(true);
         await using var db = fixture.Db();
-        var project = await db.Deployments.Where(item => item.Id == fixture.Deployments[0])
-            .Select(item => item.CsProjectId).SingleAsync();
+
+        var project = await db.Deployments
+            .Where(item => item.Id == fixture.Deployments[0])
+            .Select(item => item.CsProjectId)
+            .SingleAsync();
+
         var deletedAnalysis = Guid.NewGuid();
         var day = DateOnly.FromDateTime(DateTime.UtcNow);
+
         foreach (var consumes in new[] { true, false })
             db.AiAnalysisRequests.Add(new AiAnalysisRequest
             {
@@ -203,13 +258,18 @@ public sealed class AnalysisBudgetPostgresTests
                 ConsumesQuota = consumes,
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(90)
             });
+
         await db.SaveChangesAsync();
         await using var migration = fixture.Db(true);
+
         await migration.Database.MigrateAsync();
+
         var admission = await db.AiAnalysisBudgetEntries.SingleAsync();
+
         Assert.Equal(deletedAnalysis, admission.AnalysisId);
         Assert.Equal(fixture.Owners[0], admission.TenantId);
         Assert.Equal(day, admission.AccountingDay);
+
         Assert.False(admission.IsProviderAttempt);
         Assert.Null(admission.LeaseId);
         Assert.Equal(0, admission.ReservedCostUnits);
@@ -227,19 +287,26 @@ public sealed class AnalysisBudgetPostgresTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.Db();
-        var project = await db.Deployments.Where(d => d.Id == fixture.Deployments[0]).Select(d => d.CsProject!.AppId)
+        var project = await db.Deployments
+            .Where(d => d.Id == fixture.Deployments[0])
+            .Select(d => d.CsProject!.AppId)
             .SingleAsync();
+
         await using (var rollback = await db.Database.BeginTransactionAsync())
         {
             await db.Applications.Where(a => a.Id == project).ExecuteDeleteAsync();
+
             Assert.Single(await db.DeploymentArchiveCleanups.ToArrayAsync());
+
             await rollback.RollbackAsync();
         }
 
         Assert.Empty(await db.DeploymentArchiveCleanups.ToArrayAsync());
         Assert.True(await db.Applications.AnyAsync(a => a.Id == project));
+
         await db.Users.Where(u => u.Id == fixture.Owners[0]).ExecuteDeleteAsync();
         var work = await db.DeploymentArchiveCleanups.ToArrayAsync();
+
         Assert.Equal(4, work.Length);
         Assert.All(work, x => Assert.Equal(fixture.Owners[0], x.TenantId));
         Assert.False(await db.Deployments.AnyAsync(d => fixture.Deployments.Take(4).Contains(d.Id)));
@@ -260,10 +327,20 @@ public sealed class AnalysisBudgetPostgresTests
         protected override void OnModelCreating(ModelBuilder model)
         {
             base.OnModelCreating(model);
-            model.Entity<Deployment>().Ignore(d => d.ConfigurationSnapshotJson).Ignore(d => d.Outcome)
-                .Ignore(d => d.FinishedAt).Ignore(d => d.ResolvedHostPort).Ignore(d => d.AiAssessmentPreferencesJson);
-            model.Entity<AiDeploymentAnalysis>().Ignore(a => a.RetainUntilDeleted).Ignore(a => a.RequestedSelectionJson)
-                .Ignore(a => a.AssessmentProvenanceJson).Ignore(a => a.AssessmentSectionsJson);
+
+            model.Entity<Deployment>()
+                .Ignore(d => d.ConfigurationSnapshotJson)
+                .Ignore(d => d.Outcome)
+                .Ignore(d => d.FinishedAt)
+                .Ignore(d => d.ResolvedHostPort)
+                .Ignore(d => d.AiAssessmentPreferencesJson);
+
+            model.Entity<AiDeploymentAnalysis>()
+                .Ignore(a => a.RetainUntilDeleted)
+                .Ignore(a => a.RequestedSelectionJson)
+                .Ignore(a => a.AssessmentProvenanceJson)
+                .Ignore(a => a.AssessmentSectionsJson);
+
             model.Entity<AiAnalysisRequest>().Ignore(a => a.RequestedSelectionJson);
         }
     }
@@ -297,8 +374,10 @@ public sealed class AnalysisBudgetPostgresTests
         public async ValueTask DisposeAsync()
         {
             await using var connection = new NpgsqlConnection(connectionString);
+
             await connection.OpenAsync();
             await using var command = new NpgsqlCommand($"DROP SCHEMA {schema} CASCADE", connection);
+
             await command.ExecuteNonQueryAsync();
         }
 
@@ -311,10 +390,12 @@ public sealed class AnalysisBudgetPostgresTests
         {
             var builder = new NpgsqlConnectionStringBuilder(connectionString)
                 { SearchPath = schema, Pooling = false, Timeout = 10, CommandTimeout = 30 };
+
             var options = new DbContextOptionsBuilder<AutoMateDbContext>()
                 .UseNpgsql(builder.ToString(),
                     settings => settings.MigrationsHistoryTable("__EFMigrationsHistory", schema))
                 .UseSnakeCaseNamingConvention().Options;
+
             return legacy && !fullModel
                 ? new LegacyBudgetContext(options)
                 : new AutoMateDbContext(options, new EphemeralDataProtectionProvider());
@@ -355,22 +436,29 @@ public sealed class AnalysisBudgetPostgresTests
         public async Task<Work[]> WorkAsync(params int[] indexes)
         {
             await using var db = Db();
-            var work = indexes.Select(index =>
-            {
-                var analysis = new AiDeploymentAnalysis
+
+            var work = indexes
+                .Select(index =>
                 {
-                    DeploymentId = Deployments[index],
-                    Status = AiAnalysisStatus.Running,
-                    ExpiresAt = DateTimeOffset.UtcNow.AddDays(90),
-                    IdempotencyKey = Guid.NewGuid().ToString("N")
-                };
-                var lease = Guid.NewGuid();
-                var until = DateTimeOffset.UtcNow.AddMinutes(10);
-                db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem
-                    { Analysis = analysis, LeaseId = lease, LeaseUntil = until });
-                return new Work(analysis.Id, Deployments[index], lease, until, 1);
-            }).ToArray();
+                    var analysis = new AiDeploymentAnalysis
+                    {
+                        DeploymentId = Deployments[index],
+                        Status = AiAnalysisStatus.Running,
+                        ExpiresAt = DateTimeOffset.UtcNow.AddDays(90),
+                        IdempotencyKey = Guid.NewGuid().ToString("N")
+                    };
+                    var lease = Guid.NewGuid();
+                    var until = DateTimeOffset.UtcNow.AddMinutes(10);
+
+                    db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem
+                        { Analysis = analysis, LeaseId = lease, LeaseUntil = until });
+
+                    return new Work(analysis.Id, Deployments[index], lease, until, 1);
+                })
+                .ToArray();
+
             await db.SaveChangesAsync();
+
             return work;
         }
 
@@ -383,41 +471,53 @@ public sealed class AnalysisBudgetPostgresTests
         {
             var connectionString = Environment.GetEnvironmentVariable("AUTOMATE_AI_TEST_DB")!;
             var fixture = new Fixture("ai_budget_test_" + Guid.NewGuid().ToString("N"), connectionString, beforeBudget);
+
             await using var admin = new NpgsqlConnection(connectionString);
+
             await admin.OpenAsync();
             await using var create = new NpgsqlCommand($"CREATE SCHEMA {fixture.Schema}", admin);
+
             await create.ExecuteNonQueryAsync();
             try
             {
                 await using var db = fixture.Db();
                 await using var migration = fixture.Db(true);
+
                 await migration.GetService<IMigrator>().MigrateAsync(beforeBudget
                     ? "20261005104851_AddFailedDeploymentAnalysisEvents"
                     : null);
-                var owners = Enumerable.Range(0, 2).Select(index => new LocalUser
-                    { Username = "fixture-" + index, Email = $"{index}@example.invalid" }).ToArray();
-                var deployments = Enumerable.Range(0, 8).Select(index => new Deployment
-                {
-                    CsProject = new CsProject
+
+                var owners = Enumerable.Range(0, 2)
+                    .Select(index => new LocalUser
+                        { Username = "fixture-" + index, Email = $"{index}@example.invalid" })
+                    .ToArray();
+
+                var deployments = Enumerable.Range(0, 8)
+                    .Select(index => new Deployment
                     {
-                        Name = "fixture",
-                        Path = "fixture.csproj",
-                        Configuration = new Configuration
-                            { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
-                        Application = new Domain.Entities.Projects.Application
+                        CsProject = new CsProject
                         {
                             Name = "fixture",
-                            SourcePathOrUrl = "fixture",
-                            SourceType = SourceType.Local,
-                            User = owners[index / 4]
+                            Path = "fixture.csproj",
+                            Configuration = new Configuration
+                                { DotNetVersion = "net10.0", AiDiagnosticEgressConsented = true },
+                            Application = new Domain.Entities.Projects.Application
+                            {
+                                Name = "fixture",
+                                SourcePathOrUrl = "fixture",
+                                SourceType = SourceType.Local,
+                                User = owners[index / 4]
+                            }
                         }
-                    }
-                }).ToArray();
+                    })
+                    .ToArray();
+
                 db.Deployments.AddRange(deployments);
                 await db.SaveChangesAsync();
-                fixture.Owners = owners.Select(owner => owner.Id).ToArray();
-                fixture.Deployments = deployments.Select(deployment => deployment.Id).ToArray();
+                fixture.Owners = [.. owners.Select(owner => owner.Id)];
+                fixture.Deployments = [.. deployments.Select(deployment => deployment.Id)];
                 fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(owners[0].Id);
+
                 return fixture;
             }
             catch

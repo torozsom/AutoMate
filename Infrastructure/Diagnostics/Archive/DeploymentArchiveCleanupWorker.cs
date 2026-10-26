@@ -56,7 +56,12 @@ public sealed class DeploymentArchiveCleanupWorker(
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        var work = await db.DeploymentArchiveCleanups.OrderBy(x => x.CreatedAt).Take(100).ToArrayAsync(stoppingToken);
+
+        var work = await db.DeploymentArchiveCleanups
+            .OrderBy(x => x.CreatedAt)
+            .Take(100)
+            .ToArrayAsync(stoppingToken);
+
         foreach (var item in work)
         {
             if (await db.Applications.AnyAsync(x => x.Id == item.ProjectId, stoppingToken)) continue;

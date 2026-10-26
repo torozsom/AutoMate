@@ -47,10 +47,15 @@ public sealed class SafeTraceProcessor(PlatformTelemetryPolicy policy) : BasePro
             return;
         }
 
-        foreach (var tag in tags) activity.SetTag(tag.Key, policy.Field(tag.Key, tag.Value));
-        foreach (var baggage in activity.Baggage.ToArray()) activity.SetBaggage(baggage.Key, null);
+        foreach (var tag in tags)
+            activity.SetTag(tag.Key, policy.Field(tag.Key, tag.Value));
+
+        foreach (var baggage in activity.Baggage.ToArray())
+            activity.SetBaggage(baggage.Key, null);
+
         activity.TraceStateString = string.Empty;
         activity.SetStatus(activity.Status);
+
         activity.DisplayName = activity.Source.Name switch
         {
             "AutoMate.Deployments" when DeploymentNames.Contains(activity.OperationName) => activity.OperationName,

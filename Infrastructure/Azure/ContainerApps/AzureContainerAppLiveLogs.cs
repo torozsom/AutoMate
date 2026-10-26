@@ -163,9 +163,12 @@ internal sealed class AzureContainerAppLiveLogs(
                     deadline.CancelAfter(TimeSpan.FromSeconds(15));
                     var target = session.Target;
                     var endpoints = await DiscoverAsync(target, deadline.Token);
-                    foreach (var key in connections.Keys.Except(endpoints.Select(e => e.Key)).ToArray())
+                    foreach (var key in connections.Keys
+                                 .Except(endpoints
+                                     .Select(e => e.Key))
+                                 .ToArray())
                     {
-                        connections[key].Cancellation.Cancel();
+                        await connections[key].Cancellation.CancelAsync();
                         await connections[key].Task;
                         connections[key].Cancellation.Dispose();
                         connections.Remove(key);
@@ -214,7 +217,7 @@ internal sealed class AzureContainerAppLiveLogs(
         }
         finally
         {
-            foreach (var connection in connections.Values) connection.Cancellation.Cancel();
+            foreach (var connection in connections.Values) await connection.Cancellation.CancelAsync();
             await Task.WhenAll(connections.Values.Select(c => c.Task));
             foreach (var connection in connections.Values) connection.Cancellation.Dispose();
         }
@@ -232,26 +235,35 @@ internal sealed class AzureContainerAppLiveLogs(
         CancellationToken cancellationToken)
     {
         using var app = await ArmAsync(target.ResourceId, target.AccessToken, HttpMethod.Get, cancellationToken);
+
         var properties = app.RootElement.GetProperty("properties");
         var eventUrl = String(properties, "eventStreamEndpoint");
+
         if (!Uri.TryCreate(eventUrl, UriKind.Absolute, out var system) || !TrustedEndpoint(system))
             throw new InvalidOperationException("ACA did not return a trusted stream endpoint.");
+
         var endpoints = new List<AzureLiveLogEndpoint> { new("system", system, true, "", "") };
         var path = target.ResourceId + "/revisions/" + Uri.EscapeDataString(target.Revision) + "/replicas";
+
         using var replicas = await ArmAsync(path, target.AccessToken, HttpMethod.Get, cancellationToken);
+
         if (replicas.RootElement.TryGetProperty("nextLink", out var next) && !string.IsNullOrEmpty(next.GetString()))
             throw new InvalidOperationException("ACA replica inventory exceeds the bounded stream inventory.");
+
         foreach (var replica in replicas.RootElement.GetProperty("value").EnumerateArray())
         {
             var replicaName = String(replica, "name");
             if (string.IsNullOrEmpty(replicaName)) continue;
+
             var replicaProperties = replica.GetProperty("properties");
             if (!replicaProperties.TryGetProperty("containers", out var containers)) continue;
+
             foreach (var container in containers.EnumerateArray())
             {
                 var name = String(container, "name");
                 if (string.IsNullOrEmpty(name)) continue;
                 var endpointText = String(container, "logStreamEndpoint");
+
                 Uri endpoint;
                 if (Uri.TryCreate(endpointText, UriKind.Absolute, out var discovered))
                 {
@@ -263,12 +275,15 @@ internal sealed class AzureContainerAppLiveLogs(
                     var marker = appPath.LastIndexOf("/eventstream", StringComparison.OrdinalIgnoreCase);
                     if (marker < 0) throw new InvalidOperationException("ACA event endpoint has an unsupported path.");
                     endpoint = new Uri(system.GetLeftPart(UriPartial.Authority) + appPath[..marker] +
-                                       $"/revisions/{Uri.EscapeDataString(target.Revision)}/replicas/{Uri.EscapeDataString(replicaName)}/containers/{Uri.EscapeDataString(name)}/logstream");
+                                       $"/revisions/{Uri.EscapeDataString(target.Revision)}" +
+                                       $"/replicas/{Uri.EscapeDataString(replicaName)}" +
+                                       $"/containers/{Uri.EscapeDataString(name)}/logstream");
                 }
 
                 if (!TrustedEndpoint(endpoint) || endpoint.Authority != system.Authority)
                     throw new InvalidOperationException(
                         "ACA container endpoint does not match the verified stream origin.");
+
                 if (endpoints.Count >= 65)
                     throw new InvalidOperationException("ACA live collection is limited to 64 containers.");
                 endpoints.Add(new AzureLiveLogEndpoint(replicaName + "/" + name, endpoint, false, replicaName, name));
@@ -293,26 +308,34 @@ internal sealed class AzureContainerAppLiveLogs(
             var target = session.Target;
             using var auth = await ArmAsync(target.ResourceId + "/getAuthtoken", target.AccessToken,
                 HttpMethod.Post, cancellationToken);
+
             var properties = auth.RootElement.GetProperty("properties");
             var token = String(properties, "token");
+
             if (string.IsNullOrEmpty(token)) throw new InvalidOperationException("ACA stream token is unavailable.");
             var expires = DateTimeOffset.TryParse(String(properties, "expires"), CultureInfo.InvariantCulture,
                 DateTimeStyles.AssumeUniversal, out var expiry)
                 ? expiry.AddSeconds(-10)
                 : DateTimeOffset.UtcNow.AddMinutes(5);
+
             using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var duration = expires - DateTimeOffset.UtcNow;
+
             if (duration <= TimeSpan.Zero) throw new InvalidOperationException("ACA returned an expired stream token.");
+
             // Reconnect periodically to recheck credentials and collection ownership even on a quiet stream.
             lifetime.CancelAfter(duration < TimeSpan.FromSeconds(90) ? duration : TimeSpan.FromSeconds(90));
             await ReadAsync(endpoint, token, async record =>
             {
                 if (session.Target.LeaseUntil <= DateTimeOffset.UtcNow)
                     throw new OperationCanceledException(lifetime.Token);
+
                 if (record.Revision.Length > 0 && record.Revision != target.Revision) return;
                 if (endpoint.System && record.Revision.Length == 0 && !session.Target.IncludeAppEvents) return;
+
                 var diagnostic = CreateEvent(target, endpoint, record);
                 var identity = diagnostic.EventId!.Value;
+
                 if (session.Delivered.ContainsKey(identity)) return;
                 if (publisher is IDurableDeploymentDiagnosticPublisher durable &&
                     await durable.PublishDurablyAsync(diagnostic, lifetime.Token))
@@ -323,6 +346,7 @@ internal sealed class AzureContainerAppLiveLogs(
                         : ConsoleFingerprint(record.Timestamp, record.Message,
                             target.Revision, endpoint.Container, endpoint.Replica,
                             record.Stream == DeploymentDiagnosticStream.StandardError ? "stderr" : "stdout");
+
                     if (fingerprint is not null) session.ConfirmedConsole.TryAdd(fingerprint, 0);
                     session.Order.Enqueue((identity, fingerprint));
                     while (session.Order.Count > 4096 && session.Order.TryDequeue(out var old))
@@ -381,19 +405,24 @@ internal sealed class AzureContainerAppLiveLogs(
         {
             Query = "follow=true&output=json&tailLines=100"
         };
+
         using var request = new HttpRequestMessage(HttpMethod.Get, builder.Uri);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var client = clients.CreateClient("AzureLiveLogs");
         using var response =
             await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
         response.EnsureSuccessStatusCode();
+
         await connected();
         await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(body, Encoding.UTF8);
+
         var buffer = new char[4096];
         var line = new StringBuilder();
         var overflow = false;
         int read;
+
         while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
             for (var i = 0; i < read; i++)
                 if (buffer[i] == '\n')
@@ -431,24 +460,29 @@ internal sealed class AzureContainerAppLiveLogs(
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
             var message = String(root, "Log");
+
             if (message.Length == 0 && system) message = String(root, "Msg");
             if (message.Length == 0) message = String(root, "Message");
             if (message.Length == 0) return false;
+
             var timestamp = String(root, "TimeStamp");
             if (timestamp.Length == 0) timestamp = String(root, "Timestamp");
             if (!DateTimeOffset.TryParse(timestamp, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal,
                     out var time)) return false;
+
             var stream = system
                 ? DeploymentDiagnosticStream.System
                 : String(root, "Stream").Equals("stderr", StringComparison.OrdinalIgnoreCase)
                     ? DeploymentDiagnosticStream.StandardError
                     : DeploymentDiagnosticStream.StandardOutput;
+
             var severity = String(root, "Type").ToLowerInvariant() switch
             {
                 "error" => DeploymentDiagnosticSeverity.Error,
                 "warning" => DeploymentDiagnosticSeverity.Warning,
                 _ => DeploymentDiagnosticSeverity.Information
             };
+
             record = new AzureLiveLogRecord(time.ToUniversalTime(), message, String(root, "RevisionName"), stream,
                 severity);
             return true;
@@ -473,13 +507,16 @@ internal sealed class AzureContainerAppLiveLogs(
         var database = target.DatabaseContainers.Contains(endpoint.Container);
         var fingerprint =
             $"{target.DeploymentId:N}/live/{endpoint.Key}/{record.Timestamp:O}/{record.Stream}/{record.Message}";
+
         return new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
             DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Log, record.Severity,
             record.Timestamp, record.Message,
             endpoint.System
                 ? new DeploymentTerminalChannel(DeploymentTerminalChannelKind.System)
                 : new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container,
-                    database ? "azure-db" : "cloud-web"),
+                    database
+                        ? "azure-db"
+                        : "cloud-web"),
             new Dictionary<string, string>
             {
                 ["transport"] = "aca-live",
@@ -508,10 +545,14 @@ internal sealed class AzureContainerAppLiveLogs(
     {
         using var request = new HttpRequestMessage(method,
             AzureConstants.ManagementEndpoint + path + "?api-version=" + ApiVersion);
+
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
         using var client = clients.CreateClient("AzureRuntime");
         using var response = await client.SendAsync(request, ct);
+
         response.EnsureSuccessStatusCode();
+
         await using var body = await response.Content.ReadAsStreamAsync(ct);
         return await JsonDocument.ParseAsync(body, cancellationToken: ct);
     }
@@ -574,9 +615,12 @@ internal sealed class AzureContainerAppLiveLogs(
     /// <returns>Whether the documented trusted endpoint condition holds.</returns>
     internal static bool TrustedEndpoint(Uri uri)
     {
-        return uri.Scheme == Uri.UriSchemeHttps && uri.Port == 443 &&
-               uri.Host.EndsWith(".azurecontainerapps.dev", StringComparison.OrdinalIgnoreCase) &&
-               uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0;
+        return uri.Scheme == Uri.UriSchemeHttps
+               && uri.Port == 443
+               && uri.Host.EndsWith(".azurecontainerapps.dev", StringComparison.OrdinalIgnoreCase)
+               && uri.UserInfo.Length == 0
+               && uri.Query.Length == 0
+               && uri.Fragment.Length == 0;
     }
 
     /// <summary>

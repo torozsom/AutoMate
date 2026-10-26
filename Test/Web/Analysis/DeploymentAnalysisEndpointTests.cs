@@ -124,20 +124,25 @@ public sealed class DeploymentAnalysisEndpointTests
         var analysis = Guid.NewGuid();
         var calls = 0;
         var users = DispatchProxy.Create<IUserService, PortProxy>();
+
         ((PortProxy)users).Call = (_, args) =>
         {
             Assert.Equal(owner.ToString(), args![0]);
+
             return Task.FromResult((validOwner ? owner : Guid.Empty, (string?)null, false));
         };
         var analyses = DispatchProxy.Create<IDeploymentAnalysisService, PortProxy>();
+
         ((PortProxy)analyses).Call = (method, args) =>
         {
             Assert.Equal(methodName, method!.Name);
             Assert.Equal(owner, args![0]);
             Assert.Equal(deployment, args[1]);
+
             if (methodName == "SavePreferencesAsync") Assert.IsType<AssessmentSelection>(args[2]);
             else Assert.Equal(analysis, args[2]);
             calls++;
+
             return methodName switch
             {
                 "CancelAsync" => Task.FromResult((DeploymentAnalysisCancellationResult)outcome),
@@ -147,6 +152,7 @@ public sealed class DeploymentAnalysisEndpointTests
             };
         };
         var builder = WebApplication.CreateBuilder();
+
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
         builder.Services.AddAuthentication("fixture")
@@ -156,6 +162,7 @@ public sealed class DeploymentAnalysisEndpointTests
         builder.Services.AddSingleton(users);
         builder.Services.AddSingleton(analyses);
         await using var app = builder.Build();
+
         app.UseAuthentication();
         app.UseAuthorization();
         new DeploymentAnalysisEndpoint().Map(app);
@@ -164,8 +171,10 @@ public sealed class DeploymentAnalysisEndpointTests
         await app.StartAsync();
         using var client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() })
             { BaseAddress = new Uri(app.Urls.Single()) };
+
         if (authenticated) client.DefaultRequestHeaders.Add("Fixture-Owner", owner.ToString());
         var requestToken = await client.GetStringAsync("/fixture-token");
+
         if (csrf) client.DefaultRequestHeaders.Add("RequestVerificationToken", requestToken);
         var path = $"/api/deployments/{deployment}/analyses/{analysis}";
         var response = methodName switch
@@ -177,6 +186,7 @@ public sealed class DeploymentAnalysisEndpointTests
                 new AssessmentSelection()),
             _ => await client.DeleteAsync(path)
         };
+
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(authenticated && csrf && validOwner ? 1 : 0, calls);
     }
@@ -223,9 +233,11 @@ public sealed class DeploymentAnalysisEndpointTests
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
             var owner = Request.Headers["Fixture-Owner"].ToString();
+
             if (string.IsNullOrEmpty(owner)) return Task.FromResult(AuthenticateResult.NoResult());
             var principal =
                 new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, owner)], Scheme.Name));
+
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Scheme.Name)));
         }
     }

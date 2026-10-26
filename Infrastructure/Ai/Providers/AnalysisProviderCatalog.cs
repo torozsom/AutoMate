@@ -33,7 +33,7 @@ public sealed record AnalysisProviderRegistration(
 public sealed class AnalysisProviderCatalog
 {
     /// <summary>Ordinal canonical provider registrations, immutable after composition.</summary>
-    private readonly IReadOnlyDictionary<string, AnalysisProviderRegistration> _providers;
+    private readonly Dictionary<string, AnalysisProviderRegistration> _providers;
 
     /// <summary>
     ///     Rejects ambiguous names or implementations that do not satisfy the provider port.
@@ -43,12 +43,13 @@ public sealed class AnalysisProviderCatalog
     public AnalysisProviderCatalog(IEnumerable<AnalysisProviderRegistration> registrations)
     {
         var entries = registrations.ToArray();
-        if (entries.Any(item => item.Name.Length is < 1 or > 100 ||
-                                !item.Name.All(character =>
-                                    char.IsAsciiLetterOrDigit(character) || character is '-' or '_') ||
-                                !typeof(ILlmAnalysisProvider).IsAssignableFrom(item.ImplementationType) ||
-                                item.ApprovesRoute is null))
+        if (entries.Any(item =>
+                item.Name.Length is < 1 or > 100
+                || !item.Name.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_')
+                || !typeof(ILlmAnalysisProvider).IsAssignableFrom(item.ImplementationType) ||
+                item.ApprovesRoute is null))
             throw new ArgumentException("Invalid analysis provider registration.", nameof(registrations));
+
         _providers = entries.ToDictionary(item => item.Name, StringComparer.Ordinal);
     }
 
@@ -63,8 +64,10 @@ public sealed class AnalysisProviderCatalog
     /// </returns>
     public AnalysisProviderRegistration? Select(AiAnalysisOptions settings)
     {
-        return AnalysisEgressPolicy.IsCommonConfigured(settings) && settings.Provider is { } name &&
-               _providers.TryGetValue(name, out var provider) && provider.ApprovesRoute(settings)
+        return AnalysisEgressPolicy.IsCommonConfigured(settings)
+               && settings.Provider is { } name
+               && _providers.TryGetValue(name, out var provider)
+               && provider.ApprovesRoute(settings)
             ? provider
             : null;
     }
@@ -126,13 +129,16 @@ public sealed class ConfiguredAnalysisProvider(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
         var settings = options.CurrentValue;
         var selected = catalog.Select(settings) ?? throw new AnalysisProviderUnavailableException();
         var provider = (ILlmAnalysisProvider)services.GetRequiredService(selected.ImplementationType);
+
         if (!ReferenceEquals(settings, options.CurrentValue)) throw new AnalysisProviderUnavailableException();
         var response = await provider.AnalyzeAsync(request, cancellationToken);
-        if (!string.Equals(response.Provider, selected.Name, StringComparison.Ordinal))
-            throw new InvalidAnalysisResultException();
-        return response;
+
+        return !string.Equals(response.Provider, selected.Name, StringComparison.Ordinal)
+            ? throw new InvalidAnalysisResultException()
+            : response;
     }
 }

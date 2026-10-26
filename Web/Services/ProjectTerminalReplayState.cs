@@ -35,7 +35,7 @@ public sealed class ProjectTerminalReplayState
     /// <returns>An independent ordered snapshot; it does not clear the buffer.</returns>
     public IReadOnlyList<DeploymentTerminalLog> PendingSnapshot()
     {
-        return _pending.OrderBy(item => item.OrderId).ToArray();
+        return [.. _pending.OrderBy(item => item.OrderId)];
     }
 
     /// <summary>
@@ -54,15 +54,21 @@ public sealed class ProjectTerminalReplayState
     /// <returns>Whether this event should be rendered.</returns>
     public bool Accept(long orderId, bool isReplay)
     {
-        if (orderId < 0) return true;
-        if (orderId <= LastOrderId || _rendered.Contains(orderId)) return false;
+        if (orderId < 0)
+            return true;
+
+        if (orderId <= LastOrderId || _rendered.Contains(orderId))
+            return false;
+
         if (_rendered.Count >= 2000 && !isReplay)
         {
             Overflow = true;
             return false;
         }
 
-        if (_rendered.Count < 2000) _rendered.Add(orderId);
+        if (_rendered.Count < 2000)
+            _rendered.Add(orderId);
+
         return true;
     }
 

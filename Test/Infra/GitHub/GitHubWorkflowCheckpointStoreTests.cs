@@ -25,6 +25,7 @@ public sealed class GitHubWorkflowCheckpointStoreTests
     public async Task GetOrCreateJob_inserts_new_job_and_reuses_it_after_reload()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();

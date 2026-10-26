@@ -28,12 +28,15 @@ public sealed class DeploymentCleanupHostedServiceTests
     public async Task Startup_cleanup_does_not_fail_or_stop_azure_deployments()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();
         await using var db = new AutoMateDbContext(options, protector);
+
         await db.Database.EnsureCreatedAsync();
         var deployments = new List<Deployment>();
+
         foreach (var source in new[] { SourceType.Remote, SourceType.Local })
         foreach (var status in new[] { DeploymentStatus.Starting, DeploymentStatus.Running, DeploymentStatus.Stopped })
             deployments.Add(new Deployment
@@ -59,6 +62,7 @@ public sealed class DeploymentCleanupHostedServiceTests
         db.Deployments.AddRange(deployments);
         await db.SaveChangesAsync();
         var docker = DispatchProxy.Create<IDockerService, EmptyDocker>();
+
         await using (var operationDb = new AutoMateDbContext(options, protector))
         {
             await new DeploymentReconciliation(operationDb, docker,
@@ -67,9 +71,12 @@ public sealed class DeploymentCleanupHostedServiceTests
 
         await using var check = new AutoMateDbContext(options, protector);
         var states = await check.Deployments.AsNoTracking().ToDictionaryAsync(d => d.Id, d => d.Status);
+
         foreach (var cloud in deployments.Take(3)) Assert.Equal(cloud.Status, states[cloud.Id]);
+
         Assert.Equal(DeploymentStatus.Failed, states[deployments[3].Id]);
         Assert.Equal(DeploymentStatus.Stopped, states[deployments[4].Id]);
+        Assert.Equal(DeploymentStatus.Stopped, states[deployments[5].Id]);
     }
 
     /// <summary>

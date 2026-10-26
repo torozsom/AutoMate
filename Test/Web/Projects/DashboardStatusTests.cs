@@ -32,15 +32,19 @@ public sealed class DashboardStatusTests
         var navigation = new RecordingNavigation();
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
         LocalDeploymentJob? submitted = null;
+
         ((OperationalLoggingTests.PortProxy)queue).Call = (method, args) =>
         {
             Assert.Equal(nameof(IDeploymentJobQueue.EnqueueAsync), method!.Name);
+
             submitted = Assert.IsType<LocalDeploymentJob>(args![0]);
+
             return ValueTask.CompletedTask;
         };
         using var services = new ServiceCollection().BuildServiceProvider();
         await using var renderer = new TestRenderer(services);
         var component = new FixtureDashboard();
+
         typeof(Dashboard).GetProperty("DeploymentJobQueue", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(component, queue);
         typeof(Dashboard).GetProperty("NavigationManager", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -50,6 +54,7 @@ public sealed class DashboardStatusTests
             await (Task)typeof(Dashboard).GetMethod("ExecuteDeploymentAsync",
                     BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(component, [new DeploymentConfigDto { ProjectId = project, ProjectName = "fixture" }])!);
+
         Assert.NotNull(submitted);
         Assert.Equal($"/project/{project}", navigation.Destination);
         Assert.False(navigation.ForceLoad);
@@ -94,17 +99,21 @@ public sealed class DashboardStatusTests
             ]
         };
         var query = DispatchProxy.Create<IApplicationService, OperationalLoggingTests.PortProxy>();
+
         ((OperationalLoggingTests.PortProxy)query).Call = (method, args) =>
         {
             Assert.Equal(nameof(IApplicationService.GetAppByIdAsync), method!.Name);
             Assert.Equal(id, args![0]);
             Assert.Equal(owner, args[1]);
+
             return Task.FromResult<Domain.Entities.Projects.Application?>(app);
         };
         var capabilities = DispatchProxy.Create<IDeploymentCapabilities, OperationalLoggingTests.PortProxy>();
+
         ((OperationalLoggingTests.PortProxy)capabilities).Call = (_, _) => localEnabled;
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
         StopLocalDeploymentJob? submitted = null;
+
         ((OperationalLoggingTests.PortProxy)queue).Call = (method, args) =>
         {
             if (method!.Name == nameof(IDeploymentJobQueue.GetProjectState))
@@ -112,6 +121,7 @@ public sealed class DashboardStatusTests
             if (method.Name == nameof(IDeploymentJobQueue.EnqueueAsync))
             {
                 submitted = Assert.IsType<StopLocalDeploymentJob>(args![0]);
+
                 return ValueTask.CompletedTask;
             }
 
@@ -119,6 +129,7 @@ public sealed class DashboardStatusTests
         };
         using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
         var component = new FixtureDashboard();
+
         typeof(Dashboard).GetField("_currentUserId", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(
             component, owner);
         Property("ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
@@ -127,7 +138,9 @@ public sealed class DashboardStatusTests
         Property("Logger", NullLogger<Dashboard>.Instance);
         await (Task)typeof(Dashboard).GetMethod("StopInventoryAsync", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(component, [id])!;
+
         Assert.Equal(accepted, submitted is not null);
+
         if (submitted is not null)
         {
             Assert.Equal(id, submitted.ProjectId);
@@ -173,29 +186,36 @@ public sealed class DashboardStatusTests
             SourcePathOrUrl = "fixture",
             CsProjects = [new CsProject { Deployments = [deployment] }]
         };
+
         Set("_apps", new List<Domain.Entities.Projects.Application> { app });
         var states =
             (ConcurrentDictionary<Guid, bool>)typeof(Dashboard).GetField("_deployingStates",
                 BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(component)!;
+
         states[app.Id] = true;
         typeof(Dashboard).GetProperty("Logger", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
             NullLogger<Dashboard>.Instance);
         typeof(Dashboard).GetProperty("DeploymentStatusNotifier", BindingFlags.Instance | BindingFlags.NonPublic)!
             .SetValue(component, new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
+
         ((OperationalLoggingTests.PortProxy)queue).Call = (_, _) => null;
         typeof(Dashboard).GetProperty("DeploymentJobQueue", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(
             component, queue);
         await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
         var handler =
             typeof(Dashboard).GetMethod("DispatchStatusChangedAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
         await Task.Run(async () => await (Task)handler.Invoke(component, [app.Id, status])!);
+
         Assert.Equal(status, deployment.Status);
         Assert.False(states.ContainsKey(app.Id));
         Assert.True(renderer.RenderCount >= 2);
         Assert.Empty(renderer.Errors);
+
         component.Dispose();
         await Task.Run(async () => await (Task)handler.Invoke(component, [app.Id, DeploymentStatus.Starting])!);
+
         Assert.Equal(status, deployment.Status);
 
 #pragma warning disable CS1587 // C# does not emit local-function XML documentation.
@@ -241,16 +261,20 @@ public sealed class DashboardStatusTests
         var updated = initial with { Items = [initial.Items[0] with { Status = DeploymentStatus.Failed }] };
         var query = DispatchProxy.Create<IWorkspaceQuery, OperationalLoggingTests.PortProxy>();
         var reads = 0;
+
         ((OperationalLoggingTests.PortProxy)query).Call = (method, args) =>
         {
             Assert.Equal(nameof(IWorkspaceQuery.ProjectsAsync), method!.Name);
             Assert.Equal(owner, args![0]);
+
             reads++;
+
             return Task.FromResult(updated);
         };
         using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
         await using var renderer = new TestRenderer(services);
         var component = new FixtureDashboard();
+
         Set("_apps", new List<Domain.Entities.Projects.Application> { app });
         Set("_inventory", initial);
         Set("_currentUserId", owner);
@@ -259,13 +283,16 @@ public sealed class DashboardStatusTests
         Property("DeploymentStatusNotifier",
             new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
+
         ((OperationalLoggingTests.PortProxy)queue).Call = (_, _) => null;
         Property("DeploymentJobQueue", queue);
         await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
         reads = 0;
         var handler =
             typeof(Dashboard).GetMethod("DispatchStatusChangedAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
         await Task.Run(async () => await (Task)handler.Invoke(component, [project, DeploymentStatus.Failed])!);
+
         Assert.Equal(1, reads);
         Assert.Equal(DeploymentStatus.Failed,
             ((ProjectInventoryPage)typeof(Dashboard).GetField("_inventory",
@@ -390,6 +417,7 @@ public sealed class DashboardStatusTests
         protected override Task UpdateDisplayAsync(in RenderBatch renderBatch)
         {
             RenderCount++;
+
             return Task.CompletedTask;
         }
     }

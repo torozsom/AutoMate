@@ -29,14 +29,16 @@ public sealed class CloudRunMonitorService(
                 for (var i = 0; i < 25; i++)
                 {
                     await using var scope = scopeFactory.CreateAsyncScope();
-                    if (!await scope.ServiceProvider.GetRequiredService<CloudRunMonitor>()
+                    if (!await scope.ServiceProvider
+                            .GetRequiredService<CloudRunMonitor>()
                             .ProcessNextDeliveryAsync(stoppingToken)) break;
                     worked = true;
                 }
 
                 await using (var scope = scopeFactory.CreateAsyncScope())
                 {
-                    worked |= await scope.ServiceProvider.GetRequiredService<CloudRunMonitor>()
+                    worked |= await scope.ServiceProvider
+                        .GetRequiredService<CloudRunMonitor>()
                         .ReconcileNextAsync(stoppingToken);
                 }
 

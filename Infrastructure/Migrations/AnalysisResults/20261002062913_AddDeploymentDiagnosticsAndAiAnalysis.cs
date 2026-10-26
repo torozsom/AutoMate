@@ -113,7 +113,7 @@ public partial class AddDeploymentDiagnosticsAndAiAnalysis : Migration
         migrationBuilder.CreateIndex(
             "ix_ai_deployment_analyses_deployment_id_created_at",
             "ai_deployment_analyses",
-            new[] { "deployment_id", "created_at" });
+            ["deployment_id", "created_at"]);
 
         migrationBuilder.CreateIndex(
             "ix_ai_deployment_analyses_expires_at",
@@ -135,12 +135,12 @@ public partial class AddDeploymentDiagnosticsAndAiAnalysis : Migration
         migrationBuilder.CreateIndex(
             "ix_deployment_analysis_work_items_completed_at_claimed_at",
             "deployment_analysis_work_items",
-            new[] { "completed_at", "claimed_at" });
+            ["completed_at", "claimed_at"]);
 
         migrationBuilder.CreateIndex(
             "ix_deployment_diagnostic_records_deployment_id_timestamp_utc_s",
             "deployment_diagnostic_records",
-            new[] { "deployment_id", "timestamp_utc", "sequence" });
+            ["deployment_id", "timestamp_utc", "sequence"]);
 
         migrationBuilder.CreateIndex(
             "ix_deployment_diagnostic_records_expires_at",

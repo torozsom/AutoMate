@@ -4,12 +4,15 @@ Owner-scoped Overview loading and reusable KPI/inventory/aggregate views.
 
 ## Contents
 
-| File                                                         | Types or asset           | Responsibility                                                                                      |
-|--------------------------------------------------------------|--------------------------|-----------------------------------------------------------------------------------------------------|
-| [KpiCard.razor](KpiCard.razor)                               | `KpiCard`                | Presents one workspace indicator with its label, value and optional qualification.                  |
-| [ProjectInventoryTable.razor](ProjectInventoryTable.razor)   | `ProjectInventoryTable`  | Presents paginated project inventory and delegates authorized deployment, stop and removal actions. |
-| [WorkspaceOverviewPanel.razor](WorkspaceOverviewPanel.razor) | `WorkspaceOverviewPanel` | Loads owner-scoped overview data through independent scopes and visibility-aware polling.           |
-| [WorkspaceOverviewView.razor](WorkspaceOverviewView.razor)   | `WorkspaceOverviewView`  | Presents recorded deployment activity and resource aggregates with numeric alternatives.            |
+| File                                                               | Types or asset                         | Responsibility                                                                                      |
+|--------------------------------------------------------------------|----------------------------------------|-----------------------------------------------------------------------------------------------------|
+| [KpiCard.razor](KpiCard.razor)                                     | `KpiCard`                              | Presents one workspace indicator with its label, value and optional qualification.                  |
+| [ProjectInventoryTable.razor](ProjectInventoryTable.razor)         | `ProjectInventoryTable`                | Presents paginated project inventory and delegates authorized deployment, stop and removal actions. |
+| [ProjectInventoryTable.razor.cs](ProjectInventoryTable.razor.cs)   | `ProjectInventoryTable` partial class  | Component state, callbacks and lifecycle behavior.                                                  |
+| [WorkspaceOverviewPanel.razor](WorkspaceOverviewPanel.razor)       | `WorkspaceOverviewPanel`               | Loads owner-scoped overview data through independent scopes and visibility-aware polling.           |
+| [WorkspaceOverviewPanel.razor.cs](WorkspaceOverviewPanel.razor.cs) | `WorkspaceOverviewPanel` partial class | Component state, callbacks and lifecycle behavior.                                                  |
+| [WorkspaceOverviewView.razor](WorkspaceOverviewView.razor)         | `WorkspaceOverviewView`                | Presents recorded deployment activity and resource aggregates with numeric alternatives.            |
+| [WorkspaceOverviewView.razor.cs](WorkspaceOverviewView.razor.cs)   | `WorkspaceOverviewView` partial class  | Component state, callbacks and lifecycle behavior.                                                  |
 
 ## Usage and integration
 

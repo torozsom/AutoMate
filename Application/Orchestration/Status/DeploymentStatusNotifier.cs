@@ -22,7 +22,9 @@ public sealed class DeploymentStatusNotifier(ILogger<DeploymentStatusNotifier> l
         var handlers = OnStatusChanged;
         if (handlers is null) return;
 
-        foreach (Action<Guid, DeploymentStatus> handler in handlers.GetInvocationList())
+        foreach (var @delegate in handlers.GetInvocationList())
+        {
+            var handler = (Action<Guid, DeploymentStatus>)@delegate;
             try
             {
                 // Isolate UI subscribers so a disposed Blazor circuit cannot fail deployment processing.
@@ -34,5 +36,6 @@ public sealed class DeploymentStatusNotifier(ILogger<DeploymentStatusNotifier> l
                     "Deployment status subscriber failed for project {ProjectId} with status {Status}: {FailureType}.",
                     projectId, status, ex.GetType().Name);
             }
+        }
     }
 }

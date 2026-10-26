@@ -27,6 +27,7 @@ public sealed class GitHubServiceWorkflowLogTests
             if (request.RequestUri!.Host == "api.github.com")
             {
                 request.Headers.Authorization!.Parameter.Should().Be("github-access-token");
+
                 return new HttpResponseMessage(HttpStatusCode.Found)
                 {
                     Headers = { Location = new Uri("https://logs.example.test/job-output") }
@@ -34,6 +35,7 @@ public sealed class GitHubServiceWorkflowLogTests
             }
 
             downloadRequest = request;
+
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("first line\nsecond line")
@@ -62,6 +64,7 @@ public sealed class GitHubServiceWorkflowLogTests
             if (request.RequestUri!.Host == "api.github.com")
             {
                 request.Headers.Authorization!.Parameter.Should().Be("github-access-token");
+
                 return new HttpResponseMessage(HttpStatusCode.Found)
                 {
                     Headers = { Location = new Uri("https://logs.example.test/job-output") }
@@ -69,6 +72,7 @@ public sealed class GitHubServiceWorkflowLogTests
             }
 
             var zipStream = new MemoryStream();
+
             using (var archive = new ZipArchive(zipStream,
                        ZipArchiveMode.Create,
                        true))
@@ -76,10 +80,12 @@ public sealed class GitHubServiceWorkflowLogTests
                 var entry = archive.CreateEntry("job.log");
                 using var entryStream = entry.Open();
                 using var writer = new StreamWriter(entryStream);
+
                 writer.Write("first line\nsecond line\n");
             }
 
             zipStream.Position = 0;
+
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StreamContent(zipStream)

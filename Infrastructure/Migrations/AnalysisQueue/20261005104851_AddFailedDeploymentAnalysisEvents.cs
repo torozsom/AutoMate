@@ -38,7 +38,7 @@ public partial class AddFailedDeploymentAnalysisEvents : Migration
         migrationBuilder.CreateIndex(
             "ix_failed_deployment_analysis_events_completed_at_created_at",
             "failed_deployment_analysis_events",
-            new[] { "completed_at", "created_at" });
+            ["completed_at", "created_at"]);
 
         migrationBuilder.Sql(FailedDeploymentAnalysisTrigger.CreateSql);
     }

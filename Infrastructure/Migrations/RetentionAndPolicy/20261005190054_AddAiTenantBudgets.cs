@@ -56,12 +56,12 @@ public partial class AddAiTenantBudgets : Migration
         migrationBuilder.CreateIndex(
             "ix_ai_analysis_budget_entries_tenant_id_accounting_day_is_prov",
             "ai_analysis_budget_entries",
-            new[] { "tenant_id", "accounting_day", "is_provider_attempt" });
+            ["tenant_id", "accounting_day", "is_provider_attempt"]);
 
         migrationBuilder.CreateIndex(
             "ix_ai_analysis_budget_entries_tenant_id_is_provider_attempt_oc",
             "ai_analysis_budget_entries",
-            new[] { "tenant_id", "is_provider_attempt", "occurred_at" });
+            ["tenant_id", "is_provider_attempt", "occurred_at"]);
 
         // Preserve retained admission usage; historical remote charges cannot be inferred from optional result estimates.
         migrationBuilder.Sql("""

@@ -1,6 +1,3 @@
-@using Application.Abstractions.Diagnostics.Metrics
-@using Application.Data.Users
-@using Web.Components.Pages.Identity
 @*
     Presents authorized automatic-collection, retention and sampling information.
 *@
@@ -29,50 +26,4 @@
 else if (_error is not null)
 {
     <p role="alert">@_error</p>
-}
-
-@code {
-
-    /// <summary>Owner's project.</summary>
-    [Parameter]
-    public Guid ProjectId { get; set; }
-
-    /// <summary>Current authorized preferences.</summary>
-    private DeploymentTelemetryPreferences? _preferences;
-
-    /// <summary>Internal owner identity.</summary>
-    private Guid _owner;
-
-    /// <summary>Safe operation failure.</summary>
-    private string? _error;
-
-    /// <summary>Avoids repeated database reads for unchanged parent parameters.</summary>
-    private Guid _loadedProject;
-
-    /// <summary>
-    ///     Loads owner-authorized retention and sampling metadata for a changed project.
-    /// </summary>
-    /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
-    protected override async Task OnParametersSetAsync()
-    {
-        if (_loadedProject == ProjectId) return;
-        _loadedProject = ProjectId;
-        _preferences = null;
-        try
-        {
-            await using var scope = ServiceScopes.CreateAsyncScope();
-            _owner = await AuthenticatedUserResolver.GetCurrentUserIdAsync(Authentication,
-                scope.ServiceProvider.GetRequiredService<IUserService>());
-            if (_owner != Guid.Empty)
-                _preferences = await scope.ServiceProvider
-                    .GetRequiredService<IDeploymentHistoryService>().GetPreferencesAsync(_owner, ProjectId);
-            _error = null;
-        }
-        catch (Exception)
-        {
-            _error = "Unable to load diagnostic collection preferences.";
-        }
-    }
-
-
 }

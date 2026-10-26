@@ -111,10 +111,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
         {
             await RecoverTargetsAsync(stoppingToken);
             await PollOnceAsync(stoppingToken);
+
             using var timer =
                 new PeriodicTimer(
                     TimeSpan.FromSeconds(Math.Min(60,
                         telemetry?.Value.RuntimeSampleSeconds ?? PollInterval.TotalSeconds)));
+
             while (await timer.WaitForNextTickAsync(stoppingToken))
             {
                 await RecoverTargetsAsync(stoppingToken);
@@ -147,6 +149,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
             {
                 using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 deadline.CancelAfter(TimeSpan.FromSeconds(45));
+
                 await DeploymentTracing.RunAsync(DeploymentOperation.AzurePoll, target.ProjectId, target.DeploymentId,
                     ct, () => PollTargetAsync(target, deadline.Token));
             }
@@ -158,9 +161,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
             {
                 logger.LogError("Azure runtime monitoring failed for deployment {DeploymentId}. Failure {FailureType}.",
                     target.DeploymentId, ex.GetType().Name);
+
                 await _availability.ReportAsync(target, "coordinator",
-                    "Azure runtime monitoring encountered a recoverable error.",
-                    ct);
+                    "Azure runtime monitoring encountered a recoverable error.", ct);
             }
         });
     }
@@ -175,9 +178,13 @@ public sealed class AzureContainerAppRuntimeStreamer(
     private async Task PollTargetAsync(ContainerAppStreamTarget target, CancellationToken cancellationToken)
     {
         await using var policyScope = scopeFactory.CreateAsyncScope();
-        var project = await policyScope.ServiceProvider.GetRequiredService<AutoMateDbContext>().Applications
+
+        var project = await policyScope.ServiceProvider
+            .GetRequiredService<AutoMateDbContext>().Applications
             .Where(p => p.Id == target.ProjectId && p.UserId == target.UserId)
-            .Select(p => new { p.Id }).SingleOrDefaultAsync(cancellationToken);
+            .Select(p => new { p.Id })
+            .SingleOrDefaultAsync(cancellationToken);
+
         if (project is null)
         {
             _targets.TryRemove(target.DeploymentId, out _);
@@ -186,9 +193,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
 
         var db = policyScope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        var deployment = await db.Deployments.SingleOrDefaultAsync(d => d.Id == target.DeploymentId &&
-                                                                        d.CsProject!.AppId == target.ProjectId,
-            cancellationToken);
+
+        var deployment = await db.Deployments
+            .SingleOrDefaultAsync(d => d.Id == target.DeploymentId
+                                       && d.CsProject!.AppId == target.ProjectId,
+                cancellationToken);
+
         if (deployment is null || deployment.Status is DeploymentStatus.Stopped or DeploymentStatus.Failed)
         {
             _targets.TryRemove(target.DeploymentId, out _);
@@ -205,8 +215,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
 
         target.ExpectedRevision ??= deployment.CloudContainerRevision;
-        if (deployment.CloudResourceId != target.ResourceId ||
-            (deployment.CloudContainerRevision is { } verifiedRevision && verifiedRevision != target.ExpectedRevision))
+        if (deployment.CloudResourceId != target.ResourceId
+            || (deployment.CloudContainerRevision is { } verifiedRevision
+                && verifiedRevision != target.ExpectedRevision))
         {
             _targets.TryRemove(target.DeploymentId, out _);
             _liveLogs.Remove(target.DeploymentId);
@@ -216,31 +227,47 @@ public sealed class AzureContainerAppRuntimeStreamer(
         if (deployment.ConfigurationSnapshotJson is { } configuration)
         {
             var snapshot = JsonSerializer.Deserialize<DeploymentConfigurationSnapshot>(configuration);
-            target.DatabaseProviders = snapshot?.Databases?.Select(d => d.Provider)
+
+            target.DatabaseProviders = snapshot?.Databases?
+                .Select(d => d.Provider)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             target.DatabaseContainers = (snapshot?.Databases ?? [])
-                .Select(d => d.ContainerSuffix).Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(d => d.ContainerSuffix)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
                 .ToHashSet(StringComparer.Ordinal);
         }
 
-        var active = await db.Deployments.Where(d => d.Status == DeploymentStatus.Running &&
-                                                     d.CsProject!.AppId == target.ProjectId &&
-                                                     d.CloudResourceId == target.ResourceId)
-            .Select(d => new { d.Id, d.CreatedAt }).Take(1001).ToArrayAsync(cancellationToken);
-        target.CollectDatabases = active.Length <= 1000 && active.OrderByDescending(d => d.CreatedAt)
-            .ThenByDescending(d => d.Id).FirstOrDefault()?.Id == target.DeploymentId;
+        var active = await db.Deployments
+            .Where(d => d.Status == DeploymentStatus.Running
+                        && d.CsProject!.AppId == target.ProjectId
+                        && d.CloudResourceId == target.ResourceId)
+            .Select(d => new { d.Id, d.CreatedAt })
+            .Take(1001)
+            .ToArrayAsync(cancellationToken);
+
+        target.CollectDatabases = active.Length <= 1000 && active
+            .OrderByDescending(d => d.CreatedAt)
+            .ThenByDescending(d => d.Id)
+            .FirstOrDefault()?.Id == target.DeploymentId;
+
         var now = DateTimeOffset.UtcNow;
         target.MetricsDue = now >= target.NextMetricsAt;
+
         if (target.MetricsDue)
             target.NextMetricsAt = now.AddSeconds(telemetry?.Value.RuntimeSampleSeconds ?? PollInterval.TotalSeconds);
+
         if (db.Database.IsNpgsql())
         {
-            var claimed = await db.Deployments.Where(d => d.Id == target.DeploymentId &&
-                                                          (d.RuntimeCollectorLeaseOwner == _leaseOwner ||
-                                                           d.RuntimeCollectorLeaseUntil == null ||
-                                                           d.RuntimeCollectorLeaseUntil <= now))
-                .ExecuteUpdateAsync(u => u.SetProperty(d => d.RuntimeCollectorLeaseOwner, _leaseOwner)
+            var claimed = await db.Deployments
+                .Where(d => d.Id == target.DeploymentId
+                            && (d.RuntimeCollectorLeaseOwner == _leaseOwner
+                                || d.RuntimeCollectorLeaseUntil == null
+                                || d.RuntimeCollectorLeaseUntil <= now))
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(d => d.RuntimeCollectorLeaseOwner, _leaseOwner)
                     .SetProperty(d => d.RuntimeCollectorLeaseUntil, now.AddMinutes(2)), cancellationToken);
+
             if (claimed == 0)
             {
                 _liveLogs.Remove(target.DeploymentId);
@@ -250,10 +277,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
 
         if (policyScope.ServiceProvider.GetService<AzureArmCredentialsProvider>() is { } credentials)
             target.AzureCredentials = await credentials.GetAsync(target.UserId, cancellationToken);
+
         if (_liveLifetime is { } lifetime && !string.IsNullOrWhiteSpace(target.ExpectedRevision))
             _liveLogs.Update(new AzureLiveLogTarget(target.ProjectId, target.DeploymentId, target.ResourceId,
                 target.ExpectedRevision, target.AzureCredentials.AccessToken, now.AddSeconds(110),
                 target.CollectDatabases, target.DatabaseContainers), lifetime);
+
         // Inventory and native database metrics must complete before potentially slow history queries.
         await PollDatabasesAsync(target, null, cancellationToken);
         try
@@ -278,6 +307,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
         await using var scope = scopeFactory.CreateAsyncScope();
         var checkpoints = new AzureContainerAppLogCheckpointStore(
             scope.ServiceProvider.GetRequiredService<AutoMateDbContext>());
+
         // Database history owns independent checkpoint scopes and cannot be starved by ACA history.
         var databaseLogs = PollDatabasesAsync(target, tokenResult.AccessToken, cancellationToken);
         try
@@ -319,6 +349,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
             {
                 var logScope = await _containerAppClient.GetEnvironmentLogScopeAsync(state.ManagedEnvironmentId,
                     target.AzureCredentials.AccessToken, cancellationToken);
+
                 if (logScope is not null)
                 {
                     target.LogResourceId = logScope.ResourceId;
@@ -355,8 +386,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
             {
                 await using var metadata = scopeFactory.CreateAsyncScope();
                 var db = metadata.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-                var deployment = await db.Deployments.SingleOrDefaultAsync(d => d.Id == target.DeploymentId &&
-                    d.CsProject!.AppId == target.ProjectId, cancellationToken);
+
+                var deployment = await db.Deployments
+                    .SingleOrDefaultAsync(d => d.Id == target.DeploymentId
+                                               && d.CsProject!.AppId == target.ProjectId,
+                        cancellationToken);
+
                 if (deployment is not null)
                 {
                     deployment.CloudAppUrl = "https://" + state.Fqdn;
@@ -384,11 +419,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
         }
 
         if (!target.MetricsDue) return;
+
         var metrics = await DeploymentTracing.RunAsync(DeploymentOperation.AzureMetrics, target.ProjectId,
-            target.DeploymentId,
-            cancellationToken, () => _containerAppClient.GetMetricsAsync(target.ResourceId,
-                target.AzureCredentials.AccessToken,
-                cancellationToken, target.ExpectedRevision));
+            target.DeploymentId, cancellationToken,
+            () => _containerAppClient.GetMetricsAsync(target.ResourceId,
+                target.AzureCredentials.AccessToken, cancellationToken, target.ExpectedRevision));
+
         if (metrics is null)
         {
             await _availability.ReportAsync(target, "metrics",
@@ -397,6 +433,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
         else
         {
             _availability.Clear(target, "metrics");
+
             foreach (var observation in metrics.Observations ?? [])
             {
                 await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
@@ -411,6 +448,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
                         EventId: AzureRuntimeDiagnosticPolicy.MetricEventId(target, CloudWebContainerName,
                             observation)),
                     cancellationToken);
+
                 await PublishMetricSummaryAsync(target, CloudWebContainerName, observation, cancellationToken);
             }
         }
@@ -445,7 +483,10 @@ public sealed class AzureContainerAppRuntimeStreamer(
     private async Task PublishMetricSummaryAsync(ContainerAppStreamTarget target, string resource,
         AzureMetricObservation observation, CancellationToken cancellationToken)
     {
-        if (target.LastMetricSummary.TryGetValue(resource, out var last) && observation.Timestamp <= last) return;
+        if (target.LastMetricSummary.TryGetValue(resource, out var last)
+            && observation.Timestamp <= last)
+            return;
+
         var values = observation.Samples.Select(sample => sample.Name switch
         {
             "automate_cpu_usage_cores" => string.Create(CultureInfo.InvariantCulture,
@@ -459,6 +500,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 $"RU usage {sample.Value:0.##}%"),
             _ => string.Create(CultureInfo.InvariantCulture, $"{sample.Name} {sample.Value:0.####} {sample.Unit}")
         });
+
         await diagnostics.PublishAsync(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
                 DeploymentDiagnosticSource.AzureContainerApps, DeploymentDiagnosticKind.Lifecycle,
                 DeploymentDiagnosticSeverity.Information, observation.Timestamp,
@@ -469,6 +511,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 EventId: new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(
                     $"{target.DeploymentId:N}/metric-summary/{resource}/{observation.Timestamp:O}"))[..16])),
             cancellationToken);
+
         target.LastMetricSummary[resource] = observation.Timestamp;
     }
 
@@ -489,9 +532,11 @@ public sealed class AzureContainerAppRuntimeStreamer(
         var sourceName = source.ToString().ToLowerInvariant();
         var checkpoint = await checkpoints.GetOrCreateAsync(target.DeploymentId, sourceName, cancellationToken);
         var settings = options.Value;
+
         var from = (checkpoint.LastIngestionTimestamp ??
                     checkpoint.LastTimestamp ?? DateTimeOffset.UtcNow.Subtract(settings.InitialLookback))
             .Subtract(settings.OverlapWindow);
+
         for (var page = 0; page < Math.Clamp(settings.MaximumPagesPerPoll, 1, 100); page++)
         {
             if (string.IsNullOrWhiteSpace(target.ExpectedRevision)) return;
@@ -511,6 +556,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
                     target.LogEnvironmentName, target.LogEnvironmentResourceName,
                     source == AzureContainerAppLogSource.System && target.CollectDatabases),
                 result => result.IsSuccess);
+
             if (!result.IsSuccess)
             {
                 await _availability.ReportAsync(target, sourceName, result.FailureReason!, cancellationToken);
@@ -556,6 +602,7 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 checkpoint.LastIngestionTieBreaker = tieBreaker;
 
                 var ingestionDelay = (record.IngestionTimestampUtc ?? record.TimestampUtc) - record.TimestampUtc;
+
                 if (ingestionDelay > settings.FreshnessWarningAge)
                     await _availability.ReportAsync(target, $"{sourceName}-freshness",
                         $"Azure {sourceName} log ingestion was delayed by {ingestionDelay.TotalMinutes:0} minute(s).",
@@ -586,11 +633,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
         out ContainerAppStreamTarget target)
     {
         target = null!;
-        if (request.ProjectId == Guid.Empty || request.DeploymentId == Guid.Empty || request.UserId == Guid.Empty ||
-            string.IsNullOrWhiteSpace(request.AzureCredentials.AccessToken) ||
-            string.IsNullOrWhiteSpace(request.AzureCredentials.SubscriptionId) ||
-            string.IsNullOrWhiteSpace(request.Config.CloudResourceGroupName) ||
-            string.IsNullOrWhiteSpace(request.Config.CloudContainerAppName)) return false;
+        if (request.ProjectId == Guid.Empty || request.DeploymentId == Guid.Empty || request.UserId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.AzureCredentials.AccessToken)
+            || string.IsNullOrWhiteSpace(request.AzureCredentials.SubscriptionId)
+            || string.IsNullOrWhiteSpace(request.Config.CloudResourceGroupName)
+            || string.IsNullOrWhiteSpace(request.Config.CloudContainerAppName))
+            return false;
 
         var resourceId =
             $"/subscriptions/{Uri.EscapeDataString(request.AzureCredentials.SubscriptionId)}/resourceGroups/{Uri.EscapeDataString(request.Config.CloudResourceGroupName)}/providers/Microsoft.App/containerApps/{Uri.EscapeDataString(request.Config.CloudContainerAppName)}";
@@ -598,9 +646,12 @@ public sealed class AzureContainerAppRuntimeStreamer(
             request.Config.CloudContainerAppName, request.AzureCredentials)
         {
             ExpectedRevision = request.ExpectedRevision,
-            DatabaseContainers = request.Config.Databases.Select(d => d.ContainerNameSuffix)
-                .Where(n => !string.IsNullOrWhiteSpace(n)).ToHashSet(StringComparer.Ordinal)
+            DatabaseContainers = request.Config.Databases
+                .Select(d => d.ContainerNameSuffix)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToHashSet(StringComparer.Ordinal)
         };
+
         return true;
     }
 
@@ -612,7 +663,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
     private static string CreateAvailabilityMessage(AzureContainerAppState state)
     {
         return
-            $"Azure Container App is available{(string.IsNullOrWhiteSpace(state.Fqdn) ? string.Empty : $" at https://{state.Fqdn}")}. Latest ready revision: {state.LatestRevision}.";
+            $"Azure Container App is available{(string.IsNullOrWhiteSpace(state.Fqdn)
+                ? string.Empty
+                : $" at https://{state.Fqdn}")}. Latest ready revision: {state.LatestRevision}.";
     }
 
     /// <summary>
@@ -625,11 +678,15 @@ public sealed class AzureContainerAppRuntimeStreamer(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
         var credentials = scope.ServiceProvider.GetService<AzureArmCredentialsProvider>();
+
         if (credentials is null) return;
-        var deployments = await db.Deployments.AsNoTracking().Where(d => d.Status == DeploymentStatus.Running &&
-                                                                         d.CloudResourceId != null &&
-                                                                         d.CloudContainerAppName != null &&
-                                                                         d.CloudContainerRevision != null)
+
+        var deployments = await db.Deployments
+            .AsNoTracking()
+            .Where(d => d.Status == DeploymentStatus.Running
+                        && d.CloudResourceId != null
+                        && d.CloudContainerAppName != null
+                        && d.CloudContainerRevision != null)
             .Select(d => new
             {
                 d.Id,
@@ -638,7 +695,9 @@ public sealed class AzureContainerAppRuntimeStreamer(
                 d.CloudResourceId,
                 d.CloudContainerAppName,
                 d.CloudContainerRevision
-            }).ToListAsync(token);
+            })
+            .ToListAsync(token);
+
         foreach (var d in deployments)
         {
             if (_targets.ContainsKey(d.Id)) continue;

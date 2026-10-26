@@ -61,23 +61,31 @@ public sealed class DeploymentTelemetryStore(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
         // Accepted only for constructor compatibility; viewing no longer controls collection or persistence.
         _ = viewers;
-        if (options.Value.DiskGateway)
-        {
-            var policy = await policies!.GetAsync(diagnosticEvent.ProjectId, cancellationToken);
-            if (policy is null) return 0;
-            if (diagnosticEvent.DeploymentId is { } deployment && !await db.Deployments.AnyAsync(d =>
-                    d.Id == deployment && d.CsProject!.AppId == diagnosticEvent.ProjectId &&
-                    d.CsProject.Application.UserId == policy.UserId, cancellationToken)) return 0;
-            var receipt = await gateway!.AcceptAsync(redactor.Redact(diagnosticEvent).Event with
+
+        if (!options.Value.DiskGateway)
+            throw new InvalidOperationException("New diagnostic payloads require the Loki/Mimir disk gateway.");
+
+        var policy = await policies!.GetAsync(diagnosticEvent.ProjectId, cancellationToken);
+        if (policy is null) return 0;
+
+        if (diagnosticEvent.DeploymentId is { } deployment && !await db.Deployments
+                .AnyAsync(d => d.Id == deployment
+                               && d.CsProject!.AppId == diagnosticEvent.ProjectId
+                               && d.CsProject.Application.UserId == policy.UserId, cancellationToken))
+            return 0;
+
+        var receipt = await gateway!
+            .AcceptAsync(redactor.Redact(diagnosticEvent).Event with
             {
                 EventId = diagnosticEvent.EventId ?? Guid.NewGuid()
-            }, terminalChannel is null ? null : redactor.RedactText(terminalChannel, 128), cancellationToken);
-            return receipt.OrderId;
-        }
+            }, terminalChannel is null
+                ? null
+                : redactor.RedactText(terminalChannel, 128), cancellationToken);
 
-        throw new InvalidOperationException("New diagnostic payloads require the Loki/Mimir disk gateway.");
+        return receipt.OrderId;
     }
 
     /// <summary>
@@ -97,6 +105,7 @@ public sealed class DeploymentTelemetryStore(
         limit = Math.Clamp(limit, 1, 2000);
         var recent = await ReadPageAsync(projectId, deploymentId, 0, true, limit, cancellationToken);
         if (!options.Value.Specialized || archive is null) return recent;
+
         // Lifecycle output is finite and precedes runtime traffic; reserve replay space for it.
         var events = recent.Events.ToList();
         foreach (var channel in new[] { "build", "github-actions" })
@@ -104,6 +113,7 @@ public sealed class DeploymentTelemetryStore(
             var phase = await ReadPageAsync(projectId, deploymentId, 0, true, Math.Max(1, limit / 3),
                 cancellationToken, channel: channel);
             events.AddRange(phase.Events);
+
             recent = recent with
             {
                 CanAdvanceCursor = recent.CanAdvanceCursor && phase.CanAdvanceCursor,
@@ -114,11 +124,25 @@ public sealed class DeploymentTelemetryStore(
             };
         }
 
-        var unique = events.DistinctBy(e => e.OrderId).ToArray();
-        var channels = unique.GroupBy(e => e.TerminalChannel).ToArray();
+        var unique = events
+            .DistinctBy(e => e.OrderId)
+            .ToArray();
+
+        var channels = unique
+            .GroupBy(e => e.TerminalChannel)
+            .ToArray();
+
         var share = Math.Max(1, limit / Math.Max(1, channels.Length));
-        var balanced = channels.SelectMany(group => group.OrderByDescending(e => e.OrderId).Take(share))
-            .OrderByDescending(e => e.OrderId).Take(limit).OrderBy(e => e.OrderId).ToArray();
+
+        var balanced = channels
+            .SelectMany(group => group
+                .OrderByDescending(e => e.OrderId)
+                .Take(share))
+            .OrderByDescending(e => e.OrderId)
+            .Take(limit)
+            .OrderBy(e => e.OrderId)
+            .ToArray();
+
         return recent with
         {
             Events = balanced, EarlierOmitted = recent.EarlierOmitted || unique.Length > balanced.Length
@@ -152,12 +176,19 @@ public sealed class DeploymentTelemetryStore(
     public async Task<int> DeleteExpiredAsync(int limit, CancellationToken cancellationToken = default)
     {
         limit = Math.Clamp(limit, 1, 10000);
-        var expired = await db.DeploymentDiagnosticRecords.AsNoTracking()
-            .Where(r => r.DeliveryJson != null && r.ExpiresAt <= DateTimeOffset.UtcNow)
-            .OrderBy(r => r.ExpiresAt).Take(limit).Select(r => new { r.Id, r.TenantId }).ToListAsync(cancellationToken);
+        var expired = await db.DeploymentDiagnosticRecords
+            .AsNoTracking()
+            .Where(r => r.DeliveryJson != null
+                        && r.ExpiresAt <= DateTimeOffset.UtcNow)
+            .OrderBy(r => r.ExpiresAt)
+            .Take(limit)
+            .Select(r => new { r.Id, r.TenantId })
+            .ToListAsync(cancellationToken);
+
         foreach (var group in expired.GroupBy(r => r.TenantId!.Value))
-            await TelemetryDeliveryWorker.RemoveBufferedAsync(db, group.Key, group.Select(r => r.Id).ToArray(),
+            await TelemetryDeliveryWorker.RemoveBufferedAsync(db, group.Key, [.. group.Select(r => r.Id)],
                 cancellationToken);
+
         return expired.Count + (expired.Count == limit
             ? 0
             : await postgres.DeleteExpiredAsync(limit - expired.Count, cancellationToken));
@@ -177,10 +208,14 @@ public sealed class DeploymentTelemetryStore(
             return redactor.RedactText(
                 await postgres.BuildContextAsync(deploymentId, maximumCharacters, cancellationToken),
                 maximumCharacters);
-        var project = await db.Deployments.Where(d => d.Id == deploymentId).Select(d => d.CsProject!.AppId)
+        var project = await db.Deployments
+            .Where(d => d.Id == deploymentId)
+            .Select(d => d.CsProject!.AppId)
             .SingleOrDefaultAsync(cancellationToken);
+
         var page = await ReadRecentAsync(project, deploymentId, 300, cancellationToken);
         var context = new StringBuilder();
+
         foreach (var line in page.Events)
         {
             if (context.Length + line.Message.Length > maximumCharacters) break;
@@ -210,39 +245,67 @@ public sealed class DeploymentTelemetryStore(
         limit = Math.Clamp(limit, 1, 2000);
         if (channel?.Length > 128) throw new ArgumentException("Log channel is limited to 128 characters.");
         var now = DateTimeOffset.UtcNow;
-        var project = await db.Applications.AsNoTracking().Where(p => p.Id == projectId)
-            .Select(p => new { p.UserId }).SingleOrDefaultAsync(cancellationToken);
+
+        var project = await db.Applications
+            .AsNoTracking()
+            .Where(p => p.Id == projectId)
+            .Select(p => new { p.UserId })
+            .SingleOrDefaultAsync(cancellationToken);
+
         var tenant = project?.UserId ?? Guid.Empty;
         var specialized = options.Value.Specialized;
+
         var deploymentCreatedAt = await db.Deployments
             .Where(d => d.Id == deploymentId && d.CsProject!.AppId == projectId)
-            .Select(d => (DateTimeOffset?)d.CreatedAt).SingleOrDefaultAsync(cancellationToken);
-        if (tenant == Guid.Empty || deploymentCreatedAt is null) return new DeploymentTerminalHistory([], false);
+            .Select(d => (DateTimeOffset?)d.CreatedAt)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (tenant == Guid.Empty || deploymentCreatedAt is null)
+            return new DeploymentTerminalHistory([], false);
+
         if (!specialized && cursor == 0 && backwards && string.IsNullOrEmpty(search) && string.IsNullOrEmpty(channel))
         {
             var history = await postgres.ReadRecentAsync(projectId, deploymentId, limit, cancellationToken);
-            history = history with { Events = history.Events.Select(redactor.RedactTerminal).ToArray() };
+            history = history with { Events = [.. history.Events.Select(redactor.RedactTerminal)] };
             return history;
         }
 
-        var nextDeploymentCreatedAt = await db.Deployments.Where(d => d.CsProject!.AppId == projectId &&
-                                                                      d.CreatedAt > deploymentCreatedAt.Value)
+        var nextDeploymentCreatedAt = await db.Deployments
+            .Where(d => d.CsProject!.AppId == projectId
+                        && d.CreatedAt > deploymentCreatedAt.Value)
             .OrderBy(d => d.CreatedAt)
-            .Select(d => (DateTimeOffset?)d.CreatedAt).FirstOrDefaultAsync(cancellationToken);
-        var query = db.DeploymentDiagnosticRecords.AsNoTracking().Where(r =>
-            r.ProjectId == projectId && r.ExpiresAt > now &&
-            ((r.DeploymentId == deploymentId && r.TerminalChannel != null) ||
-             (r.DeploymentId == null && r.DeliveryJson == null &&
-              (r.Source == "GitHubActions" || r.Source == "DockerCompose") &&
-              r.TimestampUtc >= deploymentCreatedAt.Value &&
-              (nextDeploymentCreatedAt == null || r.TimestampUtc < nextDeploymentCreatedAt.Value))));
-        if (cursor > 0) query = backwards ? query.Where(r => r.OrderId < cursor) : query.Where(r => r.OrderId > cursor);
+            .Select(d => (DateTimeOffset?)d.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var query = db.DeploymentDiagnosticRecords
+            .AsNoTracking()
+            .Where(r =>
+                r.ProjectId == projectId
+                && r.ExpiresAt > now
+                && ((r.DeploymentId == deploymentId && r.TerminalChannel != null)
+                    || (r.DeploymentId == null && r.DeliveryJson == null
+                                               && (r.Source == "GitHubActions"
+                                                   || r.Source == "DockerCompose")
+                                               && r.TimestampUtc >= deploymentCreatedAt.Value
+                                               && (nextDeploymentCreatedAt == null
+                                                   || r.TimestampUtc < nextDeploymentCreatedAt.Value))));
+
+        if (cursor > 0)
+            query = backwards
+                ? query.Where(r => r.OrderId < cursor)
+                : query.Where(r => r.OrderId > cursor);
+
         if (!string.IsNullOrEmpty(search)) query = query.Where(r => r.Message.Contains(search));
+
         if (!string.IsNullOrEmpty(channel))
             query = query.Where(r =>
                 (r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build")) == channel);
-        var local = await (backwards ? query.OrderByDescending(r => r.OrderId) : query.OrderBy(r => r.OrderId))
-            .Take(limit + 1).Select(r => new DeploymentTerminalLog(r.OrderId, r.ProjectId, r.DeploymentId,
+
+        var local = await (backwards
+                ? query.OrderByDescending(r => r.OrderId)
+                : query.OrderBy(r => r.OrderId))
+            .Take(limit + 1)
+            .Select(r => new DeploymentTerminalLog(r.OrderId, r.ProjectId, r.DeploymentId,
                 r.TerminalChannel ?? (r.Source == "GitHubActions" ? "github-actions" : "build"), r.Message, r.Id, null,
                 r.Severity == "Critical" ? DeploymentDiagnosticSeverity.Critical :
                 r.Severity == "Error" ? DeploymentDiagnosticSeverity.Error :
@@ -252,9 +315,11 @@ public sealed class DeploymentTelemetryStore(
                 r.Severity == "Trace" ? DeploymentDiagnosticSeverity.Trace : null,
                 r.TimestampUtc, null, null, r.TraceId, r.SpanId, r.Sequence))
             .ToListAsync(cancellationToken);
+
         string? availability = null;
         var canAdvance = true;
         var archiveAvailable = false;
+
         if (specialized)
         {
             try
@@ -264,35 +329,41 @@ public sealed class DeploymentTelemetryStore(
                     var archived = await archive.ReadAsync(tenant, projectId, deploymentId, cursor, backwards,
                         limit + 1, search, cancellationToken, channel);
                     local.AddRange(
-                        archived.Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
+                        archived.Select(e =>
+                            DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
                     archiveAvailable = true;
                 }
 
                 if (options.Value.DiskGateway)
                 {
                     var pending = await gateway!.ReadPendingAsync(tenant, projectId, deploymentId, cancellationToken);
-                    local.AddRange(pending.Events.Where(e => e.Channel is not null &&
-                                                             (string.IsNullOrEmpty(channel) || e.Channel == channel) &&
-                                                             (cursor == 0 || (backwards
-                                                                 ? e.OrderId < cursor
-                                                                 : e.OrderId > cursor)) &&
-                                                             (string.IsNullOrEmpty(search) ||
-                                                              e.Event.Message.Contains(search,
-                                                                  StringComparison.Ordinal)))
+                    local.AddRange(pending.Events
+                        .Where(e => e.Channel is not null
+                                    && (string.IsNullOrEmpty(channel) || e.Channel == channel)
+                                    && (cursor == 0 || (backwards ? e.OrderId < cursor : e.OrderId > cursor))
+                                    && (string.IsNullOrEmpty(search)
+                                        || e.Event.Message.Contains(search, StringComparison.Ordinal)))
                         .Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
+
                     if (pending.Events.Count > 0) availability = "Recent history is pending storage confirmation.";
+
                     if (pending.DroppedEvents > 0 || pending.Truncated)
                         availability = "Some diagnostics were omitted or pending history exceeds the read limit.";
                 }
 
-                var remote = !string.IsNullOrEmpty(search) && logs is IDeploymentLogSearch searchable
+                var remote = !string.IsNullOrEmpty(search)
+                             && logs is IDeploymentLogSearch searchable
                     ? await searchable.SearchAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
                         search, cancellationToken, channel)
                     : await logs.ReadAsync(tenant, projectId, deploymentId, cursor, backwards, limit + 1,
                         cancellationToken, deploymentCreatedAt, channel);
-                local.AddRange(remote.Select(e => DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
+
+                local.AddRange(remote.Select(e =>
+                    DeploymentTerminalLog.FromEvent(e.OrderId, e.Event, e.Channel!)));
+
                 if (await db.DeploymentDiagnosticRecords.AnyAsync(
-                        r => r.ProjectId == projectId && r.DeploymentId == deploymentId && r.DeliveryJson != null,
+                        r => r.ProjectId == projectId
+                             && r.DeploymentId == deploymentId && r.DeliveryJson != null,
                         cancellationToken))
                     availability = "Recent history is pending storage confirmation.";
             }
@@ -301,6 +372,7 @@ public sealed class DeploymentTelemetryStore(
             {
                 logger.LogWarning("Specialized history unavailable for {DeploymentId}: {FailureType}.", deploymentId,
                     ex.GetType().Name);
+
                 availability = ex is TelemetryCompatibilityException compatibilityError
                     ? compatibilityError.Message
                     : archiveAvailable
@@ -309,22 +381,35 @@ public sealed class DeploymentTelemetryStore(
                 canAdvance = archiveAvailable;
             }
 
-            if (await db.TelemetryTenantStates.AnyAsync(s => s.TenantId == tenant && s.DroppedEvents > 0,
-                    cancellationToken))
+            if (await db.TelemetryTenantStates
+                    .AnyAsync(s => s.TenantId == tenant && s.DroppedEvents > 0, cancellationToken))
                 availability = (availability + " Some diagnostics were omitted because storage limits were reached.")
                     .Trim();
         }
 
-        var unique = local.DistinctBy(e => e.EventId is { } id ? id.ToString("N") : "legacy-" + e.OrderId);
-        var ordered = backwards ? unique.OrderByDescending(e => e.OrderId) : unique.OrderBy(e => e.OrderId);
-        var page = ordered.Take(limit + 1).ToList();
+        var unique = local
+            .DistinctBy(e => e.EventId is { } id
+                ? id.ToString("N")
+                : "legacy-" + e.OrderId);
+
+        var ordered = backwards
+            ? unique.OrderByDescending(e => e.OrderId)
+            : unique.OrderBy(e => e.OrderId);
+
+        var page = ordered
+            .Take(limit + 1)
+            .ToList();
+
         var more = page.Count > limit;
         if (more) page.RemoveAt(page.Count - 1);
+
         page.Sort((a, b) => a.OrderId.CompareTo(b.OrderId));
+
         if (page.Count == 0 && availability is null)
             availability =
                 "No saved output is available for this deployment. Older data may predate permanent history.";
-        return new DeploymentTerminalHistory(page.Select(redactor.RedactTerminal).ToArray(), more, availability,
+
+        return new DeploymentTerminalHistory([.. page.Select(redactor.RedactTerminal)], more, availability,
             canAdvance);
     }
 

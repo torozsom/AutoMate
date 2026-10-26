@@ -4,13 +4,15 @@ Scoped assessment choices/consent/request management and text-only presentation 
 
 ## Contents
 
-| File                                                                   | Types or asset              | Responsibility                                                                                  |
-|------------------------------------------------------------------------|-----------------------------|-------------------------------------------------------------------------------------------------|
-| [AssessmentContextControls.razor](AssessmentContextControls.razor)     | `AssessmentContextControls` | Edits immutable analysis choices for sources, containers, metrics, focus and UTC time bounds.   |
-| [AssessmentResultSection.razor](AssessmentResultSection.razor)         | `AssessmentResultSection`   | Presents one validated answer section without interpreting its text as markup.                  |
-| [DeploymentAnalysisPanel.razor](DeploymentAnalysisPanel.razor)         | `DeploymentAnalysisPanel`   | Presents saved analysis state, fixed failure guidance and validated answer content.             |
-| [DeploymentAnalysisPanel.razor.css](DeploymentAnalysisPanel.razor.css) | Scoped stylesheet           | Scoped styling for DeploymentAnalysisPanel.                                                     |
-| [DeploymentAnalysisSection.razor](DeploymentAnalysisSection.razor)     | `DeploymentAnalysisSection` | Coordinates owned analysis choices, consent, requests, cancellation and bounded result polling. |
+| File                                                                     | Types or asset                            | Responsibility                                                                                  |
+|--------------------------------------------------------------------------|-------------------------------------------|-------------------------------------------------------------------------------------------------|
+| [AssessmentContextControls.razor](AssessmentContextControls.razor)       | `AssessmentContextControls`               | Edits immutable analysis choices for sources, containers, metrics, focus and UTC time bounds.   |
+| [AssessmentContextControls.razor.cs](AssessmentContextControls.razor.cs) | `AssessmentContextControls` partial class | Component state, callbacks and lifecycle behavior.                                              |
+| [AssessmentResultSection.razor](AssessmentResultSection.razor)           | `AssessmentResultSection`                 | Presents one validated answer section without interpreting its text as markup.                  |
+| [DeploymentAnalysisPanel.razor](DeploymentAnalysisPanel.razor)           | `DeploymentAnalysisPanel`                 | Presents saved analysis state, fixed failure guidance and validated answer content.             |
+| [DeploymentAnalysisPanel.razor.css](DeploymentAnalysisPanel.razor.css)   | Scoped stylesheet                         | Scoped styling for DeploymentAnalysisPanel.                                                     |
+| [DeploymentAnalysisSection.razor](DeploymentAnalysisSection.razor)       | `DeploymentAnalysisSection`               | Coordinates owned analysis choices, consent, requests, cancellation and bounded result polling. |
+| [DeploymentAnalysisSection.razor.cs](DeploymentAnalysisSection.razor.cs) | `DeploymentAnalysisSection` partial class | Component state, callbacks and lifecycle behavior.                                              |
 
 ## Usage and integration
 

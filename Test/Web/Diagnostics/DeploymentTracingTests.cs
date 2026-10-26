@@ -25,29 +25,37 @@ public sealed class DeploymentTracingTests
     {
         using var exporter = new TraceSnapshotExporter();
         var policy = new PlatformTelemetryPolicy(new DiagnosticRedactor());
+
         using var provider = Sdk.CreateTracerProviderBuilder().AddSource("AutoMate.Analysis")
             .AddProcessor(new SafeTraceProcessor(policy))
             .AddProcessor(new SimpleActivityExportProcessor(exporter)).Build();
+
         var deployment = Guid.NewGuid();
         var analysis = Guid.NewGuid();
+
         using (var parent = AnalysisTelemetry.Start(AnalysisOperation.Process, deployment, analysis))
         {
-            await AnalysisTelemetry.RunAsync(AnalysisOperation.Provider, deployment, analysis, CancellationToken.None,
+            await AnalysisTelemetry.RunAsync(AnalysisOperation.Provider, deployment, analysis,
                 () =>
                 {
                     Activity.Current!.SetTag("provider.body", "private-provider-text");
                     Activity.Current.SetTag("analysis.outcome", "private-outcome");
                     Activity.Current.AddBaggage("private-baggage", "private-token");
+
                     return Task.FromResult(true);
                 });
             parent.Finish(AnalysisOutcome.Completed);
         }
 
         var spans = exporter.Spans
-            .Where(span => Equals(span.Tags.GetValueOrDefault("deployment.analysis.id"), analysis)).ToArray();
+            .Where(span => Equals(span.Tags.GetValueOrDefault("deployment.analysis.id"), analysis))
+            .ToArray();
+
         Assert.Equal(2, spans.Length);
+
         var root = Assert.Single(spans, span => span.Name == "analysis.process");
         var child = Assert.Single(spans, span => span.Name == "analysis.provider");
+
         Assert.Equal(root.SpanId, child.ParentSpanId);
         Assert.Equal("completed", child.Tags["analysis.outcome"]);
         Assert.DoesNotContain("private", JsonSerializer.Serialize(spans));
@@ -75,6 +83,7 @@ public sealed class DeploymentTracingTests
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
         using var root = new Activity("fixture").SetIdFormat(ActivityIdFormat.W3C).Start();
+
         root.ActivityTraceFlags = ActivityTraceFlags.Recorded;
         using var canceled = new CancellationTokenSource();
         var failure = new InvalidOperationException("password=private-provider-body");
@@ -85,15 +94,18 @@ public sealed class DeploymentTracingTests
                 if (scenario == "canceled")
                 {
                     canceled.Cancel();
+
                     return Task.FromCanceled<string>(canceled.Token);
                 }
 
                 return Task.FromResult("private-result-body");
             }, _ => scenario != "returned-failure");
+
         if (scenario == "failure")
             Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(() => action));
         else if (scenario == "canceled") await Assert.ThrowsAnyAsync<OperationCanceledException>(() => action);
         else Assert.Equal("private-result-body", await action);
+
         var span = Assert.Single(exporter.Spans,
             span => Equals(span.Tags.GetValueOrDefault("deployment.id"), deployment));
         Assert.Equal(root.TraceId, span.TraceId);
@@ -130,6 +142,7 @@ internal sealed class TraceSnapshotExporter : BaseExporter<Activity>
                 activity.Status, activity.StatusDescription,
                 activity.TagObjects.ToDictionary(pair => pair.Key, pair => pair.Value),
                 activity.Events.Count()));
+
         return ExportResult.Success;
     }
 }

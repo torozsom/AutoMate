@@ -25,30 +25,39 @@ public sealed class TelemetryGatewayCompatibilityTests
     {
         var probes = 0;
         var reads = 0;
+
         using var handler = new DelegateHttpMessageHandler(request =>
         {
             Assert.Equal("Bearer", request.Headers.Authorization!.Scheme);
+
             if (request.RequestUri!.AbsolutePath == "/capabilities")
             {
                 probes++;
+
                 return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new TelemetryCapabilities(1,
                     TelemetryCapabilities.RequiredArchiveOperations)));
             }
 
             reads++;
+
             Assert.Equal("/archive/metric-batch", request.RequestUri.AbsolutePath);
+
             return DelegateHttpMessageHandler.Json("{\"items\":[],\"nextOffset\":null}");
         });
+
         var factory = new StubHttpClientFactory(handler);
         var options = Settings();
         using var compatibility = new TelemetryGatewayCompatibility(factory, options,
             NullLogger<TelemetryGatewayCompatibility>.Instance);
         var gateway = new TelemetryGatewayClient(factory, options, compatibility);
         var range = new MetricTimeRange(DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddMinutes(-1));
+
         for (var i = 0; i < 2; i++)
             Assert.Empty(
-                (await gateway.ReadMetricBatchAsync(new ArchiveMetricBatchRequest(Guid.NewGuid(), range), default))
+                (await gateway.ReadMetricBatchAsync(new ArchiveMetricBatchRequest(Guid.NewGuid(), range),
+                    CancellationToken.None))
                 .Items);
+
         Assert.Equal(1, probes);
         Assert.Equal(2, reads);
     }
@@ -68,13 +77,17 @@ public sealed class TelemetryGatewayCompatibilityTests
     [InlineData(200, "{\"version\":1,\"archiveOperations\":[\"logs\"]}",
         TelemetryCompatibilityFailure.IncompatibleHost)]
     [InlineData(200, "invalid-private-json", TelemetryCompatibilityFailure.IncompatibleHost)]
+    [InlineData(200, "{\"version\":1,\"archiveOperations\":null}",
+        TelemetryCompatibilityFailure.IncompatibleHost)]
     public async Task Failed_probe_is_classified_safely(int status, string body, TelemetryCompatibilityFailure expected)
     {
         using var handler = new DelegateHttpMessageHandler(_ => new HttpResponseMessage((HttpStatusCode)status)
             { Content = new StringContent(body) });
         using var compatibility = new TelemetryGatewayCompatibility(new StubHttpClientFactory(handler), Settings(),
             NullLogger<TelemetryGatewayCompatibility>.Instance);
-        var error = await Assert.ThrowsAsync<TelemetryCompatibilityException>(() => compatibility.EnsureAsync(default));
+
+        var error = await Assert.ThrowsAsync<TelemetryCompatibilityException>(() =>
+            compatibility.EnsureAsync(CancellationToken.None));
         Assert.Equal(expected, error.Failure);
         Assert.DoesNotContain("private", error.ToString());
         Assert.Null(error.InnerException);
@@ -90,7 +103,9 @@ public sealed class TelemetryGatewayCompatibilityTests
         using var handler = new DelegateHttpMessageHandler(_ => throw new HttpRequestException("private-url"));
         using var compatibility = new TelemetryGatewayCompatibility(new StubHttpClientFactory(handler), Settings(),
             NullLogger<TelemetryGatewayCompatibility>.Instance);
-        var error = await Assert.ThrowsAsync<TelemetryCompatibilityException>(() => compatibility.EnsureAsync(default));
+
+        var error = await Assert.ThrowsAsync<TelemetryCompatibilityException>(() =>
+            compatibility.EnsureAsync(CancellationToken.None));
         Assert.Equal(TelemetryCompatibilityFailure.Unavailable, error.Failure);
         Assert.DoesNotContain("private-url", error.ToString());
     }
@@ -112,8 +127,9 @@ public sealed class TelemetryGatewayCompatibilityTests
             NullLogger<TelemetryGatewayCompatibility>.Instance);
         var gateway = new TelemetryGatewayClient(factory, Settings(), compatibility);
         var range = new MetricTimeRange(DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddMinutes(-1));
+
         var error = await Assert.ThrowsAsync<TelemetryCompatibilityException>(() =>
-            gateway.ReadMetricBatchAsync(new ArchiveMetricBatchRequest(Guid.NewGuid(), range), default));
+            gateway.ReadMetricBatchAsync(new ArchiveMetricBatchRequest(Guid.NewGuid(), range), CancellationToken.None));
         Assert.Equal(TelemetryCompatibilityFailure.IncompatibleHost, error.Failure);
         Assert.DoesNotContain("private-response", error.ToString());
     }

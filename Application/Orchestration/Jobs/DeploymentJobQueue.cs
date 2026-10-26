@@ -17,7 +17,7 @@ public sealed class DeploymentJobQueue(
     ILogger<DeploymentJobQueue>? logger = null) : IDeploymentJobQueue
 {
     /// <summary>Serializes updates to project counters and bounded queue admission.</summary>
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     /// <summary>Clamped maximum number of waiting admitted operations.</summary>
     private readonly int _maxQueued = Math.Clamp(options.Value.MaxQueuedJobs, 1, 1_000);
@@ -186,7 +186,9 @@ public sealed class DeploymentJobQueue(
     private void NotifyStateChanged(Guid projectId)
     {
         if (StateChanged is not { } callbacks) return;
-        foreach (Action<Guid> callback in callbacks.GetInvocationList())
+        foreach (var @delegate in callbacks.GetInvocationList())
+        {
+            var callback = (Action<Guid>)@delegate;
             try
             {
                 callback(projectId);
@@ -195,5 +197,6 @@ public sealed class DeploymentJobQueue(
             {
                 /* A disconnected UI subscriber cannot interrupt job admission. */
             }
+        }
     }
 }

@@ -40,8 +40,11 @@ public sealed class AzureMonitorLogsTokenProvider(
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        var remoteUser = await dbContext.Users.OfType<RemoteUser>()
+
+        var remoteUser = await dbContext.Users
+            .OfType<RemoteUser>()
             .SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
+
         if (string.IsNullOrWhiteSpace(remoteUser?.AzureRefreshToken))
             return new AzureMonitorLogsTokenResult(null,
                 "Reconnect Azure to grant offline access for Azure Monitor Logs.");
@@ -67,6 +70,7 @@ public sealed class AzureMonitorLogsTokenProvider(
             {
                 using var failure = await JsonDocument.ParseAsync(
                     await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+
                 consentRequired = failure.RootElement.TryGetProperty("error_codes", out var codes) &&
                                   codes.ValueKind == JsonValueKind.Array && codes.EnumerateArray()
                                       .Any(code => code.TryGetInt32(out var value) && value == 65001);
@@ -82,19 +86,21 @@ public sealed class AzureMonitorLogsTokenProvider(
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
         var accessToken = payload.RootElement.TryGetProperty("access_token", out var accessTokenElement)
             ? accessTokenElement.GetString()
             : null;
+
         if (string.IsNullOrWhiteSpace(accessToken))
             return new AzureMonitorLogsTokenResult(null, "Azure did not return a Monitor Logs access token.");
 
         // Microsoft Entra may rotate refresh tokens. Persist the replacement through the existing encrypted column.
-        if (payload.RootElement.TryGetProperty("refresh_token", out var refreshTokenElement) &&
-            !string.IsNullOrWhiteSpace(refreshTokenElement.GetString()))
-        {
-            remoteUser.AzureRefreshToken = refreshTokenElement.GetString();
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
+        if (!payload.RootElement.TryGetProperty("refresh_token", out var refreshTokenElement)
+            || string.IsNullOrWhiteSpace(refreshTokenElement.GetString()))
+            return new AzureMonitorLogsTokenResult(accessToken, null);
+
+        remoteUser.AzureRefreshToken = refreshTokenElement.GetString();
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return new AzureMonitorLogsTokenResult(accessToken, null);
     }

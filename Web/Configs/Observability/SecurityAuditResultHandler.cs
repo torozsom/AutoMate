@@ -31,6 +31,7 @@ public sealed class SecurityAuditResultHandler(ILogger<SecurityAuditResultHandle
             OperationalLog.Record(logger, AuditOperation.Authorization, AuditOutcome.Challenged);
         else if (authorizeResult.Forbidden)
             OperationalLog.Record(logger, AuditOperation.Authorization, AuditOutcome.Denied);
+
         return _default.HandleAsync(next, context, policy, authorizeResult);
     }
 }

@@ -45,20 +45,22 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
         using var document = await SendRequestAsync(
             $"{AzureConstants.ManagementEndpoint}{environmentId}?api-version={ContainerAppApiVersion}",
             accessToken, cancellationToken);
-        if (document is null) return null;
-        if (document.RootElement.TryGetProperty("properties", out var properties) &&
-            properties.TryGetProperty("appLogsConfiguration", out var logs) &&
-            logs.TryGetProperty("logAnalyticsConfiguration", out var analytics) &&
-            analytics.TryGetProperty("customerId", out var customer) &&
-            Guid.TryParse(customer.GetString(), out var workspace))
-        {
-            var domain = GetString(properties, "defaultDomain");
-            if (string.IsNullOrWhiteSpace(domain)) return null;
-            return new AzureContainerAppLogScope($"/workspaces/{workspace:D}", domain.Split('.')[0],
-                environmentId.Split('/').Last());
-        }
 
-        return new AzureContainerAppLogScope(environmentId, null, null);
+        if (document is null) return null;
+
+        if (!document.RootElement.TryGetProperty("properties", out var properties)
+            || !properties.TryGetProperty("appLogsConfiguration", out var logs)
+            || !logs.TryGetProperty("logAnalyticsConfiguration", out var analytics)
+            || !analytics.TryGetProperty("customerId", out var customer)
+            || !Guid.TryParse(customer.GetString(), out var workspace))
+            return new AzureContainerAppLogScope(environmentId, null, null);
+
+        var domain = GetString(properties, "defaultDomain");
+
+        if (string.IsNullOrWhiteSpace(domain)) return null;
+
+        return new AzureContainerAppLogScope($"/workspaces/{workspace:D}", domain.Split('.')[0],
+            environmentId.Split('/').Last());
     }
 
     /// <summary>
@@ -94,7 +96,9 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
             template.TryGetProperty("containers", out var containers) &&
             containers.ValueKind == JsonValueKind.Array && containers.GetArrayLength() > 0)
             image = GetString(containers[0], "image");
-        return new AzureContainerAppState(latestRevision, fqdn, image, GetString(properties, "managedEnvironmentId"));
+
+        return new AzureContainerAppState(latestRevision, fqdn, image,
+            GetString(properties, "managedEnvironmentId"));
     }
 
     /// <summary>
@@ -116,7 +120,9 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
         var requestUri = AzureConstants.ManagementEndpoint + resourceId +
                          $"/providers/microsoft.insights/metrics?api-version={MetricsApiVersion}" +
                          $"&metricnames={CpuMetricName},{MemoryMetricName}" +
-                         $"&timespan={Uri.EscapeDataString($"{startTime.UtcDateTime:O}/{endTime.UtcDateTime:O}")}&interval=PT1M&aggregation=Average";
+                         $"&timespan={Uri.EscapeDataString($"{startTime.UtcDateTime:O}/{endTime.UtcDateTime:O}")}" +
+                         "&interval=PT1M&aggregation=Average";
+
         if (!string.IsNullOrWhiteSpace(revision))
             requestUri += "&$filter=" + Uri.EscapeDataString("revisionName eq '" +
                                                              revision.Replace("'", "''", StringComparison.Ordinal) +
@@ -136,10 +142,13 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
 
         var observations = AzureMetricObservations.Parse(document.RootElement, "Average", true);
         var latest = observations.LastOrDefault();
+
         cpuCores = latest?.Samples.FirstOrDefault(s => s.Unit == "cores")?.Value;
         memoryBytes = latest?.Samples.FirstOrDefault(s => s.Unit == "bytes")?.Value;
+
         if (cpuCores is { } cores) cpu = string.Create(CultureInfo.InvariantCulture, $"{cores:0.##} cores");
         if (memoryBytes is { } bytes) memory = FormatBytes(bytes);
+
         return new AzureContainerAppMetrics(cpu, memory, cpuCores, memoryBytes, observations);
     }
 

@@ -42,6 +42,7 @@ public sealed class ConsoleExceptionDiagnosticsTests
             ["Cookie"] = "private-cookie"
         };
         using var activity = new Activity("console-test").Start();
+
         using (logger.BeginScope(fields))
         {
             fields["DeploymentId"] = Guid.NewGuid();
@@ -51,6 +52,7 @@ public sealed class ConsoleExceptionDiagnosticsTests
         }
 
         var console = writer.ToString();
+
         Assert.Contains("Provisioning failed", console);
         Assert.Contains("HttpRequestException", console);
         Assert.Contains("ThrownFailure", console);
@@ -76,11 +78,13 @@ public sealed class ConsoleExceptionDiagnosticsTests
         using var writer = new StringWriter();
         var diagnostics = new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), writer: writer);
         var error = new Exception("deepest-marker");
+
         for (var index = 0; index < 10; index++)
             error = new AggregateException(new string('界', 6000), error, new Exception("sibling"));
         diagnostics.Write("AutoMate.Platform", LogLevel.Error, 0, new SafePlatformLog("safe", []),
             new LoggerExternalScopeProvider(), error);
         var text = writer.ToString();
+
         Assert.NotEmpty(text);
         Assert.True(Encoding.UTF8.GetByteCount(text) <= ConsoleExceptionDiagnostics.MaximumBytes);
         Assert.DoesNotContain("deepest-marker", text);
@@ -96,9 +100,11 @@ public sealed class ConsoleExceptionDiagnosticsTests
     {
         using var writer = new StringWriter();
         var diagnostics = new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), writer: writer);
+
         diagnostics.Write("AutoMate.Platform", LogLevel.Error, 0, new SafePlatformLog("safe", []),
             new LoggerExternalScopeProvider(), new HttpRequestException(
                 "Request failed at C:\\private-root\\file.cs\nresponse body: private-json\nprivate-continuation"));
+
         Assert.DoesNotContain("private", writer.ToString());
         Assert.Contains("Request failed", writer.ToString());
     }
@@ -110,6 +116,7 @@ public sealed class ConsoleExceptionDiagnosticsTests
     public void Diagnostics_failures_are_isolated_and_disabled_log_levels_produce_nothing()
     {
         var diagnostics = new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), writer: new FailingWriter());
+
         diagnostics.Write("AutoMate.Platform", LogLevel.Error, 0, new SafePlatformLog("safe", []),
             new LoggerExternalScopeProvider(), new Exception("safe failure"));
         diagnostics.Write("AutoMate.Platform", LogLevel.Error, 0, new SafePlatformLog("safe", []),
@@ -118,7 +125,9 @@ public sealed class ConsoleExceptionDiagnosticsTests
         using var inner = LoggerFactory.Create(logging => logging.SetMinimumLevel(LogLevel.Critical).AddConsole());
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()),
             new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), writer: writer));
+
         factory.CreateLogger("AutoMate.Platform").LogError(new Exception("filtered"), "failure");
+
         Assert.Equal("", writer.ToString());
     }
 
@@ -132,6 +141,7 @@ public sealed class ConsoleExceptionDiagnosticsTests
         using var writer = new StringWriter();
         using var capture = new CaptureProvider();
         var services = new ServiceCollection();
+
         services.AddLogging(logging => logging.AddProvider(capture));
         services.Configure<LoggerFilterOptions>(settings =>
             settings.Rules.Add(new LoggerFilterRule("Console", null, LogLevel.None, null)));
@@ -139,10 +149,12 @@ public sealed class ConsoleExceptionDiagnosticsTests
             filters: provider.GetRequiredService<IOptionsMonitor<LoggerFilterOptions>>()));
         services.AddSafePlatformLogging();
         using var provider = services.BuildServiceProvider();
+
         provider.GetRequiredService<ILoggerFactory>()
             .CreateLogger("Application.Orchestration.CloudDeploymentOrchestrator")
             .LogError(new Exception("should not reach console"), "Cloud deployment preparation failed: {FailureType}.",
                 "Exception");
+
         Assert.Single(capture.Records);
         Assert.Equal("", writer.ToString());
     }
@@ -154,9 +166,11 @@ public sealed class ConsoleExceptionDiagnosticsTests
     public void Unix_root_paths_do_not_leak_from_exception_messages()
     {
         using var writer = new StringWriter();
+
         new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), writer: writer)
             .Write("AutoMate.Platform", LogLevel.Error, 0, new SafePlatformLog("safe", []),
                 new LoggerExternalScopeProvider(), new Exception("Cannot read /private-file.cs"));
+
         Assert.Contains("Cannot read", writer.ToString());
         Assert.DoesNotContain("private-file", writer.ToString());
     }
@@ -169,9 +183,11 @@ public sealed class ConsoleExceptionDiagnosticsTests
     public void Composition_installs_console_diagnostics_without_replacing_normal_providers()
     {
         var services = new ServiceCollection();
+
         services.AddSafePlatformLogging();
         services.AddSafePlatformLogging();
         using var provider = services.BuildServiceProvider();
+
         Assert.NotNull(provider.GetRequiredService<ConsoleExceptionDiagnostics>());
         Assert.IsType<SafeLoggerFactory>(provider.GetRequiredService<ILoggerFactory>());
     }

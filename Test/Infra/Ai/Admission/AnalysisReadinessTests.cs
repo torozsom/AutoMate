@@ -39,15 +39,20 @@ public sealed class AnalysisReadinessTests
         bool approved, bool credentials, AnalysisConfigurationState expected)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
+
         var commands = new ReadOnlyCommands();
         await using var db = CreateDb(connection, commands);
+
         await db.Database.EnsureCreatedAsync();
         commands.EnforceReadOnly = true;
+
         var monitor = new SettingsMonitor { CurrentValue = Settings(enabled, egress, approved) };
         var catalog = Catalog(() => credentials);
         var service = new DeploymentAnalysisReadinessService(db, monitor, catalog);
         var result = await service.CheckAsync();
+
         Assert.Equal(expected, result.Configuration);
         Assert.True(result.QueueAvailable);
         Assert.Equal(3, commands.Reads);
@@ -63,19 +68,29 @@ public sealed class AnalysisReadinessTests
     public async Task Policy_and_credentials_are_rechecked_and_validation_failures_are_safe()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         await using var db = CreateDb(connection);
+
         await db.Database.EnsureCreatedAsync();
+
         var monitor = new SettingsMonitor { CurrentValue = Settings(true, true, true) };
         var credentials = true;
         var service = new DeploymentAnalysisReadinessService(db, monitor, Catalog(() => credentials));
+
         Assert.Equal(AnalysisConfigurationState.Ready, (await service.CheckAsync()).Configuration);
+
         credentials = false;
+
         Assert.Equal(AnalysisConfigurationState.Unavailable, (await service.CheckAsync()).Configuration);
+
         monitor.CurrentValue = Settings(true, false, true);
+
         Assert.Equal(AnalysisConfigurationState.EgressDisabled, (await service.CheckAsync()).Configuration);
+
         monitor.Failure = new OptionsValidationException("private-name", typeof(AiAnalysisOptions), ["private-secret"]);
         var invalid = await service.CheckAsync();
+
         Assert.Equal(AnalysisConfigurationState.Invalid, invalid.Configuration);
         Assert.True(invalid.QueueAvailable);
         Assert.DoesNotContain("private", invalid.ToString());
@@ -95,9 +110,12 @@ public sealed class AnalysisReadinessTests
     public async Task Missing_metadata_schema_is_unavailable_even_with_disabled_ai(string table)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         await using var db = CreateDb(connection);
+
         await db.Database.EnsureCreatedAsync();
+
         var drop = table switch
         {
             "DeploymentAnalysisWorkItems" => "DROP TABLE \"DeploymentAnalysisWorkItems\"",
@@ -106,10 +124,14 @@ public sealed class AnalysisReadinessTests
             "AiAnalysisBudgetEntries" => "DROP TABLE \"AiAnalysisBudgetEntries\"",
             _ => throw new ArgumentOutOfRangeException(nameof(table))
         };
+
         await db.Database.ExecuteSqlRawAsync(drop);
+
         Assert.True(await db.Database.CanConnectAsync());
+
         var result = await new DeploymentAnalysisReadinessService(db, new SettingsMonitor(), Catalog(() => false))
             .CheckAsync();
+
         Assert.False(result.QueueAvailable);
         Assert.Equal(AnalysisConfigurationState.Disabled, result.Configuration);
     }
@@ -123,14 +145,20 @@ public sealed class AnalysisReadinessTests
     public async Task Queue_operation_observes_cancellation()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         using var cancellation = new CancellationTokenSource();
+
         var commands = new ReadOnlyCommands { Cancel = cancellation };
         await using var db = CreateDb(connection, commands);
-        await db.Database.EnsureCreatedAsync();
+
+        await db.Database.EnsureCreatedAsync(cancellation.Token);
+
         commands.EnforceReadOnly = true;
         var service = new DeploymentAnalysisReadinessService(db, new SettingsMonitor(), Catalog(() => false));
+
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.CheckAsync(cancellation.Token));
+
         Assert.True(cancellation.IsCancellationRequested);
         Assert.Equal(1, commands.Reads);
     }
@@ -144,7 +172,9 @@ public sealed class AnalysisReadinessTests
     private static AutoMateDbContext CreateDb(SqliteConnection connection, ReadOnlyCommands? commands = null)
     {
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection);
+
         if (commands is not null) options.AddInterceptors(commands);
+
         return new AutoMateDbContext(options.Options, new EphemeralDataProtectionProvider());
     }
 
@@ -288,6 +318,7 @@ public sealed class AnalysisReadinessTests
             {
                 Assert.StartsWith("SELECT", command.CommandText);
                 Assert.Contains("LIMIT", command.CommandText);
+
                 Reads++;
                 Cancel?.Cancel();
                 cancellationToken.ThrowIfCancellationRequested();
@@ -308,6 +339,7 @@ public sealed class AnalysisReadinessTests
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             Assert.False(EnforceReadOnly, "Readiness must never write queue metadata.");
+
             return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
         }
     }

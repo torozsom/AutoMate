@@ -34,10 +34,11 @@ internal static class OAuthAccountCallbacks
             return DefaultMicrosoftAuthorityTenant;
 
         var tenant = configuredTenant.Trim();
-        return tenant.Equals("common", StringComparison.OrdinalIgnoreCase) ||
-               tenant.Equals("organizations", StringComparison.OrdinalIgnoreCase) ||
-               tenant.Equals("consumers", StringComparison.OrdinalIgnoreCase) ||
-               Guid.TryParse(tenant, out _)
+
+        return tenant.Equals("common", StringComparison.OrdinalIgnoreCase)
+               || tenant.Equals("organizations", StringComparison.OrdinalIgnoreCase)
+               || tenant.Equals("consumers", StringComparison.OrdinalIgnoreCase)
+               || Guid.TryParse(tenant, out _)
             ? tenant
             : DefaultMicrosoftAuthorityTenant;
     }
@@ -220,15 +221,16 @@ internal static class OAuthAccountCallbacks
         var clientId = context.Options.ClientId;
         var clientSecret = context.Options.ClientSecret;
 
-        if (string.IsNullOrWhiteSpace(refreshToken) ||
-            string.IsNullOrWhiteSpace(tokenEndpoint) ||
-            string.IsNullOrWhiteSpace(clientId) ||
-            string.IsNullOrWhiteSpace(clientSecret))
+        if (string.IsNullOrWhiteSpace(refreshToken)
+            || string.IsNullOrWhiteSpace(tokenEndpoint)
+            || string.IsNullOrWhiteSpace(clientId)
+            || string.IsNullOrWhiteSpace(clientSecret))
             return null;
 
         var httpClientFactory = context.HttpContext.RequestServices.GetRequiredService<IHttpClientFactory>();
         using var httpClient = httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, tokenEndpoint);
+
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = clientId,

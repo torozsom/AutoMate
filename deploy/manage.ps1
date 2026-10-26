@@ -11,7 +11,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ($Build -and $Action -notin @('start', 'restart')) {
+if ($Build -and $Action -notin @('start', 'restart'))
+{
     throw '-Build is supported only with start or restart.'
 }
 
@@ -20,7 +21,8 @@ $deployRoot = $PSScriptRoot
 $startupOrder = @('infrastructure', 'telemetry', 'app')
 $shutdownOrder = @('app', 'telemetry', 'infrastructure')
 
-function Invoke-StackCompose {
+function Invoke-StackCompose
+{
     <# Runs one folder's Compose command, stopping orchestration on the first failure. #>
     param([string]$Stack, [string[]]$ComposeArguments)
 
@@ -31,37 +33,69 @@ function Invoke-StackCompose {
         '--file', (Join-Path $stackDirectory 'compose.yaml')
     )
     $ideOverride = Join-Path $stackDirectory 'compose.ide.yaml'
-    if ($Ide -and (Test-Path -LiteralPath $ideOverride)) {
+    if ($Ide -and (Test-Path -LiteralPath $ideOverride))
+    {
         $arguments += @('--file', $ideOverride)
     }
     $arguments += @('--project-name', "automate-$Stack") + $ComposeArguments
 
-    Write-Host "[$Stack] docker compose $($ComposeArguments -join ' ')"
-    if ($DryRun) { return }
+    Write-Host "[$Stack] docker compose $( $ComposeArguments -join ' ' )"
+    if ($DryRun)
+    {
+        return
+    }
     & docker @arguments
-    if ($LASTEXITCODE -ne 0) {
+    if ($LASTEXITCODE -ne 0)
+    {
         throw "Docker Compose failed for $Stack (exit code $LASTEXITCODE)."
     }
 }
 
-if ($Action -in @('stop', 'restart', 'down')) {
-    $stopCommand = if ($Action -eq 'down') { 'down' } else { 'stop' }
-    foreach ($stack in $shutdownOrder) {
+if ($Action -in @('stop', 'restart', 'down'))
+{
+    $stopCommand = if ($Action -eq 'down')
+    {
+        'down'
+    }
+    else
+    {
+        'stop'
+    }
+    foreach ($stack in $shutdownOrder)
+    {
         Invoke-StackCompose -Stack $stack -ComposeArguments @($stopCommand)
     }
 }
 
-if ($Action -in @('start', 'restart')) {
+if ($Action -in @('start', 'restart'))
+{
     # Stop a previously containerized Web so only the IDE runs deployment workers.
-    if ($Ide) { Invoke-StackCompose -Stack 'app' -ComposeArguments @('stop', 'automate') }
-    foreach ($stack in $startupOrder) {
+    if ($Ide)
+    {
+        Invoke-StackCompose -Stack 'app' -ComposeArguments @('stop', 'automate')
+    }
+    foreach ($stack in $startupOrder)
+    {
         $upArguments = @('up', '-d')
-        if ($Build -and $stack -eq 'app') { $upArguments += '--build' }
+        if ($Build -and $stack -eq 'app')
+        {
+            $upArguments += '--build'
+        }
         Invoke-StackCompose -Stack $stack -ComposeArguments $upArguments
     }
-} elseif ($Action -in @('status', 'pull')) {
-    $composeArguments = if ($Action -eq 'status') { @('ps', '--all') } else { @('pull', '--ignore-buildable') }
-    foreach ($stack in $startupOrder) {
+}
+elseif ($Action -in @('status', 'pull'))
+{
+    $composeArguments = if ($Action -eq 'status')
+    {
+        @('ps', '--all')
+    }
+    else
+    {
+        @('pull', '--ignore-buildable')
+    }
+    foreach ($stack in $startupOrder)
+    {
         Invoke-StackCompose -Stack $stack -ComposeArguments $composeArguments
     }
 }

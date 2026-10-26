@@ -13,6 +13,16 @@ namespace Test.Infra.Ai.Providers;
 public sealed class AnalysisProviderSelectionTests
 {
     /// <summary>
+    ///     A registration without its route policy is rejected before it can be selected for egress.
+    /// </summary>
+    [Fact]
+    public void Missing_route_policy_rejects_registration()
+    {
+        Assert.Throws<ArgumentException>(() => new AnalysisProviderCatalog(
+            [new AnalysisProviderRegistration("synthetic", typeof(Stub), null!)]));
+    }
+
+    /// <summary>
     ///     Missing/unknown/mismatched/disabled settings never instantiate or invoke a provider.
     /// </summary>
     /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
@@ -32,12 +42,15 @@ public sealed class AnalysisProviderSelectionTests
         using var services = new ServiceCollection().AddTransient<Stub>(_ =>
         {
             resolutions++;
+
             return new Stub("openai");
         }).BuildServiceProvider();
         var catalog = new AnalysisProviderCatalog([Registration("openai")]);
         var router = new ConfiguredAnalysisProvider(services, catalog, new AnalysisEgressPolicyTests.Monitor(settings));
+
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
+
         Assert.Equal(0, resolutions);
     }
 
@@ -56,7 +69,9 @@ public sealed class AnalysisProviderSelectionTests
             .BuildServiceProvider();
         var catalog = new AnalysisProviderCatalog([Registration("openai"), Registration("synthetic")]);
         var router = new ConfiguredAnalysisProvider(services, catalog, monitor);
+
         Assert.Equal("synthetic", (await router.AnalyzeAsync(new LlmAnalysisRequest("safe"))).Provider);
+
         monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(owner, provider: "unknown");
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
@@ -75,12 +90,15 @@ public sealed class AnalysisProviderSelectionTests
         using var services = new ServiceCollection().AddTransient<Stub>(_ =>
         {
             monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(owner, egressEnabled: false);
+
             return stub;
         }).BuildServiceProvider();
         var router =
             new ConfiguredAnalysisProvider(services, new AnalysisProviderCatalog([Registration("openai")]), monitor);
+
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
+
         Assert.Equal(0, stub.Calls);
     }
 
@@ -96,6 +114,7 @@ public sealed class AnalysisProviderSelectionTests
             .BuildServiceProvider();
         var router =
             new ConfiguredAnalysisProvider(services, new AnalysisProviderCatalog([Registration("openai")]), monitor);
+
         await Assert.ThrowsAsync<InvalidAnalysisResultException>(() =>
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
     }
@@ -140,6 +159,7 @@ public sealed class AnalysisProviderSelectionTests
             CancellationToken cancellationToken = default)
         {
             Calls++;
+
             return Task.FromResult(new LlmAnalysisResponse(name, "test-model", "Check startup configuration.", [], []));
         }
     }

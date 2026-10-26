@@ -38,17 +38,25 @@ public sealed class RuntimeViewingTests
         var viewers = new DeploymentRuntimeViewers(clock);
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
+
         viewers.Renew("one", project, deployment);
         viewers.Renew("two", project, deployment);
+
         viewers.HasViewers(project, Guid.NewGuid()).Should().BeFalse();
         viewers.HasViewers(Guid.NewGuid(), deployment).Should().BeFalse();
+
         viewers.Remove("one");
+
         viewers.HasViewers(project, deployment).Should().BeTrue();
+
         clock.Now += TimeSpan.FromSeconds(40);
         viewers.Renew("two", project, deployment);
         clock.Now += TimeSpan.FromSeconds(40);
+
         viewers.HasViewers(project, deployment).Should().BeTrue();
+
         clock.Now += TimeSpan.FromSeconds(6);
+
         viewers.HasViewers(project, deployment).Should().BeFalse();
     }
 
@@ -62,11 +70,15 @@ public sealed class RuntimeViewingTests
         var viewers = new DeploymentRuntimeViewers(clock);
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
+
         for (var i = 0; i < 4096; i++) viewers.Renew(i.ToString(), project, deployment);
+
         viewers.Invoking(v => v.Renew("extra", project, deployment)).Should().Throw<InvalidOperationException>();
+
         viewers.Renew("0", project, deployment);
         clock.Now += TimeSpan.FromSeconds(46);
         viewers.Renew("extra", project, deployment);
+
         viewers.HasViewers(project, deployment).Should().BeTrue();
     }
 
@@ -81,9 +93,11 @@ public sealed class RuntimeViewingTests
     public async Task Runtime_is_persisted_automatically_with_legacy_flags_disabled(bool managed)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         await using var db = new AutoMateDbContext(new DbContextOptionsBuilder<AutoMateDbContext>()
             .UseSqlite(connection).Options, new EphemeralDataProtectionProvider());
+
         await db.Database.EnsureCreatedAsync();
         var app = new Domain.Entities.Projects.Application
         {
@@ -92,6 +106,7 @@ public sealed class RuntimeViewingTests
             SourceType = SourceType.Local,
             User = new LocalUser { Username = "test", Email = "test@example.invalid" }
         };
+
         db.Applications.Add(app);
         await db.SaveChangesAsync();
         var viewers = new DeploymentRuntimeViewers(TimeProvider.System);
@@ -110,6 +125,7 @@ public sealed class RuntimeViewingTests
             settings, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance, viewers, gateway,
             policies);
         var deployment = Guid.NewGuid();
+
         db.Deployments.Add(new Deployment
         {
             Id = deployment,
@@ -121,21 +137,30 @@ public sealed class RuntimeViewingTests
         var log = new DeploymentDiagnosticEvent(app.Id, deployment, DeploymentDiagnosticSource.DockerContainer,
             DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow,
             "sample", new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "web"));
+
         (await store.PersistAsync(log, "web")).Should().BeGreaterThan(0);
+
         viewers.Renew("owner", app.Id, deployment);
         await store.PersistAsync(log, "web");
+
         (await store.PersistAsync(log with { DeploymentId = Guid.NewGuid() }, "web")).Should().Be(0);
+
         var metric = log with
         {
             Kind = DeploymentDiagnosticKind.Metric,
             TerminalChannel = new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Metrics, "web"),
             Metrics = [new DeploymentMetricSample("automate_cpu_usage_cores", 0.25, "cores")]
         };
+
         await store.PersistAsync(metric, null);
+
         gateway.Count.Should().Be(3);
         (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(0);
+
         viewers.Remove("owner");
+
         (await store.PersistAsync(log, "web")).Should().BeGreaterThan(0);
+
         app.RuntimeDiagnosticsEnabled = true;
         await db.SaveChangesAsync();
         using var refreshedPolicies =
@@ -144,18 +169,26 @@ public sealed class RuntimeViewingTests
             new DeploymentDiagnosticStore(db, new DiagnosticRedactor()), new UnusedQuery(),
             settings, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance, viewers, gateway,
             refreshedPolicies);
+
         await backgroundStore.PersistAsync(log, "web");
+
         gateway.Count.Should().Be(5);
         (await db.DeploymentDiagnosticRecords.CountAsync()).Should().Be(0);
+
         var history = new DeploymentHistoryService(db, store, new UnusedMetrics(), settings);
+
         await history.SetRuntimeCollectionAsync(app.UserId, app.Id, false);
         await history.SetManagedConsentAsync(app.UserId, app.Id, false);
         var enabled = await history.GetPreferencesAsync(app.UserId, app.Id);
+
         enabled.RuntimeEnabled.Should().BeTrue();
         enabled.ManagedConsent.Should().BeTrue();
+
         var persisted = await db.Applications.AsNoTracking().SingleAsync();
+
         persisted.RuntimeDiagnosticsEnabled.Should().BeTrue();
         persisted.ManagedTelemetryConsent.Should().BeTrue();
+
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             history.SetRuntimeCollectionAsync(Guid.NewGuid(), app.Id, false));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
@@ -224,6 +257,7 @@ public sealed class RuntimeViewingTests
             CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+
             return Task.FromResult(new DeploymentLogEnvelope(e.EventId!.Value, Guid.NewGuid(), ++Count,
                 DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, channel));
         }

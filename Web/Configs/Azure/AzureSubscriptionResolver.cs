@@ -35,6 +35,7 @@ internal static class AzureSubscriptionResolver
         using var httpClient = httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get,
             $"https://management.azure.com/subscriptions?api-version={AzureSubscriptionsApiVersion}");
+
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 
         using var response = await httpClient.SendAsync(request, cancellationToken);

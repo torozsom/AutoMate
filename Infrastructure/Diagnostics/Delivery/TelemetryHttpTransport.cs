@@ -54,8 +54,10 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(10));
         cancellationToken = deadline.Token;
+
         if (!await _admission.WaitAsync(0, cancellationToken))
             throw new TelemetryProviderException(503, TimeSpan.FromSeconds(2));
+
         try
         {
             await _queries.WaitAsync(cancellationToken);
@@ -64,8 +66,10 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
             {
                 using var request = new HttpRequestMessage(payload is null ? HttpMethod.Get : HttpMethod.Post, uri);
                 request.Headers.Add("X-Scope-OrgID", tenantId.ToString("N"));
+
                 if (!string.IsNullOrWhiteSpace(options.Value.Authorization))
                     request.Headers.TryAddWithoutValidation("Authorization", options.Value.Authorization);
+
                 if (payload is not null)
                 {
                     request.Content = JsonContent.Create(payload, options: Json);
@@ -75,6 +79,7 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
 
                 using var response = await clients.CreateClient("DeploymentTelemetry").SendAsync(request,
                     HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
                 if (!response.IsSuccessStatusCode)
                 {
                     if ((int)response.StatusCode == 429) TelemetryStorageMetrics.Throttled.Add(1);
@@ -87,6 +92,7 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
                 using var buffer = new MemoryStream();
                 var chunk = new byte[8192];
                 int count;
+
                 while ((count = await stream.ReadAsync(chunk, cancellationToken)) != 0)
                 {
                     if (buffer.Length + count > 8 * 1024 * 1024)
@@ -94,8 +100,9 @@ public sealed class TelemetryHttpTransport(IHttpClientFactory clients, IOptions<
                     await buffer.WriteAsync(chunk.AsMemory(0, count), cancellationToken);
                 }
 
-                if (buffer.Length == 0) return JsonDocument.Parse("{}");
-                return JsonDocument.Parse(buffer.ToArray());
+                return buffer.Length == 0
+                    ? JsonDocument.Parse("{}")
+                    : JsonDocument.Parse(buffer.ToArray());
             }
             finally
             {

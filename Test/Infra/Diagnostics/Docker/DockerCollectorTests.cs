@@ -37,6 +37,7 @@ public sealed class DockerCollectorTests
             : "unix:///var/run/docker.sock")).CreateClient();
         var target = DockerOutputTests.Target();
         var name = "automate-idle-cancel-test-" + Guid.NewGuid().ToString("N");
+
         target = target with { Containers = [target.Containers[0] with { Name = name }] };
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         using var token = new CancellationTokenSource();
@@ -49,19 +50,21 @@ public sealed class DockerCollectorTests
             Labels = DockerOutputTests.Labels(target, target.Containers[0])
         }, deadline.Token);
         Task? pending = null;
+
         try
         {
             await client.Containers.StartContainerAsync(result.ID, new ContainerStartParameters(), deadline.Token);
             pending = Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], token.Token);
             while (!publisher.Events.Any(e => e.Kind == DeploymentDiagnosticKind.Log))
                 await Task.Delay(10, deadline.Token);
-            token.Cancel();
+            await token.CancelAsync();
             await AwaitShutdownAsync(pending.WaitAsync(TimeSpan.FromSeconds(3)));
+
             Assert.True((await client.Containers.InspectContainerAsync(result.ID, deadline.Token)).State.Running);
         }
         finally
         {
-            token.Cancel();
+            await token.CancelAsync();
             await client.Containers.RemoveContainerAsync(result.ID, new ContainerRemoveParameters { Force = true },
                 CancellationToken.None);
             if (pending is not null) await AwaitShutdownAsync(pending.WaitAsync(TimeSpan.FromSeconds(5)));
@@ -83,9 +86,10 @@ public sealed class DockerCollectorTests
         var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var pending = Collector(client, new RecordingPublisher()).MonitorDaemonAsync(DockerOutputTests.Target(),
             () => ready.TrySetResult(), token.Token);
+
         await ready.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.Delay(300);
-        token.Cancel();
+        await token.CancelAsync();
         await AwaitShutdownAsync(pending.WaitAsync(TimeSpan.FromSeconds(5)));
     }
 
@@ -123,8 +127,9 @@ public sealed class DockerCollectorTests
         var pending = collector.MonitorContainerAsync(target, target.Containers[0], token.Token);
         // The startup wait is informational; wait for actual output rather than using the lifecycle notice as EOF.
         while (!publisher.Events.Any(e => e.Kind == DeploymentDiagnosticKind.Log)) await Task.Delay(10, token.Token);
-        token.Cancel();
+        await token.CancelAsync();
         await AwaitShutdownAsync(pending);
+
         Assert.Equal(0, logger.Warnings);
         Assert.Contains(publisher.Events, e => e.Message == "ready\n");
         var waiting = Assert.Single(publisher.Events, e => e.Message.Contains("Waiting for"));
@@ -150,6 +155,7 @@ public sealed class DockerCollectorTests
         var client = Proxy<IDockerClient>((_, _) => containers);
         var collector =
             new DockerDiagnosticCollector(client, publisher, new DiagnosticRedactor(), TimeProvider.System, logger);
+
         Assert.Null(await collector.VerifyContainerAsync(target, target.Containers[0], CancellationToken.None));
         Assert.Equal(missing ? 0 : 1, logger.Warnings);
         Assert.Equal(missing ? 0 : 1, publisher.Events.Count);
@@ -183,10 +189,12 @@ public sealed class DockerCollectorTests
         var client = Proxy<IDockerClient>((method, _) =>
             method.Name == "get_Containers" ? containers : throw new NotSupportedException(method.Name));
         var pending = Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], token.Token);
+
         await publisher.Ended.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        token.Cancel();
+        await token.CancelAsync();
         await AwaitShutdownAsync(pending);
         var logs = publisher.Events.Where(e => e.Kind == DeploymentDiagnosticKind.Log).ToArray();
+
         Assert.Equal(3, logs.Length);
         Assert.Contains(logs,
             e => e.Message == "out árvíz 😀\r\n" &&
@@ -214,7 +222,9 @@ public sealed class DockerCollectorTests
             : throw new InvalidOperationException("Must not subscribe to unowned container"));
         var client = Proxy<IDockerClient>((method, _) =>
             method.Name == "get_Containers" ? containers : throw new NotSupportedException());
+
         await Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], CancellationToken.None);
+
         Assert.Single(publisher.Events);
         Assert.Contains("ownership", publisher.Events.Single().Message);
     }
@@ -241,6 +251,7 @@ public sealed class DockerCollectorTests
                 });
             if (method.Name != "GetContainerLogsAsync") throw new NotSupportedException();
             subscriptions.Add((ContainerLogsParameters)args![2]!);
+
             return Task.FromResult(new MultiplexedStream(new MemoryStream(Frames(
                 (1, "2026-10-04T08:00:00.123456789Z same\n2026-10-04T08:00:00.123456789Z same\n"))), true));
         });
@@ -248,12 +259,16 @@ public sealed class DockerCollectorTests
             method.Name == "get_Containers" ? containers : throw new NotSupportedException());
         using var token = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var pending = Collector(client, publisher).MonitorContainerAsync(target, target.Containers[0], token.Token);
+
         await publisher.Ended.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        token.Cancel();
+        await token.CancelAsync();
         await AwaitShutdownAsync(pending);
+
         Assert.Equal(2, subscriptions.Count);
         Assert.All(subscriptions, s => Assert.Null(s.Since));
+
         var logs = publisher.Events.Where(e => e.Kind == DeploymentDiagnosticKind.Log).ToArray();
+
         Assert.Equal(2, logs.Length);
         Assert.Equal("same\n", logs[0].Message);
         Assert.Equal("same\n", logs[1].Message);
@@ -280,9 +295,11 @@ public sealed class DockerCollectorTests
             method.Name == "get_System" ? system : throw new NotSupportedException());
         using var token = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var pending = Collector(client, publisher).MonitorDaemonAsync(target, () => { }, token.Token);
+
         await publisher.Lifecycle.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        token.Cancel();
+        await token.CancelAsync();
         await AwaitShutdownAsync(pending);
+
         Assert.True(exited.Task.IsCompletedSuccessfully);
         Assert.Single(publisher.Events,
             e => e.Source == DeploymentDiagnosticSource.DockerDaemon && e.Kind == DeploymentDiagnosticKind.Lifecycle);
@@ -337,6 +354,7 @@ public sealed class DockerCollectorTests
         var daemon = collector.MonitorDaemonAsync(target, () => { }, token.Token);
         var created = new List<string>();
         Task? logs = null;
+
         try
         {
             foreach (var owned in new[] { false, true })
@@ -351,6 +369,7 @@ public sealed class DockerCollectorTests
                     Cmd = ["sh", "-c", "printf 'stdout 😀\\n'; printf 'password=private-value\\n' >&2"],
                     Labels = labels
                 }, token.Token);
+
                 created.Add(result.ID);
                 await client.Containers.StartContainerAsync(result.ID, new ContainerStartParameters(), token.Token);
             }
@@ -358,6 +377,7 @@ public sealed class DockerCollectorTests
             logs = collector.MonitorContainerAsync(target, target.Containers[0], token.Token);
             await publisher.Ended.Task.WaitAsync(TimeSpan.FromSeconds(15));
             await publisher.Died.Task.WaitAsync(TimeSpan.FromSeconds(15));
+
             Assert.Contains(publisher.Events, e => e.Message == "stdout 😀\n");
             Assert.Contains(publisher.Events,
                 e => e.Message == "password=[REDACTED]\n" &&
@@ -368,7 +388,7 @@ public sealed class DockerCollectorTests
         }
         finally
         {
-            token.Cancel();
+            await token.CancelAsync();
             await AwaitShutdownAsync(daemon);
             if (logs is not null) await AwaitShutdownAsync(logs);
             foreach (var id in created)
@@ -389,6 +409,7 @@ public sealed class DockerCollectorTests
         var name = "automate-compose-test-" + Guid.NewGuid().ToString("N");
         var directory = Path.Combine(Path.GetTempPath(), name);
         var file = Path.Combine(directory, "docker-compose.yml");
+
         Directory.CreateDirectory(directory);
         using var client = new DockerClientConfiguration(new Uri(OperatingSystem.IsWindows()
             ? "npipe://./pipe/docker_engine"
@@ -401,6 +422,7 @@ public sealed class DockerCollectorTests
         var collector = Collector(client, publisher);
         var sources = new List<Task>();
         var image = Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE_IMAGE") ?? "alpine:3.20";
+
         await File.WriteAllTextAsync(file, $$"""
                                              services:
                                                web:
@@ -418,13 +440,17 @@ public sealed class DockerCollectorTests
         {
             Assert.True(await cli.RunComposeAsync(directory, name, target.ProjectId, target.DeploymentId, token.Token,
                 "up", "--no-build", "-d"));
+
             var inspect = await client.Containers.InspectContainerAsync(name, token.Token);
+
             Assert.Equal(target.DeploymentId.ToString("N"), inspect.Config.Labels["io.automate.deployment"]);
+
             target = target with { ComposeProject = name, Containers = [new DockerContainerTarget(name, "web")] };
             sources.Add(collector.MonitorDaemonAsync(target, () => { }, subscriptions.Token));
             sources.Add(collector.MonitorContainerAsync(target, target.Containers[0], subscriptions.Token));
             sources.Add(cli.StreamContainerMetricsAsync(inspect.ID, target.ProjectId, target.DeploymentId, "web",
                 subscriptions.Token));
+
             Assert.False(await cli.RunComposeAsync(directory, name, target.ProjectId, target.DeploymentId, token.Token,
                 "up", "--invalid-smoke-option"));
             Assert.Contains(publisher.Events,
@@ -439,8 +465,10 @@ public sealed class DockerCollectorTests
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
             Assert.True(await cli.RunComposeAsync(directory, name, target.ProjectId, target.DeploymentId, cleanup.Token,
                 "down"));
+
             await subscriptions.CancelAsync();
             await Task.WhenAll(sources.Select(AwaitShutdownAsync)).WaitAsync(TimeSpan.FromSeconds(5));
             File.Delete(file);
@@ -453,9 +481,11 @@ public sealed class DockerCollectorTests
     public async Task Real_compose_starts_and_stops_ten_independent_projects()
     {
         var prefix = "automate-concurrent-test-" + Guid.NewGuid().ToString("N");
-        var projects = Enumerable.Range(0, 10).Select(index =>
-            (Name: prefix + "-" + index, Directory: Path.Combine(Path.GetTempPath(), prefix + "-" + index),
-                Project: Guid.NewGuid(), Deployment: Guid.NewGuid())).ToArray();
+        var projects = Enumerable.Range(0, 10)
+            .Select(index =>
+                (Name: prefix + "-" + index, Directory: Path.Combine(Path.GetTempPath(), prefix + "-" + index),
+                    Project: Guid.NewGuid(), Deployment: Guid.NewGuid()))
+            .ToArray();
         var publisher = new RecordingPublisher();
         var cli = new DockerCli(new DockerOptions(), publisher, NullLogger.Instance, 60, new UnusedLive(),
             new DiagnosticRedactor(), new DeploymentRuntimeViewers(TimeProvider.System), TimeProvider.System);
@@ -464,6 +494,7 @@ public sealed class DockerCollectorTests
             : "unix:///var/run/docker.sock")).CreateClient();
         using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
         var image = Environment.GetEnvironmentVariable("AUTOMATE_DOCKER_SMOKE_IMAGE") ?? "busybox:1.37";
+
         try
         {
             foreach (var project in projects)
@@ -484,16 +515,20 @@ public sealed class DockerCollectorTests
 
             var started = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
                 project.Name, project.Project, project.Deployment, deadline.Token, "up", "-d")));
+
             Assert.All(started, Assert.True);
+
             foreach (var project in projects)
             {
                 var container = await client.Containers.InspectContainerAsync(project.Name, deadline.Token);
+
                 Assert.True(container.State.Running);
                 Assert.Equal(project.Deployment.ToString("N"), container.Config.Labels["io.automate.deployment"]);
             }
 
             var stopped = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
                 project.Name, project.Project, project.Deployment, deadline.Token, "down")));
+
             Assert.All(stopped, Assert.True);
         }
         finally
@@ -503,10 +538,13 @@ public sealed class DockerCollectorTests
                 .Where(project => File.Exists(Path.Combine(project.Directory, "docker-compose.yml")))
                 .Select(project => cli.RunComposeAsync(project.Directory, project.Name, project.Project,
                     project.Deployment, cleanup.Token, "down")));
+
             Assert.All(cleaned, Assert.True);
+
             foreach (var project in projects)
             {
                 var file = Path.Combine(project.Directory, "docker-compose.yml");
+
                 if (File.Exists(file)) File.Delete(file);
                 if (Directory.Exists(project.Directory)) Directory.Delete(project.Directory);
             }
@@ -549,9 +587,11 @@ public sealed class DockerCollectorTests
     private static byte[] Frames(params (int Stream, string Text)[] frames)
     {
         using var bytes = new MemoryStream();
+
         foreach (var frame in frames)
         {
             var text = Encoding.UTF8.GetBytes(frame.Text);
+
             bytes.Write(new byte[]
             {
                 (byte)frame.Stream, 0, 0, 0, (byte)(text.Length >> 24), (byte)(text.Length >> 16),
@@ -572,7 +612,9 @@ public sealed class DockerCollectorTests
     private static T Proxy<T>(Func<MethodInfo, object?[]?, object?> handler) where T : class
     {
         var proxy = DispatchProxy.Create<T, SdkProxy>();
+
         ((SdkProxy)(object)proxy).Handler = handler;
+
         return proxy;
     }
 
@@ -619,6 +661,7 @@ public sealed class DockerCollectorTests
         {
             Assert.Null(error);
             Assert.DoesNotContain("private", formatter(state, error));
+
             if (level == LogLevel.Warning) Warnings++;
         }
     }
@@ -728,6 +771,7 @@ public sealed class DockerCollectorTests
             Events.Enqueue(e);
             if (e.Source == DeploymentDiagnosticSource.DockerContainer && e.Kind == DeploymentDiagnosticKind.Lifecycle)
                 Ended.TrySetResult();
+
             return ValueTask.CompletedTask;
         }
 
@@ -744,6 +788,7 @@ public sealed class DockerCollectorTests
             if (RejectNextLog && e.Kind == DeploymentDiagnosticKind.Log)
             {
                 RejectNextLog = false;
+
                 return Task.FromResult(false);
             }
 
@@ -751,6 +796,7 @@ public sealed class DockerCollectorTests
             if (e.Source == DeploymentDiagnosticSource.DockerDaemon && e.Kind == DeploymentDiagnosticKind.Lifecycle)
                 Lifecycle.TrySetResult();
             if (e.Attributes?.GetValueOrDefault("action") == "die") Died.TrySetResult();
+
             return Task.FromResult(true);
         }
     }

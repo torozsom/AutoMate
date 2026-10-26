@@ -29,15 +29,18 @@ public sealed class AzureResourceProviderRegistrarTests
                 {
                     if (request.Method == HttpMethod.Post) registered = true;
                     else reads++;
+
                     return DelegateHttpMessageHandler.Json("{\"registrationState\":\"" +
                                                            (registered ? "Registered" : "NotRegistered") + "\"}");
                 }
 
                 return DelegateHttpMessageHandler.Json("{\"registrationState\":\"Registered\"}");
             })), NullLogger.Instance);
+
         await registrar.EnsureRequiredProvidersAsync(
             new AzureCloudCredentialsDto { SubscriptionId = "sub", AccessToken = "token" }, new DeploymentConfigDto(),
-            default);
+            CancellationToken.None);
+
         Assert.True(registered);
         Assert.Equal(2, reads);
     }
@@ -56,9 +59,10 @@ public sealed class AzureResourceProviderRegistrarTests
                             { Content = new StringContent("sensitive-provider-body") }
                         : DelegateHttpMessageHandler.Json("{\"registrationState\":\"NotRegistered\"}"))),
             NullLogger.Instance);
+
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => registrar.EnsureRequiredProvidersAsync(
             new AzureCloudCredentialsDto { SubscriptionId = "private-sub", AccessToken = "private-token" },
-            new DeploymentConfigDto(), default));
+            new DeploymentConfigDto(), CancellationToken.None));
         Assert.Contains("Register it manually", error.Message);
         Assert.DoesNotContain("sensitive", error.Message);
         Assert.DoesNotContain("private", error.Message);
@@ -74,6 +78,7 @@ public sealed class AzureResourceProviderRegistrarTests
         var registrar = new AzureResourceProviderRegistrar(new StubHttpClientFactory(new DelegateHttpMessageHandler(_ =>
             DelegateHttpMessageHandler.Json("{\"registrationState\":\"Registering\"}"))), NullLogger.Instance);
         using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => registrar.EnsureRequiredProvidersAsync(
             new AzureCloudCredentialsDto { SubscriptionId = "sub", AccessToken = "token" }, new DeploymentConfigDto(),
             deadline.Token));

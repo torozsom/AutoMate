@@ -32,13 +32,17 @@ public sealed class DeploymentHistoryTests
             new DeploymentTerminalLog(2, project, deployment, "github-actions", "saved workflow\r\n"),
             new DeploymentTerminalLog(3, project, deployment, "web", "runtime\r\n")
         ], false));
+
         var (page, js) = CreatePage(history);
         SetField(page, "_channel", "build");
         await LoadAsync(page);
+
         Assert.Equal("build", history.RequestedChannel);
         Assert.Equal("saved build\r\n", js.Output);
+
         SetField(page, "_channel", "github-actions");
         await LoadAsync(page);
+
         Assert.Equal("github-actions", history.RequestedChannel);
         Assert.Equal("saved workflow\r\n", js.Output);
     }
@@ -57,6 +61,7 @@ public sealed class DeploymentHistoryTests
             new DeploymentTerminalLog(2, project, deployment, "db", "db started\r\n"),
             new DeploymentTerminalLog(3, project, deployment, "web", "request served\r\n")
         ], false));
+
         var (page, js) = CreatePage(history);
         SetProperty(page, "ProjectId", project);
         SetProperty(page, "DeploymentId", deployment);
@@ -80,6 +85,7 @@ public sealed class DeploymentHistoryTests
     {
         var (page, js) = CreatePage(new HistoryStub(new DeploymentTerminalHistory([], false, "Expired")));
         await LoadAsync(page);
+
         Assert.Equal("[No saved output in this terminal page.]\r\n", js.Output);
     }
 
@@ -92,13 +98,16 @@ public sealed class DeploymentHistoryTests
     {
         var js = new RecordingJs();
         var terminal = new Terminal();
+
         SetProperty(terminal, "JSRuntime", js);
         SetField(terminal, "_isReady", true);
         var page = new DeploymentHistory();
         var services = new ServiceCollection().AddSingleton(history).BuildServiceProvider();
+
         SetProperty(page, "ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
         SetProperty(page, "Logger", NullLogger<DeploymentHistory>.Instance);
         SetField(page, "_terminal", terminal);
+
         return (page, js);
     }
 
@@ -134,12 +143,14 @@ public sealed class DeploymentHistoryTests
         var history = new HistoryStub(new DeploymentTerminalHistory([
             new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), "build", "saved output")
         ], false));
+
         var (page, js) = CreatePage(history);
         SetField(page, "_channel", "build");
         await LoadAsync(page);
         SetField(page, "_earlierCursor", "unchanged cursor");
         SetField(page, "_metricDays", 7);
         await LoadMetricsAsync(page);
+
         Assert.Equal("saved output", js.Output);
         Assert.Equal("build", GetField<string>(page, "_channel"));
         Assert.Equal("unchanged cursor", GetField<string>(page, "_earlierCursor"));
@@ -158,6 +169,7 @@ public sealed class DeploymentHistoryTests
         var history = new HistoryStub(new DeploymentTerminalHistory([], false));
         var calls = 0;
         var now = DateTimeOffset.UtcNow;
+
         history.Metrics = () => ++calls == 1
             ? older.Task
             : Task.FromResult(new DeploymentMetricHistory([
@@ -166,12 +178,14 @@ public sealed class DeploymentHistoryTests
             ]));
         var (page, _) = CreatePage(history);
         var first = LoadMetricsAsync(page);
+
         SetField(page, "_metricDays", 7);
         await LoadMetricsAsync(page);
         older.SetResult(new DeploymentMetricHistory([
             new DeploymentMetricPoint("old", TelemetryPresentation.Cpu, "cores", now, 99, 99, 99)
         ]));
         await first;
+
         Assert.Equal(7, GetField<int>(page, "_loadedMetricDays"));
         Assert.Equal("db", GetField<string>(page, "_metricContainer"));
         Assert.Equal(2, GetField<IReadOnlyList<DeploymentMetricPoint>>(page, "_metrics").Count);
@@ -189,10 +203,14 @@ public sealed class DeploymentHistoryTests
         {
             Metrics = () => Task.FromException<DeploymentMetricHistory>(new UnauthorizedAccessException())
         };
+
         var (page, _) = CreatePage(history);
         await LoadAsync(page);
+
         Assert.True(GetField<bool>(page, "_authorized"));
+
         await LoadMetricsAsync(page);
+
         Assert.False(GetField<bool>(page, "_authorized"));
         Assert.Equal("Deployment history access denied.", GetField<string>(page, "_error"));
     }
@@ -265,6 +283,7 @@ public sealed class DeploymentHistoryTests
         {
             if (identifier == "xtermWrapper.clear") Output = "";
             if (identifier == "xtermWrapper.write") Output += (string)args![1]!;
+
             return ValueTask.FromResult(default(TValue)!);
         }
     }
@@ -294,8 +313,9 @@ public sealed class DeploymentHistoryTests
             RequestedChannel = channel;
             var selected = logs with
             {
-                Events = logs.Events.Where(e => string.IsNullOrEmpty(channel) || e.TerminalChannel == channel).ToArray()
+                Events = [.. logs.Events.Where(e => string.IsNullOrEmpty(channel) || e.TerminalChannel == channel)]
             };
+
             return Task.FromResult(TelemetryHistoryCursor.Page(selected, project, deployment));
         }
 
@@ -317,6 +337,7 @@ public sealed class DeploymentHistoryTests
             long cursor, bool backwards, int limit, CancellationToken cancellationToken = default)
         {
             LogReads++;
+
             return Task.FromResult(logs);
         }
 

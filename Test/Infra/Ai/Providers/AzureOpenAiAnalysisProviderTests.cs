@@ -38,6 +38,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var handler = new DelegateHttpMessageHandler(_ =>
         {
             calls++;
+
             return new HttpResponseMessage(HttpStatusCode.Forbidden)
             {
                 Content = new StringContent(JsonSerializer.Serialize(new { error = new { code = "403", message } }))
@@ -46,6 +47,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var client = new HttpClient(handler);
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
+
         var error = await Assert.ThrowsAsync<AnalysisProviderAccessDeniedException>(() =>
             CreateProvider(client, Configuration(), settings).AnalyzeAsync(Request()));
         Assert.Equal(reason, error.Reason);
@@ -107,6 +109,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var client = new HttpClient(handler);
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
+
         var error = await Assert.ThrowsAsync<InvalidAnalysisResultException>(() =>
             CreateProvider(client, Configuration(), settings)
                 .AnalyzeAsync(Request() with { Kind = AssessmentKind.RuntimeOverview }));
@@ -126,11 +129,15 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         {
             using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             var instructions = body.RootElement.GetProperty("instructions").GetString()!;
+
             Assert.Contains("6 items of 768 characters", instructions);
             Assert.Contains("identifiers exactly", instructions);
+
             var schema = body.RootElement.GetProperty("text").GetProperty("format").GetProperty("schema").ToString();
+
             Assert.DoesNotContain("maxLength", schema);
             Assert.DoesNotContain("maxItems", schema);
+
             return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new
             {
                 status = "completed",
@@ -153,11 +160,13 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
                 }
             }));
         });
+
         using var client = new HttpClient(handler);
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
         var result = await CreateProvider(client, Configuration(), settings)
             .AnalyzeAsync(Request() with { Kind = AssessmentKind.RuntimeOverview });
+
         Assert.Equal(2, result.ResultSchemaVersion);
         Assert.Empty(result.Sections!.Observations);
         Assert.Equal("No overview was recorded for the selected evidence.", result.Summary);
@@ -173,8 +182,10 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var handler = new DelegateHttpMessageHandler(request =>
         {
             using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+
             Assert.Equal("analysis-deployment", body.RootElement.GetProperty("model").GetString());
             Assert.Equal("test-key", Assert.Single(request.Headers.GetValues("api-key")));
+
             return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new
             {
                 status = "completed",
@@ -197,10 +208,12 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
                 }
             }));
         });
+
         using var client = new HttpClient(handler);
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/", model: "analysis-deployment");
         var result = await CreateProvider(client, Configuration(), settings).AnalyzeAsync(Request());
+
         Assert.Equal("azure-openai", result.Provider);
         Assert.Equal("analysis-deployment", result.RequestedModel);
         Assert.Equal("gpt-4.1-mini-2025-04-14", result.Model);
@@ -222,6 +235,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
     public async Task Azure_configuration_reload_cancels_active_request(bool readingBody, string setting)
     {
         var configuration = Configuration();
+
         configuration["AiAnalysis:Enabled"] = "true";
         configuration["AiAnalysis:ProviderEgressEnabled"] = "true";
         configuration["AiAnalysis:Provider"] = "azure-openai";
@@ -234,6 +248,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         configuration["AiAnalysis:AllowedDataCategories:2"] = "traceCorrelation";
         configuration["AiAnalysis:Endpoint"] = "https://automate-test.openai.azure.com/openai/v1/";
         var services = new ServiceCollection();
+
         services.AddOptions<AiAnalysisOptions>().Bind(configuration.GetSection("AiAnalysis"));
         using var container = services.BuildServiceProvider();
         var monitor = container.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
@@ -243,12 +258,14 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         var provider = new AzureOpenAiAnalysisProvider(client, configuration, monitor, AnalysisResultTests.Validator(),
             new DiagnosticRedactor(), new AnalysisEgressPolicyTests.Authorizer());
         var active = provider.AnalyzeAsync(Request());
+
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         configuration[$"AiAnalysis:AzureOpenAi:{setting}"] = "";
         configuration.Reload();
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(async () =>
             await active.WaitAsync(TimeSpan.FromSeconds(5)));
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() => provider.AnalyzeAsync(Request()));
+
         Assert.Equal(1, handler.Calls);
     }
 
@@ -275,6 +292,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var client = new HttpClient(handler);
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai", endpoint: endpoint);
         var provider = CreateProvider(client, Configuration(), settings);
+
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() => provider.AnalyzeAsync(Request()));
     }
 
@@ -300,8 +318,10 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         var configuration = Configuration(key, resource);
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
+
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             CreateProvider(client, configuration, settings).AnalyzeAsync(Request()));
+
         Assert.False(AzureOpenAiAnalysisProvider.ReadOptions(configuration).HasApiKey() &&
                      AzureOpenAiAnalysisProvider.ReadOptions(configuration).ApprovesRoute(settings));
     }
@@ -331,7 +351,9 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
                 Content = new StringContent(JsonSerializer.Serialize(new
                     { error = new { code, message = "password=private-value" } }))
             };
+
             if (hint) response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
+
             return response;
         });
         using var client = new HttpClient(handler);
@@ -339,8 +361,10 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
         var error = await Record.ExceptionAsync(() =>
             CreateProvider(client, Configuration(), settings).AnalyzeAsync(Request()));
+
         if (transient) Assert.Equal(42, Assert.IsType<TransientAnalysisProviderException>(error).RetryAfterSeconds);
         else Assert.IsType<HttpRequestException>(error);
+
         Assert.DoesNotContain("private-value", error!.ToString());
         Assert.Equal(1, calls);
     }

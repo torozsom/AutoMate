@@ -34,7 +34,8 @@ internal sealed class CloudCsProjectResolver(AutoMateDbContext dbContext)
 
         var app = await dbContext.Applications
             .Include(a => a.CsProjects)
-            .FirstOrDefaultAsync(a => a.Id == request.Config.ProjectId && a.UserId == request.RequestingUserId,
+            .FirstOrDefaultAsync(a => a.Id == request.Config.ProjectId
+                                      && a.UserId == request.RequestingUserId,
                 cancellationToken);
 
         if (app == null)
@@ -72,7 +73,9 @@ internal sealed class CloudCsProjectResolver(AutoMateDbContext dbContext)
         CancellationToken cancellationToken)
     {
         var existingCsProject = await dbContext.CsProjects.FirstOrDefaultAsync(
-            csp => csp.Id == csProjectId && csp.AppId == projectId && csp.Application.UserId == ownerId,
+            csp => csp.Id == csProjectId
+                   && csp.AppId == projectId
+                   && csp.Application.UserId == ownerId,
             cancellationToken);
 
         return existingCsProject ?? throw new InvalidOperationException(

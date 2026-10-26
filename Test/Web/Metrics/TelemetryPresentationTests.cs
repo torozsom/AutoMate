@@ -49,6 +49,7 @@ public sealed class TelemetryPresentationTests
         var rows = new[]
             { Row(date, 1, .01), Row(date, 9, .03), Row(date.AddDays(2), 1, 0), Row(date.AddDays(1), 0, null) };
         var points = TelemetryPresentation.DailyPoints(rows);
+
         Assert.Equal(2, points.Count);
         Assert.Equal(.028, points[0].Average, 8);
         Assert.Equal(date.AddDays(2), points[1].Timestamp);
@@ -68,6 +69,7 @@ public sealed class TelemetryPresentationTests
     {
         var maximum =
             TelemetryPresentation.AxisMaximum([new TelemetryChartPoint(DateTimeOffset.UtcNow, value, value, value)]);
+
         Assert.True(maximum > 0);
         Assert.True(maximum >= value);
         Assert.True(maximum < 1);

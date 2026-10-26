@@ -36,26 +36,31 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
         var owner = Guid.NewGuid();
         var calls = new List<string>();
         var users = DispatchProxy.Create<IUserService, OperationalLoggingTests.PortProxy>();
+
         ((OperationalLoggingTests.PortProxy)users).Call = (method, args) =>
         {
             calls.Add(method!.Name);
             if (method.Name == nameof(IUserService.GetAzureCloudCredentialsAsync))
             {
                 Assert.Equal(owner, args![0]);
+
                 return Task.FromResult(hasAzure ? new AzureCloudCredentialsDto() : null);
             }
 
             Assert.Equal(nameof(IUserService.GetUserDetailsFromIdentifierAsync), method.Name);
             Assert.Equal(owner.ToString(), args![0]);
+
             return Task.FromResult((owner, hasGitHub ? "synthetic-token" : null, false));
         };
         await using var provider = new ServiceCollection().AddSingleton(users).BuildServiceProvider();
         var operations = new ScopedApplicationOperations(provider.GetRequiredService<IServiceScopeFactory>());
         var preparation = await new ConnectedCloudDeploymentAdmission(operations)
             .PrepareAsync(owner, new Authentication(owner), ownerFence, () => true);
+
         Assert.Equal(expected, preparation.State);
         Assert.Equal(nameof(IUserService.GetAzureCloudCredentialsAsync), calls[0]);
         Assert.Equal(ownerFence && !hasAzure ? 1 : 2, calls.Count);
+
         if (expected != CloudConnectionState.Ready)
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 preparation.StartAsync(new DeploymentConfigDto(), "owner", "repo", "app", null));
@@ -69,9 +74,11 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
     public async Task Obsolete_dashboard_operation_stops_before_github_lookup()
     {
         var users = DispatchProxy.Create<IUserService, OperationalLoggingTests.PortProxy>();
+
         ((OperationalLoggingTests.PortProxy)users).Call = (method, _) =>
         {
             Assert.Equal(nameof(IUserService.GetAzureCloudCredentialsAsync), method!.Name);
+
             return Task.FromResult<AzureCloudCredentialsDto?>(new AzureCloudCredentialsDto());
         };
         await using var provider = new ServiceCollection().AddSingleton(users).BuildServiceProvider();
@@ -79,6 +86,7 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
         var owner = Guid.NewGuid();
         var preparation = await new ConnectedCloudDeploymentAdmission(operations)
             .PrepareAsync(owner, new Authentication(owner), true, () => false);
+
         Assert.Equal(CloudConnectionState.Obsolete, preparation.State);
     }
 

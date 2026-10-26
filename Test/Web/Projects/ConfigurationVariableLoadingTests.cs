@@ -22,10 +22,13 @@ public sealed class ConfigurationVariableLoadingTests
     {
         var scanner = DispatchProxy.Create<IProjectScannerService, Scanner>();
         var probe = (Scanner)scanner;
+
         probe.Result = Task.FromResult(new Dictionary<string, string> { ["EXISTING"] = "scanned", ["NEW"] = "value" });
         var form = Form(scanner);
+
         await Invoke(form, "LoadVariablesFromConfigFilesAsync");
         await Invoke(form, "ConfirmDeploy");
+
         Assert.Equal(form.ProjectPath, probe.Path);
         Assert.Equal("edited", form.Config.CustomEnvVars!["EXISTING"]);
         Assert.Equal("value", form.Config.CustomEnvVars["NEW"]);
@@ -43,11 +46,14 @@ public sealed class ConfigurationVariableLoadingTests
     public async Task Empty_and_failed_reads_have_safe_feedback(bool failed)
     {
         var scanner = DispatchProxy.Create<IProjectScannerService, Scanner>();
+
         ((Scanner)scanner).Result = failed
             ? Task.FromException<Dictionary<string, string>>(new IOException("private-path-and-values"))
             : Task.FromResult(new Dictionary<string, string>());
         var form = Form(scanner);
+
         await Invoke(form, "LoadVariablesFromConfigFilesAsync");
+
         Assert.Contains(failed ? "Unable to read" : "No environment variables", Message(form));
         Assert.DoesNotContain("private", Message(form));
     }
@@ -63,11 +69,15 @@ public sealed class ConfigurationVariableLoadingTests
         var probe = (Scanner)scanner;
         var pending =
             new TaskCompletionSource<Dictionary<string, string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         probe.Result = pending.Task;
         var form = Form(scanner);
         var first = Invoke(form, "LoadVariablesFromConfigFilesAsync");
+
         await Invoke(form, "LoadVariablesFromConfigFilesAsync");
+
         Assert.Equal(1, probe.Calls);
+
         pending.SetResult([]);
         await first;
     }
@@ -80,6 +90,7 @@ public sealed class ConfigurationVariableLoadingTests
     private static ConfigurationForm Form(IProjectScannerService scanner)
     {
         var form = new ConfigurationForm();
+
         typeof(ConfigurationForm).GetProperty("ProjectPath")!.SetValue(form, "C:/selected/Web.csproj");
         typeof(ConfigurationForm).GetProperty("Config")!.SetValue(form, new DeploymentConfigDto
             { ExposedPort = 12345, CustomEnvVars = new Dictionary<string, string> { ["EXISTING"] = "edited" } });
@@ -87,6 +98,7 @@ public sealed class ConfigurationVariableLoadingTests
             .SetValue(form, scanner);
         typeof(ConfigurationForm).GetMethod("OnInitialized", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(form, null);
+
         return form;
     }
 
@@ -144,8 +156,10 @@ public sealed class ConfigurationVariableLoadingTests
         protected override object? Invoke(MethodInfo? method, object?[]? args)
         {
             Assert.Equal(nameof(IProjectScannerService.ExtractEnvironmentVariablesAsync), method?.Name);
+
             Calls++;
             Path = (string)args![0]!;
+
             return Result;
         }
     }

@@ -35,14 +35,18 @@ public sealed class PlatformTelemetrySafetyTests
     {
         using var capture = new CaptureProvider();
         var services = new ServiceCollection();
+
         services.AddLogging(logging => logging.AddProvider(capture));
         services.AddSafePlatformLogging();
         services.AddHttpClient("Default").ConfigurePrimaryHttpMessageHandler(() => new SafeHttpFixture());
         await using var provider = services.BuildServiceProvider();
         using var response = await provider.GetRequiredService<IHttpClientFactory>().CreateClient("Default")
             .PostAsync("https://private.invalid?token=private-query", new StringContent("private-body"));
+
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+
         var text = JsonSerializer.Serialize(capture.Records);
+
         Assert.Contains("method POST", text);
         Assert.Contains("status 403", text);
         Assert.Contains("duration", text);
@@ -61,6 +65,7 @@ public sealed class PlatformTelemetrySafetyTests
         using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
         var client = factory.CreateLogger("System.Net.Http.HttpClient.IGitHubService.ClientHandler");
+
         client.LogInformation("Sending HTTP request {HttpMethod} {Uri}", "POST",
             "https://private.invalid?token=private-query");
         client.LogInformation("Received HTTP response headers after {ElapsedMilliseconds}ms - {StatusCode}", 42.5, 401);
@@ -68,6 +73,7 @@ public sealed class PlatformTelemetrySafetyTests
             .LogInformation("AuthenticationScheme: {AuthenticationScheme} signed in.", "Cookies");
         factory.CreateLogger("AppStartup").LogInformation("[Startup] Database migrations are current.");
         var text = JsonSerializer.Serialize(capture.Records);
+
         Assert.Contains("IGitHubService.ClientHandler", text);
         Assert.Contains("method POST", text);
         Assert.Contains("status 401", text);
@@ -89,6 +95,7 @@ public sealed class PlatformTelemetrySafetyTests
         using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
         var logger = factory.CreateLogger("Microsoft.Hosting.Lifetime");
+
         logger.LogInformation("Now listening on: {address}", "https://private-host.invalid:443");
         logger.LogInformation("Content root path: {ContentRoot}", "C:/private-root");
         logger.LogInformation("Application is shutting down...");
@@ -99,6 +106,7 @@ public sealed class PlatformTelemetrySafetyTests
         logger.LogInformation("Database dependency detected for project {ProjectId}: {DbType}.",
             Guid.NewGuid(), "private-provider");
         var text = JsonSerializer.Serialize(capture.Records);
+
         Assert.Contains("HTTP listener started.", text);
         Assert.Contains("Content root initialized.", text);
         Assert.Contains("Application is shutting down.", text);
@@ -140,6 +148,7 @@ public sealed class PlatformTelemetrySafetyTests
         var project = Guid.NewGuid();
         var scope = new Dictionary<string, object?>
             { ["ProjectId"] = project, ["Cookie"] = "private-cookie", ["private-key"] = new NeverFormat() };
+
         using (logger.BeginScope(scope))
         {
             scope["ProjectId"] = Guid.NewGuid();
@@ -186,6 +195,7 @@ public sealed class PlatformTelemetrySafetyTests
         using var exporter = new PrivacyTraceExporter();
         var builder = Sdk.CreateTracerProviderBuilder().AddSource("privacy.fixture")
             .AddProcessor(new SafeTraceProcessor(new PlatformTelemetryPolicy(new DiagnosticRedactor())));
+
         builder.AddProcessor(batch
             ? new BatchActivityExportProcessor(exporter)
             : new SimpleActivityExportProcessor(exporter));
@@ -194,10 +204,12 @@ public sealed class PlatformTelemetrySafetyTests
         var links = payload == "link"
             ? new[] { new ActivityLink(default, new ActivityTagsCollection { ["private-key"] = "private-link" }) }
             : null;
+
         using (var activity = source.StartActivity("private-operation", ActivityKind.Client, default(ActivityContext),
                    links: links))
         {
             Assert.NotNull(activity);
+
             if (payload == "event")
                 activity.AddEvent(new ActivityEvent("private-event",
                     tags: new ActivityTagsCollection { ["body"] = "private-value" }));
@@ -220,14 +232,18 @@ public sealed class PlatformTelemetrySafetyTests
     {
         var received = new ConcurrentQueue<byte[]>();
         var appBuilder = WebApplication.CreateBuilder();
+
         appBuilder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         appBuilder.Logging.ClearProviders();
         await using var app = appBuilder.Build();
+
         app.MapPost("/{**path}", async (HttpContext context) =>
         {
             using var bytes = new MemoryStream();
+
             await context.Request.Body.CopyToAsync(bytes);
             received.Enqueue(bytes.ToArray());
+
             return Results.Bytes([], "application/x-protobuf");
         });
         await app.StartAsync();
@@ -242,9 +258,11 @@ public sealed class PlatformTelemetrySafetyTests
         using var source = new ActivitySource("privacy.wire");
         var project = Guid.NewGuid();
         ActivityTraceId traceId;
+
         using (var activity = source.StartActivity("private-span-name", ActivityKind.Server))
         {
             Assert.NotNull(activity);
+
             traceId = activity.TraceId;
             activity.DisplayName = "private-display-name";
             activity.SetTag("deployment.project.id", project);
@@ -260,7 +278,9 @@ public sealed class PlatformTelemetrySafetyTests
 
         Assert.True(provider.ForceFlush());
         var packet = Assert.Single(received);
+
         var decoded = Encoding.UTF8.GetString(packet);
+
         Assert.DoesNotContain("private", decoded);
         Assert.Contains("http.server.request", decoded);
         Assert.Contains("http.response.status_code", decoded);
@@ -327,6 +347,7 @@ public sealed class PlatformTelemetrySafetyTests
                     Tags = activity.TagObjects.ToArray(),
                     Baggage = activity.Baggage.ToArray()
                 }));
+
             return ExportResult.Success;
         }
     }
@@ -409,6 +430,7 @@ public sealed class PlatformTelemetrySafetyTests
                 Func<TState, Exception?, string> formatter)
             {
                 var scopes = new List<object?>();
+
                 owner._scopes.ForEachScope((scope, list) => list.Add(scope), scopes);
                 owner.Records.Enqueue(new
                     { category, eventId, exception, Message = formatter(state, exception), state, scopes });

@@ -46,6 +46,7 @@ public static class TelemetryPresentation
     public static string Format(double? value, string metric)
     {
         if (value is not { } number || !double.IsFinite(number)) return "—";
+
         if (metric is Memory or MemoryLimit)
         {
             string[] units = ["B", "KiB", "MiB", "GiB", "TiB"];
@@ -70,7 +71,7 @@ public static class TelemetryPresentation
     /// <returns>The sample-weighted mean, or null when no supported observations exist.</returns>
     public static double? WeightedAverage(IEnumerable<DeploymentAnalyticsRow> rows)
     {
-        var observed = rows.Where(r => r.SampleCount > 0 && r.Average is { } a && double.IsFinite(a)).ToArray();
+        var observed = rows.Where(r => r is { SampleCount: > 0, Average: { } a } && double.IsFinite(a)).ToArray();
         var count = observed.Sum(r => r.SampleCount);
         return count == 0 ? null : observed.Sum(r => r.Average!.Value * r.SampleCount) / count;
     }
@@ -82,9 +83,17 @@ public static class TelemetryPresentation
     /// <returns>Observed chart points in timestamp order, without synthetic missing samples.</returns>
     public static IReadOnlyList<TelemetryChartPoint> DailyPoints(IEnumerable<DeploymentAnalyticsRow> rows)
     {
-        return rows.Where(r => r.SampleCount > 0 && r.Average.HasValue).GroupBy(r => r.DayUtc)
-            .OrderBy(g => g.Key).Select(g => new TelemetryChartPoint(g.Key, WeightedAverage(g)!.Value,
-                g.Min(r => r.Minimum), g.Max(r => r.Maximum))).ToArray();
+        return
+        [
+            .. rows
+                .Where(r => r is { SampleCount: > 0, Average: not null })
+                .GroupBy(r => r.DayUtc)
+                .OrderBy(g => g.Key)
+                .Select(g =>
+                    new TelemetryChartPoint(g.Key, WeightedAverage(g)!.Value,
+                        g.Min(r => r.Minimum),
+                        g.Max(r => r.Maximum)))
+        ];
     }
 
     /// <summary>
@@ -94,11 +103,25 @@ public static class TelemetryPresentation
     /// <returns>A rounded positive chart ceiling that retains fractional-core resolution.</returns>
     public static double AxisMaximum(IEnumerable<TelemetryChartPoint> points)
     {
-        var max = points.Select(p => Math.Max(p.Average, p.Maximum ?? p.Average)).DefaultIfEmpty(0).Max();
-        if (!double.IsFinite(max) || max <= 0) return 0.001;
+        var max = points
+            .Select(p => Math.Max(p.Average, p.Maximum ?? p.Average))
+            .DefaultIfEmpty(0)
+            .Max();
+
+        if (!double.IsFinite(max) || max <= 0)
+            return 0.001;
+
         var magnitude = Math.Pow(10, Math.Floor(Math.Log10(max)));
         var normalized = max / magnitude;
-        return (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
+
+        return (normalized <= 1
+                ? 1
+                : normalized <= 2
+                    ? 2
+                    : normalized <= 5
+                        ? 5
+                        : 10
+            ) * magnitude;
     }
 }
 

@@ -32,12 +32,15 @@ internal sealed class AzureContainerRegistryProvisioner(IHttpClientFactory httpC
         var server = config.CloudRegistryName.Trim().ToLowerInvariant();
         if (!server.EndsWith(".azurecr.io", StringComparison.Ordinal))
             throw new InvalidOperationException("SaaS deployments require Azure Container Registry.");
+
         var name = server[..^".azurecr.io".Length];
         var id = $"/subscriptions/{credentials.SubscriptionId}/resourceGroups/{config.CloudResourceGroupName}" +
                  $"/providers/Microsoft.ContainerRegistry/registries/{name}";
         var uri = $"https://management.azure.com{id}?api-version=2023-07-01";
+
         using var get = Request(HttpMethod.Get, uri, credentials.AccessToken);
         using var existing = await httpClientFactory.CreateClient().SendAsync(get, cancellationToken);
+
         if (existing.IsSuccessStatusCode)
         {
             await VerifyServerAsync(existing, server, cancellationToken);
@@ -47,38 +50,51 @@ internal sealed class AzureContainerRegistryProvisioner(IHttpClientFactory httpC
         if (existing.StatusCode != HttpStatusCode.NotFound) existing.EnsureSuccessStatusCode();
 
         using var put = Request(HttpMethod.Put, uri, credentials.AccessToken);
+
         put.Content = JsonContent.Create(new
         {
             location = config.CloudAzureRegion,
             sku = new { name = "Basic" },
             properties = new { adminUserEnabled = false }
         });
+
         using var created = await httpClientFactory.CreateClient().SendAsync(put, cancellationToken);
+
         if (created.StatusCode == HttpStatusCode.Conflict)
             throw new InvalidOperationException(
                 "The Azure Container Registry name is unavailable or belongs to another resource group.");
+
         created.EnsureSuccessStatusCode();
+
         for (var attempt = 0; attempt < 30; attempt++)
         {
             using var poll = Request(HttpMethod.Get, uri, credentials.AccessToken);
             using var result = await httpClientFactory.CreateClient().SendAsync(poll, cancellationToken);
             result.EnsureSuccessStatusCode();
+
             using var payload = await JsonDocument.ParseAsync(
                 await result.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+
             var state = payload.RootElement.GetProperty("properties")
                 .GetProperty("provisioningState").GetString();
-            if (state == "Succeeded")
-            {
-                var loginServer = payload.RootElement.GetProperty("properties")
-                    .GetProperty("loginServer").GetString();
-                if (!string.Equals(loginServer, server, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Azure returned a different Container Registry server.");
-                return id;
-            }
 
-            if (state is "Failed" or "Canceled")
-                throw new InvalidOperationException("Azure Container Registry provisioning failed.");
-            await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+            switch (state)
+            {
+                case "Succeeded":
+                {
+                    var loginServer = payload.RootElement.GetProperty("properties")
+                        .GetProperty("loginServer").GetString();
+
+                    return !string.Equals(loginServer, server, StringComparison.OrdinalIgnoreCase)
+                        ? throw new InvalidOperationException("Azure returned a different Container Registry server.")
+                        : id;
+                }
+                case "Failed" or "Canceled":
+                    throw new InvalidOperationException("Azure Container Registry provisioning failed.");
+                default:
+                    await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                    break;
+            }
         }
 
         throw new TimeoutException("Azure Container Registry provisioning did not finish in time.");

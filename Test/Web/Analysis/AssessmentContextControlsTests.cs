@@ -23,6 +23,7 @@ public sealed class AssessmentContextControlsTests
     {
         AssessmentSelection? changed = null;
         var component = new AssessmentContextControls();
+
         Set(component, nameof(component.Selection), new AssessmentSelection());
         Set(component, nameof(component.Channels),
             new AssessmentChannel[] { new(AssessmentSources.Web, "web"), new(AssessmentSources.Database, "db") });
@@ -30,16 +31,22 @@ public sealed class AssessmentContextControlsTests
         Set(component, nameof(component.OnChange),
             EventCallback.Factory.Create<AssessmentSelection>(new object(), selection => changed = selection));
         await Invoke(component, "LogContainerChanged", "db", new ChangeEventArgs { Value = false });
+
         Assert.Equal(["web"], changed!.LogContainers!);
         Assert.Null(changed.MetricContainers);
         Assert.True(changed.IncludeMetrics);
+
         Set(component, nameof(component.Selection), changed);
         await Invoke(component, "MetricsChanged", new ChangeEventArgs { Value = false });
+
         Assert.False(changed!.IncludeMetrics);
         Assert.Equal(["web"], changed.LogContainers!);
+
         Set(component, nameof(component.Disabled), true);
         var frozen = changed;
+
         await Invoke(component, "SourceChanged", AssessmentSources.Web, new ChangeEventArgs { Value = false });
+
         Assert.Same(frozen, changed);
     }
 
@@ -63,6 +70,7 @@ public sealed class AssessmentContextControlsTests
                     ["UnsupportedSources"] = AssessmentSources.Azure,
                     ["Disabled"] = true
                 }))).ToHtmlString());
+
         Assert.Contains("Startup assessment", html);
         Assert.Contains("Failure diagnosis", html);
         Assert.Contains("Runtime overview", html);
@@ -73,6 +81,7 @@ public sealed class AssessmentContextControlsTests
         Assert.Contains("fieldset", html);
         Assert.Contains("disabled", html);
         Assert.Contains("Azure application console output", html);
+
         var section = await renderer.Dispatcher.InvokeAsync(async () =>
             (await renderer.RenderComponentAsync<AssessmentResultSection>(ParameterView.FromDictionary(
                 new Dictionary<string, object?>
@@ -81,6 +90,7 @@ public sealed class AssessmentContextControlsTests
                     ["Items"] = new[] { "<script>unsafe</script>" },
                     ["EmptyMessage"] = "No observations."
                 }))).ToHtmlString());
+
         Assert.DoesNotContain("<script>", section);
         Assert.Contains("&lt;script&gt;", section);
     }

@@ -32,13 +32,17 @@ public sealed class AssessmentSelectionTests
             new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), "web", "Started",
                 TimestampUtc: DateTimeOffset.UtcNow)
         ], false);
+
         var context = new AnalysisContextSelector(new DiagnosticRedactor()).Select(history, [],
-            AnalysisContextBudget.From(new AiAnalysisOptions()), false, kind: AssessmentKind.Startup,
-            metadata: new
+            AnalysisContextBudget.From(new AiAnalysisOptions()), false, AssessmentKind.Startup,
+            new
                 { status = "Starting", configuration = new { image = "cookie: private-header-value", port = 8080 } });
+
         Assert.DoesNotContain("private-header-value", context.Text);
+
         using var json = JsonDocument.Parse(context.Text);
         var metadata = json.RootElement.GetProperty("deployment");
+
         Assert.Equal("Starting", metadata.GetProperty("status").GetString());
         Assert.Equal(8080, metadata.GetProperty("configuration").GetProperty("port").GetInt32());
     }
@@ -75,6 +79,7 @@ public sealed class AssessmentSelectionTests
         var window =
             new AssessmentSelection(Range: range).Window(DeploymentStatus.Running, now.AddDays(-2), now.AddDays(-1),
                 now);
+
         Assert.Equal(now, window.End);
         Assert.Equal(TimeSpan.FromMinutes(minutes), window.End - window.Start);
         Assert.False(window.Truncated);
@@ -89,14 +94,16 @@ public sealed class AssessmentSelectionTests
         var now = DateTimeOffset.UtcNow;
         var window = new AssessmentSelection(Range: AssessmentRange.DeploymentLifetime).Window(DeploymentStatus.Stopped,
             now.AddDays(-800), now.AddDays(-100), now);
+
         Assert.Equal(now.AddDays(-100), window.End);
         Assert.Equal(TimeSpan.FromDays(365), window.End - window.Start);
         Assert.True(window.Truncated);
+
         Assert.Throws<ArgumentException>(() =>
             new AssessmentSelection(Range: AssessmentRange.Custom, Start: now.AddDays(-366), End: now).Normalize());
         Assert.Throws<ArgumentException>(() => new AssessmentSelection(Sources: (AssessmentSources)1024).Normalize());
         Assert.Throws<ArgumentException>(() =>
-            new AssessmentSelection(LogContainers: Enumerable.Repeat("x", 65).ToArray()).Normalize());
+            new AssessmentSelection(LogContainers: [.. Enumerable.Repeat("x", 65)]).Normalize());
         Assert.Equal(new AssessmentSelection(LogContainers: ["a", "b"]).CanonicalJson(),
             new AssessmentSelection(LogContainers: ["b", "a", "a"]).CanonicalJson());
     }
@@ -130,6 +137,7 @@ public sealed class AssessmentSelectionTests
         DeploymentDiagnosticStream stream, AssessmentSources expected)
     {
         var e = Event(Guid.NewGuid(), Guid.NewGuid(), source, component, stream, "database error GitHub Azure build");
+
         Assert.Equal(expected, AssessmentClassification.Source(e));
     }
 
@@ -145,6 +153,7 @@ public sealed class AssessmentSelectionTests
             {
                 SourceIdentity = null
             };
+
         Assert.Equal(AssessmentSources.Other, AssessmentClassification.Source(e));
     }
 
@@ -160,43 +169,53 @@ public sealed class AssessmentSelectionTests
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
+
         try
         {
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = root }),
                 new DiagnosticRedactor());
+
             for (var i = 1; i <= 25; i++)
             {
                 var selected = i == 1;
                 var e = Event(project, deployment, DeploymentDiagnosticSource.DockerContainer,
                     selected ? DeploymentDiagnosticComponent.Web : DeploymentDiagnosticComponent.Database,
                     DeploymentDiagnosticStream.StandardOutput, selected ? "selected-web" : "excluded-db");
+
                 await archive.AppendAsync(
                     new DeploymentLogEnvelope(e.EventId!.Value, tenant, i, now, now.AddDays(30), e,
-                        selected ? "web" : "db"), default);
+                        selected ? "web" : "db"), CancellationToken.None);
             }
 
             var window = new AssessmentWindow(now.AddMinutes(-5), now.AddMinutes(1), false);
             var query = new ArchiveAssessmentQuery(tenant, project, deployment,
                 new AssessmentSelection(Sources: AssessmentSources.Web, IncludeMetrics: false), window, 1);
-            var page = await archive.ReadAssessmentAsync(query, default);
+            var page = await archive.ReadAssessmentAsync(query, CancellationToken.None);
+
             Assert.Equal("selected-web", Assert.Single(page.Events).Event.Message);
             Assert.False(page.EarlierOmitted);
             Assert.Contains(page.Channels, c => c.Source == AssessmentSources.Database);
-            Assert.Empty((await archive.ReadAssessmentAsync(query with { Tenant = Guid.NewGuid() }, default)).Events);
+            Assert.Empty(
+                (await archive.ReadAssessmentAsync(query with { Tenant = Guid.NewGuid() }, CancellationToken.None))
+                .Events);
+
             Assert.Empty((await archive.ReadAssessmentAsync(
                 query with
                 {
                     Selection = new AssessmentSelection(Sources: AssessmentSources.None, IncludeMetrics: false)
-                }, default)).Events);
+                }, CancellationToken.None)).Events);
+
             await archive.ImportMetricsAsync(new ArchiveMetricImport(tenant, project, deployment, [
                 new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", now, 1, 0, 2),
                 new DeploymentMetricPoint("db", "automate_cpu_usage_cores", "cores", now, 99, 99, 99)
-            ]), default);
+            ]), CancellationToken.None);
+
             var points = await archive.ReadAssessmentMetricsAsync(
                 query with
                 {
                     Selection = new AssessmentSelection(Sources: AssessmentSources.None, MetricContainers: ["web"])
-                }, default);
+                }, CancellationToken.None);
+
             Assert.Equal("web", Assert.Single(points).Container);
             Assert.Equal(1, points[0].Average);
         }
@@ -214,21 +233,26 @@ public sealed class AssessmentSelectionTests
     public void V2_sections_are_redacted_independent_and_bounded_without_changing_legacy_results()
     {
         var validator = AnalysisResultTests.Validator();
+
         var input = AnalysisResultTests.Valid() with
         {
             ResultSchemaVersion = 2,
             Sections = new AssessmentSections(["token=private-observation"], ["memory has no recorded limit"], [], [])
         };
+
         var safe = validator.Validate(input);
+
         Assert.Equal("token=[REDACTED]", Assert.Single(safe.Sections!.Observations));
         Assert.NotSame(input.Sections!.Observations, safe.Sections.Observations);
         Assert.Equal(2, safe.ResultSchemaVersion);
+
         Assert.Equal("No overview was recorded for the selected evidence.",
             validator.Validate(input with { Summary = "" }).Summary);
         Assert.Equal(1, validator.Validate(AnalysisResultTests.Valid()).ResultSchemaVersion);
+
         Assert.Throws<InvalidAnalysisResultException>(() => validator.Validate(input with
         {
-            Sections = input.Sections with { Observations = Enumerable.Repeat("x", 7).ToArray() }
+            Sections = input.Sections with { Observations = [.. Enumerable.Repeat("x", 7)] }
         }));
         Assert.Throws<InvalidAnalysisResultException>(() => validator.Validate(input with
         {
@@ -249,6 +273,7 @@ public sealed class AssessmentSelectionTests
     {
         var instructions = ResponsesAnalysisTransport.Instructions(kind);
         var schema = JsonSerializer.Serialize(ResponsesAnalysisTransport.ResultSchema(true));
+
         Assert.True(Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(instructions)) +
             Encoding.UTF8.GetByteCount(schema) + 256 <= 2048);
         Assert.Contains("low usage alone is not proof of health", instructions);

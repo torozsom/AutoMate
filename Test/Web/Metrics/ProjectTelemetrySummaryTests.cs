@@ -25,13 +25,16 @@ public sealed class ProjectTelemetrySummaryTests
         var component = new ProjectTelemetrySummary();
         var owner = Guid.NewGuid();
         var project = Guid.NewGuid();
+
         Set(component, "UserId", owner);
         Set(component, "ProjectId", project);
         Set(component, "ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
         Set(component, "Logger", NullLogger<ProjectTelemetrySummary>.Instance);
         var load = typeof(ProjectTelemetrySummary).GetMethod("LoadAsync",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
+
         await Task.WhenAll((Task)load.Invoke(component, null)!, (Task)load.Invoke(component, null)!);
+
         Assert.Equal(2, recorder.Calls.Count);
         Assert.Equal(2, recorder.Calls.Select(call => call.Scope).Distinct().Count());
         Assert.All(recorder.Calls, call =>
@@ -40,6 +43,7 @@ public sealed class ProjectTelemetrySummaryTests
             Assert.Equal(project, call.Project);
         });
         Assert.Equal(2, recorder.Disposed.Count);
+
         component.Dispose();
     }
 
@@ -100,6 +104,7 @@ public sealed class ProjectTelemetrySummaryTests
         {
             recorder.Calls.Add((_id, user, project));
             await Task.Delay(20, token);
+
             return new ProjectTelemetryAnalytics(0, 0, 0, null, [], null);
         }
     }

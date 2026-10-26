@@ -83,7 +83,7 @@ public sealed class SafeLoggerFactory(
         {
             var fields = policy.Fields(state);
             var safe = new SafePlatformLog(
-                string.Join(" ", fields.Select(pair => $"{pair.Key}={pair.Value}")), fields.ToArray());
+                string.Join(" ", fields.Select(pair => $"{pair.Key}={pair.Value}")), [.. fields]);
             var innerScope = innerLogger.BeginScope(safe);
             return new Scope(innerScope, scopes.Push(safe));
         }

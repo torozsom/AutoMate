@@ -17,7 +17,7 @@ public static class DeploymentTerminalPresentation
     /// <returns>Formatted source output, or an empty string for suppressed database Metric records.</returns>
     public static string Format(DeploymentTerminalLog log)
     {
-        if (log.TerminalChannel == "azure-db" && log.Stream == DeploymentDiagnosticStream.Metric)
+        if (log is { TerminalChannel: "azure-db", Stream: DeploymentDiagnosticStream.Metric })
             return string.Empty;
 
         if (log.TerminalChannel is "azure-web" or "azure-system" or "azure-db")
@@ -36,6 +36,7 @@ public static class DeploymentTerminalPresentation
     {
         var timestamp = log.TimestampUtc?.ToUniversalTime()
             .ToString("yyyy-MM-dd HH:mm:ss.fff 'UTC'", CultureInfo.InvariantCulture);
+
         var stream = log.Stream switch
         {
             DeploymentDiagnosticStream.StandardError => "STDERR",
@@ -44,9 +45,11 @@ public static class DeploymentTerminalPresentation
             DeploymentDiagnosticStream.Metric => "METRIC",
             _ => log.TerminalChannel == "azure-system" ? "SYSTEM" : "STDOUT"
         };
+
         var prefix = timestamp is null ? $"[{stream}] " : $"{timestamp} [{stream}] ";
         var output = new StringBuilder();
         using var reader = new StringReader(log.Message);
+
         while (reader.ReadLine() is { } line)
             output.Append(prefix).Append(line).Append("\r\n");
 

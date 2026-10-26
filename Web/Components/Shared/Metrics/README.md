@@ -4,15 +4,21 @@ Frozen UTC ranges, numeric alternatives, accessible SVG charts and presentation-
 
 ## Contents
 
-| File                                                           | Types or asset                                 | Responsibility                                                                                    |
-|----------------------------------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| [MetricRangePicker.razor](MetricRangePicker.razor)             | `MetricRangePicker`                            | Selects relative or explicit frozen UTC windows and validates range bounds before publication.    |
-| [MetricStatisticsView.razor](MetricStatisticsView.razor)       | `MetricStatisticsView`                         | Presents metric charts and an independent paginated numeric alternative from recorded aggregates. |
-| [ProjectTelemetrySummary.razor](ProjectTelemetrySummary.razor) | `ProjectTelemetrySummary`                      | Loads and presents owner-scoped project aggregates for the selected metric window.                |
-| [StatisticsPager.razor](StatisticsPager.razor)                 | `StatisticsPager`                              | Presents bounded numeric-table paging and supported row-count selection.                          |
-| [TelemetryChart.razor](TelemetryChart.razor)                   | `TelemetryChart`                               | Presents observed SVG metric points with accessible pointer and keyboard inspection.              |
-| [TelemetryPreferences.razor](TelemetryPreferences.razor)       | `TelemetryPreferences`                         | Presents authorized automatic-collection, retention and sampling information.                     |
-| [TelemetryPresentation.cs](TelemetryPresentation.cs)           | `TelemetryPresentation`, `TelemetryChartPoint` | Friendly units/labels, observed chart aggregates and TelemetryChartPoint projections.             |
+| File                                                                 | Types or asset                                 | Responsibility                                                                                    |
+|----------------------------------------------------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| [MetricRangePicker.razor](MetricRangePicker.razor)                   | `MetricRangePicker`                            | Selects relative or explicit frozen UTC windows and validates range bounds before publication.    |
+| [MetricRangePicker.razor.cs](MetricRangePicker.razor.cs)             | `MetricRangePicker` partial class              | Component state, callbacks and lifecycle behavior.                                                |
+| [MetricStatisticsView.razor](MetricStatisticsView.razor)             | `MetricStatisticsView`                         | Presents metric charts and an independent paginated numeric alternative from recorded aggregates. |
+| [MetricStatisticsView.razor.cs](MetricStatisticsView.razor.cs)       | `MetricStatisticsView` partial class           | Component state, callbacks and lifecycle behavior.                                                |
+| [ProjectTelemetrySummary.razor](ProjectTelemetrySummary.razor)       | `ProjectTelemetrySummary`                      | Loads and presents owner-scoped project aggregates for the selected metric window.                |
+| [ProjectTelemetrySummary.razor.cs](ProjectTelemetrySummary.razor.cs) | `ProjectTelemetrySummary` partial class        | Component state, callbacks and lifecycle behavior.                                                |
+| [StatisticsPager.razor](StatisticsPager.razor)                       | `StatisticsPager`                              | Presents bounded numeric-table paging and supported row-count selection.                          |
+| [StatisticsPager.razor.cs](StatisticsPager.razor.cs)                 | `StatisticsPager` partial class                | Component state, callbacks and lifecycle behavior.                                                |
+| [TelemetryChart.razor](TelemetryChart.razor)                         | `TelemetryChart`                               | Presents observed SVG metric points with accessible pointer and keyboard inspection.              |
+| [TelemetryChart.razor.cs](TelemetryChart.razor.cs)                   | `TelemetryChart` partial class                 | Component state, callbacks and lifecycle behavior.                                                |
+| [TelemetryPreferences.razor](TelemetryPreferences.razor)             | `TelemetryPreferences`                         | Presents authorized automatic-collection, retention and sampling information.                     |
+| [TelemetryPreferences.razor.cs](TelemetryPreferences.razor.cs)       | `TelemetryPreferences` partial class           | Component state, callbacks and lifecycle behavior.                                                |
+| [TelemetryPresentation.cs](TelemetryPresentation.cs)                 | `TelemetryPresentation`, `TelemetryChartPoint` | Friendly units/labels, observed chart aggregates and TelemetryChartPoint projections.             |
 
 ## Usage and integration
 

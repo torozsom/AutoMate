@@ -25,12 +25,16 @@ public sealed class ProjectDetailsNotificationTests
         using var services = Services(query);
         await using var renderer = new TestRenderer(services);
         var page = Page(services);
+
         await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(page));
         await renderer.Dispatcher.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
+
         Assert.NotNull(Field(page, "_projectReadError"));
         Assert.False((bool)Field(page, "_isLoading")!);
+
         query.Fail = false;
         await renderer.Dispatcher.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
+
         Assert.Null(Field(page, "_projectReadError"));
         Assert.NotNull(Field(page, "_app"));
         Assert.Empty(renderer.Errors);
@@ -44,29 +48,40 @@ public sealed class ProjectDetailsNotificationTests
         using var services = Services(query);
         await using var renderer = new TestRenderer(services);
         var page = Page(services);
+
         await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(page));
         await renderer.Dispatcher.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
         query.Pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         query.Entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var refresh = renderer.Dispatcher.InvokeAsync(() => Call(page, "RefreshProjectAsync", false));
+
         await query.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.WhenAll(Enumerable.Range(0, 10)
             .Select(_ => renderer.Dispatcher.InvokeAsync(() => Call(page, "RefreshProjectAsync", false))));
+
         Assert.Equal(2, query.Reads);
+
         query.Pending.SetResult();
         await refresh;
+
         Assert.Equal(3, query.Reads);
         Assert.Equal(1, query.MaximumActive);
+
         var called = false;
+
         await Call(page, "DispatchNotificationAsync",
             (Func<Task>)(() => throw new InvalidOperationException("synthetic")));
+
         Assert.Empty(renderer.Errors);
+
         SetField(page, "_analysisDisposed", true);
         await Call(page, "DispatchNotificationAsync", (Func<Task>)(() =>
         {
             called = true;
+
             return Task.CompletedTask;
         }));
+
         Assert.False(called);
     }
 
@@ -81,6 +96,7 @@ public sealed class ProjectDetailsNotificationTests
     private static FixturePage Page(IServiceProvider services)
     {
         var page = new FixturePage();
+
         SetField(page, "_currentUserId", Guid.NewGuid());
         SetField(page, "_isLoading", false);
         Property(page, "ScopeFactory", services.GetRequiredService<IServiceScopeFactory>());
@@ -90,6 +106,7 @@ public sealed class ProjectDetailsNotificationTests
             new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         Property(page, "DeploymentJobQueue",
             new DeploymentJobQueue(Options.Create(new DeploymentConcurrencyOptions())));
+
         return page;
     }
 

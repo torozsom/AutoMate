@@ -61,26 +61,38 @@ public sealed class LocalRuntimeRecoveryService(
     internal async Task RecoverOnceAsync(CancellationToken token)
     {
         await using var scope = scopes.CreateAsyncScope();
+
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-        var query = db.Deployments.AsNoTracking()
-            .Where(d => d.Status == DeploymentStatus.Running &&
-                        d.CsProject!.Application!.SourceType == SourceType.Local &&
-                        !db.Deployments.Any(newer => newer.CsProject!.AppId == d.CsProject.AppId &&
-                                                     newer.CreatedAt > d.CreatedAt))
-            .Include(d => d.CsProject!).ThenInclude(p => p.Application)
+
+        var query = db.Deployments
+            .AsNoTracking()
+            .Where(d => d.Status == DeploymentStatus.Running
+                        && d.CsProject!.Application.SourceType == SourceType.Local
+                        && !db.Deployments.Any(newer =>
+                            newer.CsProject!.AppId == d.CsProject.AppId
+                            && newer.CreatedAt > d.CreatedAt))
+            .Include(d => d.CsProject!)
+            .ThenInclude(p => p.Application)
             .OrderBy(d => d.Id);
+
         for (var offset = 0;; offset += 100)
         {
-            var deployments = await query.Skip(offset).Take(100).ToListAsync(token);
+            var deployments = await query
+                .Skip(offset)
+                .Take(100)
+                .ToListAsync(token);
+
             foreach (var deployment in deployments)
             {
                 var project = deployment.CsProject!;
-                var app = project.Application!;
+                var app = project.Application;
                 if (diagnostics.IsActive(app.Id, deployment.Id)) continue;
                 try
                 {
-                    var config = await scope.ServiceProvider.GetRequiredService<IProjectScannerService>()
+                    var config = await scope.ServiceProvider
+                        .GetRequiredService<IProjectScannerService>()
                         .AnalyzeDependenciesAsync(app, project, token);
+
                     await diagnostics.RegisterAsync(LocalDockerTargets.Create(config, project.Name, deployment.Id),
                         false, token);
                 }

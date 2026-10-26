@@ -24,9 +24,11 @@ internal static class LocalDockerTargets
         var app = OrchestrationNameNormalizer.NormalizeContainerName(config.ProjectName);
         var containers = new List<DockerContainerTarget>
             { new($"{OrchestrationNameNormalizer.NormalizeContainerName(projectName)}-web", "web") };
+
         if (config.Databases is not null)
             containers.AddRange(config.Databases.Select(db =>
                 new DockerContainerTarget($"{app}-{db.ContainerNameSuffix}", db.ContainerNameSuffix, true)));
+
         return new DockerDeploymentTarget(config.ProjectId, deploymentId,
             DockerNameNormalizer.NormalizeProjectName(config.ProjectName), containers, DateTimeOffset.UtcNow);
     }

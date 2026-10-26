@@ -58,6 +58,8 @@ public sealed class TelemetryGatewayCompatibility(
     ILogger<TelemetryGatewayCompatibility> logger,
     TimeProvider? clock = null) : IDisposable
 {
+    private static readonly JsonSerializerOptions SReadOptions = new(JsonSerializerDefaults.Web);
+
     /// <summary>Coalesces concurrent probes without holding an HTTP client or response.</summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -121,27 +123,43 @@ public sealed class TelemetryGatewayCompatibility(
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(5));
+
         using var request =
             new HttpRequestMessage(HttpMethod.Get, options.Value.GatewayUrl.TrimEnd('/') + "/capabilities");
+
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", options.Value.GatewayToken);
+
         try
         {
             using var response = await clients.CreateClient("DeploymentTelemetry").SendAsync(request,
                 HttpCompletionOption.ResponseHeadersRead, deadline.Token);
-            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                return TelemetryCompatibilityFailure.AccessDenied;
-            if (response.StatusCode == HttpStatusCode.NotFound) return TelemetryCompatibilityFailure.IncompatibleHost;
+
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden:
+                    return TelemetryCompatibilityFailure.AccessDenied;
+                case HttpStatusCode.NotFound:
+                    return TelemetryCompatibilityFailure.IncompatibleHost;
+            }
+
             if (!response.IsSuccessStatusCode) return TelemetryCompatibilityFailure.Unavailable;
             if (response.Content.Headers.ContentLength > 8192) return TelemetryCompatibilityFailure.IncompatibleHost;
+
             await using var stream = await response.Content.ReadAsStreamAsync(deadline.Token);
+
             var bytes = new byte[8193];
             var count = 0;
             int read;
+
             while (count < bytes.Length && (read = await stream.ReadAsync(bytes.AsMemory(count), deadline.Token)) > 0)
                 count += read;
+
             if (count > 8192) return TelemetryCompatibilityFailure.IncompatibleHost;
-            var capabilities = JsonSerializer.Deserialize<TelemetryCapabilities>(bytes.AsSpan(0, count),
-                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+            var capabilities = JsonSerializer.Deserialize<TelemetryCapabilities>(
+                bytes.AsSpan(0, count),
+                SReadOptions);
+
             return capabilities is { Version: >= TelemetryCapabilities.CurrentVersion, ArchiveOperations: not null } &&
                    TelemetryCapabilities.RequiredArchiveOperations.All(operation =>
                        capabilities.ArchiveOperations.Contains(operation, StringComparer.Ordinal))

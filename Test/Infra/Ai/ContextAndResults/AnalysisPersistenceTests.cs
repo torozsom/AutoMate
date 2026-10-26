@@ -54,6 +54,9 @@ namespace Test.Infra.Ai.ContextAndResults;
 /// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class AnalysisPersistenceTests
 {
+    private static readonly JsonSerializerOptions SIgnoreCycles = new()
+        { ReferenceHandler = ReferenceHandler.IgnoreCycles };
+
     /// <summary>
     ///     A permanent access denial is saved distinctly without scheduling a provider retry or
     ///     retaining messages.
@@ -64,8 +67,10 @@ public sealed class AnalysisPersistenceTests
     {
         await using var fixture = await Fixture.CreateAsync(() => Task.FromException<LlmAnalysisResponse>(
             new AnalysisProviderAccessDeniedException("azure-openai", "AccessDenied", Guid.NewGuid().ToString())));
+
         await fixture.ProcessAsync();
         var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
         Assert.Equal(AiAnalysisStatus.Failed, saved.Status);
         Assert.Equal(AnalysisProviderAccessDeniedException.FailureCode, saved.FailureCode);
         Assert.Equal(AnalysisProviderAccessDeniedException.Guidance, saved.Summary);
@@ -84,9 +89,11 @@ public sealed class AnalysisPersistenceTests
     public async Task Status_aware_results_and_skips_preserve_immutable_collection_provenance(bool empty)
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid() with
             {
                 ResultSchemaVersion = 2,
@@ -94,25 +101,31 @@ public sealed class AnalysisPersistenceTests
                 Sections = new AssessmentSections(["token=private-observation"], [], [], ["Recorded evidence only."])
             });
         });
+
         var now = DateTimeOffset.UtcNow;
         var selection = new AssessmentSelection(Sources: AssessmentSources.Web, IncludeMetrics: false);
         var provenance = new AssessmentProvenance(selection, AssessmentKind.HistoricalReview, DeploymentStatus.Stopped,
             DeploymentOutcome.Succeeded, now, new AssessmentWindow(now.AddHours(-2), now, false));
+
         await fixture.Db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
             update.SetProperty(a => a.RequestedSelectionJson, selection.CanonicalJson()));
+
         await fixture.Db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(d => d.Status, DeploymentStatus.Stopped));
         ((ContextProxy)fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = () =>
             Task.FromResult(new DeploymentAnalysisContext(empty ? "" : "redacted activity", empty ? [] : ["order:1"],
                 provenance));
+
         await fixture.ProcessAsync();
         var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.Equal(empty ? AiAnalysisStatus.Skipped : AiAnalysisStatus.Completed, view!.Status);
         Assert.Equal(empty ? 0 : 1, calls);
         Assert.Equal(provenance.Window, view.Assessment!.Window);
         Assert.Equal(DeploymentStatus.Stopped, view.Assessment.ObservedStatus);
         Assert.Equal(selection.CanonicalJson(), view.Assessment.Requested.CanonicalJson());
+
         if (!empty)
         {
             Assert.Equal(AssessmentKind.HistoricalReview,
@@ -136,17 +149,22 @@ public sealed class AnalysisPersistenceTests
         using var audit = new AuditLoggerProvider();
         await using var fixture =
             await Fixture.CreateAsync(() => throw new InvalidOperationException("Provider must not run."), audit);
+
         ((AnalysisEgressPolicyTests.Monitor)fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>())
             .CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, dailyBudget: 0);
         await fixture.ProcessAsync();
+
         var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
         Assert.Equal(AiAnalysisStatus.Skipped, saved.Status);
         Assert.Equal("budget_not_configured", saved.FailureCode);
         Assert.DoesNotContain(audit.Entries, entry => Equals(entry.GetValueOrDefault("Outcome"), "Completed"));
+
         Assert.Contains(audit.Entries, entry => Equals(entry.GetValueOrDefault("Outcome"), "Unavailable"));
         Assert.Contains(audit.Entries,
             entry => Equals(entry.GetValueOrDefault("BudgetReason"), "BudgetNotConfigured") &&
                      Equals(entry.GetValueOrDefault("DailyBudgetUnits"), 0L));
+
         Assert.Empty(await fixture.Db.AiAnalysisBudgetEntries.ToListAsync());
         Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
     }
@@ -168,6 +186,7 @@ public sealed class AnalysisPersistenceTests
     public async Task Worker_telemetry_reports_attempt_outcomes_and_balances_active_slots(string mode, string outcome)
     {
         using var token = new CancellationTokenSource();
+
         await using var fixture = await Fixture.CreateAsync(() => mode switch
         {
             "failure" => Task.FromException<LlmAnalysisResponse>(new IOException("private-error-body")),
@@ -180,59 +199,74 @@ public sealed class AnalysisPersistenceTests
             "canceled" => Cancel(),
             _ => Task.FromResult(AnalysisResultTests.Valid() with { InputTokens = 12, OutputTokens = 7 })
         });
+
         var spans = new ConcurrentQueue<(string Name, string? Outcome)>();
-        using var activities = new ActivityListener
+
+        using var activities = new ActivityListener();
+
+        activities.ShouldListenTo = source => source.Name == "AutoMate.Analysis";
+        activities.Sample = (ref _) =>
+            ActivitySamplingResult.AllDataAndRecorded;
+        activities.ActivityStopped = activity =>
         {
-            ShouldListenTo = source => source.Name == "AutoMate.Analysis",
-            Sample = (ref _) =>
-                ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = activity =>
-            {
-                if (!Equals(activity.GetTagItem("deployment.analysis.id"), fixture.AnalysisId)) return;
-                Assert.Empty(activity.Events);
-                Assert.DoesNotContain("private", JsonSerializer.Serialize(activity.TagObjects));
-                spans.Enqueue((activity.OperationName, activity.GetTagItem("analysis.outcome") as string));
-            }
+            if (!Equals(activity.GetTagItem("deployment.analysis.id"), fixture.AnalysisId)) return;
+
+            Assert.Empty(activity.Events);
+            Assert.DoesNotContain("private", JsonSerializer.Serialize(activity.TagObjects));
+
+            spans.Enqueue((activity.OperationName, activity.GetTagItem("analysis.outcome") as string));
         };
+
         ActivitySource.AddActivityListener(activities);
         var samples = new ConcurrentQueue<(string Name, long Value)>();
         using var metrics = new MeterListener();
+
         metrics.InstrumentPublished = (instrument, listener) =>
         {
             if (instrument.Meter.Name == "AutoMate.Analysis")
                 listener.EnableMeasurementEvents(instrument);
         };
+
         metrics.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
         {
             if (!Equals(Activity.Current?.GetTagItem("deployment.analysis.id"), fixture.AnalysisId)) return;
             foreach (var tag in tags) Assert.Contains(tag.Key, new[] { "analysis.operation", "analysis.outcome" });
             samples.Enqueue((instrument.Name, value));
         });
+
         metrics.Start();
+
         if (mode == "canceled")
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.ProcessAsync(token.Token));
         else await fixture.ProcessAsync(token.Token);
+
         Assert.Contains(("analysis.process", outcome), spans);
         Assert.Contains(("analysis.provider", mode is "skipped" ? "skipped" :
             mode is "canceled" ? "canceled" :
             mode is "completed" ? "completed" : "failed"), spans);
+
         var active = samples.Where(sample => sample.Name == "automate.analysis.active").ToArray();
-        Assert.Equal(new long[] { 1, -1 }, active.Select(sample => sample.Value));
+
+        Assert.Equal([1, -1], active.Select(sample => sample.Value));
         Assert.Equal(mode == "completed" ? 1 : 0,
             samples.Count(sample => sample.Name == "automate.analysis.input.tokens"));
+
         if (mode == "completed") Assert.Contains(("automate.analysis.output.tokens", 7L), samples);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Simulates cooperative cancellation without contacting any provider.
-        /// </summary>
-        /// <returns>A canceled task carrying the configured fixture cancellation token.</returns>
+        return;
+
+
+        /*
+         * Simulates cooperative cancellation without contacting any provider.
+         *
+         * @return A canceled task carrying the configured fixture cancellation token.
+         */
         Task<LlmAnalysisResponse> Cancel()
         {
             token.Cancel();
+
             return Task.FromCanceled<LlmAnalysisResponse>(token.Token);
         }
-#pragma warning restore CS1587
     }
 
     /// <summary>
@@ -248,16 +282,22 @@ public sealed class AnalysisPersistenceTests
     public async Task Context_builder_uses_scoped_sources_without_persisting_payloads(string mode)
     {
         await using var fixture = await Fixture.CreateAsync(() => Task.FromResult(AnalysisResultTests.Valid()));
-        var project = await fixture.Db.Deployments.Where(item => item.Id == fixture.DeploymentId)
-            .Select(item => item.CsProject!.AppId).SingleAsync();
+
+        var project = await fixture.Db.Deployments
+            .Where(item => item.Id == fixture.DeploymentId)
+            .Select(item => item.CsProject!.AppId)
+            .SingleAsync();
+
         var timestamp = DateTimeOffset.UtcNow;
         var logPort = DispatchProxy.Create<IDeploymentDiagnosticStore, ReadPort>();
+
         ((ReadPort)logPort).Call = (method, args) =>
         {
             Assert.Equal("ReadRecentAsync", method!.Name);
             Assert.Equal(project, args![0]);
             Assert.Equal(fixture.DeploymentId, args[1]);
             Assert.Equal(AnalysisContextSelector.MaximumCandidates, args[2]);
+
             return Task.FromResult(new DeploymentTerminalHistory([
                 new DeploymentTerminalLog(1, project, fixture.DeploymentId, "web", "password=private-secret",
                     Severity: DeploymentDiagnosticSeverity.Error, TimestampUtc: timestamp),
@@ -265,17 +305,21 @@ public sealed class AnalysisPersistenceTests
                     TimestampUtc: timestamp)
             ], true));
         };
+
         var metricCalls = 0;
         var metricPort = DispatchProxy.Create<IDeploymentMetricQuery, ReadPort>();
+
         ((ReadPort)metricPort).Call = (method, args) =>
         {
             metricCalls++;
+
             Assert.Equal("ReadAsync", method!.Name);
             Assert.Equal(fixture.OwnerId, args![0]);
             Assert.Equal(project, args[1]);
             Assert.Equal(fixture.DeploymentId, args[2]);
             Assert.Equal(300, args[5]);
             Assert.True((DateTimeOffset)args[4]! - (DateTimeOffset)args[3]! <= TimeSpan.FromHours(1));
+
             return mode == "unavailable"
                 ? Task.FromException<IReadOnlyList<DeploymentMetricPoint>>(
                     new HttpRequestException("private-provider-error"))
@@ -284,15 +328,19 @@ public sealed class AnalysisPersistenceTests
                         2)
                 ]);
         };
+
         var builder = new DeploymentAnalysisContextBuilder(fixture.Db, logPort, metricPort, new DiagnosticRedactor(),
             Options.Create(new AiAnalysisOptions()),
             Options.Create(new TelemetryStorageOptions { ManagedService = mode == "no-consent" }), TimeProvider.System);
         var context = await builder.BuildAsync(fixture.DeploymentId);
+
         Assert.DoesNotContain("private", context.Text);
         Assert.Contains("order:1", context.EvidenceReferences);
         Assert.DoesNotContain("order:2", context.EvidenceReferences);
         Assert.Equal(mode == "no-consent" ? 0 : 1, metricCalls);
+
         using var document = JsonDocument.Parse(context.Text);
+
         Assert.Equal(mode != "available",
             document.RootElement.GetProperty("coverage").GetProperty("metricsUnavailable").GetBoolean());
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
@@ -310,9 +358,11 @@ public sealed class AnalysisPersistenceTests
             EvidenceReferences = ["order:999"],
             Summary = "Unsupported claim"
         }));
+
         await fixture.ProcessAsync();
         fixture.Db.ChangeTracker.Clear();
         var analysis = await fixture.Db.AiDeploymentAnalyses.SingleAsync();
+
         Assert.Equal(AiAnalysisStatus.Failed, analysis.Status);
         Assert.Equal("invalid_response_evidence", analysis.FailureCode);
         Assert.Null(analysis.Summary);
@@ -337,25 +387,33 @@ public sealed class AnalysisPersistenceTests
             EstimatedCost = 0.001m,
             CostCurrency = "USD"
         }));
+
         await fixture.ProcessAsync(CancellationToken.None);
         fixture.Db.ChangeTracker.Clear();
         var result = await fixture.Db.AiDeploymentAnalyses.SingleAsync();
+
         Assert.Equal(AiAnalysisStatus.Completed, result.Status);
         Assert.Equal("password=[REDACTED]", result.Summary);
+
         Assert.DoesNotContain("private", result.RecommendedStepsJson!);
         Assert.DoesNotContain("private", result.EvidenceReferencesJson!);
+
         Assert.Equal("gpt-5-mini-2025-08-07", result.Model);
         Assert.Equal("gpt-5-mini", result.RequestedModel);
         Assert.Equal(1, result.ResultSchemaVersion);
         Assert.Equal(0.001m, result.EstimatedCost);
         Assert.Equal("USD", result.CostCurrency);
+
         Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.SingleAsync()).CompletedAt);
+
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
         var view = await service.GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.NotNull(view);
         Assert.Equal(result.Model, view.Model);
         Assert.Equal(10, view.InputTokens);
         Assert.Equal(20, view.OutputTokens);
+
         Assert.Null(await service.GetLatestAsync(Guid.NewGuid(), fixture.DeploymentId));
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
     }
@@ -386,17 +444,20 @@ public sealed class AnalysisPersistenceTests
             "unavailable" => Task.FromException<LlmAnalysisResponse>(new AnalysisProviderUnavailableException()),
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         });
+
         await fixture.ProcessAsync(CancellationToken.None);
         fixture.Db.ChangeTracker.Clear();
         var analysis = await fixture.Db.AiDeploymentAnalyses.SingleAsync();
+
         Assert.Equal(status, analysis.Status);
         Assert.Equal(code, analysis.FailureCode);
+
         var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.Equal(code, view!.FailureCode);
-        Assert.DoesNotContain("private-value",
-            JsonSerializer.Serialize(analysis,
-                new JsonSerializerOptions { ReferenceHandler = ReferenceHandler.IgnoreCycles }));
+        Assert.DoesNotContain("private-value", JsonSerializer.Serialize(analysis, SIgnoreCycles));
+
         Assert.Null(analysis.RecommendedStepsJson);
         Assert.Null(analysis.EvidenceReferencesJson);
         Assert.Null(analysis.ResultSchemaVersion);
@@ -410,14 +471,17 @@ public sealed class AnalysisPersistenceTests
     public async Task Caller_cancellation_keeps_work_unfinished_without_output()
     {
         using var canceled = new CancellationTokenSource();
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             canceled.Cancel();
+
             return Task.FromCanceled<LlmAnalysisResponse>(canceled.Token);
         });
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            fixture.ProcessAsync(canceled.Token));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.ProcessAsync(canceled.Token));
         fixture.Db.ChangeTracker.Clear();
+
         Assert.Null((await fixture.Db.DeploymentAnalysisWorkItems.SingleAsync()).CompletedAt);
         Assert.Null((await fixture.Db.AiDeploymentAnalyses.SingleAsync()).Summary);
     }
@@ -436,13 +500,16 @@ public sealed class AnalysisPersistenceTests
         await using var fixture =
             await Fixture.CreateAsync(() => throw new InvalidOperationException("Must not invoke provider"));
         var legacy = await fixture.Db.AiDeploymentAnalyses.SingleAsync();
+
         legacy.Status = AiAnalysisStatus.Completed;
         legacy.Summary = "password=private-value";
         legacy.RecommendedStepsJson = corrupt ? "{password=private-value" : "[\"token=private-value\"]";
         legacy.EvidenceReferencesJson = "[]";
+
         await fixture.Db.SaveChangesAsync();
         var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.NotNull(view);
         Assert.DoesNotContain("private-value", JsonSerializer.Serialize(view));
         Assert.Null(view.ResultSchemaVersion);
@@ -468,17 +535,25 @@ public sealed class AnalysisPersistenceTests
     {
         await using var fixture = await Fixture.CreateAsync(() => throw new InvalidOperationException());
         var analysis = await fixture.Db.AiDeploymentAnalyses.SingleAsync();
+
         analysis.Status = status;
         await fixture.Db.SaveChangesAsync();
+
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
+
         Assert.Equal(DeploymentAnalysisDeletionResult.NotFound,
             await service.DeleteAsync(Guid.NewGuid(), fixture.DeploymentId, fixture.AnalysisId));
+
         Assert.Equal(DeploymentAnalysisDeletionResult.NotFound,
             await service.DeleteAsync(fixture.OwnerId, Guid.NewGuid(), fixture.AnalysisId));
+
         Assert.Equal(deletable ? DeploymentAnalysisDeletionResult.Deleted : DeploymentAnalysisDeletionResult.InProgress,
             await service.DeleteAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
+
         Assert.Equal(deletable ? 0 : 1, await fixture.Db.DeploymentAnalysisWorkItems.CountAsync());
+
         Assert.Equal(1, await fixture.Db.Deployments.CountAsync());
+
         if (deletable)
             Assert.Equal(DeploymentAnalysisDeletionResult.NotFound,
                 await service.DeleteAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
@@ -492,13 +567,17 @@ public sealed class AnalysisPersistenceTests
     public async Task Expired_work_is_hidden_unclaimed_and_owner_deletable()
     {
         await using var fixture = await Fixture.CreateAsync(() => throw new InvalidOperationException("Must not call"));
+
         (await fixture.Db.AiDeploymentAnalyses.SingleAsync()).ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1);
         await fixture.Db.SaveChangesAsync();
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
+
         Assert.Null(await service.GetLatestAsync(fixture.OwnerId, fixture.DeploymentId));
         Assert.Null(await new DeploymentAnalysisQueue(fixture.Db, TimeProvider.System,
             fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()).ClaimNextAsync());
+
         await fixture.ProcessAsync(CancellationToken.None);
+
         Assert.Equal(DeploymentAnalysisDeletionResult.Deleted,
             await service.DeleteAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
         Assert.Empty(await fixture.Db.DeploymentAnalysisWorkItems.ToListAsync());
@@ -514,6 +593,7 @@ public sealed class AnalysisPersistenceTests
     {
         await using var fixture = await Fixture.CreateAsync(() => throw new InvalidOperationException());
         var now = DateTimeOffset.UtcNow;
+
         for (var i = 0; i < 1001; i++)
         {
             var expired = new AiDeploymentAnalysis
@@ -525,20 +605,26 @@ public sealed class AnalysisPersistenceTests
                 Status = (AiAnalysisStatus)(i % 6),
                 ExpiresAt = now
             };
+
             fixture.Db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem { Analysis = expired });
         }
 
         await fixture.Db.SaveChangesAsync();
+
         Assert.Equal(1000,
             await DeploymentAnalysisRetentionService.DeleteBatchAsync(fixture.Db, now, CancellationToken.None));
+
         Assert.Equal(2, await fixture.Db.DeploymentAnalysisWorkItems.CountAsync());
         Assert.Equal(1,
             await DeploymentAnalysisRetentionService.DeleteBatchAsync(fixture.Db, now, CancellationToken.None));
+
         Assert.Equal(fixture.AnalysisId, (await fixture.Db.AiDeploymentAnalyses.SingleAsync()).Id);
         Assert.Equal(1, await fixture.Db.Deployments.CountAsync());
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
+
         using var canceled = new CancellationTokenSource();
-        canceled.Cancel();
+
+        await canceled.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             DeploymentAnalysisRetentionService.DeleteBatchAsync(fixture.Db, now, canceled.Token));
     }
@@ -555,19 +641,24 @@ public sealed class AnalysisPersistenceTests
     public async Task Late_provider_result_is_discarded(bool cleanup)
     {
         Fixture? active = null;
+
         await using var fixture = await Fixture.CreateAsync(async () =>
         {
             var db = active!.Db;
+
             await db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.ExpiresAt, DateTimeOffset.UtcNow.AddSeconds(-1)));
             if (cleanup)
                 await DeploymentAnalysisRetentionService.DeleteBatchAsync(db, DateTimeOffset.UtcNow,
                     CancellationToken.None);
+
             return AnalysisResultTests.Valid();
         });
+
         active = fixture;
         await fixture.ProcessAsync(CancellationToken.None);
         fixture.Db.ChangeTracker.Clear();
+
         if (cleanup)
         {
             Assert.Empty(await fixture.Db.AiDeploymentAnalyses.ToListAsync());
@@ -595,6 +686,7 @@ public sealed class AnalysisPersistenceTests
     public async Task Worker_audits_only_safe_outcomes_with_correlation(string path, string expected)
     {
         var audit = new AuditLoggerProvider();
+
         await using var fixture = await Fixture.CreateAsync(() => path switch
         {
             "completed" => Task.FromResult(AnalysisResultTests.Valid() with { Summary = "password=private-result" }),
@@ -607,10 +699,13 @@ public sealed class AnalysisPersistenceTests
                 new InvalidOperationException("password=private-exception")),
             _ => Task.FromException<LlmAnalysisResponse>(new AnalysisProviderUnavailableException())
         }, audit);
+
         await fixture.ProcessAsync(CancellationToken.None);
+
         var terminal = Assert.Single(audit.Entries, entry =>
             entry.GetValueOrDefault("Operation") as string == "Analysis" &&
             entry.GetValueOrDefault("Outcome") as string == expected);
+
         Assert.Equal(fixture.AnalysisId, terminal["AnalysisId"]);
         Assert.Equal(fixture.DeploymentId, terminal["DeploymentId"]);
         Assert.DoesNotContain("private", JsonSerializer.Serialize(audit.Entries));
@@ -624,16 +719,22 @@ public sealed class AnalysisPersistenceTests
     public async Task Unsupported_context_skips_without_provider_calls()
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid());
         });
+
         var context = (ContextProxy)fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>();
+
         context.Build = () => Task.FromResult(new DeploymentAnalysisContext(string.Empty, []));
         await fixture.ProcessAsync();
+
         var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.Equal(0, calls);
         Assert.Equal(AiAnalysisStatus.Skipped, view!.Status);
         Assert.Equal("unsupported_data", view.FailureCode);
@@ -650,16 +751,23 @@ public sealed class AnalysisPersistenceTests
     public async Task Revoked_consent_skips_queued_work_without_provider_calls()
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid());
         });
+
         await fixture.Db.Set<Configuration>()
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
+
         await fixture.ProcessAsync(CancellationToken.None);
+
         Assert.Equal(0, calls);
+
         var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
         Assert.Equal(AiAnalysisStatus.Skipped, saved.Status);
         Assert.Equal("unavailable", saved.FailureCode);
     }
@@ -674,12 +782,15 @@ public sealed class AnalysisPersistenceTests
     {
         await using var fixture = await Fixture.CreateAsync(() => Task.FromResult(AnalysisResultTests.Valid()));
         var egress = fixture.Services.GetRequiredService<IAnalysisEgressAuthorizer>();
+
         Assert.True(await egress.AuthorizeAsync(fixture.DeploymentId, AiAnalysisTrigger.Manual));
         Assert.False(await egress.AuthorizeAsync(Guid.NewGuid(), AiAnalysisTrigger.Manual));
         Assert.False(await egress.AuthorizeAsync(fixture.DeploymentId, AiAnalysisTrigger.DeploymentFailed));
+
         var foreign = new AnalysisEgressAuthorizer(fixture.Db,
             new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(Guid.NewGuid())),
             new DiagnosticRedactor());
+
         Assert.False(await foreign.AuthorizeAsync(fixture.DeploymentId, AiAnalysisTrigger.Manual));
     }
 
@@ -692,19 +803,26 @@ public sealed class AnalysisPersistenceTests
     public async Task Consent_revoked_during_context_build_prevents_provider_invocation()
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid());
         });
+
         var context = (ContextProxy)fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>();
+
         context.Build = async () =>
         {
             await fixture.Db.Set<Configuration>().ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
+
             return new DeploymentAnalysisContext("safe", []);
         };
+
         await fixture.ProcessAsync(CancellationToken.None);
+
         Assert.Equal(0, calls);
     }
 
@@ -716,19 +834,26 @@ public sealed class AnalysisPersistenceTests
     public async Task Reloaded_operator_switch_blocks_existing_work_and_new_admission()
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid());
         });
+
         var monitor =
             (AnalysisEgressPolicyTests.Monitor)fixture.Services
                 .GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
+
         monitor.CurrentValue = new AiAnalysisOptions { Enabled = true };
         var admission = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .RequestManualAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.False(admission.Accepted);
+
         await fixture.ProcessAsync(CancellationToken.None);
+
         Assert.Equal(0, calls);
     }
 
@@ -744,12 +869,18 @@ public sealed class AnalysisPersistenceTests
         var monitor =
             (AnalysisEgressPolicyTests.Monitor)fixture.Services
                 .GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
+
         monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, model: "ghp_" + new string('a', 36));
+
         var result = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .RequestManualAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.False(result.Accepted);
-        var skipped = await fixture.Db.AiDeploymentAnalyses.AsNoTracking()
+
+        var skipped = await fixture.Db.AiDeploymentAnalyses
+            .AsNoTracking()
             .SingleAsync(item => item.Status == AiAnalysisStatus.Skipped);
+
         Assert.Equal("unavailable", skipped.Model);
         Assert.Equal("unavailable", skipped.Provider);
         Assert.Single(await fixture.Db.DeploymentAnalysisWorkItems.ToListAsync());
@@ -763,17 +894,24 @@ public sealed class AnalysisPersistenceTests
     public async Task Admission_applies_configured_result_retention()
     {
         await using var fixture = await Fixture.CreateAsync(() => Task.FromResult(AnalysisResultTests.Valid()));
+
         await fixture.Db.AiDeploymentAnalyses.ExecuteDeleteAsync();
         fixture.Db.ChangeTracker.Clear();
+
         var monitor =
             (AnalysisEgressPolicyTests.Monitor)fixture.Services
                 .GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
+
         monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, retentionDays: 7);
+
         var before = DateTimeOffset.UtcNow;
         var result = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .RequestManualAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.True(result.Accepted);
+
         var stored = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
         Assert.InRange(stored.ExpiresAt, before.AddDays(7), DateTimeOffset.UtcNow.AddDays(7));
     }
 
@@ -788,22 +926,30 @@ public sealed class AnalysisPersistenceTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var late = new TaskCompletionSource<LlmAnalysisResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             if (++calls != 1) return Task.FromResult(AnalysisResultTests.Valid() with { Summary = "Newer diagnosis." });
             entered.TrySetResult();
+
             return late.Task;
         });
+
         var queue = fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>();
         var first = (await queue.ClaimNextAsync())!;
-        var stale = DeploymentAnalysisWorker.ProcessAsync(fixture.Services, first, default);
+        var stale = DeploymentAnalysisWorker.ProcessAsync(fixture.Services, first, CancellationToken.None);
+
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await fixture.Db.DeploymentAnalysisWorkItems.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.LeaseUntil, DateTimeOffset.UtcNow.AddSeconds(-1)));
+
         var second = (await queue.ClaimNextAsync())!;
-        await DeploymentAnalysisWorker.ProcessAsync(fixture.Services, second, default);
+
+        await DeploymentAnalysisWorker.ProcessAsync(fixture.Services, second, CancellationToken.None);
+
         late.SetResult(AnalysisResultTests.Valid() with { Summary = "Older diagnosis." });
         await stale;
+
         Assert.Equal("Newer diagnosis.", (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Summary);
         Assert.Equal(second.LeaseId,
             (await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).LeaseId);
@@ -819,20 +965,29 @@ public sealed class AnalysisPersistenceTests
     public async Task Exhausted_recovery_attempts_finish_without_context_or_provider_calls()
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid());
         });
+
         var queue = fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>();
+
         for (var attempt = 0; attempt < 3; attempt++)
             Assert.True(await queue.ReleaseAsync((await queue.ClaimNextAsync())!));
+
         ((ContextProxy)fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build =
             () => throw new InvalidOperationException("Context must not be loaded after recovery exhaustion.");
+
         await fixture.ProcessAsync();
+
         Assert.Equal(0, calls);
+
         var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.Equal(AiAnalysisStatus.Failed, view!.Status);
         Assert.Equal("recovery_exhausted", view.FailureCode);
         Assert.NotNull((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
@@ -855,25 +1010,34 @@ public sealed class AnalysisPersistenceTests
         var calls = 0;
         var builds = 0;
         using var audit = new AuditLoggerProvider();
+
         await using var fixture = await Fixture.CreateAsync(() => ++calls == 1
             ? Task.FromException<LlmAnalysisResponse>(new TransientAnalysisProviderException(40))
             : Task.FromResult(AnalysisResultTests.Valid()), audit);
+
         ((ContextProxy)fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = () =>
         {
             builds++;
+
             return Task.FromResult(new DeploymentAnalysisContext("fresh redacted context", ["container/web startup"]));
         };
+
         var before = DateTimeOffset.UtcNow;
+
         await fixture.ProcessAsync();
         var row = await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync();
+
         Assert.Equal(1, row.ProviderRetryCount);
         Assert.Equal(0, row.AttemptCount);
         Assert.Null(row.LeaseId);
         Assert.Null(row.CompletedAt);
         Assert.True(row.NextAttemptAt >= before.AddSeconds(40));
+
         Assert.Equal(AiAnalysisStatus.Queued,
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
+
         Assert.Contains(audit.Entries, entry => Equals(entry.GetValueOrDefault("Outcome"), "RetryScheduled"));
+
         using (var scope = fixture.Services.CreateScope())
         {
             Assert.Null(await scope.ServiceProvider.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync());
@@ -881,20 +1045,29 @@ public sealed class AnalysisPersistenceTests
 
         await fixture.Db.DeploymentAnalysisWorkItems.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.NextAttemptAt, DateTimeOffset.UtcNow.AddSeconds(-1)));
-        if (outcome == "consent")
-            await fixture.Db.Set<Configuration>().ExecuteUpdateAsync(update =>
-                update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
-        if (outcome == "configuration")
-            ((AnalysisEgressPolicyTests.Monitor)
-                    fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()).CurrentValue =
-                new AiAnalysisOptions();
-        if (outcome == "retry-policy")
-            ((AnalysisEgressPolicyTests.Monitor)
-                    fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()).CurrentValue =
-                new AiAnalysisOptions { MaximumProviderRetries = 0 };
+
+        switch (outcome)
+        {
+            case "consent":
+                await fixture.Db.Set<Configuration>().ExecuteUpdateAsync(update =>
+                    update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
+                break;
+            case "configuration":
+                ((AnalysisEgressPolicyTests.Monitor)
+                        fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()).CurrentValue =
+                    new AiAnalysisOptions();
+                break;
+            case "retry-policy":
+                ((AnalysisEgressPolicyTests.Monitor)
+                        fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()).CurrentValue =
+                    new AiAnalysisOptions { MaximumProviderRetries = 0 };
+                break;
+        }
+
         await fixture.ProcessAsync();
         var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.Equal(
             outcome == "complete" ? AiAnalysisStatus.Completed :
             outcome == "retry-policy" ? AiAnalysisStatus.Failed : AiAnalysisStatus.Skipped, view!.Status);
@@ -912,12 +1085,16 @@ public sealed class AnalysisPersistenceTests
     public async Task Repeated_transient_failures_exhaust_durable_retry_budget()
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromException<LlmAnalysisResponse>(new TransientAnalysisProviderException());
         });
+
         var originalStatus = (await fixture.Db.Deployments.AsNoTracking().SingleAsync()).Status;
+
         for (var attempt = 0; attempt < 3; attempt++)
         {
             await fixture.ProcessAsync();
@@ -927,10 +1104,13 @@ public sealed class AnalysisPersistenceTests
 
         var view = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.Equal(AiAnalysisStatus.Failed, view!.Status);
         Assert.Equal("retry_exhausted", view.FailureCode);
         Assert.Equal(3, calls);
+
         var work = await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync();
+
         Assert.Equal(2, work.ProviderRetryCount);
         Assert.NotNull(work.CompletedAt);
         Assert.Null(await fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync());
@@ -950,11 +1130,14 @@ public sealed class AnalysisPersistenceTests
     {
         await using var fixture = await Fixture.CreateAsync(() => Task.FromException<LlmAnalysisResponse>(
             new TransientAnalysisProviderException(imminentExpiry ? 120 : 3600)));
+
         if (imminentExpiry)
             await fixture.Db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.ExpiresAt, DateTimeOffset.UtcNow.AddMinutes(1)));
+
         await fixture.ProcessAsync();
         var row = await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync();
+
         Assert.Equal(0, row.ProviderRetryCount);
         Assert.Null(row.NextAttemptAt);
         Assert.NotNull(row.CompletedAt);
@@ -971,21 +1154,27 @@ public sealed class AnalysisPersistenceTests
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var late = new TaskCompletionSource<LlmAnalysisResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             if (++calls != 1) return Task.FromResult(AnalysisResultTests.Valid());
             entered.TrySetResult();
+
             return late.Task;
         });
+
         var queue = fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>();
         var first = (await queue.ClaimNextAsync())!;
-        var stale = DeploymentAnalysisWorker.ProcessAsync(fixture.Services, first, default);
+        var stale = DeploymentAnalysisWorker.ProcessAsync(fixture.Services, first, CancellationToken.None);
+
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await fixture.Db.DeploymentAnalysisWorkItems.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.LeaseUntil, DateTimeOffset.UtcNow.AddSeconds(-1)));
         await fixture.ProcessAsync();
+
         late.SetException(new TransientAnalysisProviderException());
         await stale;
+
         Assert.Equal(AiAnalysisStatus.Completed,
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
         Assert.Equal(0, (await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).ProviderRetryCount);
@@ -1005,37 +1194,49 @@ public sealed class AnalysisPersistenceTests
     {
         var calls = 0;
         using var audit = new AuditLoggerProvider();
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid());
         }, audit);
+
         if (scheduledRetry)
             await fixture.Db.DeploymentAnalysisWorkItems.ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.NextAttemptAt, DateTimeOffset.UtcNow.AddMinutes(5))
                     .SetProperty(item => item.ProviderRetryCount, 1));
+
         ((AnalysisEgressPolicyTests.Monitor)fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>())
             .CurrentValue = new AiAnalysisOptions();
+
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
         var deploymentStatus = (await fixture.Db.Deployments.AsNoTracking().SingleAsync()).Status;
+
         Assert.Equal(DeploymentAnalysisCancellationResult.Cancelled,
             await service.CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
         Assert.Equal(DeploymentAnalysisCancellationResult.Cancelled,
             await service.CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
+
         var view = await service.GetLatestAsync(fixture.OwnerId, fixture.DeploymentId);
+
         Assert.Equal(AiAnalysisStatus.Cancelled, view!.Status);
         Assert.Equal("AI analysis was canceled by its owner.", view.Summary);
         Assert.Empty(view.RecommendedSteps);
         Assert.Empty(view.EvidenceReferences);
         Assert.Null(view.FailureCode);
         Assert.NotNull(view.CompletedAt);
+
         var work = await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync();
+
         Assert.NotNull(work.CompletedAt);
         Assert.Null(work.LeaseId);
         Assert.Null(work.LeaseUntil);
         Assert.Null(work.NextAttemptAt);
         Assert.Null(await fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync());
+
         await fixture.ProcessAsync();
+
         Assert.Equal(0, calls);
         Assert.Equal(deploymentStatus, (await fixture.Db.Deployments.AsNoTracking().SingleAsync()).Status);
         Assert.Contains(audit.Entries, entry => Equals(entry.GetValueOrDefault("Outcome"), "CanceledByOwner") &&
@@ -1058,13 +1259,16 @@ public sealed class AnalysisPersistenceTests
     public async Task Cancellation_does_not_disclose_or_modify_inaccessible_analysis(string mismatch)
     {
         await using var fixture = await Fixture.CreateAsync(() => throw new InvalidOperationException());
+
         if (mismatch == "expired")
             await fixture.Db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.ExpiresAt, DateTimeOffset.UtcNow.AddSeconds(-1)));
+
         var result = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>().CancelAsync(
             mismatch == "owner" ? Guid.NewGuid() : fixture.OwnerId,
             mismatch == "deployment" ? Guid.NewGuid() : fixture.DeploymentId,
             mismatch == "analysis" ? Guid.NewGuid() : fixture.AnalysisId);
+
         Assert.Equal(DeploymentAnalysisCancellationResult.NotFound, result);
         Assert.Equal(AiAnalysisStatus.Queued,
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
@@ -1084,19 +1288,29 @@ public sealed class AnalysisPersistenceTests
     public async Task Cancellation_preserves_finished_results(AiAnalysisStatus status)
     {
         await using var fixture = await Fixture.CreateAsync(() => Task.FromResult(AnalysisResultTests.Valid()));
+
         await fixture.ProcessAsync();
         await fixture.Db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, status));
+
         var original = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
+
         Assert.Equal(DeploymentAnalysisCancellationResult.AlreadyFinished,
             await service.CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
+
         using var canceled = new CancellationTokenSource();
-        canceled.Cancel();
+
+        await canceled.CancelAsync();
+
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.CancelAsync(fixture.OwnerId,
             fixture.DeploymentId,
             fixture.AnalysisId, canceled.Token));
-        var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
+        var saved = await fixture.Db.AiDeploymentAnalyses
+            .AsNoTracking()
+            .SingleAsync(CancellationToken.None);
+
         Assert.Equal(original.Status, saved.Status);
         Assert.Equal(original.Summary, saved.Summary);
         Assert.Equal(original.CompletedAt, saved.CompletedAt);
@@ -1115,29 +1329,41 @@ public sealed class AnalysisPersistenceTests
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var late = new TaskCompletionSource<LlmAnalysisResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             entered.TrySetResult();
+
             return late.Task;
         });
+
         var queue = fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>();
         var claim = (await queue.ClaimNextAsync())!;
-        var processing = DeploymentAnalysisWorker.ProcessAsync(fixture.Services, claim, default);
+        var processing = DeploymentAnalysisWorker.ProcessAsync(fixture.Services, claim, CancellationToken.None);
+
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
+
         Assert.Equal(DeploymentAnalysisCancellationResult.Cancelled,
             await service.CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
+
         if (transient) late.SetException(new TransientAnalysisProviderException());
         else late.SetResult(AnalysisResultTests.Valid());
+
         await processing;
+
         Assert.False(await queue.RenewAsync(claim));
         Assert.False(await queue.ReleaseAsync(claim));
+
         var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
         Assert.Equal(AiAnalysisStatus.Cancelled, saved.Status);
         Assert.Null(saved.Summary);
         Assert.Null(saved.RecommendedStepsJson);
         Assert.Null(saved.FailureCode);
+
         var work = await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync();
+
         Assert.Equal(0, work.ProviderRetryCount);
         Assert.Null(work.NextAttemptAt);
         Assert.NotNull(work.CompletedAt);
@@ -1152,18 +1378,24 @@ public sealed class AnalysisPersistenceTests
     public async Task Cancellation_during_context_build_stops_provider_admission()
     {
         var calls = 0;
+
         await using var fixture = await Fixture.CreateAsync(() =>
         {
             calls++;
+
             return Task.FromResult(AnalysisResultTests.Valid());
         });
+
         ((ContextProxy)fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = async () =>
         {
             await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
                 .CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId);
+
             return new DeploymentAnalysisContext("safe diagnostics", []);
         };
+
         await fixture.ProcessAsync();
+
         Assert.Equal(0, calls);
         Assert.Equal(AiAnalysisStatus.Cancelled,
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
@@ -1179,25 +1411,36 @@ public sealed class AnalysisPersistenceTests
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         await using var fixture = await Fixture.CreateAsync(() => throw new InvalidOperationException(),
             tokenResponse: async token =>
             {
                 entered.TrySetResult();
-                using var registration = token.Register(() => canceled.TrySetResult());
+                await using var registration = token.Register(() => canceled.TrySetResult());
+
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
+
                 return AnalysisResultTests.Valid();
             });
-        var claim = (await fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync())!;
+
+        var claim = (await fixture.Services
+            .GetRequiredService<IDeploymentAnalysisQueue>()
+            .ClaimNextAsync())!;
+
         var worker = new DeploymentAnalysisWorker(fixture.Services.GetRequiredService<IServiceScopeFactory>(),
             fixture.Services.GetRequiredService<ILogger<DeploymentAnalysisWorker>>(), TimeProvider.System,
             fixture.Services.GetRequiredService<IOptions<AiAnalysisOptions>>());
+
         var processing = worker.RunLeasedAsync(fixture.Services,
-            claim with { LeaseUntil = DateTimeOffset.UtcNow.AddSeconds(3) }, default);
+            claim with { LeaseUntil = DateTimeOffset.UtcNow.AddSeconds(3) }, CancellationToken.None);
+
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId);
+
         await canceled.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await processing.WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.Equal(AiAnalysisStatus.Cancelled,
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
     }
@@ -1212,17 +1455,23 @@ public sealed class AnalysisPersistenceTests
     {
         var interceptor = new RetirementFailure();
         using var audit = new AuditLoggerProvider();
+
         await using var fixture = await Fixture.CreateAsync(() => Task.FromResult(AnalysisResultTests.Valid()), audit,
             interceptor: interceptor);
+
         interceptor.Fail = true;
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
+
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
+
         Assert.Equal(AiAnalysisStatus.Queued,
             (await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Status);
         Assert.Null((await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync()).CompletedAt);
         Assert.DoesNotContain(audit.Entries, entry => Equals(entry.GetValueOrDefault("Outcome"), "CanceledByOwner"));
+
         interceptor.Fail = false;
+
         Assert.Equal(DeploymentAnalysisCancellationResult.Cancelled,
             await service.CancelAsync(fixture.OwnerId, fixture.DeploymentId, fixture.AnalysisId));
     }
@@ -1240,29 +1489,41 @@ public sealed class AnalysisPersistenceTests
     {
         using var stopping = new CancellationTokenSource();
         var renewed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
         await using var fixture = await Fixture.CreateAsync(
             () => throw new InvalidOperationException("Token-aware fixture required."),
             tokenResponse: async token =>
             {
                 await Task.Delay(Timeout.InfiniteTimeSpan, token);
+
                 return AnalysisResultTests.Valid();
             }, decorateQueue: queue => new RenewalProbe(queue, renewSucceeds, renewed));
+
         var queue = fixture.Services.GetRequiredService<IDeploymentAnalysisQueue>();
-        var claim = (await queue.ClaimNextAsync())!;
+        var claim = (await queue.ClaimNextAsync(stopping.Token))!;
+
         // Accelerate the coordinator's first heartbeat without altering the persisted 120-second ownership lease.
         var schedulerClaim = claim with { LeaseUntil = DateTimeOffset.UtcNow.AddSeconds(3) };
         var worker = new DeploymentAnalysisWorker(fixture.Services.GetRequiredService<IServiceScopeFactory>(),
             fixture.Services.GetRequiredService<ILogger<DeploymentAnalysisWorker>>(), TimeProvider.System,
             fixture.Services.GetRequiredService<IOptions<AiAnalysisOptions>>());
+
         var processing = worker.RunLeasedAsync(fixture.Services, schedulerClaim, stopping.Token);
+
         await renewed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
         if (renewSucceeds) await stopping.CancelAsync();
+
         if (renewSucceeds)
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 processing.WaitAsync(TimeSpan.FromSeconds(5)));
         else
             await processing.WaitAsync(TimeSpan.FromSeconds(5));
-        var persisted = await fixture.Db.DeploymentAnalysisWorkItems.AsNoTracking().SingleAsync();
+
+        var persisted = await fixture.Db.DeploymentAnalysisWorkItems
+            .AsNoTracking()
+            .SingleAsync(CancellationToken.None);
+
         Assert.Null(persisted.LeaseId);
         Assert.Null(persisted.CompletedAt);
         Assert.Null((await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync()).Summary);
@@ -1295,6 +1556,7 @@ public sealed class AnalysisPersistenceTests
                 (command.CommandText.Contains("DeploymentAnalysisWorkItems", StringComparison.Ordinal) ||
                  command.CommandText.Contains("deployment_analysis_work_items", StringComparison.Ordinal)))
                 throw new InvalidOperationException("Synthetic queue retirement failure.");
+
             return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
@@ -1333,7 +1595,9 @@ public sealed class AnalysisPersistenceTests
             CancellationToken token = default)
         {
             var owned = success && await inner.RenewAsync(work, token);
+
             renewed.TrySetResult();
+
             return owned;
         }
 
@@ -1429,16 +1693,20 @@ public sealed class AnalysisPersistenceTests
                 Func<TState, Exception?, string> formatter)
             {
                 Assert.Null(exception);
+
                 var attributes = new Dictionary<string, object?>();
+
                 provider._scopes.ForEachScope((scope, target) =>
                 {
                     if (scope is IEnumerable<KeyValuePair<string, object?>> values)
                         foreach (var pair in values)
                             target[pair.Key] = pair.Value;
                 }, attributes);
+
                 if (state is IEnumerable<KeyValuePair<string, object?>> fields)
                     foreach (var pair in fields)
                         attributes[pair.Key] = pair.Value;
+
                 provider.Entries.Add(attributes);
             }
         }
@@ -1496,6 +1764,7 @@ public sealed class AnalysisPersistenceTests
         public async Task ProcessAsync(CancellationToken token = default)
         {
             var work = await Services.GetRequiredService<IDeploymentAnalysisQueue>().ClaimNextAsync(token);
+
             if (work is not null) await DeploymentAnalysisWorker.ProcessAsync(Services, work, token);
         }
 
@@ -1515,12 +1784,18 @@ public sealed class AnalysisPersistenceTests
             DbCommandInterceptor? interceptor = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
+
             await connection.OpenAsync();
+
             var dbOptions = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection);
+
             if (interceptor is not null) dbOptions.AddInterceptors(interceptor);
+
             var db = new AnalysisContext(dbOptions.Options, new EphemeralDataProtectionProvider());
+
             await db.Database.EnsureCreatedAsync();
             var owner = Guid.NewGuid();
+
             var deployment = new Deployment
             {
                 CsProject = new CsProject
@@ -1537,6 +1812,7 @@ public sealed class AnalysisPersistenceTests
                     }
                 }
             };
+
             var analysis = new AiDeploymentAnalysis
             {
                 Deployment = deployment,
@@ -1547,14 +1823,18 @@ public sealed class AnalysisPersistenceTests
                 IdempotencyKey = Guid.NewGuid().ToString("N"),
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(90)
             };
+
             db.AiDeploymentAnalyses.Add(analysis);
             db.DeploymentAnalysisWorkItems.Add(new DeploymentAnalysisWorkItem { Analysis = analysis });
+
             await db.SaveChangesAsync();
             var context = DispatchProxy.Create<IDeploymentAnalysisContextBuilder, ContextProxy>();
+
             var services = new ServiceCollection().AddLogging(logging =>
                 {
                     if (audit is not null) logging.AddProvider(audit);
-                }).AddSingleton<AutoMateDbContext>(db).AddSingleton(TimeProvider.System)
+                })
+                .AddSingleton<AutoMateDbContext>(db).AddSingleton(TimeProvider.System)
                 .AddSingleton<IDiagnosticRedactor>(new DiagnosticRedactor())
                 .AddSingleton<IAnalysisResultValidator>(AnalysisResultTests.Validator())
                 .AddSingleton(context).AddSingleton<ILlmAnalysisProvider>(new Provider(respond, tokenResponse))
@@ -1572,6 +1852,7 @@ public sealed class AnalysisPersistenceTests
                 })
                 .AddScoped<IDeploymentAnalysisService, DeploymentAnalysisService>().AddSafePlatformLogging()
                 .BuildServiceProvider();
+
             return new Fixture(connection, services, db, owner, deployment.Id, analysis.Id);
         }
     }
@@ -1652,6 +1933,7 @@ public sealed class AnalysisPersistenceTests
             CancellationToken cancellationToken = default)
         {
             LastRequest = request;
+
             return tokenResponse?.Invoke(cancellationToken) ?? respond();
         }
     }
@@ -1672,18 +1954,24 @@ public sealed class AnalysisPersistenceTests
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
+
             builder.Entity<AiAnalysisBudgetEntry>().Property(e => e.OccurredAt)
                 .HasConversion(e => e.UtcTicks, e => new DateTimeOffset(e, TimeSpan.Zero));
+
             builder.Entity<AiDeploymentAnalysis>().Property(e => e.ExpiresAt)
                 .HasConversion(e => e.UtcTicks, e => new DateTimeOffset(e, TimeSpan.Zero));
+
             builder.Entity<DeploymentAnalysisWorkItem>().Property(e => e.NextAttemptAt)
                 .HasConversion(e => e.HasValue ? e.Value.UtcTicks : (long?)null,
                     e => e.HasValue ? new DateTimeOffset(e.Value, TimeSpan.Zero) : null);
+
             builder.Entity<DeploymentAnalysisWorkItem>().Property(e => e.LeaseUntil)
                 .HasConversion(e => e.HasValue ? e.Value.UtcTicks : (long?)null,
                     e => e.HasValue ? new DateTimeOffset(e.Value, TimeSpan.Zero) : null);
+
             builder.Entity<DeploymentAnalysisWorkItem>().Property(e => e.CreatedAt)
                 .HasConversion(e => e.UtcTicks, e => new DateTimeOffset(e, TimeSpan.Zero));
+
             builder.Entity<AiDeploymentAnalysis>().Property(e => e.CreatedAt)
                 .HasConversion(e => e.UtcTicks, e => new DateTimeOffset(e, TimeSpan.Zero));
         }

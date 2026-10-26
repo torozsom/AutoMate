@@ -26,6 +26,7 @@ public sealed class CloudFailurePrivacyTests
             BindingFlags.NonPublic | BindingFlags.Static)!;
         var reason = (string)policy.Invoke(null,
             [new InvalidOperationException(prefix + ": private-payload-token")])!;
+
         Assert.Contains(guidance, reason);
         Assert.DoesNotContain("private", reason);
     }

@@ -139,6 +139,7 @@ internal sealed class AzureFederatedCredentialService(
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var payload = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         var properties = payload.RootElement.GetProperty("properties");
+
         var audiences = properties.GetProperty("audiences")
             .EnumerateArray()
             .Select(audience => audience.GetString())

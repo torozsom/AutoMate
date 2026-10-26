@@ -43,14 +43,17 @@ public sealed class TelemetryStorageTests
             }
         };
         var calls = 0;
+
         using var handler = new DelegateHttpMessageHandler(request =>
         {
             calls++;
             var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+
             Assert.DoesNotContain("private-", body);
             Assert.Contains("[REDACTED]", body);
             Assert.Contains(input.Event.ProjectId.ToString("N"), body);
             Assert.Equal(input.TenantId.ToString("N"), request.Headers.GetValues("X-Scope-OrgID").Single());
+
             if (metric)
             {
                 Assert.Contains("1.25", body);
@@ -60,6 +63,7 @@ public sealed class TelemetryStorageTests
                 using var parsed = JsonDocument.Parse(body);
                 var stored = parsed.RootElement.GetProperty("streams")[0].GetProperty("values")[0];
                 using var envelope = JsonDocument.Parse(stored[1].GetString()!);
+
                 Assert.Contains("Build failed.",
                     envelope.RootElement.GetProperty("event").GetProperty("message").GetString());
                 Assert.Equal(input.EventId, envelope.RootElement.GetProperty("eventId").GetGuid());
@@ -68,14 +72,17 @@ public sealed class TelemetryStorageTests
 
             return new HttpResponseMessage(HttpStatusCode.NoContent);
         });
+
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
+
         if (metric)
             await new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor())
-                .WriteAsync([input], default);
+                .WriteAsync([input], CancellationToken.None);
         else
             await new LokiDeploymentLogs(transport, Options.Create(Specialized()), new DiagnosticRedactor()).WriteAsync(
-                [input], default);
+                [input], CancellationToken.None);
+
         Assert.Equal(1, calls);
         Assert.Contains("private-value", input.Event.Message);
         Assert.Equal("Bearer private-value", attributes["Authorization"]);
@@ -100,14 +107,16 @@ public sealed class TelemetryStorageTests
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
         var items = new[] { Envelope(), Envelope() };
+
         if (metric)
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor())
-                    .WriteAsync(items, default));
+                    .WriteAsync(items, CancellationToken.None));
         else
             await Assert.ThrowsAsync<ArgumentException>(() =>
                 new LokiDeploymentLogs(transport, Options.Create(Specialized()), new DiagnosticRedactor()).WriteAsync(
-                    items, default));
+                    items, CancellationToken.None));
+
         Assert.Equal(0, calls);
     }
 
@@ -136,13 +145,15 @@ public sealed class TelemetryStorageTests
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
         var envelope = Envelope();
+
         envelope = envelope with
         {
             Event = envelope.Event with { Metrics = [new DeploymentMetricSample(name, value, unit)] }
         };
         await Assert.ThrowsAsync<ArgumentException>(() =>
             new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor()).WriteAsync(
-                [envelope], default));
+                [envelope], CancellationToken.None));
+
         Assert.Equal(0, calls);
     }
 
@@ -153,6 +164,7 @@ public sealed class TelemetryStorageTests
     public void Docker_numeric_samples_preserve_units_and_missing_values()
     {
         var samples = DeploymentMetricNormalizer.Docker("250.5%", "1.5GiB / 2GB");
+
         samples.Single(s => s.Unit == "cores").Value.Should().Be(2.505);
         samples.Single(s => s.Name == "automate_memory_used_bytes").Value.Should().Be(1.5 * 1073741824);
         samples.Single(s => s.Name == "automate_memory_limit_bytes").Value.Should().Be(2e9);
@@ -167,11 +179,15 @@ public sealed class TelemetryStorageTests
     {
         new TelemetryStorageOptions().IsValid().Should().BeTrue();
         new TelemetryStorageOptions { Backend = "Other" }.IsValid().Should().BeFalse();
+
         var options = Specialized();
+
         options.IsValid().Should().BeTrue();
+
         options.ManagedService = true;
         options.ManagedDataProcessingApproved = true;
         options.ProcessingRegion = "EU";
+
         options.IsValid().Should().BeFalse();
     }
 
@@ -184,11 +200,15 @@ public sealed class TelemetryStorageTests
     {
         var validator = new TelemetryStorageOptionsValidator();
         var result = validator.Validate(null, new TelemetryStorageOptions { Backend = "LokiMimir" });
+
         result.Failed.Should().BeTrue();
         string.Join(' ', result.Failures!).Should().Contain("LokiUrl").And.Contain("MetricsWriteUrl").And
             .Contain("MetricsQueryUrl");
+
         var options = Specialized();
+
         options.LokiUrl = "https://user:private-password@example.invalid";
+
         string.Join(' ', validator.Validate(null, options).Failures!).Should().NotContain("private-password");
         validator.Validate(null, new TelemetryStorageOptions()).Succeeded.Should().BeTrue();
     }
@@ -204,16 +224,20 @@ public sealed class TelemetryStorageTests
         var handler = new DelegateHttpMessageHandler(request =>
         {
             request.Headers.GetValues("X-Scope-OrgID").Single().Should().Be(envelope.TenantId.ToString("N"));
+
             using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
             var stream = body.RootElement.GetProperty("streams")[0];
+
             stream.GetProperty("stream").EnumerateObject().Select(p => p.Name).Should().NotContain("deployment_id");
             stream.GetProperty("values")[0][2].GetProperty("event_id").GetString().Should()
                 .Be(envelope.EventId.ToString("N"));
+
             return new HttpResponseMessage(HttpStatusCode.NoContent);
         });
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
         var adapter = new LokiDeploymentLogs(transport, Options.Create(Specialized()), new DiagnosticRedactor());
+
         await adapter.WriteAsync([envelope], CancellationToken.None);
         await adapter.WriteAsync([envelope], CancellationToken.None);
     }
@@ -226,12 +250,15 @@ public sealed class TelemetryStorageTests
     public async Task Loki_query_deduplicates_retry_copies_and_scopes_project_and_cursor()
     {
         var envelope = Envelope();
+
         envelope = envelope with { Event = envelope.Event with { Message = "password=private-backend-value" } };
         var handler = new DelegateHttpMessageHandler(request =>
         {
             var query = Uri.UnescapeDataString(request.RequestUri!.Query);
+
             query.Should().Contain(envelope.Event.ProjectId.ToString("N")).And.Contain("order_id > 10").And
                 .Contain("expires_at >");
+
             return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new
             {
                 status = "success",
@@ -257,6 +284,7 @@ public sealed class TelemetryStorageTests
         var result = await adapter.ReadAsync(envelope.TenantId, envelope.Event.ProjectId,
             envelope.Event.DeploymentId!.Value,
             10, false, 500, CancellationToken.None);
+
         Assert.Single(result);
         Assert.Equal("password=[REDACTED]", result[0].Event.Message);
     }
@@ -278,14 +306,17 @@ public sealed class TelemetryStorageTests
         var handler = new DelegateHttpMessageHandler(request =>
         {
             using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult());
+
             body.RootElement.GetProperty("resourceMetrics")[0].GetProperty("scopeMetrics")[0]
                 .GetProperty("metrics")[0].GetProperty("gauge").GetProperty("dataPoints")[0]
                 .GetProperty("asDouble").GetDouble().Should().Be(2.5);
+
             return DelegateHttpMessageHandler.Json("{\"partialSuccess\":{\"rejectedDataPoints\":\"1\"}}");
         });
         using var transport =
             new TelemetryHttpTransport(new StubHttpClientFactory(handler), Options.Create(Specialized()));
         var adapter = new MimirDeploymentMetrics(transport, Options.Create(Specialized()), new DiagnosticRedactor());
+
         await adapter.Invoking(a => a.WriteAsync([envelope], CancellationToken.None)).Should()
             .ThrowAsync<InvalidOperationException>();
     }
@@ -300,7 +331,9 @@ public sealed class TelemetryStorageTests
         var handler = new DelegateHttpMessageHandler(_ =>
         {
             var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+
             response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromMinutes(2));
+
             return response;
         });
         using var transport =
@@ -308,6 +341,7 @@ public sealed class TelemetryStorageTests
         var error = await transport
             .Invoking(t => t.SendAsync("http://localhost/query", Guid.NewGuid(), null, CancellationToken.None))
             .Should().ThrowAsync<TelemetryProviderException>();
+
         error.Which.RetryAfter.Should().Be(TimeSpan.FromMinutes(2));
     }
 

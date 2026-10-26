@@ -127,6 +127,7 @@ public sealed record AssessmentSelection(
               End - Start > TimeSpan.FromDays(365))) ||
             (Range != AssessmentRange.Custom && (Start is not null || End is not null)))
             throw new ArgumentException("Invalid assessment selection.");
+
         return this with
         {
             LogContainers = Names(LogContainers),
@@ -223,10 +224,12 @@ public sealed record AssessmentSelection(
                 ? AssessmentRange.LastHour
                 : AssessmentRange.DeploymentLifetime
             : Range;
+
         var end = range == AssessmentRange.Custom ? End!.Value :
             range != AssessmentRange.DeploymentLifetime ||
             status is DeploymentStatus.Starting or DeploymentStatus.Running ? now :
             activityEnd < now ? activityEnd : now;
+
         var start = range switch
         {
             AssessmentRange.Custom => Start!.Value,
@@ -235,12 +238,16 @@ public sealed record AssessmentSelection(
             AssessmentRange.Last24Hours => end.AddHours(-24),
             _ => created
         };
+
         if (end > now || end <= DateTimeOffset.UnixEpoch)
             throw new ArgumentException("Range must end in the recorded past.");
+
         if (start < created) start = created;
         var truncated = end - start > TimeSpan.FromDays(365);
+
         if (truncated) start = end.AddDays(-365);
         if (start > end) start = end;
+
         return new AssessmentWindow(start, end, truncated);
     }
 }
@@ -288,6 +295,7 @@ public static class AssessmentClassification
         {
             DeploymentDiagnosticSource.GitHubActions => AssessmentSources.GitHub,
             DeploymentDiagnosticSource.DockerCompose => AssessmentSources.Build,
+
             DeploymentDiagnosticSource.AzureContainerApps => e.SourceIdentity?.Stream switch
             {
                 DeploymentDiagnosticStream.StandardOutput or DeploymentDiagnosticStream.StandardError =>
@@ -295,8 +303,10 @@ public static class AssessmentClassification
                 DeploymentDiagnosticStream.Control or DeploymentDiagnosticStream.System => AssessmentSources.Azure,
                 _ => AssessmentSources.Other
             },
-            DeploymentDiagnosticSource.AutoMate or DeploymentDiagnosticSource.DockerDaemon => AssessmentSources
-                .Deployment,
+
+            DeploymentDiagnosticSource.AutoMate or
+                DeploymentDiagnosticSource.DockerDaemon => AssessmentSources.Deployment,
+
             DeploymentDiagnosticSource.DockerContainer => e.SourceIdentity?.Component switch
             {
                 DeploymentDiagnosticComponent.Web => AssessmentSources.Web,
@@ -304,6 +314,7 @@ public static class AssessmentClassification
                 DeploymentDiagnosticComponent.Build => AssessmentSources.Build,
                 _ => AssessmentSources.Other
             },
+
             _ => AssessmentSources.Other
         };
     }
@@ -318,10 +329,13 @@ public static class AssessmentClassification
     public static bool Matches(DeploymentLogEnvelope entry, AssessmentSelection selection, AssessmentWindow window)
     {
         var e = entry.Event;
+
         if (e.TimestampUtc < window.Start || e.TimestampUtc > window.End || e.Kind == DeploymentDiagnosticKind.Metric ||
             entry.Channel is null)
             return false;
+
         var source = Source(e);
+
         return selection.Sources.HasFlag(source) &&
                (source is not (AssessmentSources.Web or AssessmentSources.Database) ||
                 selection.LogContainers is null ||

@@ -26,10 +26,12 @@ public sealed class ProjectDetailsQueryTests
     public async Task Current_graph_totals_pages_and_ownership_remain_independent()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var clock = new Clock();
         await using var db = new QueryDb(options, clock);
+
         await db.Database.EnsureCreatedAsync();
         var app = new Domain.Entities.Projects.Application
         {
@@ -43,9 +45,11 @@ public sealed class ProjectDetailsQueryTests
                     { Name = "web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } }
             ]
         };
+
         db.Applications.Add(app);
         await db.SaveChangesAsync();
         var first = clock.GetUtcNow();
+
         for (var index = 0; index < 14; index++)
         {
             clock.Now = first.AddMinutes(index);
@@ -65,6 +69,7 @@ public sealed class ProjectDetailsQueryTests
 
         db.ChangeTracker.Clear();
         var query = new ProjectDetailsQuery(db);
+
         var page = Assert.IsType<ProjectDetailsReadModel>(await query.ReadAsync(app.Id, app.UserId, 0));
         Assert.Equal(new ProjectDeploymentSummary(14, 5, 5, 4, first), page.Summary);
         Assert.Single(page.Project.CsProjects.Single().Deployments);
@@ -97,7 +102,8 @@ public sealed class ProjectDetailsQueryTests
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
-            foreach (var property in builder.Model.GetEntityTypes().SelectMany(entity => entity.GetProperties())
+            foreach (var property in builder.Model.GetEntityTypes()
+                         .SelectMany(entity => entity.GetProperties())
                          .Where(property =>
                              property.ClrType == typeof(DateTimeOffset) || property.ClrType == typeof(DateTimeOffset?)))
                 property.SetValueConverter(new DateTimeOffsetToBinaryConverter());

@@ -32,7 +32,7 @@ public sealed class DeploymentDiagnosticPublisher(
     IServiceScopeFactory? scopes = null) : IDeploymentDiagnosticPublisher, IDurableDeploymentDiagnosticPublisher
 {
     /// <summary>Serializes admission of new overflow identities to enforce the bookkeeping limit.</summary>
-    private readonly object _dropLock = new();
+    private readonly Lock _dropLock = new();
 
     /// <summary>
     ///     Bounded overflow bookkeeping; metric totals still include omissions beyond this
@@ -74,12 +74,15 @@ public sealed class DeploymentDiagnosticPublisher(
 
         using var rootActivity = EnsureTraceContext();
         using var ingestActivity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest");
+
         var safeEvent = PrepareEvent(diagnosticEvent);
         var tags = TelemetryTags.Create(safeEvent);
+
         AutoMateTelemetry.DiagnosticQueueDepth.Add(1);
         if (_events.Writer.TryWrite(safeEvent)) return ValueTask.CompletedTask;
         AutoMateTelemetry.DiagnosticQueueDepth.Add(-1);
         AutoMateTelemetry.EventsDropped.Add(1, tags);
+
         lock (_dropLock)
         {
             if (_droppedProjects.ContainsKey(safeEvent.ProjectId) || _droppedProjects.Count < 4_096)
@@ -113,9 +116,11 @@ public sealed class DeploymentDiagnosticPublisher(
         var safe = PrepareEvent(diagnosticEvent) with { EventId = diagnosticEvent.EventId ?? Guid.NewGuid() };
         using var correlation = OperationalLog.BeginCorrelation(logger, safe.DeploymentId, projectId: safe.ProjectId);
         await using var scope = scopes!.CreateAsyncScope();
+
         var channel = safe.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
             ? null
             : DeploymentDiagnosticDispatcher.GetTerminalChannel(safe);
+
         long order;
         using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
@@ -155,6 +160,7 @@ public sealed class DeploymentDiagnosticPublisher(
                     cancellationToken,
                     () => scope.ServiceProvider.GetRequiredService<ILogStreamer>().StreamTerminalLogAsync(
                         DeploymentTerminalLog.FromEvent(order, safe, channel), deadline.Token));
+
                 AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(safe));
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
@@ -180,6 +186,7 @@ public sealed class DeploymentDiagnosticPublisher(
     {
         var startedAt = Stopwatch.GetTimestamp();
         var activity = Activity.Current!;
+
         var redaction = DeploymentTracing.Run(DeploymentOperation.Redaction, diagnosticEvent.ProjectId,
             diagnosticEvent.DeploymentId,
             () => redactor.Redact(diagnosticEvent with
@@ -187,14 +194,18 @@ public sealed class DeploymentDiagnosticPublisher(
                 TraceId = diagnosticEvent.TraceId ?? activity.TraceId.ToString(),
                 SpanId = diagnosticEvent.SpanId ?? activity.SpanId.ToString()
             }));
+
         var safeEvent = redaction.Event.Message.Length > 4_096
             ? redaction.Event with { Message = redaction.Event.Message[..4_096] + " [output truncated]\r\n" }
             : redaction.Event;
+
         var tags = TelemetryTags.Create(safeEvent);
         AutoMateTelemetry.EventsReceived.Add(1, tags);
+
         if (safeEvent.Kind == DeploymentDiagnosticKind.Log)
             AutoMateTelemetry.DiagnosticCursorLag.Record(
                 Math.Max(0, (DateTimeOffset.UtcNow - safeEvent.TimestampUtc).TotalSeconds), tags);
+
         if (redaction.RedactedValueCount > 0)
         {
             AutoMateTelemetry.ValuesRedacted.Add(redaction.RedactedValueCount, tags);
@@ -215,7 +226,10 @@ public sealed class DeploymentDiagnosticPublisher(
     /// <returns>The numeric position, count or status described by this operation.</returns>
     internal int DrainDropped(Guid projectId)
     {
-        return _droppedProjects.TryRemove(projectId, out var count) ? count : 0;
+        lock (_dropLock)
+        {
+            return _droppedProjects.TryRemove(projectId, out var count) ? count : 0;
+        }
     }
 
     /// <summary>
@@ -257,17 +271,22 @@ public sealed class DeploymentDiagnosticPublisher(
         ArgumentNullException.ThrowIfNull(diagnosticEvent);
         if (diagnosticEvent.ProjectId == Guid.Empty)
             throw new ArgumentException("A diagnostic event must identify its project.", nameof(diagnosticEvent));
+
         // Empty output lines are meaningful terminal data; lifecycle/annotation messages are not.
         if (diagnosticEvent.Kind == DeploymentDiagnosticKind.Log)
             ArgumentException.ThrowIfNullOrEmpty(diagnosticEvent.Message);
         else
             ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.Message);
+
         ArgumentNullException.ThrowIfNull(diagnosticEvent.TerminalChannel);
-        if (diagnosticEvent.Metrics is { } samples && (samples.Count > 3 || samples.Any(s =>
-                !MimirDeploymentMetrics.Units.TryGetValue(s.Name, out var unit) || unit != s.Unit ||
-                !double.IsFinite(s.Value) || s.Value < 0)))
+
+        if (diagnosticEvent.Metrics is { } samples
+            && (samples.Count > 3 || samples.Any(s =>
+                !MimirDeploymentMetrics.Units.TryGetValue(s.Name, out var unit) || unit != s.Unit
+                || !double.IsFinite(s.Value) || s.Value < 0)))
             throw new ArgumentException("Metric samples must use supported names, finite values and explicit units.",
                 nameof(diagnosticEvent));
+
         if (diagnosticEvent.TerminalChannel.Kind is DeploymentTerminalChannelKind.Container
             or DeploymentTerminalChannelKind.Metrics)
             ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticEvent.TerminalChannel.Target);
@@ -306,11 +325,13 @@ public sealed class DeploymentDiagnosticDispatcher(
             await ProcessAsync(diagnosticEvent, stoppingToken);
             var dropped = publisher.DrainDropped(diagnosticEvent.ProjectId);
             if (dropped == 0) continue;
+
             var markerChannel = diagnosticEvent.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
                 ? new DeploymentTerminalChannel(diagnosticEvent.Source == DeploymentDiagnosticSource.AzureContainerApps
                     ? DeploymentTerminalChannelKind.System
                     : DeploymentTerminalChannelKind.Build)
                 : diagnosticEvent.TerminalChannel;
+
             var marker = diagnosticEvent with
             {
                 Kind = DeploymentDiagnosticKind.Annotation,
@@ -324,6 +345,7 @@ public sealed class DeploymentDiagnosticDispatcher(
                 Cursor = null,
                 Sequence = null
             };
+
             await ProcessAsync(marker, stoppingToken);
         }
 
@@ -342,13 +364,18 @@ public sealed class DeploymentDiagnosticDispatcher(
         var channel = diagnosticEvent.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
             ? null
             : GetTerminalChannel(diagnosticEvent);
-        ActivityContext.TryParse($"00-{diagnosticEvent.TraceId}-{diagnosticEvent.SpanId}-01", null, out var parent);
+
+        ActivityContext.TryParse($"00-{diagnosticEvent.TraceId}-{diagnosticEvent.SpanId}-01",
+            null, out var parent);
         using var activity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.dispatch",
             ActivityKind.Internal, parent);
+
         using var correlation = OperationalLog.BeginCorrelation(logger, diagnosticEvent.DeploymentId,
             projectId: diagnosticEvent.ProjectId);
+
         long orderId;
         var startedAt = Stopwatch.GetTimestamp();
+
         try
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
@@ -392,6 +419,7 @@ public sealed class DeploymentDiagnosticDispatcher(
         {
             using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             deadline.CancelAfter(publisher.DeliveryTimeout);
+
             try
             {
                 await DeploymentTracing.RunAsync(DeploymentOperation.Delivery, diagnosticEvent.ProjectId,
@@ -458,17 +486,17 @@ public sealed class DeploymentDiagnosticDispatcher(
             {
                 Source: DeploymentDiagnosticSource.AzureContainerApps,
                 Kind: DeploymentDiagnosticKind.Annotation, Attributes: not null
-            } &&
-            diagnosticEvent.Attributes.ContainsKey("issue"))
-            return logStreamer.StreamTerminalNoticeAsync(diagnosticEvent.ProjectId, diagnosticEvent.Message,
-                cancellationToken);
+            } && diagnosticEvent.Attributes.ContainsKey("issue"))
+            return logStreamer.StreamTerminalNoticeAsync(diagnosticEvent.ProjectId,
+                diagnosticEvent.Message, cancellationToken);
+
         return diagnosticEvent.TerminalChannel.Kind switch
         {
             DeploymentTerminalChannelKind.Build or DeploymentTerminalChannelKind.System or
                 DeploymentTerminalChannelKind.Container => logStreamer.StreamTerminalLogAsync(
                     DeploymentTerminalLog.FromEvent(orderId, diagnosticEvent, channel!), cancellationToken),
             DeploymentTerminalChannelKind.Metrics => DeliverMetricsAsync(diagnosticEvent, cancellationToken),
-            _ => throw new ArgumentOutOfRangeException()
+            _ => throw new ArgumentOutOfRangeException(nameof(diagnosticEvent), "Unsupported terminal channel kind.")
         };
     }
 
@@ -487,6 +515,7 @@ public sealed class DeploymentDiagnosticDispatcher(
                 deployment, diagnosticEvent.TerminalChannel.Target!,
                 diagnosticEvent.SourceIdentity?.Component ?? DeploymentDiagnosticComponent.Container,
                 diagnosticEvent.TimestampUtc, samples), token);
+
         await logStreamer.StreamContainerMetricsAsync(diagnosticEvent.ProjectId,
             diagnosticEvent.TerminalChannel.Target!,
             diagnosticEvent.Attributes?.GetValueOrDefault("cpu") ?? "unknown",
@@ -516,7 +545,8 @@ public sealed class DeploymentDiagnosticDispatcher(
             DeploymentTerminalChannelKind.Container when diagnosticEvent.TerminalChannel.Target == "cloud-web" =>
                 "azure-web",
             DeploymentTerminalChannelKind.Container => diagnosticEvent.TerminalChannel.Target!,
-            _ => throw new ArgumentOutOfRangeException()
+            DeploymentTerminalChannelKind.Metrics => "metrics",
+            _ => throw new ArgumentOutOfRangeException(nameof(diagnosticEvent), "Unsupported terminal channel kind.")
         };
     }
 }

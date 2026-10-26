@@ -30,10 +30,12 @@ public sealed class AzureMonitorLogsTokenProviderTests
     public async Task Denied_token_returns_safe_guidance(string body, bool consent)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();
         await using var db = new AutoMateDbContext(options, protector);
+
         await db.Database.EnsureCreatedAsync();
         var user = new RemoteUser
         {
@@ -42,6 +44,7 @@ public sealed class AzureMonitorLogsTokenProviderTests
             Email = "fixture@example.test",
             AzureRefreshToken = "refresh"
         };
+
         db.Users.Add(user);
         await db.SaveChangesAsync();
         await using var services = new ServiceCollection().AddScoped(_ => new AutoMateDbContext(options, protector))
@@ -56,6 +59,7 @@ public sealed class AzureMonitorLogsTokenProviderTests
                 TokenEndpoint = "https://login.microsoftonline.com/organizations/oauth2/v2.0/token"
             }));
         var result = await provider.GetTokenAsync(user.Id);
+
         Assert.False(result.IsSuccess);
         Assert.DoesNotContain("private-data", result.FailureReason);
         Assert.Equal(consent, result.FailureReason!.Contains("Data.Read", StringComparison.Ordinal));

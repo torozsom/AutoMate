@@ -14,6 +14,7 @@ window.xtermWrapper = {
      */
     init: function (elementId) {
         this.dispose(elementId);
+
         const term = new Terminal({
             theme: {background: '#07090e', foreground: '#bbc9cf', cursor: '#00d2ff', selectionBackground: '#003543'},
             convertEol: true,
@@ -28,9 +29,11 @@ window.xtermWrapper = {
 
         const container = document.getElementById(elementId);
         term.open(container);
+
         // Fitting changes xterm's children. Only fit again when the external viewport changes, and do it outside
         // the ResizeObserver callback to avoid a content/resize feedback loop.
         const entry = {term, fitAddon, resizeObserver: null, frame: null, width: 0, height: 0};
+
         /**
          * Schedules fitting only when no viewport update is already pending.
          * @returns {void} No value.
@@ -52,10 +55,12 @@ window.xtermWrapper = {
                     fitAddon.fit();
                 });
         };
+
         const resizeObserver = new ResizeObserver(fit);
         entry.resizeObserver = resizeObserver;
         resizeObserver.observe(container);
         this.terminals[elementId] = entry;
+
         fit();
     },
 
@@ -89,9 +94,12 @@ window.xtermWrapper = {
      */
     dispose: function (elementId) {
         if (this.terminals[elementId]) {
-            if (this.terminals[elementId].frame !== null) cancelAnimationFrame(this.terminals[elementId].frame);
+            if (this.terminals[elementId].frame !== null)
+                cancelAnimationFrame(this.terminals[elementId].frame);
+
             this.terminals[elementId].resizeObserver.disconnect();
             this.terminals[elementId].term.dispose();
+
             delete this.terminals[elementId];
         }
     }

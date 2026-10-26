@@ -75,16 +75,29 @@ public sealed class DeploymentArchiveBackfillWorker(
     {
         if (settings.Value.ManagedService && !settings.Value.ManagedDataProcessingApproved)
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
+
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
         var logs = scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>();
         var metrics = scope.ServiceProvider.GetRequiredService<IDeploymentMetricQuery>();
-        var projects = await db.Deployments.AsNoTracking()
-            .OrderBy(d => d.CreatedAt).ThenBy(d => d.Id).Skip(_offset).Take(20)
+
+        var projects = await db.Deployments
+            .AsNoTracking()
+            .OrderBy(d => d.CreatedAt)
+            .ThenBy(d => d.Id)
+            .Skip(_offset)
+            .Take(20)
             .Select(d => new
-                { d.Id, d.CreatedAt, Project = d.CsProject!.AppId, Tenant = d.CsProject.Application.UserId })
+            {
+                d.Id,
+                d.CreatedAt,
+                Project = d.CsProject!.AppId,
+                Tenant = d.CsProject.Application.UserId
+            })
             .ToArrayAsync(token);
+
         _offset = projects.Length < 20 ? 0 : _offset + projects.Length;
+
         foreach (var deployment in projects)
             try
             {
@@ -92,6 +105,7 @@ public sealed class DeploymentArchiveBackfillWorker(
                     deployment.Project.ToString("N"));
                 Directory.CreateDirectory(directory);
                 var path = Path.Combine(directory, deployment.Id.ToString("N") + ".checkpoint");
+
                 var state = File.Exists(path)
                     ? await ReadAsync(path, token)
                     : new Progress(DateTimeOffset.UtcNow, 0, 0,
@@ -99,6 +113,7 @@ public sealed class DeploymentArchiveBackfillWorker(
                             ? deployment.CreatedAt
                             : DateTimeOffset.UtcNow.AddDays(-30),
                         false, false);
+
                 if (state.Complete) continue;
                 if (pending is not null)
                 {
@@ -110,26 +125,42 @@ public sealed class DeploymentArchiveBackfillWorker(
                 // Use the fixed cutoff for this import so later live archive samples are not imported again as aggregates.
                 if (!state.LegacyDone)
                 {
-                    var next = await db.Deployments.Where(d =>
-                            d.CsProject!.AppId == deployment.Project && d.CreatedAt > deployment.CreatedAt)
-                        .OrderBy(d => d.CreatedAt).Select(d => (DateTimeOffset?)d.CreatedAt).FirstOrDefaultAsync(token);
+                    var next = await db.Deployments
+                        .Where(d =>
+                            d.CsProject!.AppId == deployment.Project
+                            && d.CreatedAt > deployment.CreatedAt)
+                        .OrderBy(d => d.CreatedAt)
+                        .Select(d => (DateTimeOffset?)d.CreatedAt)
+                        .FirstOrDefaultAsync(token);
+
                     var now = DateTimeOffset.UtcNow;
-                    var rows = await db.DeploymentDiagnosticRecords.AsNoTracking().Where(r =>
-                            r.ProjectId == deployment.Project &&
-                            r.ExpiresAt > now && r.OrderId > state.LegacyCursor && r.TimestampUtc < state.Cutoff &&
-                            (r.DeploymentId == deployment.Id || (r.DeploymentId == null && r.DeliveryJson == null &&
-                                                                 (r.Source == "GitHubActions" ||
-                                                                  r.Source == "DockerCompose") &&
-                                                                 r.TimestampUtc >= deployment.CreatedAt &&
-                                                                 (next == null || r.TimestampUtc < next))))
-                        .OrderBy(r => r.OrderId).Take(500).ToArrayAsync(token);
+                    var rows = await db.DeploymentDiagnosticRecords
+                        .AsNoTracking()
+                        .Where(r =>
+                            r.ProjectId == deployment.Project
+                            && r.ExpiresAt > now
+                            && r.OrderId > state.LegacyCursor
+                            && r.TimestampUtc < state.Cutoff
+                            && (r.DeploymentId == deployment.Id
+                                || (r.DeploymentId == null
+                                    && r.DeliveryJson == null
+                                    && (r.Source == "GitHubActions"
+                                        || r.Source == "DockerCompose")
+                                    && r.TimestampUtc >= deployment.CreatedAt
+                                    && (next == null || r.TimestampUtc < next))))
+                        .OrderBy(r => r.OrderId)
+                        .Take(500)
+                        .ToArrayAsync(token);
+
                     foreach (var row in rows)
                         await archive.AppendAsync(Envelope(row, deployment.Tenant, deployment.Id), token);
+
                     state = state with
                     {
                         LegacyCursor = rows.LastOrDefault()?.OrderId ?? state.LegacyCursor,
                         LegacyDone = rows.Length < 500
                     };
+
                     await WriteAsync(path, state, token);
                 }
 
@@ -137,14 +168,17 @@ public sealed class DeploymentArchiveBackfillWorker(
                 {
                     var rows = await logs.ReadAsync(deployment.Tenant, deployment.Project, deployment.Id,
                         state.LogCursor, false, 500, token, deployment.CreatedAt);
+
                     // Live events at/after cutoff already require archive persistence before acknowledgment.
                     foreach (var row in rows.Where(r => r.Event.TimestampUtc < state.Cutoff))
                         await archive.AppendAsync(row, token);
+
                     state = state with
                     {
                         LogCursor = rows.LastOrDefault()?.OrderId ?? state.LogCursor,
                         LogsDone = rows.Count < 500 || rows.Any(r => r.Event.TimestampUtc >= state.Cutoff)
                     };
+
                     await WriteAsync(path, state, token);
                 }
 
@@ -155,7 +189,10 @@ public sealed class DeploymentArchiveBackfillWorker(
                     {
                         var points = await metrics.ReadAsync(deployment.Tenant, deployment.Project, deployment.Id,
                             state.MetricStart, end, 1000, token);
-                        foreach (var batch in points.Where(p => p.Timestamp < state.Cutoff).Chunk(1000))
+
+                        foreach (var batch in points
+                                     .Where(p => p.Timestamp < state.Cutoff)
+                                     .Chunk(1000))
                             await archive.ImportMetricsAsync(new ArchiveMetricImport(deployment.Tenant,
                                 deployment.Project,
                                 deployment.Id, batch), token);
@@ -182,13 +219,17 @@ public sealed class DeploymentArchiveBackfillWorker(
     {
         if (row.DeliveryJson is not null && row.TenantId is not null && row.StoredAt is not null)
             return DeploymentTelemetryStore.Envelope(row);
+
         var source = Enum.TryParse<DeploymentDiagnosticSource>(row.Source, out var s)
             ? s
             : DeploymentDiagnosticSource.AutoMate;
+
         var kind = Enum.TryParse<DeploymentDiagnosticKind>(row.Kind, out var k) ? k : DeploymentDiagnosticKind.Log;
+
         var severity = Enum.TryParse<DeploymentDiagnosticSeverity>(row.Severity, out var level)
             ? level
             : DeploymentDiagnosticSeverity.Information;
+
         var e = new DeploymentDiagnosticEvent(row.ProjectId, deployment, source, kind, severity, row.TimestampUtc,
             row.Message, new DeploymentTerminalChannel(kind == DeploymentDiagnosticKind.Metric
                 ? DeploymentTerminalChannelKind.Metrics
@@ -201,9 +242,9 @@ public sealed class DeploymentArchiveBackfillWorker(
                 ? null
                 : JsonSerializer.Deserialize<DeploymentMetricSample[]>(row.MetricSamplesJson),
             EventId: row.Id);
+
         return new DeploymentLogEnvelope(row.Id, tenant, row.OrderId, row.StoredAt ?? row.TimestampUtc, row.ExpiresAt,
-            e,
-            row.TerminalChannel ?? (row.Source == "GitHubActions" ? "github-actions" : "build"));
+            e, row.TerminalChannel ?? (row.Source == "GitHubActions" ? "github-actions" : "build"));
     }
 
     /// <summary>

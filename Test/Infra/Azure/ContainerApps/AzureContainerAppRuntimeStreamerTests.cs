@@ -43,16 +43,19 @@ public sealed class AzureContainerAppRuntimeStreamerTests
     public async Task App_system_events_are_collected_only_by_latest_active_deployment()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();
         var older = Guid.NewGuid();
         var newer = Guid.NewGuid();
+
         await SeedDeploymentAsync(options, protector, older);
         await using var seeded = new AutoMateDbContext(options, protector);
         var first = await seeded.Deployments.SingleAsync();
         var app = await seeded.Applications.SingleAsync();
         const string resource = "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/containerApps/app";
+
         first.CloudResourceId = resource;
         first.CloudContainerRevision = "rev-1";
         first.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-2);
@@ -73,7 +76,9 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         {
             if (request.RequestUri!.Host == "management.azure.com") return Respond(request);
             var query = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+
             if (!query.Contains("ContainerAppSystemLogs")) return DelegateHttpMessageHandler.Json("""{"tables":[]}""");
+
             return DelegateHttpMessageHandler.Json("""
                                                    {"tables":[{"columns":[{"name":"TimeGenerated"},{"name":"Message"},{"name":"RevisionName"}],
                                                     "rows":[["2026-10-11T12:00:00Z","app-wide",""],
@@ -88,6 +93,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                 factory,
                 services.GetRequiredService<IServiceScopeFactory>(), Options.Create(new AzureMonitorLogsOptions()),
                 NullLogger<AzureContainerAppRuntimeStreamer>.Instance);
+
             collector.StartStreaming(new AzureContainerAppRuntimeStreamRequest
             {
                 ProjectId = app.Id,
@@ -97,7 +103,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                 AzureCredentials = new AzureCloudCredentialsDto { SubscriptionId = "sub", AccessToken = "token" },
                 Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
             });
-            await collector.PollOnceAsync(default);
+            await collector.PollOnceAsync(CancellationToken.None);
         }
 
         Assert.Contains(publisher.Events, e => e.DeploymentId == newer && e.Message == "[Azure system] app-wide");
@@ -118,14 +124,17 @@ public sealed class AzureContainerAppRuntimeStreamerTests
     public async Task Delayed_ingestion_survives_restart_without_advancing_rejected_records(bool accepted)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();
         var deployment = Guid.NewGuid();
+
         await SeedDeploymentAsync(options, protector, deployment);
         await using var seeded = new AutoMateDbContext(options, protector);
         var app = await seeded.Applications.SingleAsync();
         var ingestion = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+
         seeded.AzureContainerAppLogCheckpoints.Add(new AzureContainerAppLogCheckpoint
         {
             DeploymentId = deployment,
@@ -139,22 +148,28 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         using var services = new ServiceCollection()
             .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(options, protector)).BuildServiceProvider();
         var publisher = new RecordingPublisher { Accepted = accepted };
+
         var handler = new DelegateHttpMessageHandler(request =>
         {
             if (request.RequestUri!.Host == "management.azure.com") return Respond(request);
             var query = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult()).RootElement
                 .GetProperty("query").GetString()!;
+
             if (!query.Contains("ContainerAppConsoleLogs")) return DelegateHttpMessageHandler.Json("""{"tables":[]}""");
+
             Assert.Contains("strcmp(CursorHash, 'hash-", query);
+
             return DelegateHttpMessageHandler.Json("""
                                                    {"tables":[{"columns":[{"name":"TimeGenerated"},{"name":"IngestedAt"},{"name":"Message"},{"name":"RevisionName"},{"name":"CursorHash"}],"rows":[["2026-10-10T09:00:00Z","2026-10-10T11:00:00Z","late","rev-1","hash-b"]]}]}
                                                    """);
         });
+
         for (var restart = 0; restart < 2; restart++)
         {
             using var streamer = new AzureContainerAppRuntimeStreamer(publisher, new SuccessfulTokenProvider(),
                 new StubHttpClientFactory(handler), services.GetRequiredService<IServiceScopeFactory>(),
                 Options.Create(new AzureMonitorLogsOptions()), NullLogger<AzureContainerAppRuntimeStreamer>.Instance);
+
             streamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
             {
                 ProjectId = app.Id,
@@ -164,15 +179,18 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                 AzureCredentials = new AzureCloudCredentialsDto { SubscriptionId = "sub", AccessToken = "token" },
                 Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
             });
-            await streamer.PollOnceAsync(default);
+            await streamer.PollOnceAsync(CancellationToken.None);
         }
 
         var events = publisher.Events.Where(e => e.Message == "late").ToArray();
+
         Assert.Equal(accepted ? 1 : 2, events.Length);
         Assert.Single(events.Select(e => e.EventId).Distinct());
         Assert.All(events, e => Assert.Equal(ingestion.AddHours(-2), e.TimestampUtc));
+
         await using var check = new AutoMateDbContext(options, protector);
         var checkpoint = await check.AzureContainerAppLogCheckpoints.SingleAsync(c => c.Source == "console");
+
         Assert.Equal(accepted ? "hash-b" : "hash-a", checkpoint.LastIngestionTieBreaker);
     }
 
@@ -190,6 +208,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded,
             ActivityStopped = spans.Enqueue
         };
+
         ActivitySource.AddActivityListener(listener);
         var path = Path.Combine(Path.GetTempPath(), "automate-azure-" + Guid.NewGuid().ToString("N") + ".db");
         var dbOptions = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite($"Data Source={path};Pooling=False")
@@ -197,11 +216,13 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         var protector = new EphemeralDataProtectionProvider();
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
+
         try
         {
             await SeedDeploymentAsync(dbOptions, protector, first);
             await using var seeded = new AutoMateDbContext(dbOptions, protector);
             var project = await seeded.Applications.SingleAsync();
+
             seeded.Deployments.Add(new Deployment
                 { Id = second, CsProjectId = (await seeded.Deployments.SingleAsync()).CsProjectId });
             await seeded.SaveChangesAsync();
@@ -211,10 +232,12 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             var handler = new DelegateHttpMessageHandler(request =>
             {
                 var response = Respond(request);
+
                 if (request.RequestUri!.Host != "management.azure.com" &&
                     request.Content!.ReadAsStringAsync().GetAwaiter().GetResult().Contains("rev-2"))
                 {
                     response.Dispose();
+
                     return DelegateHttpMessageHandler.Json(
                         RecordsJson("second revision line", "stdout", "ContainerAppConsoleLogs")
                             .Replace("rev-1", "rev-2"));
@@ -225,6 +248,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             var streamer = new AzureContainerAppRuntimeStreamer(publisher, new SuccessfulTokenProvider(),
                 new StubHttpClientFactory(handler), services.GetRequiredService<IServiceScopeFactory>(),
                 Options.Create(new AzureMonitorLogsOptions()), NullLogger<AzureContainerAppRuntimeStreamer>.Instance);
+
             foreach (var target in new[] { (Id: first, Revision: "rev-1"), (Id: second, Revision: "rev-2") })
                 streamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
                 {
@@ -236,10 +260,11 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                         { SubscriptionId = "sub", AccessToken = "arm-token" },
                     Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
                 });
-            await streamer.PollOnceAsync(default);
+            await streamer.PollOnceAsync(CancellationToken.None);
             foreach (var id in new[] { first, second })
             {
                 var owned = spans.Where(span => Equals(span.GetTagItem("deployment.id"), id)).ToArray();
+
                 var poll = Assert.Single(owned, span => span.OperationName == "azure.runtime.poll");
                 Assert.Contains(owned,
                     span => span.OperationName == "azure.logs.query" && span.TraceId == poll.TraceId);
@@ -256,7 +281,9 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             Assert.DoesNotContain(publisher.Events,
                 e => (e.DeploymentId == first && e.Message == "second revision line") ||
                      (e.DeploymentId == second && e.Message == "console line"));
+
             await using var check = new AutoMateDbContext(dbOptions, protector);
+
             Assert.Equal(2,
                 (await check.AzureContainerAppLogCheckpoints.ToListAsync()).Select(c => c.DeploymentId).Distinct()
                 .Count());
@@ -283,13 +310,16 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         string expectedRevision)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var dbOptions = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();
         var deploymentId = Guid.NewGuid();
+
         await SeedDeploymentAsync(dbOptions, protector, deploymentId);
         await using var seeded = new AutoMateDbContext(dbOptions, protector);
         var project = await seeded.Applications.SingleAsync();
+
         project.RuntimeDiagnosticsEnabled = saved;
         await seeded.SaveChangesAsync();
         var viewers = new DeploymentRuntimeViewers(TimeProvider.System);
@@ -322,9 +352,12 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         {
             Assert.DoesNotContain(diagnostics.Events,
                 e => e.Message == "console line" || e.Message.Contains("revision provisioned"));
+
             await using var otherRevisionDb = new AutoMateDbContext(dbOptions, protector);
+
             Assert.All(await otherRevisionDb.AzureContainerAppLogCheckpoints.ToListAsync(),
                 c => Assert.Null(c.LastTimestamp));
+
             return;
         }
 
@@ -339,8 +372,10 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                                                          DeploymentTerminalChannelKind.System &&
                                                          eventItem.SourceIdentity!.Stream ==
                                                          DeploymentDiagnosticStream.System);
+
         await using var checkpointsDb = new AutoMateDbContext(dbOptions, protector);
         var checkpoints = await checkpointsDb.AzureContainerAppLogCheckpoints.ToListAsync();
+
         Assert.All(checkpoints, c => Assert.Equal(accepted, c.LastTimestamp is not null));
     }
 
@@ -355,10 +390,12 @@ public sealed class AzureContainerAppRuntimeStreamerTests
     public async Task Managed_database_logs_and_metrics_use_verified_ownership_and_durable_checkpoints(bool accepted)
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var dbOptions = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();
         var deploymentId = Guid.NewGuid();
+
         await SeedDeploymentAsync(dbOptions, protector, deploymentId);
         await using var seeded = new AutoMateDbContext(dbOptions, protector);
         var project = await seeded.Applications.SingleAsync();
@@ -367,6 +404,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         var publisher = new RecordingPublisher { Accepted = accepted };
         const string dbResource =
             "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.DBforPostgreSQL/flexibleServers/db";
+
         var handler = new DelegateHttpMessageHandler(request =>
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/resources"))
@@ -385,8 +423,10 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                 var query = body.RootElement.GetProperty("query").GetString()!;
                 var lowerBound = Regex.Match(query,
                     @"IngestedAt >= datetime\(([^)]+)\)").Groups[1].Value;
+
                 Assert.True(DateTimeOffset.Parse(lowerBound) <= DateTimeOffset.UtcNow.AddHours(-23),
                     "Initial database collection must recover quiet startup events preceding web readiness.");
+
                 return DelegateHttpMessageHandler.Json(RecordsJson("database line", "system", "AzureDiagnostics"));
             }
 
@@ -396,14 +436,17 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                 Assert.Contains(publisher.Events, e =>
                     e.SourceIdentity?.Component == DeploymentDiagnosticComponent.Database &&
                     e.Kind == DeploymentDiagnosticKind.Metric);
+
                 throw new HttpRequestException("synthetic provider detail");
             }
 
             return Respond(request);
         });
+
         using var streamer = new AzureContainerAppRuntimeStreamer(publisher, new SuccessfulTokenProvider(),
             new StubHttpClientFactory(handler), services.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(new AzureMonitorLogsOptions()), NullLogger<AzureContainerAppRuntimeStreamer>.Instance);
+
         streamer.StartStreaming(new AzureContainerAppRuntimeStreamRequest
         {
             ProjectId = project.Id,
@@ -413,7 +456,8 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             AzureCredentials = new AzureCloudCredentialsDto { SubscriptionId = "sub", AccessToken = "token" },
             Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
         });
-        await streamer.PollOnceAsync(default);
+        await streamer.PollOnceAsync(CancellationToken.None);
+
         Assert.Contains(publisher.Events, e => e.Message == "console line");
         Assert.Contains(publisher.Events,
             e => e.TerminalChannel.Target == "azure-db" && e.Message == "[db] database line");
@@ -423,11 +467,15 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         Assert.Contains(metric.Metrics!,
             m => m.Name == "automate_cpu_usage_percent" && m.Value == 42 && m.Unit == "percent");
         Assert.Contains(metric.Metrics!, m => m.Name == "automate_memory_used_percent" && m.Value == 65);
+
         await using var check = new AutoMateDbContext(dbOptions, protector);
+
         var cursor = Assert.Single(await check.AzureContainerAppLogCheckpoints.ToListAsync(),
             c => c.Source.StartsWith("db-"));
         Assert.Equal(accepted, cursor.LastTimestamp is not null);
-        await streamer.PollOnceAsync(default);
+
+        await streamer.PollOnceAsync(CancellationToken.None);
+
         Assert.Equal(accepted ? 1 : 2, publisher.Events.Count(e => e.TerminalChannel.Target == "azure-db" &&
                                                                    e.Kind == DeploymentDiagnosticKind.Log));
         Assert.DoesNotContain(publisher.Events, e => e.TerminalChannel.Target == "azure-db" &&
@@ -446,13 +494,16 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         {
             if (request.RequestUri.AbsoluteUri.Contains("/metrics?", StringComparison.Ordinal))
                 return DelegateHttpMessageHandler.Json("{ \"value\": [] }");
+
             return DelegateHttpMessageHandler.Json(
                 "{ \"properties\": { \"latestReadyRevisionName\": \"rev-1\", \"managedEnvironmentId\": \"/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/managedEnvironments/env\" } }");
         }
 
         Assert.Contains("/managedEnvironments/env/query", request.RequestUri.AbsolutePath);
+
         var query = JsonDocument.Parse(request.Content!.ReadAsStringAsync().GetAwaiter().GetResult()).RootElement
             .GetProperty("query").GetString()!;
+
         return DelegateHttpMessageHandler.Json(query.Contains("ContainerAppConsoleLogs", StringComparison.Ordinal)
             ? RecordsJson("console line", "stdout", "ContainerAppConsoleLogs")
             : RecordsJson("revision provisioned", "system", "ContainerAppSystemLogs"));
@@ -486,6 +537,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         IDataProtectionProvider protector, Guid deploymentId)
     {
         await using var dbContext = new AutoMateDbContext(options, protector);
+
         await dbContext.Database.EnsureCreatedAsync();
         dbContext.Deployments.Add(new Deployment
         {

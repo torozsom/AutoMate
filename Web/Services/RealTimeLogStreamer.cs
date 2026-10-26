@@ -37,10 +37,17 @@ public sealed class RealTimeLogStreamer(
         var safe = snapshot with
         {
             ResourceName = redactor.RedactText(snapshot.ResourceName, 128),
-            Samples = snapshot.Samples.Where(s => double.IsFinite(s.Value) && s.Value >= 0 &&
-                                                  DeploymentMetricCatalog.Units.TryGetValue(s.Name, out var unit) &&
-                                                  unit == s.Unit).Take(16).ToArray()
+            Samples =
+            [
+                .. snapshot.Samples
+                    .Where(s => double.IsFinite(s.Value)
+                                && s.Value >= 0
+                                && DeploymentMetricCatalog.Units.TryGetValue(s.Name, out var unit)
+                                && unit == s.Unit)
+                    .Take(16)
+            ]
         };
+
         return SendAsync(snapshot.ProjectId, nameof(ILogClient.ReceiveDeploymentMetrics), [safe], cancellationToken);
     }
 
@@ -60,6 +67,7 @@ public sealed class RealTimeLogStreamer(
         ArgumentException.ThrowIfNullOrWhiteSpace(terminalLog.TerminalChannel);
 
         var safe = redactor.RedactTerminal(terminalLog);
+
         return SendAsync(terminalLog.ProjectId, nameof(ILogClient.ReceiveTerminalLog), [safe],
             cancellationToken);
     }
@@ -123,6 +131,7 @@ public sealed class RealTimeLogStreamer(
         using var activity = DeploymentTracing.Start(DeploymentOperation.SignalRSend, projectId);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(options.Value.DeliveryTimeoutSeconds));
+
         try
         {
             await hubContext.Clients.Group(LogHub.GetProjectGroupName(projectId))

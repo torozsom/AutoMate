@@ -43,8 +43,9 @@ public static class AnalysisEgressPolicy
             options.MaximumContextCharacters is < 1 or > 131_072 ||
             options.MaximumContextBytes is < 1 or > 131_072 ||
             options.MaximumContextTokens is < 1 or > 131_072) return false;
+
         var categories = options.AllowedDataCategories.ToHashSet(StringComparer.Ordinal);
-        if (!categories.SetEquals(["logs", "metrics", "traceCorrelation"])) return false;
-        return true;
+
+        return categories.SetEquals(["logs", "metrics", "traceCorrelation"]);
     }
 }

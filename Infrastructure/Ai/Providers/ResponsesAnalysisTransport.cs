@@ -63,26 +63,34 @@ internal sealed class ResponsesAnalysisTransport(
     /// <exception cref="ArgumentNullException">A required input or dependency is null.</exception>
     /// <exception cref="OperationCanceledException">The supplied cancellation token is canceled.</exception>
     public async Task<LlmAnalysisResponse> AnalyzeAsync(LlmAnalysisRequest request, string provider,
-        Func<string?> getApiKey,
-        Func<AiAnalysisOptions, bool> approvesRoute, CancellationToken cancellationToken = default)
+        Func<string?> getApiKey, Func<AiAnalysisOptions, bool> approvesRoute,
+        CancellationToken cancellationToken = default)
     {
         var settings = options.CurrentValue;
         var key = getApiKey();
+
         if (!settings.Enabled || !IsValidApiKey(key))
             throw new AnalysisProviderUnavailableException();
+
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Context);
+
         var evidence = request.AllowedEvidenceReferences is null
             ? null
-            : Array.AsReadOnly(request.AllowedEvidenceReferences.Take(1024).ToArray());
+            : Array.AsReadOnly([.. request.AllowedEvidenceReferences.Take(1024)]);
+
         var maximumContext = Math.Clamp(settings.MaximumContextCharacters, 1, MaximumResponseBytes);
+
         if (!AnalysisContextBudget.From(settings).Fits(request.Context))
             throw new ArgumentException("Diagnostic context exceeds the configured limit.", nameof(request));
+
         var safeContext = redactor.RedactText(request.Context, maximumContext);
         if (!AnalysisContextBudget.From(settings).Fits(safeContext))
             throw new ArgumentException("Diagnostic context exceeds the configured limit.", nameof(request));
+
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var policyChanged = 0;
+
         using var policySubscription = options.OnChange((updated, _) =>
         {
             if (ReferenceEquals(settings, updated)) return;
@@ -96,22 +104,29 @@ internal sealed class ResponsesAnalysisTransport(
                 // An already-dispatched reload callback may outlive its subscription and completed request.
             }
         });
+
         if (!AnalysisEgressPolicy.IsCommonConfigured(settings) || !approvesRoute(settings))
             throw new AnalysisProviderUnavailableException();
+
         deadline.CancelAfter(TimeSpan.FromSeconds(settings.TimeoutSeconds));
-        if (redactor.RedactText(settings.Model, 128) != settings.Model ||
-            request.DeploymentId is not { } deploymentId ||
-            !await egress.AuthorizeAsync(deploymentId, request.Trigger, cancellationToken))
+
+        if (redactor.RedactText(settings.Model, 128) != settings.Model
+            || request.DeploymentId is not { } deploymentId
+            || !await egress.AuthorizeAsync(deploymentId, request.Trigger, cancellationToken))
             throw new AnalysisProviderUnavailableException();
+
         // A configuration reload during authorization must not send a request using the previous route/model.
         if (Volatile.Read(ref policyChanged) != 0 || !ReferenceEquals(settings, options.CurrentValue))
             throw new AnalysisProviderUnavailableException();
+
         using var message = new HttpRequestMessage(HttpMethod.Post,
             new Uri(new Uri(settings.Endpoint, UriKind.Absolute), "responses"));
+
         if (provider == AzureOpenAiAnalysisProvider.ProviderName)
             message.Headers.Add("api-key", key);
         else
             message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+
         var structuredV2 = request.Kind != AssessmentKind.Automatic;
         message.Content = JsonContent.Create(new
         {
@@ -132,7 +147,9 @@ internal sealed class ResponsesAnalysisTransport(
                 }
             }
         });
+
         byte[] bytes;
+
         try
         {
             bytes = await SendBoundedAsync(message, provider, deadline.Token, cancellationToken);
@@ -145,19 +162,25 @@ internal sealed class ResponsesAnalysisTransport(
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+
         if (Volatile.Read(ref policyChanged) != 0 || !ReferenceEquals(settings, options.CurrentValue))
             throw new AnalysisProviderUnavailableException();
+
         var parsingAnswer = false;
+
         try
         {
             using var document = JsonDocument.Parse(bytes, new JsonDocumentOptions { MaxDepth = 16 });
             var root = document.RootElement;
+
             if (root.GetProperty("status").GetString() == "incomplete")
                 throw new InvalidAnalysisResultException(AnalysisResultRejection.IncompleteOutput);
             if (root.GetProperty("status").GetString() != "completed")
                 throw new InvalidAnalysisResultException(AnalysisResultRejection.MalformedEnvelope);
+
             var model = root.GetProperty("model").GetString();
             var texts = new List<string>();
+
             foreach (var item in root.GetProperty("output").EnumerateArray())
             {
                 var type = item.GetProperty("type").GetString();
@@ -165,6 +188,7 @@ internal sealed class ResponsesAnalysisTransport(
                 if (type != "message" || item.GetProperty("role").GetString() != "assistant" ||
                     item.GetProperty("status").GetString() != "completed")
                     throw new InvalidAnalysisResultException(AnalysisResultRejection.MalformedEnvelope);
+
                 foreach (var content in item.GetProperty("content").EnumerateArray())
                 {
                     if (content.GetProperty("type").GetString() == "refusal")
@@ -177,10 +201,12 @@ internal sealed class ResponsesAnalysisTransport(
 
             if (texts.Count != 1 || string.IsNullOrWhiteSpace(texts[0]))
                 throw new InvalidAnalysisResultException(AnalysisResultRejection.MalformedEnvelope);
+
             parsingAnswer = true;
             using var result = JsonDocument.Parse(texts[0], new JsonDocumentOptions { MaxDepth = 4 });
             var structured = result.RootElement;
             var names = new HashSet<string>(StringComparer.Ordinal);
+
             var required = structuredV2
                 ? new[]
                 {
@@ -188,23 +214,47 @@ internal sealed class ResponsesAnalysisTransport(
                     "recommendedSteps", "limitations", "evidenceReferences"
                 }
                 : new[] { "summary", "recommendedSteps", "evidenceReferences" };
+
             foreach (var property in structured.EnumerateObject())
                 if (!required.Contains(property.Name, StringComparer.Ordinal) || !names.Add(property.Name))
                     throw new InvalidAnalysisResultException();
+
             if (names.Count != required.Length) throw new InvalidAnalysisResultException();
             int? input = null, output = null;
-            if (root.TryGetProperty("usage", out var usage) && usage.ValueKind != JsonValueKind.Null)
-            {
-                input = TokenCount(usage, "input_tokens");
-                output = TokenCount(usage, "output_tokens");
-            }
+
+            if (!root.TryGetProperty("usage", out var usage) || usage.ValueKind == JsonValueKind.Null)
+                return AnalysisEvidence.Validate(validator.Validate(new LlmAnalysisResponse(provider,
+                    model ?? string.Empty,
+                    structured.GetProperty(structuredV2 ? "overview" : "summary").GetString() ?? string.Empty,
+                    [
+                        .. structured.GetProperty("recommendedSteps").EnumerateArray()
+                            .Select(item => item.GetString() ?? string.Empty)
+                    ],
+                    [
+                        .. structured.GetProperty("evidenceReferences").EnumerateArray()
+                            .Select(item => item.GetString() ?? string.Empty)
+                    ],
+                    input, output, settings.Model, PromptVersion: PromptVersion,
+                    ResultSchemaVersion: structuredV2 ? AnalysisResultValidator.SchemaVersion : 1,
+                    Sections: structuredV2
+                        ? new AssessmentSections(Section(structured, "observations"),
+                            Section(structured, "metricsAssessment"),
+                            Section(structured, "potentialIssues"), Section(structured, "limitations"))
+                        : null)), evidence);
+
+            input = TokenCount(usage, "input_tokens");
+            output = TokenCount(usage, "output_tokens");
 
             return AnalysisEvidence.Validate(validator.Validate(new LlmAnalysisResponse(provider, model ?? string.Empty,
                 structured.GetProperty(structuredV2 ? "overview" : "summary").GetString() ?? string.Empty,
-                structured.GetProperty("recommendedSteps").EnumerateArray()
-                    .Select(item => item.GetString() ?? string.Empty).ToArray(),
-                structured.GetProperty("evidenceReferences").EnumerateArray()
-                    .Select(item => item.GetString() ?? string.Empty).ToArray(),
+                [
+                    .. structured.GetProperty("recommendedSteps").EnumerateArray()
+                        .Select(item => item.GetString() ?? string.Empty)
+                ],
+                [
+                    .. structured.GetProperty("evidenceReferences").EnumerateArray()
+                        .Select(item => item.GetString() ?? string.Empty)
+                ],
                 input, output, settings.Model, PromptVersion: PromptVersion,
                 ResultSchemaVersion: structuredV2 ? AnalysisResultValidator.SchemaVersion : 1,
                 Sections: structuredV2
@@ -276,14 +326,24 @@ internal sealed class ResponsesAnalysisTransport(
                 items = new { type = "string" }
             }
         };
-        if (v2)
-            foreach (var name in new[] { "observations", "metricsAssessment", "potentialIssues", "limitations" })
-                properties[name] = new
-                {
-                    type = "array",
-                    description = "0-6 items; at most 768 characters each.",
-                    items = new { type = "string" }
-                };
+
+        if (!v2)
+            return new
+            {
+                type = "object",
+                additionalProperties = false,
+                properties,
+                required = properties.Keys.ToArray()
+            };
+
+        foreach (var name in new[] { "observations", "metricsAssessment", "potentialIssues", "limitations" })
+            properties[name] = new
+            {
+                type = "array",
+                description = "0-6 items; at most 768 characters each.",
+                items = new { type = "string" }
+            };
+
         return new { type = "object", additionalProperties = false, properties, required = properties.Keys.ToArray() };
     }
 
@@ -297,7 +357,7 @@ internal sealed class ResponsesAnalysisTransport(
     /// <returns>The section selection with its documented bounds and ordering.</returns>
     private static string[] Section(JsonElement result, string name)
     {
-        return result.GetProperty(name).EnumerateArray().Select(item => item.GetString() ?? "").ToArray();
+        return [.. result.GetProperty(name).EnumerateArray().Select(item => item.GetString() ?? "")];
     }
 
     /// <summary>
@@ -322,19 +382,20 @@ internal sealed class ResponsesAnalysisTransport(
         try
         {
             using var response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, deadline);
-            if (!response.IsSuccessStatusCode)
-            {
-                var status = (int)response.StatusCode;
-                if (status == 403)
-                    throw await AccessDeniedAsync(response, provider, deadline, caller);
-                if (status is 408 or 500 or 502 or 503 or 504 ||
-                    (status == 429 && await IsTemporaryRateLimitAsync(response.Content, provider,
-                        response.Headers.RetryAfter is not null, deadline, caller)))
-                    throw new TransientAnalysisProviderException(RetryAfterSeconds(response.Headers));
-                throw new HttpRequestException("AI provider request failed.", null, response.StatusCode);
-            }
+            if (response.IsSuccessStatusCode) return await ReadBoundedAsync(response.Content, deadline);
 
-            return await ReadBoundedAsync(response.Content, deadline);
+            var status = (int)response.StatusCode;
+            switch (status)
+            {
+                case 403:
+                    throw await AccessDeniedAsync(response, provider, deadline, caller);
+                case 408 or 500 or 502 or 503 or 504:
+                case 429 when await IsTemporaryRateLimitAsync(response.Content, provider,
+                    response.Headers.RetryAfter is not null, deadline, caller):
+                    throw new TransientAnalysisProviderException(RetryAfterSeconds(response.Headers));
+                default:
+                    throw new HttpRequestException("AI provider request failed.", null, response.StatusCode);
+            }
         }
         catch (OperationCanceledException) when (!caller.IsCancellationRequested)
         {
@@ -368,25 +429,34 @@ internal sealed class ResponsesAnalysisTransport(
         string? code = null;
         string? reason = null;
         var requestId =
-            response.Headers.TryGetValues(provider == "azure-openai" ? "apim-request-id" : "x-request-id", out var ids)
+            response.Headers
+                .TryGetValues(provider == "azure-openai"
+                    ? "apim-request-id"
+                    : "x-request-id", out var ids)
                 ? ids.FirstOrDefault()
                 : null;
+
         try
         {
             var bytes = await ReadBoundedAsync(response.Content, deadline, 8192);
             using var body = JsonDocument.Parse(bytes);
-            if (body.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+
+            if (body.RootElement.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.Object)
             {
                 if (error.TryGetProperty("code", out var value) && value.ValueKind == JsonValueKind.String)
                     code = value.GetString();
-                if (provider == AzureOpenAiAnalysisProvider.ProviderName &&
-                    error.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String)
+
+                if (provider == AzureOpenAiAnalysisProvider.ProviderName
+                    && error.TryGetProperty("message", out var message)
+                    && message.ValueKind == JsonValueKind.String)
                 {
                     var text = message.GetString() ?? string.Empty;
-                    reason = text.Contains("Virtual Network/Firewall", StringComparison.OrdinalIgnoreCase) ||
-                             text.Contains("A Virtual Network is configured for this resource",
-                                 StringComparison.OrdinalIgnoreCase) ||
-                             text.Contains("approved private endpoint", StringComparison.OrdinalIgnoreCase)
+
+                    reason = text.Contains("Virtual Network/Firewall", StringComparison.OrdinalIgnoreCase)
+                             || text.Contains("A Virtual Network is configured for this resource",
+                                 StringComparison.OrdinalIgnoreCase)
+                             || text.Contains("approved private endpoint", StringComparison.OrdinalIgnoreCase)
                         ? "network_access_denied"
                         : text.Contains("resource has been temporarily blocked", StringComparison.OrdinalIgnoreCase)
                             ? "resource_blocked"
@@ -421,12 +491,15 @@ internal sealed class ResponsesAnalysisTransport(
         {
             using var document = JsonDocument.Parse(await ReadBoundedAsync(content, token, 8192),
                 new JsonDocumentOptions { MaxDepth = 8 });
-            return document.RootElement.TryGetProperty("error", out var error) &&
-                   error.ValueKind == JsonValueKind.Object &&
-                   error.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String &&
-                   (code.GetString() is "rate_limit_exceeded" or "slow_down" ||
-                    (provider == AzureOpenAiAnalysisProvider.ProviderName && hasRetryHint &&
-                     code.GetString() == "429"));
+
+            return document.RootElement.TryGetProperty("error", out var error)
+                   && error.ValueKind == JsonValueKind.Object
+                   && error.TryGetProperty("code", out var code)
+                   && code.ValueKind == JsonValueKind.String
+                   && (code.GetString() is "rate_limit_exceeded" or "slow_down"
+                       || (provider == AzureOpenAiAnalysisProvider.ProviderName
+                           && hasRetryHint
+                           && code.GetString() == "429"));
         }
         catch (Exception error) when (error is JsonException or InvalidAnalysisResultException
                                           or InvalidOperationException or IOException)
@@ -501,10 +574,12 @@ internal sealed class ResponsesAnalysisTransport(
     {
         if (content.Headers.ContentLength > maximumBytes)
             throw new InvalidAnalysisResultException(AnalysisResultRejection.ResponseTooLarge);
+
         await using var stream = await content.ReadAsStreamAsync(token);
         using var output = new MemoryStream();
         var buffer = new byte[8192];
         int count;
+
         while ((count = await stream.ReadAsync(buffer, token)) > 0)
         {
             if (output.Length + count > maximumBytes)

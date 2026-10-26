@@ -20,11 +20,13 @@ public sealed class DockerOutputTests
     {
         const string stamp = "2026-10-04T08:00:00.123456789Z";
         var bytes = Encoding.UTF8.GetBytes($"{stamp} árvíz 😀\r\n{stamp} \n{stamp} partial");
+
         for (var split = 0; split <= bytes.Length; split++)
         {
             var decoder = new DockerLogDecoder(true, TimeProvider.System);
             var lines = decoder.Feed(bytes.AsSpan(0, split)).Concat(decoder.Feed(bytes.AsSpan(split), true)).ToArray();
-            Assert.Equal(new[] { "árvíz 😀\r\n", "\n", "partial" }, lines.Select(e => e.Text));
+
+            Assert.Equal(["árvíz 😀\r\n", "\n", "partial"], lines.Select(e => e.Text));
             Assert.All(lines, e => Assert.Equal(stamp, e.ProviderTimestamp));
             Assert.All(lines, e => Assert.False(e.Omitted));
         }
@@ -38,10 +40,11 @@ public sealed class DockerOutputTests
     {
         var stdout = new DockerLogDecoder(false, TimeProvider.System);
         var stderr = new DockerLogDecoder(false, TimeProvider.System);
+
         Assert.Empty(stdout.Feed("out"u8));
         Assert.Empty(stderr.Feed("err"u8));
         Assert.Equal("output\r\n", Assert.Single(stdout.Feed("put\r\n"u8)).Text);
-        Assert.Equal(new[] { "error\r", "next" }, stderr.Feed("or\rnext"u8, true).Select(e => e.Text));
+        Assert.Equal(["error\r", "next"], stderr.Feed("or\rnext"u8, true).Select(e => e.Text));
     }
 
     /// <summary>
@@ -51,8 +54,11 @@ public sealed class DockerOutputTests
     public void Oversized_lines_are_omitted_whole_and_next_line_recovers()
     {
         var decoder = new DockerLogDecoder(false, TimeProvider.System);
+
         Assert.Empty(decoder.Feed(Encoding.UTF8.GetBytes("password=" + new string('s', 9000))));
+
         var result = decoder.Feed("\r\nok\n"u8);
+
         Assert.True(result[0].Omitted);
         Assert.DoesNotContain("password", result[0].Text);
         Assert.Equal("ok\n", result[1].Text);
@@ -78,12 +84,14 @@ public sealed class DockerOutputTests
     {
         var e = DockerDiagnosticNormalizer.Compose(Guid.NewGuid(), Guid.NewGuid(), "sample", text,
             DeploymentDiagnosticStream.StandardError, 7);
+
         Assert.Equal(text, e.Message);
         Assert.Equal(kind, e.Kind.ToString());
         Assert.Equal(severity, e.Severity.ToString());
         Assert.Equal(phase, e.Attributes!["phase"]);
         Assert.Equal(DeploymentDiagnosticStream.StandardError, e.SourceIdentity!.Stream);
         Assert.Equal(7, e.Sequence);
+
         if (text.Contains("sha256")) Assert.Equal("sha256:abcdef123456", e.Attributes["image_id"]);
     }
 
@@ -97,6 +105,7 @@ public sealed class DockerOutputTests
         var web = target.Containers[0];
         var db = target.Containers[1];
         var labels = Labels(target, web);
+
         Assert.True(DockerDiagnosticNormalizer.IsOwned(target, web, labels));
         Assert.False(DockerDiagnosticNormalizer.IsOwned(target with { DeploymentId = Guid.NewGuid() }, web, labels));
         Assert.False(DockerDiagnosticNormalizer.IsOwned(target with { ProjectId = Guid.NewGuid() }, web, labels));
@@ -115,10 +124,13 @@ public sealed class DockerOutputTests
         var target = Target();
         var labels = new Dictionary<string, string>
             { ["com.docker.compose.project"] = target.ComposeProject, ["com.docker.compose.service"] = "web" };
+
         Assert.True(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels, true));
         Assert.False(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels));
         Assert.Null(DockerDiagnosticNormalizer.Daemon(target, Event(labels, "start")));
+
         labels["io.automate.owner"] = "other";
+
         Assert.False(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels, true));
     }
 
@@ -139,10 +151,12 @@ public sealed class DockerOutputTests
     {
         var target = Target();
         var labels = Labels(target, target.Containers[0]);
+
         labels["exitCode"] = "1";
         labels["password"] = "private-value";
         var message = Event(labels, action);
         var e = DockerDiagnosticNormalizer.Daemon(target, message)!;
+
         Assert.NotNull(e);
         Assert.Equal(target.DeploymentId, e.DeploymentId);
         Assert.Equal(DeploymentTerminalChannelKind.Build, e.TerminalChannel.Kind);
@@ -150,7 +164,9 @@ public sealed class DockerOutputTests
         Assert.False(e.Attributes!.ContainsKey("password"));
         Assert.Equal(e.EventId, DockerDiagnosticNormalizer.Daemon(target, message)!.EventId);
         Assert.Null(DockerDiagnosticNormalizer.Daemon(target, Event(labels, "exec_create: echo private-value")));
+
         message.Type = "image";
+
         Assert.Null(DockerDiagnosticNormalizer.Daemon(target, message));
     }
 
@@ -165,15 +181,24 @@ public sealed class DockerOutputTests
         const string stamp = "2026-10-04T08:00:00.123456789Z";
         var time = DateTimeOffset.Parse(stamp);
         var first = replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "same")!.Value;
+
         Assert.Null(replay.LastTimestamp);
+
         replay.Confirm(first.Key, first.Occurrence, time);
         var second = replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "same")!.Value;
+
         Assert.Equal(2, second.Occurrence);
+
         replay.BeginSubscription();
+
         Assert.Null(replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "same"));
+
         var retried = replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "same")!.Value;
+
         Assert.Equal(second, retried);
+
         replay.Confirm(retried.Key, retried.Occurrence, time);
+
         Assert.NotNull(replay.Observe(stamp, DeploymentDiagnosticStream.StandardError, "same"));
     }
 
@@ -186,15 +211,19 @@ public sealed class DockerOutputTests
         var target = Target();
         const string stamp = "2026-10-04T08:00:00.123456789Z";
         var replay = new DockerLogReplayWindow();
+
         replay.Restore([
             new DeploymentTerminalLog(1, target.ProjectId, target.DeploymentId, "web", "safe",
                 Stream: DeploymentDiagnosticStream.StandardOutput, TimestampUtc: DateTimeOffset.Parse(stamp),
                 SourceInstanceId: "container-id", SourceCursor: stamp + "/2")
         ], "container-id");
+
         Assert.Null(replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "safe"));
         Assert.Null(replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "safe"));
         Assert.Equal(3, replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "safe")!.Value.Occurrence);
+
         for (var i = 0; i < 4097; i++) replay.Confirm(i.ToString(), 1, DateTimeOffset.UtcNow);
+
         Assert.True(replay.Evicted);
     }
 

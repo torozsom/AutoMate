@@ -62,13 +62,20 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
         ConfigureGitHubWorkflowCheckpoints(modelBuilder);
         ConfigureAzureContainerAppLogCheckpoints(modelBuilder);
         ConfigureDeploymentDiagnosticsAndAnalyses(modelBuilder);
+
         var daily = modelBuilder.Entity<DeploymentDailyTelemetry>();
+
         daily.HasIndex(d => new { d.DeploymentId, d.DayUtc, d.Container, d.Metric }).IsUnique();
         daily.HasIndex(d => new { d.UserId, d.ProjectId, d.DayUtc });
         daily.Property(d => d.Container).HasMaxLength(128);
         daily.Property(d => d.Metric).HasMaxLength(64);
         daily.Property(d => d.Unit).HasMaxLength(32);
-        daily.HasOne<Deployment>().WithMany().HasForeignKey(d => d.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+
+        daily.HasOne<Deployment>()
+            .WithMany()
+            .HasForeignKey(d => d.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<Deployment>().Property(d => d.CloudResourceId).HasMaxLength(1024);
         modelBuilder.Entity<Deployment>().Property(d => d.CloudContainerAppName).HasMaxLength(200);
     }
@@ -80,8 +87,10 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
     private void ConfigureCloudDeploymentRuns(ModelBuilder modelBuilder)
     {
         var run = modelBuilder.Entity<CloudDeploymentRun>();
+
         run.Property(item => item.SnapshotJson)
             .HasConversion(CreateProtectedStringConverter(CloudRunSnapshotProtectorPurpose));
+
         run.Property(item => item.Phase).HasConversion<string>().HasMaxLength(32);
         run.Property(item => item.IdempotencyKey).HasMaxLength(128).IsRequired();
         run.Property(item => item.RepositoryOwner).HasMaxLength(255).IsRequired();
@@ -100,15 +109,23 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
         run.HasIndex(item => new { item.UserId, item.LaunchStartedAt });
         run.HasIndex(item => new { item.RepositoryId, item.BranchName, item.EnvironmentName, item.CreatedAt });
         run.HasIndex(item => new { item.ProjectId, item.CreatedAt });
-        run.HasOne<Domain.Entities.Projects.Application>().WithMany().HasForeignKey(item => item.ProjectId)
+
+        run.HasOne<Domain.Entities.Projects.Application>()
+            .WithMany()
+            .HasForeignKey(item => item.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
+
         run.HasOne<User>().WithMany().HasForeignKey(item => item.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var outbox = modelBuilder.Entity<CloudRunOutbox>();
+
         outbox.HasIndex(item => item.RunId).IsUnique();
         outbox.HasIndex(item => item.DispatchedAt);
-        outbox.HasOne<CloudDeploymentRun>().WithOne().HasForeignKey<CloudRunOutbox>(item => item.RunId)
+
+        outbox.HasOne<CloudDeploymentRun>()
+            .WithOne()
+            .HasForeignKey<CloudRunOutbox>(item => item.RunId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var delivery = modelBuilder.Entity<CloudWebhookDelivery>();
@@ -206,12 +223,14 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
     private static void ConfigureGitHubWorkflowCheckpoints(ModelBuilder modelBuilder)
     {
         var workflow = modelBuilder.Entity<GitHubWorkflowCheckpoint>();
+
         workflow.HasIndex(checkpoint => new
         {
             checkpoint.DeploymentId,
             checkpoint.WorkflowRunId,
             checkpoint.WorkflowAttempt
         }).IsUnique();
+
         workflow.Property(checkpoint => checkpoint.LastWorkflowStateFingerprint).HasMaxLength(128);
         workflow.HasOne(checkpoint => checkpoint.Deployment)
             .WithMany(deployment => deployment.GitHubWorkflowCheckpoints)
@@ -219,12 +238,14 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
             .OnDelete(DeleteBehavior.Cascade);
 
         var job = modelBuilder.Entity<GitHubWorkflowJobCheckpoint>();
+
         job.HasIndex(checkpoint => new { checkpoint.GitHubWorkflowCheckpointId, checkpoint.JobId }).IsUnique();
         job.Property(checkpoint => checkpoint.JobName).HasMaxLength(512).IsRequired();
         job.Property(checkpoint => checkpoint.LastStateFingerprint).HasMaxLength(128);
         job.Property(checkpoint => checkpoint.LastLogPrefixHash).HasMaxLength(128);
         job.Property(checkpoint => checkpoint.LastLogContentHash).HasMaxLength(128);
         job.Property(checkpoint => checkpoint.FinalArchiveContentHash).HasMaxLength(128);
+
         job.HasOne(checkpoint => checkpoint.WorkflowCheckpoint)
             .WithMany(checkpoint => checkpoint.JobCheckpoints)
             .HasForeignKey(checkpoint => checkpoint.GitHubWorkflowCheckpointId)
@@ -242,6 +263,7 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
         checkpoint.Property(item => item.Source).HasMaxLength(32).IsRequired();
         checkpoint.Property(item => item.LastTieBreaker).HasMaxLength(128);
         checkpoint.Property(item => item.LastIngestionTieBreaker).HasMaxLength(128);
+
         checkpoint.HasOne(item => item.Deployment)
             .WithMany(deployment => deployment.AzureContainerAppLogCheckpoints)
             .HasForeignKey(item => item.DeploymentId)
@@ -257,9 +279,12 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
     {
         modelBuilder.Entity<DeploymentArchiveCleanup>().HasIndex(item => item.ProjectId).IsUnique();
         var diagnostic = modelBuilder.Entity<DeploymentDiagnosticRecord>();
+
         diagnostic.HasIndex(item => new { item.TenantId, item.OrderId });
         diagnostic.HasIndex(item => item.BufferExpiresAt);
+
         var tenant = modelBuilder.Entity<TelemetryTenantState>();
+
         tenant.HasIndex(item => item.TenantId).IsUnique();
         tenant.HasIndex(item => item.DueAt);
         diagnostic.Property(item => item.OrderId).UseIdentityByDefaultColumn();
@@ -272,10 +297,14 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
         diagnostic.Property(item => item.Severity).HasMaxLength(32).IsRequired();
         diagnostic.Property(item => item.Message).IsRequired();
         diagnostic.Property(item => item.TerminalChannel).HasMaxLength(128);
-        diagnostic.HasOne(item => item.Deployment).WithMany(deployment => deployment.DiagnosticRecords)
-            .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+
+        diagnostic.HasOne(item => item.Deployment)
+            .WithMany(deployment => deployment.DiagnosticRecords)
+            .HasForeignKey(item => item.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         var analysis = modelBuilder.Entity<AiDeploymentAnalysis>();
+
         analysis.HasIndex(item => item.IdempotencyKey).IsUnique();
         analysis.HasIndex(item => new { item.DeploymentId, item.CreatedAt });
         analysis.HasIndex(item => item.ExpiresAt);
@@ -288,38 +317,56 @@ internal sealed class AutoMateModelConfiguration(IDataProtectionProvider dataPro
         analysis.Property(item => item.CostCurrency).HasMaxLength(3);
         analysis.Property(item => item.IdempotencyKey).HasMaxLength(128).IsRequired();
         analysis.Property(item => item.FailureCode).HasMaxLength(100);
-        analysis.HasOne(item => item.Deployment).WithMany(deployment => deployment.AiAnalyses)
-            .HasForeignKey(item => item.DeploymentId).OnDelete(DeleteBehavior.Cascade);
+
+        analysis.HasOne(item => item.Deployment)
+            .WithMany(deployment => deployment.AiAnalyses)
+            .HasForeignKey(item => item.DeploymentId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         var receipt = modelBuilder.Entity<AiAnalysisRequest>();
+
         receipt.HasIndex(item => item.RequestKey).IsUnique();
         receipt.HasIndex(item => new { item.ProjectId, item.AdmissionDay, item.ConsumesQuota });
         receipt.HasIndex(item => item.ExpiresAt);
         receipt.Property(item => item.RequestKey).HasMaxLength(128).IsRequired();
-        receipt.HasOne(item => item.Project).WithMany().HasForeignKey(item => item.ProjectId)
+
+        receipt.HasOne(item => item.Project)
+            .WithMany()
+            .HasForeignKey(item => item.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var failure = modelBuilder.Entity<FailedDeploymentAnalysisEvent>();
+
         failure.HasKey(item => item.DeploymentId);
         failure.HasIndex(item => new { item.CompletedAt, item.CreatedAt });
-        failure.HasOne(item => item.Deployment).WithOne()
+
+        failure.HasOne(item => item.Deployment)
+            .WithOne()
             .HasForeignKey<FailedDeploymentAnalysisEvent>(item => item.DeploymentId)
             .OnDelete(DeleteBehavior.Cascade);
 
         var work = modelBuilder.Entity<DeploymentAnalysisWorkItem>();
         var budget = modelBuilder.Entity<AiAnalysisBudgetEntry>();
+
         budget.HasIndex(item => new { item.TenantId, item.AccountingDay, item.IsProviderAttempt });
         budget.HasIndex(item => new { item.TenantId, item.IsProviderAttempt, item.OccurredAt });
         budget.HasIndex(item => item.OccurredAt);
         budget.HasIndex(item => item.LeaseId).IsUnique();
         budget.Property(item => item.Currency).HasMaxLength(3).IsRequired();
-        budget.HasOne(item => item.Tenant).WithMany().HasForeignKey(item => item.TenantId)
+
+        budget.HasOne(item => item.Tenant)
+            .WithMany()
+            .HasForeignKey(item => item.TenantId)
             .OnDelete(DeleteBehavior.Cascade);
+
         work.HasIndex(item => item.AnalysisId).IsUnique();
         work.HasIndex(item => new { item.CompletedAt, item.NextAttemptAt, item.LeaseUntil, item.CreatedAt });
         work.Property(item => item.AttemptCount).HasDefaultValue(0);
         work.Property(item => item.ProviderRetryCount).HasDefaultValue(0);
-        work.HasOne(item => item.Analysis).WithOne().HasForeignKey<DeploymentAnalysisWorkItem>(item => item.AnalysisId)
+
+        work.HasOne(item => item.Analysis)
+            .WithOne()
+            .HasForeignKey<DeploymentAnalysisWorkItem>(item => item.AnalysisId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 

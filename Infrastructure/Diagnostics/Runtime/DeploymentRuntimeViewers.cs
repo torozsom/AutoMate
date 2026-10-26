@@ -12,7 +12,7 @@ public sealed class DeploymentRuntimeViewers(TimeProvider clock) : IDeploymentRu
     private const int MaximumLeases = 4096;
 
     /// <summary>Serializes bounded viewing-lease updates.</summary>
-    private readonly object _gate = new();
+    private readonly Lock _gate = new();
 
     /// <summary>Expiring authorized connection/project viewing leases.</summary>
     private readonly Dictionary<(string Connection, Guid Project), (Guid Deployment, DateTimeOffset Until)>
@@ -48,8 +48,10 @@ public sealed class DeploymentRuntimeViewers(TimeProvider clock) : IDeploymentRu
     {
         lock (_gate)
         {
-            foreach (var key in _leases.Keys.Where(k => k.Connection == connectionId &&
-                                                        (!projectId.HasValue || k.Project == projectId)).ToArray())
+            foreach (var key in _leases.Keys
+                         .Where(k => k.Connection == connectionId
+                                     && (!projectId.HasValue || k.Project == projectId))
+                         .ToArray())
                 _leases.Remove(key);
         }
     }
@@ -65,7 +67,9 @@ public sealed class DeploymentRuntimeViewers(TimeProvider clock) : IDeploymentRu
         lock (_gate)
         {
             Prune();
-            return _leases.Any(p => p.Key.Project == projectId && p.Value.Deployment == deploymentId);
+            return _leases
+                .Any(p => p.Key.Project == projectId
+                          && p.Value.Deployment == deploymentId);
         }
     }
 
@@ -75,7 +79,10 @@ public sealed class DeploymentRuntimeViewers(TimeProvider clock) : IDeploymentRu
     private void Prune()
     {
         var now = clock.GetUtcNow();
-        foreach (var key in _leases.Where(p => p.Value.Until <= now).Select(p => p.Key).ToArray())
+        foreach (var key in _leases
+                     .Where(p => p.Value.Until <= now)
+                     .Select(p => p.Key)
+                     .ToArray())
             _leases.Remove(key);
     }
 }

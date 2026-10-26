@@ -26,7 +26,7 @@ namespace Application.Orchestration.Jobs;
 /// </param>
 /// <param name="options">The current validated options used by this operation.</param>
 /// <param name="logger">The logger used for fixed operational events without diagnostic payloads.</param>
-public sealed class DeploymentJobWorker(
+public sealed partial class DeploymentJobWorker(
     IDeploymentJobQueue queue,
     IServiceScopeFactory scopeFactory,
     IDeploymentStatusNotifier statusNotifier,
@@ -67,8 +67,10 @@ public sealed class DeploymentJobWorker(
         var pending = new List<QueuedDeploymentJob>();
         var running = new List<RunningJob>();
         using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+
         await using var reader =
             queue.DequeueAllAsync(readCancellation.Token).GetAsyncEnumerator(readCancellation.Token);
+
         Task<bool>? readTask = null;
 
         try
@@ -79,14 +81,14 @@ public sealed class DeploymentJobWorker(
                 if (readTask is null && pending.Count < _pendingLimit)
                     readTask = reader.MoveNextAsync().AsTask();
 
-                var waits = running.Select(item => (Task)item.Task).ToList();
+                var waits = running.Select(Task (item) => item.Task).ToList();
                 if (readTask is not null) waits.Add(readTask);
                 if (waits.Count == 0) break;
 
                 var completed = await Task.WhenAny(waits);
                 if (completed == readTask)
                 {
-                    if (!await readTask!) break;
+                    if (!await readTask) break;
                     pending.Add(reader.Current);
                     readTask = null;
                     continue;
@@ -144,8 +146,9 @@ public sealed class DeploymentJobWorker(
         {
             var queued = pending[index];
             var job = queued.Job;
-            if (!earlierProjects.Add(job.ProjectId) || running.Any(item => item.Queued.Job.ProjectId == job.ProjectId)
-                                                    || !LaneAvailable(job, running) || ResourceInUse(job, running))
+            if (!earlierProjects
+                    .Add(job.ProjectId) || running.Any(item => item.Queued.Job.ProjectId == job.ProjectId)
+                                        || !LaneAvailable(job, running) || ResourceInUse(job, running))
             {
                 index++;
                 continue;
@@ -154,10 +157,13 @@ public sealed class DeploymentJobWorker(
             pending.RemoveAt(index);
             queue.MarkStarted(job);
             var waitMs = Stopwatch.GetElapsedTime(queued.EnqueuedTimestamp).TotalMilliseconds;
+
             AutoMateTelemetry.DeploymentQueueWait.Record(waitMs, new KeyValuePair<string, object?>("lane", Lane(job)));
             AutoMateTelemetry.DeploymentJobsStarted.Add(1, new KeyValuePair<string, object?>("lane", Lane(job)));
+
             logger.LogInformation("Starting {JobType} for project {ProjectId} after {WaitMs:F0} ms queued.",
                 job.GetType().Name, job.ProjectId, waitMs);
+
             running.Add(new RunningJob(queued, ProcessJobSafelyAsync(job, cancellationToken)));
         }
     }
@@ -197,9 +203,11 @@ public sealed class DeploymentJobWorker(
                 string.Equals(other.Request.BranchName, cloud.Request.BranchName,
                     StringComparison.OrdinalIgnoreCase)))
             return true;
+
         var composeName = ComposeName(job);
         if (composeName is not null && running.Any(item => ComposeName(item.Queued.Job) == composeName))
             return true;
+
         return job is LocalDeploymentJob local && running.Any(item =>
             item.Queued.Job is LocalDeploymentJob other && other.Config.ExposedPort == local.Config.ExposedPort);
     }
@@ -217,9 +225,11 @@ public sealed class DeploymentJobWorker(
             StopLocalDeploymentJob stop => stop.ProjectName,
             _ => null
         };
+
         if (name is null) return null;
-        var normalized = Regex.Replace(name.Trim().ToLowerInvariant(), "[^a-z0-9_-]+", "-");
+        var normalized = MyRegex().Replace(name.Trim().ToLowerInvariant(), "-");
         normalized = string.Join('-', normalized.Split('-', StringSplitOptions.RemoveEmptyEntries));
+
         return string.IsNullOrEmpty(normalized) ? "automate-project" : normalized;
     }
 
@@ -352,6 +362,9 @@ public sealed class DeploymentJobWorker(
                 throw new NotSupportedException($"Unsupported deployment job type {job.GetType().Name}.");
         }
     }
+
+    [GeneratedRegex("[^a-z0-9_-]+")]
+    private static partial Regex MyRegex();
 
     /// <summary>
     ///     Pairs an admitted deployment operation with its supervised completion task.

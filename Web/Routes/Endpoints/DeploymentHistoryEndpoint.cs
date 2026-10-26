@@ -36,12 +36,16 @@ public sealed class DeploymentHistoryEndpoint : IEndpoint
                     return Results.BadRequest("Invalid history cursor or search.");
                 }
             }).RequireAuthorization();
+
         app.MapGet("/api/v2/projects/{projectId:guid}/analytics",
             async (HttpContext context, IUserService users, IProjectTelemetryAnalytics analytics,
                 Guid projectId, DateTimeOffset start, DateTimeOffset end, CancellationToken token) =>
             {
                 var owner = await OwnerAsync(context, users, token);
-                if (owner == Guid.Empty) return Results.Forbid();
+
+                if (owner == Guid.Empty)
+                    return Results.Forbid();
+
                 try
                 {
                     return Results.Ok(await analytics.ReadAsync(owner, projectId, start, end, token));
@@ -55,13 +59,17 @@ public sealed class DeploymentHistoryEndpoint : IEndpoint
                     return Results.BadRequest("Invalid analytics date range.");
                 }
             }).RequireAuthorization();
+
         app.MapGet("/api/projects/{projectId:guid}/deployments/{deploymentId:guid}/logs",
             async (HttpContext context, IUserService users, IDeploymentHistoryService history,
                 Guid projectId, Guid deploymentId, long? cursor, bool? backwards, int? limit,
                 CancellationToken token) =>
             {
                 var owner = await OwnerAsync(context, users, token);
-                if (owner == Guid.Empty) return Results.Forbid();
+
+                if (owner == Guid.Empty)
+                    return Results.Forbid();
+
                 try
                 {
                     return Results.Ok(await history.ReadLogsAsync(owner, projectId, deploymentId, cursor ?? 0,
@@ -72,13 +80,17 @@ public sealed class DeploymentHistoryEndpoint : IEndpoint
                     return Results.Forbid();
                 }
             }).RequireAuthorization();
+
         app.MapGet("/api/projects/{projectId:guid}/deployments/{deploymentId:guid}/metrics",
             async (HttpContext context, IUserService users, IDeploymentHistoryService history,
                 Guid projectId, Guid deploymentId, DateTimeOffset start, DateTimeOffset end, int? maximumPoints,
                 CancellationToken token) =>
             {
                 var owner = await OwnerAsync(context, users, token);
-                if (owner == Guid.Empty) return Results.Forbid();
+
+                if (owner == Guid.Empty)
+                    return Results.Forbid();
+
                 try
                 {
                     return Results.Ok(await history.ReadMetricsAsync(owner, projectId, deploymentId, start, end,
@@ -105,7 +117,8 @@ public sealed class DeploymentHistoryEndpoint : IEndpoint
     private static async Task<Guid> OwnerAsync(HttpContext context, IUserService users, CancellationToken token)
     {
         var identifier = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (string.IsNullOrWhiteSpace(identifier)) return Guid.Empty;
-        return (await users.GetUserDetailsFromIdentifierAsync(identifier, token)).UserId;
+        return string.IsNullOrWhiteSpace(identifier)
+            ? Guid.Empty
+            : (await users.GetUserDetailsFromIdentifierAsync(identifier, token)).UserId;
     }
 }

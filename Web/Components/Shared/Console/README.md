@@ -7,9 +7,12 @@ Bounded terminal hosting, source-aware output formatting, accessible dialogs and
 | File                                                                   | Types or asset                   | Responsibility                                                                                    |
 |------------------------------------------------------------------------|----------------------------------|---------------------------------------------------------------------------------------------------|
 | [ConsoleDialog.razor](ConsoleDialog.razor)                             | `ConsoleDialog`                  | Hosts accessible dialog content with keyboard focus trapping and disposal-time focus restoration. |
+| [ConsoleDialog.razor.cs](ConsoleDialog.razor.cs)                       | `ConsoleDialog` partial class    | Component state, callbacks and lifecycle behavior.                                                |
 | [DeploymentTerminalPresentation.cs](DeploymentTerminalPresentation.cs) | `DeploymentTerminalPresentation` | Formats Azure records and identifies stderr consistently in live and saved terminal output.       |
 | [Terminal.razor](Terminal.razor)                                       | `Terminal`                       | Hosts xterm output with bounded pre-initialization writes and component-owned browser cleanup.    |
+| [Terminal.razor.cs](Terminal.razor.cs)                                 | `Terminal` partial class         | Component state, callbacks and lifecycle behavior.                                                |
 | [ThemeToggle.razor](ThemeToggle.razor)                                 | `ThemeToggle`                    | Presents a theme action using the existing browser theme-storage contract.                        |
+| [ThemeToggle.razor.cs](ThemeToggle.razor.cs)                           | `ThemeToggle` partial class      | Component state, callbacks and lifecycle behavior.                                                |
 
 ## Usage and integration
 

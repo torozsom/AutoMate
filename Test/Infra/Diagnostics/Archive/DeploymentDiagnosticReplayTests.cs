@@ -31,8 +31,10 @@ public sealed class DeploymentDiagnosticReplayTests
             new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite("Data Source=:memory:").Options,
             new EphemeralDataProtectionProvider());
         var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
+
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             store.PersistAsync(Event(Guid.NewGuid(), Guid.NewGuid(), "password=private-value"), "build"));
+
         Assert.Empty(db.ChangeTracker.Entries());
     }
 
@@ -44,14 +46,17 @@ public sealed class DeploymentDiagnosticReplayTests
     public async Task Recent_history_is_ordered_bounded_project_scoped_and_excludes_expired_rows()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         await using var db = new SqliteReplayDbContext(options, new EphemeralDataProtectionProvider());
+
         await db.Database.EnsureCreatedAsync();
         var firstProject = Guid.NewGuid();
         var secondProject = Guid.NewGuid();
         var firstDeployment = Guid.NewGuid();
         var secondDeployment = Guid.NewGuid();
+
         db.Deployments.Add(CreateDeployment(firstProject, firstDeployment));
         db.Deployments.Add(CreateDeployment(secondProject, secondDeployment));
         await db.SaveChangesAsync();
@@ -59,6 +64,7 @@ public sealed class DeploymentDiagnosticReplayTests
         var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
         var safeMessage = new DiagnosticRedactor().Redact(Event(firstProject, firstDeployment, "password=secret"))
             .Event.Message;
+
         db.DeploymentDiagnosticRecords.AddRange(
             Record(1, firstProject, firstDeployment, "first", DateTimeOffset.UtcNow.AddMinutes(-1)),
             Record(2, firstProject, firstDeployment, safeMessage),
@@ -66,6 +72,7 @@ public sealed class DeploymentDiagnosticReplayTests
         await db.SaveChangesAsync();
 
         var history = await store.ReadRecentAsync(firstProject, firstDeployment, 1);
+
         history.Events.Should().ContainSingle().Which.OrderId.Should().Be(2);
         history.Events[0].Message.Should().Be("password=[REDACTED]");
         history.EarlierOmitted.Should().BeFalse();
@@ -81,15 +88,19 @@ public sealed class DeploymentDiagnosticReplayTests
     public async Task Replay_reports_when_older_messages_are_omitted()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         await using var db = new SqliteReplayDbContext(options, new EphemeralDataProtectionProvider());
+
         await db.Database.EnsureCreatedAsync();
         var projectId = Guid.NewGuid();
         var deploymentId = Guid.NewGuid();
+
         db.Deployments.Add(CreateDeployment(projectId, deploymentId));
         await db.SaveChangesAsync();
         var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
+
         db.DeploymentDiagnosticRecords.AddRange(
             Record(1, projectId, deploymentId, "first"),
             Record(2, projectId, deploymentId, "password=private-value"),
@@ -97,6 +108,7 @@ public sealed class DeploymentDiagnosticReplayTests
         await db.SaveChangesAsync();
 
         var history = await store.ReadRecentAsync(projectId, deploymentId, 2);
+
         Assert.DoesNotContain("private-value", JsonSerializer.Serialize(history));
         Assert.Contains("private-value",
             (await db.DeploymentDiagnosticRecords.SingleAsync(row => row.OrderId == 2)).Message);
@@ -115,14 +127,17 @@ public sealed class DeploymentDiagnosticReplayTests
     public async Task Replay_recovers_legacy_uncorrelated_output_only_within_its_project_and_deployment_window()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         await using var db = new SqliteReplayDbContext(options, new EphemeralDataProtectionProvider());
+
         await db.Database.EnsureCreatedAsync();
         var projectId = Guid.NewGuid();
         var firstId = Guid.NewGuid();
         var secondId = Guid.NewGuid();
         var firstDeployment = CreateDeployment(projectId, firstId);
+
         db.Deployments.Add(firstDeployment);
         await db.SaveChangesAsync();
         db.Deployments.Add(new Deployment { Id = secondId, CsProjectId = firstDeployment.CsProjectId });
@@ -130,6 +145,7 @@ public sealed class DeploymentDiagnosticReplayTests
         var first = await db.Deployments.FindAsync(firstId);
         var second = await db.Deployments.FindAsync(secondId);
         var start = DateTimeOffset.UtcNow.AddHours(-2);
+
         first!.CreatedAt = start;
         second!.CreatedAt = start.AddHours(1);
         await db.SaveChangesAsync();
@@ -161,6 +177,7 @@ public sealed class DeploymentDiagnosticReplayTests
 
         var store = new DeploymentDiagnosticStore(db, new DiagnosticRedactor());
         var firstHistory = await store.ReadRecentAsync(projectId, firstId, 10);
+
         firstHistory.Events.Select(item => item.Message).Should().Equal("first cloud");
         firstHistory.Events[0].TerminalChannel.Should().Be("github-actions");
         (await store.ReadRecentAsync(projectId, secondId, 10)).Events.Select(item => item.Message)

@@ -98,24 +98,37 @@ public sealed class TelemetryStorageOptions
     {
         if (Backend != "Postgres" && !Specialized)
             yield return "TelemetryStorage:Backend must be Postgres or LokiMimir.";
+
         if (DeliveryMode is not ("PostgresOutbox" or "DiskGateway"))
             yield return "TelemetryStorage:DeliveryMode must be PostgresOutbox or DiskGateway.";
+
         if (DiskGateway && (!Specialized || !ValidUri(GatewayUrl) || GatewayToken.Length < 32))
             yield return
                 "DiskGateway requires LokiMimir, an approved GatewayUrl and a GatewayToken of at least 32 characters.";
+
         if (BufferHours is < 1 or > 24) yield return "TelemetryStorage:BufferHours must be between 1 and 24.";
+
         if (BatchSize is < 1 or > 500) yield return "TelemetryStorage:BatchSize must be between 1 and 500.";
+
         if (TenantBufferBytes <= 0) yield return "TelemetryStorage:TenantBufferBytes must be positive.";
+
         if (GlobalBufferBytes < TenantBufferBytes)
             yield return "TelemetryStorage:GlobalBufferBytes must cover TenantBufferBytes.";
+
         if (TenantBytesPerMinute <= 0) yield return "TelemetryStorage:TenantBytesPerMinute must be positive.";
+
         if (MaximumMetricContainers is < 1 or > 1000)
             yield return "TelemetryStorage:MaximumMetricContainers must be between 1 and 1000.";
+
         if (QueryConcurrency is < 1 or > 32) yield return "TelemetryStorage:QueryConcurrency must be between 1 and 32.";
+
         if (RuntimeSampleSeconds < 60) yield return "TelemetryStorage:RuntimeSampleSeconds must be at least 60.";
+
         if (!Specialized) yield break;
+
         if (!string.IsNullOrWhiteSpace(CaCertificatePath) && !File.Exists(CaCertificatePath))
             yield return "TelemetryStorage:CaCertificatePath must reference an existing public CA certificate file.";
+
         foreach (var endpoint in new[]
                  {
                      (nameof(LokiUrl), LokiUrl), (nameof(MetricsWriteUrl), MetricsWriteUrl),
@@ -124,9 +137,11 @@ public sealed class TelemetryStorageOptions
             if (!ValidUri(endpoint.Item2))
                 yield return
                     $"TelemetryStorage:{endpoint.Item1} requires an absolute HTTPS URL without embedded credentials. Load the complete pilot configuration, not just Backend.";
+
         if (ManagedService && !ManagedDataProcessingApproved)
             yield return
                 "Managed telemetry requires TelemetryStorage:ManagedDataProcessingApproved after provider review.";
+
         if (ManagedService && string.IsNullOrWhiteSpace(ProcessingRegion))
             yield return "Managed telemetry requires TelemetryStorage:ProcessingRegion.";
     }
@@ -139,8 +154,9 @@ public sealed class TelemetryStorageOptions
     private bool ValidUri(string value)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-               string.IsNullOrEmpty(uri.UserInfo) && (uri.Scheme == "https" ||
-                                                      (AllowInsecureDevelopment && !ManagedService &&
-                                                       uri.Scheme == "http"));
+               string.IsNullOrEmpty(uri.UserInfo)
+               && (uri.Scheme == "https"
+                   || (AllowInsecureDevelopment
+                       && !ManagedService && uri.Scheme == "http"));
     }
 }

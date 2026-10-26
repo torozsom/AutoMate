@@ -78,16 +78,16 @@ public sealed class DisabledDockerService : IDockerService
     /// <param name="workingDir">The local directory containing the Compose deployment.</param>
     /// <param name="projectName">The project name used for deployment artifacts or Compose lookup.</param>
     /// <param name="projectId">The project identity used for authorization or correlation.</param>
-    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
     /// <param name="deploymentId">
     ///     The deployment identity; null is used only where legacy observations permit it.
     /// </param>
+    /// <param name="cancellationToken">Cancels the operation when supported by the underlying work.</param>
     /// <returns>A faulted task reporting the disabled Docker capability.</returns>
     /// <exception cref="InvalidOperationException">
     ///     Docker operations are disabled by the selected hosting profile.
     /// </exception>
     public Task<bool> RunDockerComposeDownAsync(string workingDir, string projectName, Guid projectId,
-        CancellationToken cancellationToken = default, Guid? deploymentId = null)
+        Guid? deploymentId = null, CancellationToken cancellationToken = default)
     {
         return Task.FromException<bool>(Disabled());
     }

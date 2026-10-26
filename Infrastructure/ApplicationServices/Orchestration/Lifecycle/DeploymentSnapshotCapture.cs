@@ -45,14 +45,20 @@ internal static class DeploymentSnapshotCapture
         string? source, string? branch, CancellationToken token)
     {
         if (deployment.ConfigurationSnapshotJson is not null) return;
-        var project = await db.CsProjects.AsNoTracking().Include(p => p.Application).Include(p => p.Configuration)
+        var project = await db.CsProjects
+            .AsNoTracking()
+            .Include(p => p.Application)
+            .Include(p => p.Configuration)
             .SingleAsync(p => p.Id == deployment.CsProjectId, token);
+
         source ??= project.Application.SourcePathOrUrl;
-        var sourceUrl = Uri.TryCreate(source, UriKind.Absolute, out var uri) && uri.Scheme == "https" &&
-                        uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) &&
-                        string.IsNullOrEmpty(uri.UserInfo)
+        var sourceUrl = Uri.TryCreate(source, UriKind.Absolute, out var uri)
+                        && uri.Scheme == "https"
+                        && uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase)
+                        && string.IsNullOrEmpty(uri.UserInfo)
             ? uri.GetLeftPart(UriPartial.Path)
             : null;
+
         deployment.ConfigurationSnapshotJson = JsonSerializer.Serialize(new DeploymentConfigurationSnapshot(
             project.Name, config.IsCloudDeployment ? "Azure Container Apps" : "Docker Compose", sourceUrl, branch, null,
             config.EnvironmentName, project.Configuration?.DotNetVersion, config.ExposedPort,
@@ -60,7 +66,10 @@ internal static class DeploymentSnapshotCapture
             config.IsCloudDeployment ? config.CloudResourceGroupName : null,
             config.IsCloudDeployment ? config.CloudContainerAppName : null,
             config.IsCloudDeployment ? config.CloudRegistryName : null,
-            Databases: config.Databases
-                .Select(d => new DeploymentDatabaseSnapshot(d.DbType, d.DbName, d.ContainerNameSuffix)).ToArray()));
+            Databases:
+            [
+                .. config.Databases
+                    .Select(d => new DeploymentDatabaseSnapshot(d.DbType, d.DbName, d.ContainerNameSuffix))
+            ]));
     }
 }

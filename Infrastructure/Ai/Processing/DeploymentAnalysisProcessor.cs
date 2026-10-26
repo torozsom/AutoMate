@@ -62,67 +62,96 @@ internal sealed class DeploymentAnalysisProcessor(
         CancellationToken cancellationToken)
     {
         if (work.LeaseId == Guid.Empty) return AnalysisOutcome.Discarded;
+
         var analysisId = work.AnalysisId;
         var now = clock.GetUtcNow();
+
         var analysis = await db.AiDeploymentAnalyses.AsNoTracking().FirstOrDefaultAsync(
             item => item.Id == analysisId && item.ExpiresAt > now, cancellationToken);
+
         if (analysis is null) return AnalysisOutcome.Discarded;
+
         using var correlation = OperationalLog.BeginCorrelation(logger, analysis.DeploymentId, analysisId);
+
         OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Started);
         analysis.Status = AiAnalysisStatus.Running;
         analysis.StartedAt = clock.GetUtcNow();
-        if (await db.AiDeploymentAnalyses.Where(item => item.Id == analysisId && item.ExpiresAt > now &&
-                                                        (item.Status == AiAnalysisStatus.Queued ||
-                                                         item.Status == AiAnalysisStatus.Running) &&
-                                                        db.DeploymentAnalysisWorkItems.Any(row =>
-                                                            row.AnalysisId == analysisId &&
-                                                            row.LeaseId == work.LeaseId &&
-                                                            row.CompletedAt == null && row.LeaseUntil > now))
-                .ExecuteUpdateAsync(update => update.SetProperty(item => item.Status, AiAnalysisStatus.Running)
-                    .SetProperty(item => item.StartedAt, now)
-                    .SetProperty(item => item.RetryCount, work.ProviderRetryCount), cancellationToken) ==
+
+        // Conditional writes prevent expired/deleted work from starting a late analysis.
+        if (await db.AiDeploymentAnalyses
+                .Where(item =>
+                    item.Id == analysisId
+                    && item.ExpiresAt > now
+                    && (item.Status == AiAnalysisStatus.Queued ||
+                        item.Status == AiAnalysisStatus.Running)
+                    && db.DeploymentAnalysisWorkItems
+                        .Any(row =>
+                            row.AnalysisId == analysisId
+                            && row.LeaseId == work.LeaseId
+                            && row.CompletedAt == null && row.LeaseUntil > now))
+                .ExecuteUpdateAsync(update =>
+                    update.SetProperty(item => item.Status, AiAnalysisStatus.Running)
+                        .SetProperty(item => item.StartedAt, now)
+                        .SetProperty(item => item.RetryCount, work.ProviderRetryCount), cancellationToken) ==
             0) return AnalysisOutcome.Discarded;
+
         var providerStarted = false;
+
         try
         {
-            if (work.Attempt >
-                Math.Clamp(
-                    settings.Value.CurrentValue
-                        .MaximumRecoveryAttempts, 1, 10))
+            if (work.Attempt > Math.Clamp(settings.Value.CurrentValue.MaximumRecoveryAttempts, 1, 10))
                 throw new AnalysisRecoveryExhaustedException();
-            if (work.ProviderRetryCount >
-                Math.Clamp(
-                    settings.Value.CurrentValue
-                        .MaximumProviderRetries, 0, 5))
+
+            if (work.ProviderRetryCount > Math.Clamp(settings.Value.CurrentValue.MaximumProviderRetries, 0, 5))
                 throw new AnalysisRetryExhaustedException();
+
             var egress = authorizer.Value;
+
             if (!await egress.AuthorizeAsync(analysis.DeploymentId, analysis.Trigger, cancellationToken))
                 throw new AnalysisProviderUnavailableException();
+
             var context = await AnalysisTelemetry.RunAsync(AnalysisOperation.Context, analysis.DeploymentId, analysisId,
-                cancellationToken, () => contextBuilder.Value
-                    .BuildAsync(analysis.DeploymentId, AssessmentSelection.Read(analysis.RequestedSelectionJson),
-                        cancellationToken),
-                result => string.IsNullOrWhiteSpace(result.Text) ? AnalysisOutcome.Empty : AnalysisOutcome.Completed);
+                () => contextBuilder.Value
+                    .BuildAsync(analysis.DeploymentId,
+                        AssessmentSelection.Read(analysis.RequestedSelectionJson), cancellationToken),
+                result => string.IsNullOrWhiteSpace(result.Text)
+                    ? AnalysisOutcome.Empty
+                    : AnalysisOutcome.Completed,
+                cancellationToken);
+
             analysis.AssessmentProvenanceJson =
                 context.Provenance is null ? null : JsonSerializer.Serialize(context.Provenance);
+
             if (string.IsNullOrWhiteSpace(context.Text))
                 throw new AnalysisProviderUnavailableException(AnalysisSkipReason.UnsupportedData);
-            var evidence = Array.AsReadOnly(context.EvidenceReferences.ToArray());
+
+            var evidence = Array.AsReadOnly([.. context.EvidenceReferences]);
             now = clock.GetUtcNow();
-            if (!await db.AiDeploymentAnalyses.AsNoTracking().AnyAsync(
-                    item => item.Id == analysisId && item.ExpiresAt > now &&
-                            db.DeploymentAnalysisWorkItems.Any(row =>
-                                row.AnalysisId == analysisId && row.LeaseId == work.LeaseId &&
-                                row.CompletedAt == null && row.LeaseUntil > now), cancellationToken))
+
+            if (!await db.AiDeploymentAnalyses
+                    .AsNoTracking()
+                    .AnyAsync(item => item.Id == analysisId
+                                      && item.ExpiresAt > now
+                                      && db.DeploymentAnalysisWorkItems
+                                          .Any(row =>
+                                              row.AnalysisId == analysisId
+                                              && row.LeaseId == work.LeaseId
+                                              && row.CompletedAt == null
+                                              && row.LeaseUntil > now),
+                        cancellationToken)
+               )
                 return AnalysisOutcome.Discarded;
+
             if (!await egress.AuthorizeAsync(analysis.DeploymentId, analysis.Trigger, cancellationToken))
                 throw new AnalysisProviderUnavailableException();
+
             var spendSettings = settings.Value.CurrentValue;
-            var denied = await budget.Value
-                .ReserveAttemptAsync(work, cancellationToken);
+            var denied = await budget.Value.ReserveAttemptAsync(work, cancellationToken);
+
             if (!ReferenceEquals(spendSettings,
                     settings.Value.CurrentValue))
                 denied = AnalysisSkipReason.Unavailable;
+
             if (denied is { } reason)
             {
                 OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Denied);
@@ -130,38 +159,50 @@ internal sealed class DeploymentAnalysisProcessor(
             }
 
             now = clock.GetUtcNow();
-            if (!await db.DeploymentAnalysisWorkItems.AsNoTracking().AnyAsync(item =>
-                        item.AnalysisId == analysisId && item.LeaseId == work.LeaseId && item.CompletedAt == null &&
-                        item.LeaseUntil > now && item.Analysis.ExpiresAt > now &&
-                        item.Analysis.Status == AiAnalysisStatus.Running,
-                    cancellationToken)) return AnalysisOutcome.Discarded;
+
+            if (!await db.DeploymentAnalysisWorkItems
+                    .AsNoTracking()
+                    .AnyAsync(item =>
+                            item.AnalysisId == analysisId
+                            && item.LeaseId == work.LeaseId
+                            && item.CompletedAt == null
+                            && item.LeaseUntil > now
+                            && item.Analysis.ExpiresAt > now
+                            && item.Analysis.Status == AiAnalysisStatus.Running,
+                        cancellationToken)) return AnalysisOutcome.Discarded;
+
             providerStarted = true;
             OperationalLog.Record(logger, AuditOperation.AnalysisProvider, AuditOutcome.Started);
             var response = await AnalysisTelemetry.RunAsync(AnalysisOperation.Provider, analysis.DeploymentId,
-                analysisId,
-                cancellationToken, async () =>
+                analysisId, async () =>
                 {
                     var result = await provider.Value
                         .AnalyzeAsync(
                             new LlmAnalysisRequest(context.Text, evidence, analysis.DeploymentId, analysis.Trigger,
                                 context.Provenance?.EffectiveKind ?? AssessmentKind.Automatic),
                             cancellationToken);
+
                     result = validator.Value.Validate(result);
                     result = AnalysisEvidence.Validate(result, evidence);
                     AnalysisTelemetry.Usage(result);
+
                     return result;
-                });
+                }, token: cancellationToken);
+
             OperationalLog.Record(logger, AuditOperation.AnalysisProvider, AuditOutcome.Completed);
+
             analysis.Provider = response.Provider;
             analysis.Model = response.Model;
             analysis.Summary = response.Summary;
             analysis.AssessmentSectionsJson =
                 response.Sections is null ? null : JsonSerializer.Serialize(response.Sections);
+
             analysis.RecommendedStepsJson = JsonSerializer.Serialize(response.RecommendedSteps);
             analysis.EvidenceReferencesJson = JsonSerializer.Serialize(response.EvidenceReferences);
             analysis.RequestedModel = response.RequestedModel;
             analysis.ModelVersion = response.ModelVersion;
             analysis.PromptVersion = response.PromptVersion;
+
             analysis.ResultSchemaVersion = response.ResultSchemaVersion;
             analysis.InputTokens = response.InputTokens;
             analysis.OutputTokens = response.OutputTokens;
@@ -180,17 +221,20 @@ internal sealed class DeploymentAnalysisProcessor(
         {
             logger.LogWarning(error, "AI analysis execution failed: {FailureType}.", error.GetType().Name);
             OperationalLog.Record(logger, AuditOperation.AnalysisProvider, AuditOutcome.Failed);
+
             var delay = AnalysisRetryPolicy.Delay(
                 settings.Value.CurrentValue,
                 work.ProviderRetryCount, error.RetryAfterSeconds);
+
             if (delay is { } wait && clock.GetUtcNow().Add(wait) < analysis.ExpiresAt)
             {
                 var scheduled = await AnalysisTelemetry.RunAsync(AnalysisOperation.Retry, analysis.DeploymentId,
-                    analysisId,
-                    cancellationToken, () => ScheduleRetryAsync(db, clock, work, wait, cancellationToken),
-                    result => result ? AnalysisOutcome.RetryScheduled : AnalysisOutcome.Discarded);
+                    analysisId, () => ScheduleRetryAsync(db, clock, work, wait, cancellationToken),
+                    result => result ? AnalysisOutcome.RetryScheduled : AnalysisOutcome.Discarded, cancellationToken);
+
                 OperationalLog.Record(logger, AuditOperation.Analysis,
                     scheduled ? AuditOutcome.RetryScheduled : AuditOutcome.Discarded);
+
                 return scheduled ? AnalysisOutcome.RetryScheduled : AnalysisOutcome.Discarded;
             }
 
@@ -248,16 +292,24 @@ internal sealed class DeploymentAnalysisProcessor(
         }
 
         // Conditional writes prevent expired/deleted work from publishing a late result.
-        using var publication = AnalysisTelemetry.Start(AnalysisOperation.Publish, analysis.DeploymentId, analysisId,
-            cancellationToken);
+        using var publication =
+            AnalysisTelemetry.Start(AnalysisOperation.Publish, analysis.DeploymentId, analysisId, cancellationToken);
+
         now = clock.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var stored = await db.AiDeploymentAnalyses.Where(item => item.Id == analysisId && item.ExpiresAt > now &&
-                                                                 item.Status == AiAnalysisStatus.Running &&
-                                                                 db.DeploymentAnalysisWorkItems.Any(row =>
-                                                                     row.AnalysisId == analysisId &&
-                                                                     row.LeaseId == work.LeaseId &&
-                                                                     row.CompletedAt == null && row.LeaseUntil > now))
+
+        // Update the analysis record only if it is still running and the work item is still valid.
+        var stored = await db.AiDeploymentAnalyses
+            .Where(item =>
+                item.Id == analysisId
+                && item.ExpiresAt > now
+                && item.Status == AiAnalysisStatus.Running
+                && db.DeploymentAnalysisWorkItems
+                    .Any(row =>
+                        row.AnalysisId == analysisId
+                        && row.LeaseId == work.LeaseId
+                        && row.CompletedAt == null
+                        && row.LeaseUntil > now))
             .ExecuteUpdateAsync(update => update
                 .SetProperty(item => item.Provider, analysis.Provider)
                 .SetProperty(item => item.Model, analysis.Model)
@@ -277,6 +329,7 @@ internal sealed class DeploymentAnalysisProcessor(
                 .SetProperty(item => item.FailureCode, analysis.FailureCode)
                 .SetProperty(item => item.Status, analysis.Status)
                 .SetProperty(item => item.CompletedAt, analysis.CompletedAt), cancellationToken);
+
         if (stored == 0)
         {
             OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Discarded);
@@ -285,12 +338,16 @@ internal sealed class DeploymentAnalysisProcessor(
         }
 
         now = clock.GetUtcNow();
-        var completed = await db.DeploymentAnalysisWorkItems.Where(item => item.AnalysisId == analysisId &&
-                                                                           item.LeaseId == work.LeaseId &&
-                                                                           item.CompletedAt == null &&
-                                                                           item.LeaseUntil > now)
+
+        // Update the work item record only if it is still valid.
+        var completed = await db.DeploymentAnalysisWorkItems
+            .Where(item => item.AnalysisId == analysisId
+                           && item.LeaseId == work.LeaseId
+                           && item.CompletedAt == null
+                           && item.LeaseUntil > now)
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.CompletedAt, now)
                 .SetProperty(item => item.LeaseUntil, (DateTimeOffset?)null), cancellationToken);
+
         if (completed == 0)
         {
             OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Discarded);
@@ -334,30 +391,39 @@ internal sealed class DeploymentAnalysisProcessor(
     {
         var now = clock.GetUtcNow();
         var next = now.Add(delay);
+
         await using var transaction = await db.Database.BeginTransactionAsync(token);
-        var changed = await db.AiDeploymentAnalyses.Where(item => item.Id == work.AnalysisId &&
-                                                                  item.Status == AiAnalysisStatus.Running &&
-                                                                  item.ExpiresAt > next &&
-                                                                  db.DeploymentAnalysisWorkItems.Any(row =>
-                                                                      row.AnalysisId == work.AnalysisId &&
-                                                                      row.LeaseId == work.LeaseId &&
-                                                                      row.CompletedAt == null && row.LeaseUntil > now &&
-                                                                      row.ProviderRetryCount ==
-                                                                      work.ProviderRetryCount))
-            .ExecuteUpdateAsync(update => update.SetProperty(item => item.Status, AiAnalysisStatus.Queued)
-                .SetProperty(item => item.RetryCount, work.ProviderRetryCount + 1), token);
+        var changed = await db.AiDeploymentAnalyses
+            .Where(item =>
+                item.Id == work.AnalysisId
+                && item.Status == AiAnalysisStatus.Running
+                && item.ExpiresAt > next
+                && db.DeploymentAnalysisWorkItems
+                    .Any(row =>
+                        row.AnalysisId == work.AnalysisId
+                        && row.LeaseId == work.LeaseId
+                        && row.CompletedAt == null
+                        && row.LeaseUntil > now
+                        && row.ProviderRetryCount == work.ProviderRetryCount))
+            .ExecuteUpdateAsync(update =>
+                update.SetProperty(item => item.Status, AiAnalysisStatus.Queued)
+                    .SetProperty(item => item.RetryCount, work.ProviderRetryCount + 1), token);
+
         if (changed == 0) return false;
         now = clock.GetUtcNow();
-        changed = await db.DeploymentAnalysisWorkItems.Where(item => item.AnalysisId == work.AnalysisId &&
-                                                                     item.LeaseId == work.LeaseId &&
-                                                                     item.CompletedAt == null &&
-                                                                     item.LeaseUntil > now &&
-                                                                     item.ProviderRetryCount == work.ProviderRetryCount)
+
+        changed = await db.DeploymentAnalysisWorkItems
+            .Where(item => item.AnalysisId == work.AnalysisId
+                           && item.LeaseId == work.LeaseId
+                           && item.CompletedAt == null
+                           && item.LeaseUntil > now
+                           && item.ProviderRetryCount == work.ProviderRetryCount)
             .ExecuteUpdateAsync(update => update
                 .SetProperty(item => item.ProviderRetryCount, work.ProviderRetryCount + 1)
                 .SetProperty(item => item.NextAttemptAt, next).SetProperty(item => item.AttemptCount, 0)
                 .SetProperty(item => item.LeaseId, (Guid?)null)
                 .SetProperty(item => item.LeaseUntil, (DateTimeOffset?)null), token);
+
         if (changed == 0) return false; // Roll back the status transition if ownership changed or expired.
         await transaction.CommitAsync(token);
         return true;

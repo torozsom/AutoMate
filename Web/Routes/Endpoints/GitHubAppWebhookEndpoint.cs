@@ -20,10 +20,13 @@ public sealed class GitHubAppWebhookEndpoint : IEndpoint
         app.MapPost("/api/github/app/webhook", async (HttpContext context,
             IGitHubWebhookReceiver receiver, CancellationToken cancellationToken) =>
         {
-            if (context.Request.ContentLength is > 1_048_576) return Results.StatusCode(413);
+            if (context.Request.ContentLength is > 1_048_576)
+                return Results.StatusCode(413);
+
             using var body = new MemoryStream();
             var chunk = new byte[8192];
             int read;
+
             while ((read = await context.Request.Body.ReadAsync(chunk, cancellationToken)) > 0)
             {
                 if (body.Length + read > 1_048_576) return Results.StatusCode(413);
@@ -36,6 +39,7 @@ public sealed class GitHubAppWebhookEndpoint : IEndpoint
                     context.Request.Headers["X-Hub-Signature-256"].ToString(),
                     context.Request.Headers["X-GitHub-Delivery"].ToString(),
                     context.Request.Headers["X-GitHub-Event"].ToString(), cancellationToken);
+
                 return Results.Accepted();
             }
             catch (UnauthorizedAccessException)

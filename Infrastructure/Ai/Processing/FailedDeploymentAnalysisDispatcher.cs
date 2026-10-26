@@ -31,9 +31,14 @@ public sealed class FailedDeploymentAnalysisDispatcher(
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
-                var ids = await db.FailedDeploymentAnalysisEvents.AsNoTracking().Where(item => item.CompletedAt == null)
-                    .OrderBy(item => item.CreatedAt).Select(item => item.DeploymentId).Take(100)
+                var ids = await db.FailedDeploymentAnalysisEvents
+                    .AsNoTracking()
+                    .Where(item => item.CompletedAt == null)
+                    .OrderBy(item => item.CreatedAt)
+                    .Select(item => item.DeploymentId)
+                    .Take(100)
                     .ToListAsync(stoppingToken);
+
                 foreach (var id in ids)
                 {
                     await using var admissionScope = scopeFactory.CreateAsyncScope();
@@ -82,9 +87,11 @@ public sealed class FailedDeploymentAnalysisDispatcher(
         Guid deploymentId, CancellationToken token = default)
     {
         await service.RequestAutomaticAsync(deploymentId, token);
+
         // Successful admission already completes the marker atomically. A crash after a policy denial can safely retry.
         await db.FailedDeploymentAnalysisEvents
             .Where(item => item.DeploymentId == deploymentId && item.CompletedAt == null)
-            .ExecuteUpdateAsync(update => update.SetProperty(item => item.CompletedAt, clock.GetUtcNow()), token);
+            .ExecuteUpdateAsync(update => update
+                .SetProperty(item => item.CompletedAt, clock.GetUtcNow()), token);
     }
 }

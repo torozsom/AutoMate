@@ -4,12 +4,14 @@ Editable next-launch settings and separate immutable recorded-deployment values.
 
 ## Contents
 
-| File                                                                         | Types or asset                                     | Responsibility                                                                                            |
-|------------------------------------------------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| [ConfigurationForm.razor](ConfigurationForm.razor)                           | `ConfigurationForm`                                | Edits deployment settings and merges discovered variables while retaining explicit user values.           |
-| [ConfigurationForm.razor.cs](ConfigurationForm.razor.cs)                     | `ConfigurationForm`, `EnvVarItem`, `CloudDefaults` | A Blazor component that provides a user interface for configuring deployment settings for a .NET project. |
-| [DeploymentConfigurationDetails.razor](DeploymentConfigurationDetails.razor) | `DeploymentConfigurationDetails`                   | Presents recorded launch settings with safe links and explicitly selected metadata copying.               |
-| [RecordedValueRow.razor](RecordedValueRow.razor)                             | `RecordedValueRow`                                 | Presents a recorded metadata value and an optional browser clipboard action.                              |
+| File                                                                               | Types or asset                                     | Responsibility                                                                                            |
+|------------------------------------------------------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
+| [ConfigurationForm.razor](ConfigurationForm.razor)                                 | `ConfigurationForm`                                | Edits deployment settings and merges discovered variables while retaining explicit user values.           |
+| [ConfigurationForm.razor.cs](ConfigurationForm.razor.cs)                           | `ConfigurationForm`, `EnvVarItem`, `CloudDefaults` | A Blazor component that provides a user interface for configuring deployment settings for a .NET project. |
+| [DeploymentConfigurationDetails.razor](DeploymentConfigurationDetails.razor)       | `DeploymentConfigurationDetails`                   | Presents recorded launch settings with safe links and explicitly selected metadata copying.               |
+| [DeploymentConfigurationDetails.razor.cs](DeploymentConfigurationDetails.razor.cs) | `DeploymentConfigurationDetails` partial class     | Component state, callbacks and lifecycle behavior.                                                        |
+| [RecordedValueRow.razor](RecordedValueRow.razor)                                   | `RecordedValueRow`                                 | Presents a recorded metadata value and an optional browser clipboard action.                              |
+| [RecordedValueRow.razor.cs](RecordedValueRow.razor.cs)                             | `RecordedValueRow` partial class                   | Component state, callbacks and lifecycle behavior.                                                        |
 
 ## Usage and integration
 

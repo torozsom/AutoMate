@@ -4,13 +4,16 @@ Status/workflow badges, persisted GitHub URL parsing and scoped section navigati
 
 ## Contents
 
-| File                                                             | Types or asset              | Responsibility                                                                               |
-|------------------------------------------------------------------|-----------------------------|----------------------------------------------------------------------------------------------|
-| [DeploymentBadge.razor](DeploymentBadge.razor)                   | `DeploymentBadge`           | Presents deployment state using a consistent text, icon and badge style.                     |
-| [GitHubRepositoryReference.cs](GitHubRepositoryReference.cs)     | `GitHubRepositoryReference` | Identifies a GitHub repository by owner and repository name.                                 |
-| [GitHubRepositoryUrlParser.cs](GitHubRepositoryUrlParser.cs)     | `GitHubRepositoryUrlParser` | Parses persisted GitHub repository URLs into repository references for deployment workflows. |
-| [ProjectSectionNavigation.razor](ProjectSectionNavigation.razor) | `ProjectSectionNavigation`  | Presents project section links with scoped scroll tracking and fragment restoration.         |
-| [WorkflowBadge.razor](WorkflowBadge.razor)                       | `WorkflowBadge`             | Presents remote workflow progress with an optional GitHub Actions link.                      |
+| File                                                                   | Types or asset                           | Responsibility                                                                               |
+|------------------------------------------------------------------------|------------------------------------------|----------------------------------------------------------------------------------------------|
+| [DeploymentBadge.razor](DeploymentBadge.razor)                         | `DeploymentBadge`                        | Presents deployment state using a consistent text, icon and badge style.                     |
+| [DeploymentBadge.razor.cs](DeploymentBadge.razor.cs)                   | `DeploymentBadge` partial class          | Component state, callbacks and lifecycle behavior.                                           |
+| [GitHubRepositoryReference.cs](GitHubRepositoryReference.cs)           | `GitHubRepositoryReference`              | Identifies a GitHub repository by owner and repository name.                                 |
+| [GitHubRepositoryUrlParser.cs](GitHubRepositoryUrlParser.cs)           | `GitHubRepositoryUrlParser`              | Parses persisted GitHub repository URLs into repository references for deployment workflows. |
+| [ProjectSectionNavigation.razor](ProjectSectionNavigation.razor)       | `ProjectSectionNavigation`               | Presents project section links with scoped scroll tracking and fragment restoration.         |
+| [ProjectSectionNavigation.razor.cs](ProjectSectionNavigation.razor.cs) | `ProjectSectionNavigation` partial class | Component state, callbacks and lifecycle behavior.                                           |
+| [WorkflowBadge.razor](WorkflowBadge.razor)                             | `WorkflowBadge`                          | Presents remote workflow progress with an optional GitHub Actions link.                      |
+| [WorkflowBadge.razor.cs](WorkflowBadge.razor.cs)                       | `WorkflowBadge` partial class            | Component state, callbacks and lifecycle behavior.                                           |
 
 ## Usage and integration
 

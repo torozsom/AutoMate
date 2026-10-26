@@ -10,6 +10,8 @@ using Application.Orchestration.Cloud;
 using Application.Orchestration.Jobs;
 using Application.Orchestration.Status;
 using Domain.DTO.Deployment;
+using Domain.Entities.Deployments;
+using Domain.Entities.Projects;
 using Domain.Enums.Deployments;
 using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
@@ -100,6 +102,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
     /// <summary>Database channels discovered from project configuration.</summary>
     private IEnumerable<DatabaseTab> _databaseTabs = [];
+
+
+    /// <summary>Bounded six-item deployment history page.</summary>
+    private int _deploymentPage;
 
     /// <summary>Initialized github actions terminal component, or null before rendering.</summary>
     private Terminal? _githubActionsTerminal;
@@ -387,7 +393,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError("Failed to queue stop deployment for project {ProjectId} Failure {FailureType}.", ProjectId,
-                ex?.GetType().Name);
+                ex.GetType().Name);
             _isStopping = false;
             StateHasChanged();
         }
@@ -462,7 +468,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         catch (Exception ex)
         {
             Logger.LogError("Failed to queue deployment for project {ProjectId} Failure {FailureType}.",
-                finalConfig.ProjectId, ex?.GetType().Name);
+                finalConfig.ProjectId, ex.GetType().Name);
             _workflowStatusMessage = ex is InvalidOperationException &&
                                      ex.Message == "The deployment queue is full. Try again after a job starts."
                 ? "The deployment queue is full. Try again after a job starts."
@@ -492,6 +498,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
 
         var preparation = await CloudAdmission.PrepareAsync(_currentUserId, AuthStateProvider,
             false, () => true);
+
         if (preparation.State != CloudConnectionState.Ready)
         {
             _workflowStatusMessage = "Connect both GitHub and Azure before deploying to the cloud.";
@@ -543,10 +550,13 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         DeploymentStatusNotifier.OnStatusChanged += OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged += OnQueueStateChanged;
+
         _boundProjectId = ProjectId;
         _currentUserId = await GetCurrentUserIdAsync();
         await LoadCurrentProjectAsync();
-        if (_app is not null) _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
+
+        if (_app is not null)
+            _cloudPollTask = PollTerminalHistoryAsync(_cloudPollCancellation.Token);
     }
 
     /// <summary>
@@ -562,18 +572,24 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             return;
         }
 
-        if (_boundProjectId == ProjectId || _analysisDisposed) return;
+        if (_boundProjectId == ProjectId || _analysisDisposed)
+            return;
+
         var previousProject = _boundProjectId;
         _boundProjectId = ProjectId;
         _pageGeneration++;
         _showAnalysisDialog = false;
+
         HideConfigModal();
         _app = null;
         _isLoading = true;
         _terminalDeploymentId = null;
+
         ResetTerminalState();
+
         if (_hubConnection?.State == HubConnectionState.Connected)
             await _hubConnection.SendAsync("LeaveProjectGroup", previousProject, _cloudPollCancellation.Token);
+
         await LoadCurrentProjectAsync();
         _rejoinPending = true;
     }
@@ -628,14 +644,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         var project = ProjectId;
         var generation = _pageGeneration;
         var token = _cloudPollCancellation.Token;
+
         await using var scope = ScopeFactory.CreateAsyncScope();
+
         var view = _currentUserId == Guid.Empty
             ? null
             : await ReadProjectViewAsync(
                 scope.ServiceProvider, project, _currentUserId, token);
+
         var app = view?.Project;
         if (_analysisDisposed || token.IsCancellationRequested || project != ProjectId ||
             generation != _pageGeneration) return;
+
         _projectView = view;
         _app = app;
         _terminalDeploymentId = GetLatestDeployment()?.Id;
@@ -643,6 +663,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _databaseTabs = [];
         _cloudRunReceipt = null;
         _workflowStatusMessage = null;
+
         if (app is { SourceType: SourceType.Remote } && !DeploymentCapabilities.LocalDeploymentsEnabled)
         {
             var receipt = await scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>()
@@ -657,12 +678,16 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         {
             var config = await ProjectScanner.AnalyzeDependenciesAsync(app, csProject, token);
             if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;
-            _databaseTabs = config.Databases.Select(db => new DatabaseTab(db.DbType, db.ContainerNameSuffix, db.DbType))
-                .ToList();
+            _databaseTabs =
+            [
+                .. config.Databases.Select(db => new DatabaseTab(db.DbType,
+                    db.ContainerNameSuffix, db.DbType))
+            ];
         }
 
         await UpdateWebHostPortAsync();
-        if (project == ProjectId && generation == _pageGeneration && !token.IsCancellationRequested) _isLoading = false;
+        if (project == ProjectId && generation == _pageGeneration && !token.IsCancellationRequested)
+            _isLoading = false;
     }
 
     /// <summary>
@@ -678,15 +703,28 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (services.GetService<IProjectDetailsQuery>() is { } query)
             return await query.ReadAsync(project, owner, _deploymentPage, token);
+
         var app = await services.GetRequiredService<IApplicationService>().GetAppByIdAsync(project, owner, token);
+
         if (app is null) return null;
-        var history = app.CsProjects.SelectMany(p => p.Deployments).OrderBy(d => d.CreatedAt).ToArray();
-        return new ProjectDetailsReadModel(app, new ProjectDeploymentSummary(history.Length,
+
+        var history = app.CsProjects
+            .SelectMany(p => p.Deployments)
+            .OrderBy(d => d.CreatedAt)
+            .ToArray();
+
+        return new ProjectDetailsReadModel(app, new ProjectDeploymentSummary(
+                history.Length,
                 history.Count(d => d.Outcome == DeploymentOutcome.Succeeded),
                 history.Count(d => d.Outcome == DeploymentOutcome.Failed),
-                history.Count(d => d.Outcome == DeploymentOutcome.Unknown), history.FirstOrDefault()?.CreatedAt),
-            history.OrderByDescending(d => d.CreatedAt).ThenByDescending(d => d.Id)
-                .Skip(_deploymentPage * 6).Take(6).ToArray());
+                history.Count(d => d.Outcome == DeploymentOutcome.Unknown),
+                history.FirstOrDefault()?.CreatedAt),
+            [
+                .. history
+                    .OrderByDescending(d => d.CreatedAt)
+                    .ThenByDescending(d => d.Id)
+                    .Skip(_deploymentPage * 6).Take(6)
+            ]);
     }
 
     /// <summary>
@@ -718,6 +756,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 {
                     if (_analysisDisposed || _isLoading) return;
                     await RefreshProjectAsync();
+
                     if (_app?.SourceType == SourceType.Remote && !DeploymentCapabilities.LocalDeploymentsEnabled)
                     {
                         var project = ProjectId;
@@ -725,8 +764,10 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                         await using var scope = ScopeFactory.CreateAsyncScope();
                         var receipt = await scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>()
                             .GetLatestForProjectAsync(_currentUserId, project, cancellationToken);
+
                         if (project != ProjectId || generation != _pageGeneration ||
                             cancellationToken.IsCancellationRequested) return;
+
                         _cloudRunReceipt = receipt;
                         UpdateCloudRunMessage();
                     }
@@ -834,12 +875,14 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             foreach (var containerName in containerNames)
             {
                 var hostPort = await DockerService.GetContainerHostPortAsync(containerName);
-                if (_analysisDisposed || project != ProjectId || generation != _pageGeneration) return;
-                if (hostPort > 0)
-                {
-                    _webHostPort = hostPort;
+
+                if (_analysisDisposed || project != ProjectId || generation != _pageGeneration)
                     return;
-                }
+
+                if (hostPort <= 0) continue;
+
+                _webHostPort = hostPort;
+                return;
             }
 
             if (attempt < maxAttempts)
@@ -859,8 +902,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         _resolvePortPending |= resolveWebPortWithRetry;
         _refreshPending = true;
-        if (_refreshInProgress || _analysisDisposed || _isLoading) return;
+
+        if (_refreshInProgress || _analysisDisposed || _isLoading)
+            return;
+
         _refreshInProgress = true;
+
         try
         {
             while (_refreshPending && !_analysisDisposed)
@@ -870,6 +917,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 _resolvePortPending = false;
                 var project = ProjectId;
                 var generation = _pageGeneration;
+
                 try
                 {
                     await RefreshProjectCoreAsync(resolvePort);
@@ -902,14 +950,20 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         var project = ProjectId;
         var generation = _pageGeneration;
         await using var scope = ScopeFactory.CreateAsyncScope();
+
         var view = await ReadProjectViewAsync(scope.ServiceProvider, project, _currentUserId,
             _cloudPollCancellation.Token);
+
         var app = view?.Project;
-        if (_analysisDisposed || generation != _pageGeneration || project != ProjectId) return;
+
+        if (_analysisDisposed || generation != _pageGeneration || project != ProjectId)
+            return;
+
         var previouslyActive = CanReplayTerminalHistory();
         _projectView = view;
         _app = app;
         var latestDeploymentId = GetLatestDeployment()?.Id;
+
         if (latestDeploymentId != _terminalDeploymentId)
         {
             _terminalDeploymentId = latestDeploymentId;
@@ -939,10 +993,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _containerMetrics.Clear();
         _typedMetrics.Clear();
         _metricContainerNames.Clear();
+
         _currentMetricIndex = 0;
         _nextMetricReplayAt = DateTimeOffset.MinValue;
         _showSavedMetricNotice = false;
         _terminalReplay.Reset();
+
         _lastHistoryAvailability = null;
         _terminalReplay.ClearPending();
         _terminalReplay.AcknowledgeOverflow();
@@ -1176,124 +1232,131 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // OnInitializedAsync may yield while the loading view is rendered. The first render
-        // therefore does not guarantee that any Terminal component exists yet.
-        if (!_isLoading && _app is not null && !_hubInitializationStarted)
+        switch (_isLoading)
         {
-            _hubInitializationStarted = true;
-            if (_currentUserId == Guid.Empty)
+            // OnInitializedAsync may yield while the loading view is rendered. The first render
+            // therefore does not guarantee that any Terminal component exists yet.
+            case false when _app is not null && !_hubInitializationStarted:
             {
-                Logger.LogWarning(
-                    "Skipping log hub connection for project {ProjectId} because no user ID was resolved.",
-                    ProjectId);
-                return;
-            }
+                _hubInitializationStarted = true;
+                if (_currentUserId == Guid.Empty)
+                {
+                    Logger.LogWarning(
+                        "Skipping log hub connection for project {ProjectId} because no user ID was resolved.",
+                        ProjectId);
+                    return;
+                }
 
-            _hubConnection = new HubConnectionBuilder()
-                .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
-                .WithAutomaticReconnect()
-                .Build();
+                _hubConnection = new HubConnectionBuilder()
+                    .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
+                    .WithAutomaticReconnect()
+                    .Build();
 
-            // Report transient disconnects while keeping the current terminal contents intact.
-            _hubConnection.Reconnecting += exception =>
-            {
-                Logger.LogWarning("Log hub connection is reconnecting for project {ProjectId}. Failure {FailureType}.",
-                    ProjectId, exception?.GetType().Name);
-                return Task.CompletedTask;
-            };
+                // Report transient disconnects while keeping the current terminal contents intact.
+                _hubConnection.Reconnecting += exception =>
+                {
+                    Logger.LogWarning(
+                        "Log hub connection is reconnecting for project {ProjectId}. Failure {FailureType}.",
+                        ProjectId, exception?.GetType().Name);
+                    return Task.CompletedTask;
+                };
 
-            // SignalR group membership is connection-scoped, so reauthorize after reconnecting.
-            _hubConnection.Reconnected += async _ =>
-            {
+                // SignalR group membership is connection-scoped, so reauthorize after reconnecting.
+                _hubConnection.Reconnected += async _ =>
+                {
+                    try
+                    {
+                        await JoinLogHubGroupAsync();
+                        Logger.LogInformation("Log hub connection rejoined the project group for project {ProjectId}.",
+                            ProjectId);
+                    }
+                    catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
+                    {
+                        // Navigation ended this page's subscription; no UI remains to report a failure to.
+                    }
+                    catch (Exception exception)
+                    {
+                        Logger.LogWarning(
+                            "Log hub connection could not rejoin the project group for project {ProjectId}. Failure {FailureType}.",
+                            ProjectId, exception?.GetType().Name);
+                        await InvokeAsync(async () =>
+                        {
+                            _terminalReplayPending = false;
+                            await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
+                        });
+                    }
+                };
+
+                _hubConnection.On<DeploymentTerminalLog>("ReceiveTerminalLog", async terminalLog =>
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        if (_analysisDisposed || !CanReplayTerminalHistory() ||
+                            terminalLog.DeploymentId != _terminalDeploymentId) return;
+                        if (_terminalReplayPending)
+                        {
+                            _terminalReplay.Buffer(terminalLog);
+                            return;
+                        }
+
+                        await WriteTerminalLogAsync(terminalLog);
+                    });
+                });
+
+                _hubConnection.On<string>("ReceiveTerminalNotice", message =>
+                    InvokeAsync(() => WriteTerminalNoticeAsync(message)));
+
+                _hubConnection.On<DeploymentRuntimeMetricSnapshot>("ReceiveDeploymentMetrics", snapshot =>
+                    InvokeAsync(() =>
+                    {
+                        if (_analysisDisposed || !CanReplayTerminalHistory() || snapshot.ProjectId != ProjectId ||
+                            snapshot.DeploymentId != _terminalDeploymentId) return;
+                        ApplyTypedMetrics(snapshot.ResourceName, snapshot.Samples.Select(s => new DeploymentMetricPoint(
+                            snapshot.ResourceName, s.Name, s.Unit, snapshot.Timestamp, s.Value, s.Value, s.Value)));
+                        _showSavedMetricNotice = false;
+                        StateHasChanged();
+                    }));
+
+                _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
+                    (containerName, cpuUsage, memoryUsage) =>
+                    {
+                        return InvokeAsync(() =>
+                        {
+                            if (_analysisDisposed || !CanReplayTerminalHistory() ||
+                                _typedMetrics.ContainsKey(containerName)) return;
+                            _containerMetrics[containerName] = (cpuUsage, memoryUsage);
+                            _showSavedMetricNotice = false;
+                            if (!_metricContainerNames.Contains(containerName))
+                                _metricContainerNames.Add(containerName);
+                            StateHasChanged();
+                        });
+                    }
+                );
+
                 try
                 {
+                    await _hubConnection.StartAsync(_cloudPollCancellation.Token);
                     await JoinLogHubGroupAsync();
-                    Logger.LogInformation("Log hub connection rejoined the project group for project {ProjectId}.",
-                        ProjectId);
                 }
                 catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
                 {
-                    // Navigation ended this page's subscription; no UI remains to report a failure to.
+                    // Reload/navigation cancels initial connection and replay without a failure notice.
                 }
-                catch (Exception exception)
+                catch (Exception ex)
                 {
-                    Logger.LogWarning(
-                        "Log hub connection could not rejoin the project group for project {ProjectId}. Failure {FailureType}.",
-                        ProjectId, exception?.GetType().Name);
-                    await InvokeAsync(async () =>
-                    {
-                        _terminalReplayPending = false;
-                        await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
-                    });
+                    Logger.LogError("Failed to start SignalR connection for project {ProjectId} Failure {FailureType}.",
+                        ProjectId, ex?.GetType().Name);
+                    _terminalReplayPending = false;
+                    await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
                 }
-            };
 
-            _hubConnection.On<DeploymentTerminalLog>("ReceiveTerminalLog", async terminalLog =>
-            {
-                await InvokeAsync(async () =>
-                {
-                    if (_analysisDisposed || !CanReplayTerminalHistory() ||
-                        terminalLog.DeploymentId != _terminalDeploymentId) return;
-                    if (_terminalReplayPending)
-                    {
-                        _terminalReplay.Buffer(terminalLog);
-                        return;
-                    }
-
-                    await WriteTerminalLogAsync(terminalLog);
-                });
-            });
-
-            _hubConnection.On<string>("ReceiveTerminalNotice", message =>
-                InvokeAsync(() => WriteTerminalNoticeAsync(message)));
-
-            _hubConnection.On<DeploymentRuntimeMetricSnapshot>("ReceiveDeploymentMetrics", snapshot => InvokeAsync(() =>
-            {
-                if (_analysisDisposed || !CanReplayTerminalHistory() || snapshot.ProjectId != ProjectId ||
-                    snapshot.DeploymentId != _terminalDeploymentId) return;
-                ApplyTypedMetrics(snapshot.ResourceName, snapshot.Samples.Select(s => new DeploymentMetricPoint(
-                    snapshot.ResourceName, s.Name, s.Unit, snapshot.Timestamp, s.Value, s.Value, s.Value)));
-                _showSavedMetricNotice = false;
-                StateHasChanged();
-            }));
-
-            _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
-                (containerName, cpuUsage, memoryUsage) =>
-                {
-                    return InvokeAsync(() =>
-                    {
-                        if (_analysisDisposed || !CanReplayTerminalHistory() ||
-                            _typedMetrics.ContainsKey(containerName)) return;
-                        _containerMetrics[containerName] = (cpuUsage, memoryUsage);
-                        _showSavedMetricNotice = false;
-                        if (!_metricContainerNames.Contains(containerName)) _metricContainerNames.Add(containerName);
-                        StateHasChanged();
-                    });
-                }
-            );
-
-            try
-            {
-                await _hubConnection.StartAsync(_cloudPollCancellation.Token);
+                break;
+            }
+            case false when (_app is not null && _rejoinPending &&
+                             _hubConnection?.State == HubConnectionState.Connected):
+                _rejoinPending = false;
                 await JoinLogHubGroupAsync();
-            }
-            catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
-            {
-                // Reload/navigation cancels initial connection and replay without a failure notice.
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError("Failed to start SignalR connection for project {ProjectId} Failure {FailureType}.",
-                    ProjectId, ex?.GetType().Name);
-                _terminalReplayPending = false;
-                await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
-            }
-        }
-        else if (!_isLoading && _app is not null && _rejoinPending &&
-                 _hubConnection?.State == HubConnectionState.Connected)
-        {
-            _rejoinPending = false;
-            await JoinLogHubGroupAsync();
+                break;
         }
     }
 
@@ -1307,19 +1370,24 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             _hubConnection.State != HubConnectionState.Connected) return;
 
         await _terminalReplayGate.WaitAsync(_cloudPollCancellation.Token);
+
         try
         {
             var project = ProjectId;
             var deployment = _terminalDeploymentId;
             var generation = _pageGeneration;
             var active = CanReplayTerminalHistory();
+
             var protector = DataProtectionProvider.CreateProtector(LogHub.ProtectorPurpose)
                 .ToTimeLimitedDataProtector();
+
             var secureToken = protector.Protect($"{project}:{_currentUserId}", TimeSpan.FromMinutes(5));
             _terminalReplayPending = active;
+
             var history = await _hubConnection.InvokeAsync<DeploymentTerminalHistory>("JoinProjectGroup",
                 project, active ? deployment : null, secureToken, _terminalReplay.LastOrderId,
                 _cloudPollCancellation.Token);
+
             await InvokeAsync(async () =>
             {
                 if (!IsCurrentTerminalRead(project, deployment, generation))
@@ -1333,18 +1401,24 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     history.Availability?.StartsWith("No saved output", StringComparison.Ordinal) == true
                         ? null
                         : history.Availability;
+
                 if (history.EarlierOmitted)
                     _lastHistoryAvailability = _terminalReplay.LastOrderId == 0
                         ? "Showing bounded saved output across channels. Open deployment history for earlier output."
                         : "More output is available and will load on the next refresh.";
+
                 foreach (var terminalLog in history.Events)
                 {
-                    if (!IsCurrentTerminalRead(project, deployment, generation)) return;
+                    if (!IsCurrentTerminalRead(project, deployment, generation))
+                        return;
+
                     await WriteTerminalLogAsync(terminalLog, true);
                 }
 
-                if (!IsCurrentTerminalRead(project, deployment, generation)) return;
-                if (history.CanAdvanceCursor && history.Events.Count > 0)
+                if (!IsCurrentTerminalRead(project, deployment, generation))
+                    return;
+
+                if (history is { CanAdvanceCursor: true, Events.Count: > 0 })
                     _terminalReplay.Confirm(history.Events.Max(e => e.OrderId));
 
                 foreach (var terminalLog in _terminalReplay.PendingSnapshot())
@@ -1381,18 +1455,23 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (_analysisDisposed || _cloudPollCancellation.IsCancellationRequested ||
             !CanReplayTerminalHistory() || !_terminalDeploymentId.HasValue ||
             DateTimeOffset.UtcNow < _nextMetricReplayAt) return;
+
         _nextMetricReplayAt = DateTimeOffset.UtcNow.AddSeconds(60);
+
         var deploymentId = _terminalDeploymentId.Value;
         var projectId = ProjectId;
         var generation = _pageGeneration;
         var token = _cloudPollCancellation.Token;
+
         try
         {
             await using var scope = ScopeFactory.CreateAsyncScope();
+
             var end = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 60 * 60);
             var history = await scope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>()
                 .ReadMetricsAsync(_currentUserId, projectId, deploymentId, end.AddMinutes(-15), end, 500,
                     token);
+
             if (_analysisDisposed || token.IsCancellationRequested) return;
             await InvokeAsync(() =>
             {
@@ -1429,14 +1508,18 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     {
         if (!_typedMetrics.TryGetValue(resource, out var samples))
             _typedMetrics[resource] = samples = new Dictionary<string, DeploymentMetricPoint>();
+
         foreach (var point in points)
             if (double.IsFinite(point.Average) && point.Average >= 0 &&
                 DeploymentMetricCatalog.Units.TryGetValue(point.Name, out var unit) && point.Unit == unit &&
                 (!samples.TryGetValue(point.Name, out var current) || point.Timestamp > current.Timestamp))
                 samples[point.Name] = point;
+
         _containerMetrics[resource] =
             DeploymentMetricDisplay.Latest(samples.Values, _app?.SourceType == SourceType.Remote);
-        if (!_metricContainerNames.Contains(resource)) _metricContainerNames.Add(resource);
+
+        if (!_metricContainerNames.Contains(resource))
+            _metricContainerNames.Add(resource);
     }
 
     /// <summary>
@@ -1567,6 +1650,112 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         await using var scope = ScopeFactory.CreateAsyncScope();
         return await AuthenticatedUserResolver.GetCurrentUserIdAsync(AuthStateProvider,
             scope.ServiceProvider.GetRequiredService<IUserService>());
+    }
+
+
+    /// <summary>
+    ///     Chooses the console layout class for the project source.
+    /// </summary>
+    /// <param name="sourceType">Local or remote project source.</param>
+    /// <returns>The CSS classes for the selected state.</returns>
+    private static string GetProjectSourceClass(SourceType sourceType)
+    {
+        return sourceType == SourceType.Remote ? "project-console-remote" : "project-console-local";
+    }
+
+    /// <summary>
+    ///     Finds the first recorded web project in the current application.
+    /// </summary>
+    /// <returns>The first web project, or null when none is loaded.</returns>
+    private CsProject? GetPrimaryWebProject()
+    {
+        return _app?.CsProjects.FirstOrDefault(csp => csp.IsWebProject);
+    }
+
+    /// <summary>
+    ///     Finds the newest deployment across the current application projects.
+    /// </summary>
+    /// <returns>The newest recorded deployment, or null when no deployment exists.</returns>
+    private Deployment? GetLatestDeployment()
+    {
+        return _app?.CsProjects
+            .SelectMany(csp => csp.Deployments)
+            .MaxBy(deployment => deployment.CreatedAt);
+    }
+
+
+    /// <summary>
+    ///     Formats an available timestamp for the project summary.
+    /// </summary>
+    /// <param name="timestamp">Recorded timestamp, if available.</param>
+    /// <returns>The formatted timestamp, or "Never" when absent.</returns>
+    private static string FormatTimestamp(DateTimeOffset? timestamp)
+    {
+        return timestamp?.ToString("yyyy. MM. dd. HH:mm") ?? "Never";
+    }
+
+    /// <summary>
+    ///     Uses the Azure revision or a shortened Docker identity for the summary.
+    /// </summary>
+    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
+    /// <returns>The recorded Azure revision, up to 12 Docker identity characters, or "None".</returns>
+    private static string GetRevisionLabel(Deployment? deployment)
+    {
+        if (!string.IsNullOrWhiteSpace(deployment?.CloudContainerRevision))
+            return deployment.CloudContainerRevision;
+
+        if (!string.IsNullOrWhiteSpace(deployment?.DockerContainerId))
+            return deployment.DockerContainerId.Length <= 12
+                ? deployment.DockerContainerId
+                : deployment.DockerContainerId[..12];
+
+        return "None";
+    }
+
+    /// <summary>
+    ///     Chooses the provider label from the current project source.
+    /// </summary>
+    /// <returns>"Azure" for remote projects; otherwise "Docker".</returns>
+    private string GetProviderLabel()
+    {
+        return _app?.SourceType == SourceType.Remote ? "Azure" : "Docker";
+    }
+
+    /// <summary>
+    ///     Displays the configured Azure region or discovered local web port.
+    /// </summary>
+    /// <param name="configuration">Deployment settings or host configuration used by this operation.</param>
+    /// <returns>The recorded region or local endpoint, with a fixed pending-configuration label when unavailable.</returns>
+    private string GetRegionOrEndpoint(Configuration? configuration)
+    {
+        if (_app?.SourceType == SourceType.Remote)
+            return string.IsNullOrWhiteSpace(configuration?.CloudAzureRegion)
+                ? "Configured during deploy"
+                : configuration.CloudAzureRegion;
+
+        return _webHostPort > 0 ? $"localhost:{_webHostPort}" : "Assigned during deploy";
+    }
+
+    /// <summary>
+    ///     Chooses recorded URL, image or container metadata, with fixed guidance when no artifact
+    ///     exists.
+    /// </summary>
+    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
+    /// <returns>Recorded artifact metadata, or fixed pending/failure guidance.</returns>
+    private static string GetDeploymentMeta(Deployment deployment)
+    {
+        if (!string.IsNullOrWhiteSpace(deployment.CloudAppUrl))
+            return deployment.CloudAppUrl;
+
+        if (!string.IsNullOrWhiteSpace(deployment.ImageTag))
+            return deployment.ImageTag;
+
+        if (!string.IsNullOrWhiteSpace(deployment.DockerContainerId))
+            return deployment.DockerContainerId;
+
+        return deployment.Status == DeploymentStatus.Failed
+            ? "Failed before an artifact was recorded; see deployment logs"
+            : "Deployment artifact not yet recorded";
     }
 
 

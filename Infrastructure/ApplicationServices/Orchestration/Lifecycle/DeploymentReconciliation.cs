@@ -28,9 +28,10 @@ internal sealed class DeploymentReconciliation(
     {
         // 1. Mark 'Starting' as 'Failed'
         var updatedCount = await dbContext.Deployments
-            .Where(d => d.Status == DeploymentStatus.Starting &&
-                        d.CsProject!.Application.SourceType == SourceType.Local &&
-                        d.CloudResourceId == null && d.CloudGitHubActionRunId == null)
+            .Where(d => d.Status == DeploymentStatus.Starting
+                        && d.CsProject!.Application.SourceType == SourceType.Local
+                        && d.CloudResourceId == null
+                        && d.CloudGitHubActionRunId == null)
             .ExecuteUpdateAsync(setters => setters
                     .SetProperty(d => d.Status, DeploymentStatus.Failed),
                 cancellationToken);
@@ -43,14 +44,16 @@ internal sealed class DeploymentReconciliation(
         var runningDeployments = await dbContext.Deployments
             .Include(d => d.CsProject)
             .ThenInclude(csp => csp!.Application)
-            .Where(d => (d.Status == DeploymentStatus.Running || d.Status == DeploymentStatus.Stopped) &&
-                        d.CsProject!.Application.SourceType == SourceType.Local &&
-                        d.CloudResourceId == null && d.CloudGitHubActionRunId == null)
+            .Where(d => (d.Status == DeploymentStatus.Running
+                         || d.Status == DeploymentStatus.Stopped)
+                        && d.CsProject!.Application.SourceType == SourceType.Local
+                        && d.CloudResourceId == null
+                        && d.CloudGitHubActionRunId == null)
             .ToListAsync(cancellationToken);
 
         if (runningDeployments.Count > 0)
         {
-            var runningProjectsInDocker = await dockerService.GetRunningProjectNamesAsync();
+            var runningProjectsInDocker = await dockerService.GetRunningProjectNamesAsync(cancellationToken);
             var changedCount = 0;
 
             foreach (var deployment in runningDeployments)
@@ -62,15 +65,25 @@ internal sealed class DeploymentReconciliation(
                 var isActuallyRunning =
                     runningProjectsInDocker.Contains(expectedProjectName, StringComparer.OrdinalIgnoreCase);
 
-                if (deployment.Status == DeploymentStatus.Running && !isActuallyRunning)
+                switch (deployment.Status)
                 {
-                    deployment.Status = DeploymentStatus.Stopped;
-                    changedCount++;
-                }
-                else if (deployment.Status == DeploymentStatus.Stopped && isActuallyRunning)
-                {
-                    deployment.Status = DeploymentStatus.Running;
-                    changedCount++;
+                    case DeploymentStatus.Running when !isActuallyRunning:
+                        deployment.Status = DeploymentStatus.Stopped;
+                        changedCount++;
+                        break;
+                    case DeploymentStatus.Stopped when isActuallyRunning:
+                        deployment.Status = DeploymentStatus.Running;
+                        changedCount++;
+                        break;
+                    case DeploymentStatus.Running:
+                    case DeploymentStatus.Stopped:
+                    case DeploymentStatus.Starting:
+                    case DeploymentStatus.Failed:
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(
+                            "Unexpected deployment status encountered during reconciliation: "
+                            + deployment.Status);
                 }
             }
 

@@ -27,12 +27,16 @@ public sealed class AnalysisResultTests
             EstimatedCost = 0.00001234m,
             CostCurrency = "USD"
         };
+
         var safe = Validator().Validate(raw);
+
         Assert.Equal("password=[REDACTED]", safe.Summary);
         Assert.Equal("token=[REDACTED]", Assert.Single(safe.RecommendedSteps));
         Assert.Equal("api_key=[REDACTED]", Assert.Single(safe.EvidenceReferences));
+
         Assert.Contains("private-summary", raw.Summary);
         Assert.NotSame(raw.RecommendedSteps, safe.RecommendedSteps);
+
         Assert.Equal(123, safe.InputTokens);
         Assert.Equal(0.00001234m, safe.EstimatedCost);
         Assert.Equal(1, safe.ResultSchemaVersion);
@@ -47,6 +51,7 @@ public sealed class AnalysisResultTests
     public void Missing_metadata_is_preserved_as_null()
     {
         var safe = Validator().Validate(Valid());
+
         Assert.Null(safe.InputTokens);
         Assert.Null(safe.OutputTokens);
         Assert.Null(safe.ModelVersion);
@@ -83,11 +88,11 @@ public sealed class AnalysisResultTests
             "empty-summary" => Valid() with { Summary = " " },
             "oversized-summary" => Valid() with { Summary = new string('x', 4097) },
             "null-steps" => Valid() with { RecommendedSteps = null! },
-            "too-many-steps" => Valid() with { RecommendedSteps = Enumerable.Repeat("step", 11).ToArray() },
+            "too-many-steps" => Valid() with { RecommendedSteps = [.. Enumerable.Repeat("step", 11)] },
             "null-step" => Valid() with { RecommendedSteps = [null!] },
             "oversized-step" => Valid() with { RecommendedSteps = [new string('x', 2049)] },
             "oversized-evidence" => Valid() with { EvidenceReferences = [new string('x', 513)] },
-            "too-many-evidence" => Valid() with { EvidenceReferences = Enumerable.Repeat("reference", 21).ToArray() },
+            "too-many-evidence" => Valid() with { EvidenceReferences = [.. Enumerable.Repeat("reference", 21)] },
             "negative-tokens" => Valid() with { InputTokens = -1 },
             "negative-cost" => Valid() with { EstimatedCost = -1m, CostCurrency = "USD" },
             "cost-without-currency" => Valid() with { EstimatedCost = 1m },
@@ -98,6 +103,7 @@ public sealed class AnalysisResultTests
             "control-only-summary" => Valid() with { Summary = "\u001b[2J" },
             _ => throw new ArgumentOutOfRangeException(nameof(kind))
         };
+
         var error = Assert.Throws<InvalidAnalysisResultException>(() => Validator().Validate(raw));
         Assert.DoesNotContain("private-value", error.ToString());
     }

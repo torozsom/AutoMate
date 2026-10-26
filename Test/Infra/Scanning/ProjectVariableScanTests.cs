@@ -19,6 +19,7 @@ public sealed class ProjectVariableScanTests
     {
         var scanner = new ProjectScannerService(NullLogger<ProjectScannerService>.Instance);
         var path = Path.Combine(Path.GetTempPath(), "automate-missing-" + Guid.NewGuid().ToString("N"), "Web.csproj");
+
         await Assert.ThrowsAsync<DirectoryNotFoundException>(() => scanner.ExtractEnvironmentVariablesAsync(path));
     }
 }

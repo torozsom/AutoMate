@@ -49,7 +49,7 @@ public partial class AddAnalysisAdmissionReceipts : Migration
         migrationBuilder.CreateIndex(
             "ix_ai_analysis_requests_project_id_admission_day_consumes_quota",
             "ai_analysis_requests",
-            new[] { "project_id", "admission_day", "consumes_quota" });
+            ["project_id", "admission_day", "consumes_quota"]);
 
         migrationBuilder.CreateIndex(
             "ix_ai_analysis_requests_request_key",

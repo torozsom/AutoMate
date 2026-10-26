@@ -48,42 +48,61 @@ public sealed class TelemetryHostSafetyTests
             builder.Logging.ClearProviders().SetMinimumLevel(LogLevel.Trace).AddProvider(capture);
             builder.Services.AddSafePlatformLogging();
         });
+
         Assert.IsType<SafeLoggerFactory>(app.Services.GetRequiredService<ILoggerFactory>());
+
         await app.StartAsync();
         using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
         using var unauthorized = await client.GetAsync("/status?password=private-query");
+
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
+
         using var anonymousCapabilities = await client.GetAsync("/capabilities");
+
         Assert.Equal(HttpStatusCode.Unauthorized, anonymousCapabilities.StatusCode);
+
         using var capabilityRequest = new HttpRequestMessage(HttpMethod.Get, "/capabilities");
+
         capabilityRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var capabilityResponse = await client.SendAsync(capabilityRequest);
+
         Assert.Equal(HttpStatusCode.OK, capabilityResponse.StatusCode);
+
         var capabilityJson = await capabilityResponse.Content.ReadAsStringAsync();
+
         Assert.Contains("assessment-metrics", capabilityJson);
         Assert.Contains("metric-batch", capabilityJson);
         Assert.DoesNotContain(token, capabilityJson);
+
         using var request = new HttpRequestMessage(HttpMethod.Post, "/ingest?password=private-query")
         {
             Content = new StringContent("{password=private-body")
         };
+
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var badRequest = await client.SendAsync(request);
+
         Assert.Equal(HttpStatusCode.BadRequest, badRequest.StatusCode);
+
         using var missingCredential = await client.PostAsync("/archive/metric-batch",
             new StringContent("{}"));
+
         Assert.Equal(HttpStatusCode.Unauthorized, missingCredential.StatusCode);
+
         using var malformedBatch = new HttpRequestMessage(HttpMethod.Post, "/archive/metric-batch")
         {
             Content = new StringContent("{password=private-body")
         };
+
         malformedBatch.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         malformedBatch.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var rejectedBatch = await client.SendAsync(malformedBatch);
+
         Assert.Equal(HttpStatusCode.BadRequest, rejectedBatch.StatusCode);
 
         var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("private-category");
+
         using (logger.BeginScope(new Dictionary<string, object?>
                    { ["Authorization"] = token, ["DeploymentId"] = Guid.NewGuid() }))
         {
@@ -92,8 +111,11 @@ public sealed class TelemetryHostSafetyTests
         }
 
         await app.StopAsync();
+
         Assert.NotEmpty(capture.Entries);
+
         var exported = JsonSerializer.Serialize(capture.Entries);
+
         Assert.DoesNotContain("private-", exported);
         Assert.DoesNotContain(token, exported);
         Assert.Contains(PlatformTelemetryPolicy.UnknownMessage, exported);
@@ -165,6 +187,7 @@ public sealed class TelemetryHostSafetyTests
                 Func<TState, Exception?, string> formatter)
             {
                 Assert.Null(exception);
+
                 capture.Entries.Enqueue(new { category, message = formatter(state, exception), state });
             }
         }

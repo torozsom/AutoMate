@@ -26,6 +26,7 @@ public sealed class DeploymentAnalysisActionTests
     public async Task Consent_updates_exact_project_in_fresh_scope()
     {
         using var fixture = new Fixture();
+
         fixture.Apps.Call = (method, args) =>
         {
             Assert.Equal("SetAiDiagnosticEgressConsentAsync", method?.Name);
@@ -35,9 +36,11 @@ public sealed class DeploymentAnalysisActionTests
             Assert.Equal(fixture.Selected.Id, args[2]);
             Assert.Equal(true, args[3]);
             Assert.True(((CancellationToken)args[4]!).CanBeCanceled);
+
             return Task.FromResult(true);
         };
         await fixture.Invoke("ConsentAsync", true);
+
         Assert.Equal(true, fixture.Get("_consented"));
         Assert.False(fixture.Other.Configuration!.AiDiagnosticEgressConsented);
         Assert.Contains("consent saved", fixture.Message);
@@ -55,9 +58,11 @@ public sealed class DeploymentAnalysisActionTests
     public async Task Consent_failure_preserves_saved_setting(bool uncertain)
     {
         using var fixture = new Fixture();
+
         fixture.Apps.Call = (_, _) =>
             uncertain ? Task.FromException<bool>(new Exception("private-secret")) : Task.FromResult(false);
         await fixture.Invoke("ConsentAsync", true);
+
         Assert.Equal(false, fixture.Get("_consented"));
         Assert.Contains(uncertain ? "Analysis could not be updated" : "Consent", fixture.Message);
         Assert.DoesNotContain("private", fixture.Message);
@@ -81,22 +86,28 @@ public sealed class DeploymentAnalysisActionTests
     {
         using var fixture = new Fixture();
         var active = fixture.View(AiAnalysisStatus.Running);
+
         fixture.Set("_latest", active);
         var saved = status is null ? null : fixture.View(status.Value);
+
         fixture.Analyses.Call = (method, args) =>
         {
             Assert.Equal(fixture.Owner, args![0]);
             Assert.Equal(fixture.Deployment.Id, args[1]);
+
             if (method?.Name == "CancelAsync")
             {
                 Assert.Equal(active.Id, args[2]);
+
                 return Task.FromResult(outcome);
             }
 
             Assert.Equal("GetLatestAsync", method?.Name);
+
             return Task.FromResult(saved);
         };
         await fixture.Invoke("CancelAsync");
+
         Assert.Same(saved, fixture.Get("_latest"));
         Assert.Contains(message, fixture.Message);
     }
@@ -111,17 +122,22 @@ public sealed class DeploymentAnalysisActionTests
     {
         using var fixture = new Fixture();
         var active = fixture.View(AiAnalysisStatus.Queued);
+
         fixture.Set("_latest", active);
         var calls = 0;
+
         fixture.Analyses.Call = (method, args) =>
         {
             Assert.Equal("CancelAsync", method?.Name);
             Assert.Equal(active.Id, args![2]);
+
             calls++;
+
             return Task.FromException<DeploymentAnalysisCancellationResult>(new Exception("private-secret"));
         };
         await fixture.Invoke("CancelAsync");
         await fixture.Invoke("CancelAsync");
+
         Assert.Equal(2, calls);
         Assert.Same(active, fixture.Get("_latest"));
         Assert.Contains("could not be updated", fixture.Message);
@@ -140,31 +156,39 @@ public sealed class DeploymentAnalysisActionTests
     public async Task Changed_deployment_discards_action_feedback(bool consent)
     {
         using var fixture = new Fixture();
+
         fixture.Set("_latest", fixture.View(AiAnalysisStatus.Queued));
         var consentResponse = new TaskCompletionSource<bool>();
         var cancelResponse = new TaskCompletionSource<DeploymentAnalysisCancellationResult>();
         var calls = 0;
+
         fixture.Apps.Call = (_, _) =>
         {
             calls++;
+
             return consentResponse.Task;
         };
         fixture.Analyses.Call = (_, _) =>
         {
             calls++;
+
             return cancelResponse.Task;
         };
         var method = consent ? "ConsentAsync" : "CancelAsync";
         var args = consent ? new object?[] { true } : [];
         var action = fixture.Invoke(method, args);
+
         await fixture.Invoke(method, args);
+
         Assert.Equal(1, calls);
+
         fixture.Deployment.Id = Guid.NewGuid();
         fixture.Parameter("DeploymentId", (Guid?)fixture.Deployment.Id);
         fixture.Set("_identity", (fixture.Owner, fixture.App.Id, (Guid?)fixture.Deployment.Id));
         consentResponse.SetResult(true);
         cancelResponse.SetResult(DeploymentAnalysisCancellationResult.Cancelled);
         await action;
+
         Assert.Null(fixture.Get("_message"));
         Assert.Equal(false, fixture.Get("_consented"));
     }
@@ -204,6 +228,7 @@ public sealed class DeploymentAnalysisActionTests
             Set("_identity", (Owner, App.Id, (Guid?)Deployment.Id));
             var apps = DispatchProxy.Create<IApplicationService, OperationalLoggingTests.PortProxy>();
             var analyses = DispatchProxy.Create<IDeploymentAnalysisService, OperationalLoggingTests.PortProxy>();
+
             Apps = (OperationalLoggingTests.PortProxy)apps;
             Analyses = (OperationalLoggingTests.PortProxy)analyses;
             _services = new ServiceCollection().AddScoped(_ => apps).AddScoped(_ => analyses).BuildServiceProvider();

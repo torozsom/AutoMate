@@ -25,6 +25,7 @@ public sealed class AzureContainerAppLogCheckpointStoreTests
     public async Task GetOrCreate_persists_one_cursor_per_deployment_and_source()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
+
         await connection.OpenAsync();
         var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(connection).Options;
         var protector = new EphemeralDataProtectionProvider();
@@ -69,10 +70,12 @@ public sealed class AzureContainerAppLogCheckpointStoreTests
 
             checkpoint.LastTieBreaker.Should().Be("abc");
             systemCheckpoint.Source.Should().Be("system");
+
             await store.SaveAsync(CancellationToken.None);
         }
 
         await using var verificationContext = new AutoMateDbContext(options, protector);
+
         (await verificationContext.AzureContainerAppLogCheckpoints.CountAsync()).Should().Be(2);
     }
 }

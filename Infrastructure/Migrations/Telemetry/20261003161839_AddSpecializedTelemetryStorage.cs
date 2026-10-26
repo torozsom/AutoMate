@@ -107,7 +107,7 @@ public partial class AddSpecializedTelemetryStorage : Migration
         migrationBuilder.CreateIndex(
             "ix_deployment_diagnostic_records_tenant_id_order_id",
             "deployment_diagnostic_records",
-            new[] { "tenant_id", "order_id" });
+            ["tenant_id", "order_id"]);
 
         migrationBuilder.CreateIndex(
             "ix_telemetry_tenant_states_due_at",

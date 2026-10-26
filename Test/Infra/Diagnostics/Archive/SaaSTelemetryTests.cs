@@ -49,6 +49,7 @@ public sealed class SaaSTelemetryTests
         await using var fixture = await Fixture.CreateAsync();
         var path = Path.Combine(Path.GetTempPath(), "automate-channel-replay-" + Guid.NewGuid().ToString("N"));
         var diskOptions = Options.Create(new DiskSpoolOptions { Directory = path });
+
         try
         {
             using (var writer = new DiskDeploymentArchive(diskOptions, new DiagnosticRedactor()))
@@ -57,8 +58,9 @@ public sealed class SaaSTelemetryTests
                 {
                     var channel = order <= 3 ? "build" : order <= 6 ? "github-actions" : "web";
                     var e = fixture.Event() with { Message = $"{channel} observation {order}" };
+
                     await writer.AppendAsync(new DeploymentLogEnvelope(e.EventId!.Value, fixture.User, order,
-                        DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, channel), default);
+                        DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, channel), CancellationToken.None);
                 }
             }
 
@@ -69,6 +71,7 @@ public sealed class SaaSTelemetryTests
                 new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
                 new DeploymentRuntimeViewers(TimeProvider.System), archive: archive);
             var replay = await store.ReadRecentAsync(fixture.Project, fixture.Deployment, 6);
+
             Assert.Contains(replay.Events, e => e.TerminalChannel == "build");
             Assert.Contains(replay.Events, e => e.TerminalChannel == "github-actions");
             Assert.Contains(replay.Events, e => e.TerminalChannel == "web");
@@ -77,15 +80,19 @@ public sealed class SaaSTelemetryTests
             Assert.Equal(replay.Events.OrderBy(e => e.OrderId), replay.Events);
 
             var history = new DeploymentHistoryService(fixture.Db, store, new EmptyMetrics(), options);
+
             foreach (var channel in new[] { "build", "github-actions" })
             {
                 var page = await history.ReadLogsV2Async(fixture.User, fixture.Project, fixture.Deployment,
                     null, true, 2, channel: channel);
+
                 Assert.Equal(2, page.Events.Count);
                 Assert.All(page.Events, e => Assert.Equal(channel, e.TerminalChannel));
                 Assert.NotNull(page.EarlierCursor);
+
                 var earlier = await history.ReadLogsV2Async(fixture.User, fixture.Project, fixture.Deployment,
                     page.EarlierCursor, true, 2, channel: channel);
+
                 Assert.Single(earlier.Events);
                 Assert.True(earlier.Events[0].OrderId < page.Events[0].OrderId);
             }
@@ -113,6 +120,7 @@ public sealed class SaaSTelemetryTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var logs = new EmptyLogs();
+
         if (source == "loki")
         {
             var e = fixture.Event() with
@@ -122,6 +130,7 @@ public sealed class SaaSTelemetryTests
                 SpanId = "1234567890abcdef",
                 Sequence = 42
             };
+
             logs.Events =
             [
                 new DeploymentLogEnvelope(e.EventId!.Value, fixture.User, 17,
@@ -159,6 +168,7 @@ public sealed class SaaSTelemetryTests
         var history = new DeploymentHistoryService(fixture.Db, store, new EmptyMetrics(), options);
         var page = await history.ReadLogsAsync(fixture.User, fixture.Project, fixture.Deployment,
             source == "legacy-forward" ? 1 : 0, source != "legacy-forward", 500);
+
         var delivered = Assert.Single(page.Events);
         Assert.Equal(17, delivered.OrderId);
         Assert.Equal("web", delivered.TerminalChannel);
@@ -168,6 +178,7 @@ public sealed class SaaSTelemetryTests
         Assert.Equal(DeploymentDiagnosticSeverity.Information, delivered.Severity);
         Assert.Equal("1234567890abcdef1234567890abcdef", delivered.TraceId);
         Assert.Equal(42, delivered.Sequence);
+
         if (source != "loki")
             Assert.Contains("private-value", (await fixture.Db.DeploymentDiagnosticRecords.SingleAsync()).Message);
         else
@@ -196,24 +207,29 @@ public sealed class SaaSTelemetryTests
             TerminalChannel = "web",
             Message = "saved"
         };
+
         fixture.Db.DeploymentDiagnosticRecords.Add(row);
         await fixture.Db.SaveChangesAsync();
         var path = Path.Combine(Path.GetTempPath(), "automate-archive-merge-" + Guid.NewGuid().ToString("N"));
+
         try
         {
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
                 new DiagnosticRedactor());
             var e = fixture.Event() with { EventId = row.Id, Message = "saved" };
+
             await archive.AppendAsync(
                 new DeploymentLogEnvelope(row.Id, fixture.User, 17, row.TimestampUtc, row.ExpiresAt, e, "web"),
-                default);
+                CancellationToken.None);
             var options = Options.Create(new TelemetryStorageOptions { Backend = "LokiMimir" });
             var logs = new EmptyLogs { Fail = true };
             var store = new DeploymentTelemetryStore(fixture.Db,
                 new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()),
                 logs, options, new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
                 new DeploymentRuntimeViewers(TimeProvider.System), archive: archive);
-            var page = await store.ReadPageAsync(fixture.Project, fixture.Deployment, 0, true, 1, default);
+            var page = await store.ReadPageAsync(fixture.Project, fixture.Deployment, 0, true, 1,
+                CancellationToken.None);
+
             Assert.Single(page.Events);
             Assert.Equal(row.Id, page.Events[0].EventId);
             Assert.True(page.CanAdvanceCursor);
@@ -235,28 +251,34 @@ public sealed class SaaSTelemetryTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var end = DateTimeOffset.UtcNow.AddDays(-120);
-        await fixture.Db.Deployments.Where(d => d.Id == fixture.Deployment).ExecuteUpdateAsync(update => update
-            .SetProperty(d => d.CreatedAt, end.AddHours(-2)).SetProperty(d => d.UpdatedAt, end)
-            .SetProperty(d => d.Status, DeploymentStatus.Stopped));
+
+        await fixture.Db.Deployments
+            .Where(d => d.Id == fixture.Deployment)
+            .ExecuteUpdateAsync(update => update
+                .SetProperty(d => d.CreatedAt, end.AddHours(-2)).SetProperty(d => d.UpdatedAt, end)
+                .SetProperty(d => d.Status, DeploymentStatus.Stopped));
         var path = Path.Combine(Path.GetTempPath(), "automate-archive-context-" + Guid.NewGuid().ToString("N"));
+
         try
         {
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
                 new DiagnosticRedactor());
+
             await archive.ImportMetricsAsync(new ArchiveMetricImport(fixture.User, fixture.Project, fixture.Deployment,
                 [
                     new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", end.AddMinutes(-5), 2, 1, 3)
                 ]),
-                default);
+                CancellationToken.None);
             await archive.ImportMetricsAsync(new ArchiveMetricImport(fixture.User, fixture.Project, Guid.NewGuid(),
             [
                 new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", end.AddMinutes(-5), 999, 999, 999)
-            ]), default);
+            ]), CancellationToken.None);
             var context = await new DeploymentAnalysisContextBuilder(fixture.Db,
                 new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), new EmptyMetrics(),
                 new DiagnosticRedactor(),
                 Options.Create(new AiAnalysisOptions()), Options.Create(new TelemetryStorageOptions()),
                 TimeProvider.System, archive).BuildAsync(fixture.Deployment);
+
             Assert.NotEmpty(context.Text);
             Assert.Contains(context.EvidenceReferences, value => value.StartsWith("metric:automate_cpu_usage_cores:"));
             Assert.DoesNotContain("999", context.Text);
@@ -277,34 +299,43 @@ public sealed class SaaSTelemetryTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var path = Path.Combine(Path.GetTempPath(), "automate-archive-cleanup-" + Guid.NewGuid().ToString("N"));
+
         try
         {
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
                 new DiagnosticRedactor());
             var e = fixture.Event();
+
             await archive.AppendAsync(
                 new DeploymentLogEnvelope(e.EventId!.Value, fixture.User, 1, e.TimestampUtc, e.TimestampUtc.AddDays(30),
-                    e, "web"), default);
+                    e, "web"), CancellationToken.None);
             var apps = new ApplicationService(fixture.Db,
                 NullLogger<ApplicationService>.Instance);
+
             Assert.True(await apps.DeleteAppAsync(fixture.Project, fixture.User));
             Assert.False(await fixture.Db.Applications.AnyAsync(x => x.Id == fixture.Project));
             Assert.Single(await fixture.Db.DeploymentArchiveCleanups.ToArrayAsync());
+
             var gateway = DispatchProxy.Create<IDeploymentArchive, CleanupArchiveProxy>();
             var proxy = (CleanupArchiveProxy)gateway;
+
             proxy.Archive = archive;
             using var worker = new DeploymentArchiveCleanupWorker(
                 fixture.Services.GetRequiredService<IServiceScopeFactory>(), gateway,
                 NullLogger<DeploymentArchiveCleanupWorker>.Instance);
-            await worker.ProcessOnceAsync(default);
+
+            await worker.ProcessOnceAsync(CancellationToken.None);
+
             Assert.Single(await fixture.Db.DeploymentArchiveCleanups.AsNoTracking().ToArrayAsync());
             Assert.Single(await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 10, null,
-                default));
+                CancellationToken.None));
+
             proxy.Fail = false;
-            await worker.ProcessOnceAsync(default);
+            await worker.ProcessOnceAsync(CancellationToken.None);
+
             Assert.Empty(await fixture.Db.DeploymentArchiveCleanups.AsNoTracking().ToArrayAsync());
             Assert.Empty(await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 10, null,
-                default));
+                CancellationToken.None));
         }
         finally
         {
@@ -321,6 +352,7 @@ public sealed class SaaSTelemetryTests
     public async Task Backfill_resumes_without_rewriting_or_duplicating_legacy_records()
     {
         await using var fixture = await Fixture.CreateAsync();
+
         fixture.Db.DeploymentDiagnosticRecords.AddRange(Enumerable.Range(1, 1001).Select(i =>
             new DeploymentDiagnosticRecord
             {
@@ -337,6 +369,7 @@ public sealed class SaaSTelemetryTests
             }));
         await fixture.Db.SaveChangesAsync();
         var path = Path.Combine(Path.GetTempPath(), "automate-archive-backfill-" + Guid.NewGuid().ToString("N"));
+
         try
         {
             var logs = new EmptyLogs { Fail = true };
@@ -362,22 +395,24 @@ public sealed class SaaSTelemetryTests
 
             using (var first = Worker())
             {
-                await first.ImportBatchAsync(default);
+                await first.ImportBatchAsync(CancellationToken.None);
             }
 
             Assert.Equal(500,
                 (await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 2001, null,
-                    default)).Count);
+                    CancellationToken.None)).Count);
+
             using (var restarted = Worker())
             {
-                await restarted.ImportBatchAsync(default);
+                await restarted.ImportBatchAsync(CancellationToken.None);
                 logs.Fail = false;
-                await restarted.ImportBatchAsync(default);
-                await restarted.ImportBatchAsync(default);
+                await restarted.ImportBatchAsync(CancellationToken.None);
+                await restarted.ImportBatchAsync(CancellationToken.None);
             }
 
             var rows = await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 2001, null,
-                default);
+                CancellationToken.None);
+
             Assert.Equal(1001, rows.Count);
             Assert.Equal(1001, rows.Select(r => r.EventId).Distinct().Count());
             Assert.Equal(1001, await fixture.Db.DeploymentDiagnosticRecords.CountAsync());
@@ -405,8 +440,10 @@ public sealed class SaaSTelemetryTests
             new EmptyLogs(), Options.Create(settings), new DiagnosticRedactor(),
             NullLogger<DeploymentTelemetryStore>.Instance,
             new DeploymentRuntimeViewers(TimeProvider.System));
+
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             store.PersistAsync(fixture.Event(), "password=private-channel"));
+
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
         Assert.Empty(await fixture.Db.TelemetryTenantStates.ToListAsync());
     }
@@ -430,6 +467,7 @@ public sealed class SaaSTelemetryTests
             new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
             new DeploymentRuntimeViewers(TimeProvider.System), gateway, policies);
         var e = fixture.Event();
+
         Assert.True(await store.PersistAsync(e, "web") > 0);
         Assert.Equal("password=[REDACTED]", gateway.Events.Single().Message);
         Assert.True(await store.PersistAsync(e with
@@ -441,8 +479,10 @@ public sealed class SaaSTelemetryTests
         }, null) > 0);
         Assert.Equal(2, gateway.Events.Count);
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
+
         gateway.Fail = true;
         await Assert.ThrowsAsync<IOException>(() => store.PersistAsync(e with { EventId = Guid.NewGuid() }, "web"));
+
         Assert.Empty(await fixture.Db.DeploymentDiagnosticRecords.ToListAsync());
     }
 
@@ -461,12 +501,14 @@ public sealed class SaaSTelemetryTests
             new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
             new DeploymentRuntimeViewers(TimeProvider.System));
         var history = new DeploymentHistoryService(fixture.Db, store, new EmptyMetrics(), options);
+
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => history.ReadLogsV2Async(Guid.NewGuid(),
             fixture.Project,
             fixture.Deployment, null, true, 500));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             new ProjectTelemetryAnalyticsService(fixture.Db, new DiagnosticRedactor())
                 .ReadAsync(Guid.NewGuid(), fixture.Project, DateTimeOffset.UtcNow.AddDays(-7), DateTimeOffset.UtcNow));
+
         Assert.Equal(0, logs.Reads);
     }
 
@@ -479,6 +521,7 @@ public sealed class SaaSTelemetryTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var day = new DateTimeOffset(DateTime.UtcNow.Date, TimeSpan.Zero);
+
         fixture.Db.DeploymentDailyTelemetry.Add(new DeploymentDailyTelemetry
         {
             UserId = fixture.User,
@@ -490,6 +533,7 @@ public sealed class SaaSTelemetryTests
         });
         await fixture.Db.SaveChangesAsync();
         var daily = new DailyQuery();
+
         await fixture.Services.DisposeAsync();
         fixture.Services = new ServiceCollection().AddScoped<AutoMateDbContext>(_ => fixture.NewDb())
             .AddSingleton<IDailyDeploymentMetricQuery>(daily).AddSingleton<IDeploymentErrorCountQuery>(daily)
@@ -497,21 +541,25 @@ public sealed class SaaSTelemetryTests
         var worker = new TelemetryDailyAggregationWorker(fixture.Services.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(new TelemetryStorageOptions()), NullLogger<TelemetryDailyAggregationWorker>.Instance,
             new DiagnosticRedactor());
-        await worker.AggregateOnceAsync(default);
+
+        await worker.AggregateOnceAsync(CancellationToken.None);
         daily.Sum = 25;
-        await worker.AggregateOnceAsync(default);
+        await worker.AggregateOnceAsync(CancellationToken.None);
         fixture.Db.ChangeTracker.Clear();
         var rows = await fixture.Db.DeploymentDailyTelemetry.ToListAsync();
+
         Assert.Contains(rows, r => r.Metric == "expired");
         var cpu = Assert.Single(rows, r => r.Metric == "automate_cpu_usage_cores" && r.DayUtc == day);
         Assert.Equal(10, cpu.SampleCount);
         Assert.Equal(25, cpu.Sum);
         Assert.Equal("password=[REDACTED]", cpu.Container);
+
         cpu.Container = "password=legacy-private-label";
         await fixture.Db.SaveChangesAsync();
         var analytics = await new ProjectTelemetryAnalyticsService(fixture.Db, new DiagnosticRedactor()).ReadAsync(
             fixture.User, fixture.Project,
             day.AddDays(-7), DateTimeOffset.UtcNow);
+
         Assert.DoesNotContain("legacy-private-label", JsonSerializer.Serialize(analytics));
         Assert.Equal("password=legacy-private-label", cpu.Container);
         Assert.Equal(2.5, analytics.Daily.Single(d => d.Metric == cpu.Metric && d.DayUtc == day).Average);
@@ -572,6 +620,7 @@ public sealed class SaaSTelemetryTests
         public static async Task<Fixture> CreateAsync()
         {
             var f = new Fixture();
+
             await f._connection.OpenAsync();
             f.Db = f.NewDb();
             await f.Db.Database.EnsureCreatedAsync();
@@ -589,12 +638,14 @@ public sealed class SaaSTelemetryTests
                 CsProject = new CsProject { Name = "web", Path = "web.csproj", Application = project },
                 Status = DeploymentStatus.Running
             };
+
             f.Db.Deployments.Add(deployment);
             await f.Db.SaveChangesAsync();
             f.User = user.Id;
             f.Project = project.Id;
             f.Deployment = deployment.Id;
             f.Services = new ServiceCollection().AddScoped<AutoMateDbContext>(_ => f.NewDb()).BuildServiceProvider();
+
             return f;
         }
 
@@ -629,8 +680,10 @@ public sealed class SaaSTelemetryTests
         {
             base.OnModelCreating(model);
             // SQLite test representation only; production uses PostgreSQL timestamptz.
-            foreach (var property in model.Model.GetEntityTypes().SelectMany(e => e.GetProperties()).Where(p =>
-                         p.ClrType == typeof(DateTimeOffset) || p.ClrType == typeof(DateTimeOffset?)))
+            foreach (var property in model.Model.GetEntityTypes()
+                         .SelectMany(e => e.GetProperties())
+                         .Where(p =>
+                             p.ClrType == typeof(DateTimeOffset) || p.ClrType == typeof(DateTimeOffset?)))
             {
                 property.SetValueConverter(new ValueConverter<DateTimeOffset, long>(v => v.UtcTicks,
                     v => new DateTimeOffset(v, TimeSpan.Zero)));
@@ -664,6 +717,7 @@ public sealed class SaaSTelemetryTests
         {
             if (Fail) throw new IOException("Unavailable");
             Events.Add(e);
+
             return Task.FromResult(new DeploymentLogEnvelope(e.EventId!.Value, Guid.NewGuid(),
                 DateTimeOffset.UtcNow.UtcTicks,
                 DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), e, channel));
@@ -710,6 +764,7 @@ public sealed class SaaSTelemetryTests
         protected override object? Invoke(MethodInfo? method, object?[]? arguments)
         {
             if (method?.Name != nameof(IDeploymentArchive.DeleteProjectAsync)) throw new NotSupportedException();
+
             return Fail
                 ? Task.FromException(new IOException("Synthetic archive outage"))
                 : Archive.DeleteProjectAsync((Guid)arguments![0]!, (Guid)arguments[1]!,
@@ -803,6 +858,7 @@ public sealed class SaaSTelemetryTests
         {
             Reads++;
             if (Fail) throw new IOException("Synthetic backend outage");
+
             return Task.FromResult(Events);
         }
 

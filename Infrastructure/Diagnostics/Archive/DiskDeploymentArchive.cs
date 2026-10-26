@@ -67,7 +67,9 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
         var selection = query.Selection.Normalize();
         if (query.Window.End < query.Window.Start || query.Window.End - query.Window.Start > TimeSpan.FromDays(365) ||
             query.Limit is < 1 or > 1000) throw new ArgumentException("Invalid archive selection.");
+
         await _gate.WaitAsync(token);
+
         try
         {
             var channels = new HashSet<AssessmentChannel>();
@@ -102,9 +104,13 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
                     if (containers.Count < 64) containers.Add(point.Container);
                 }
 
-            return new ArchiveAssessmentPage(page.Values.ToArray(),
-                channels.OrderBy(c => c.Source).ThenBy(c => c.Channel, StringComparer.Ordinal).ToArray(),
-                containers.ToArray(), omitted);
+            return new ArchiveAssessmentPage([.. page.Values],
+                [
+                    .. channels
+                        .OrderBy(c => c.Source)
+                        .ThenBy(c => c.Channel, StringComparer.Ordinal)
+                ],
+                [.. containers], omitted);
         }
         finally
         {
@@ -144,21 +150,30 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
     {
         if (envelope.TenantId == Guid.Empty || envelope.Event.ProjectId == Guid.Empty || envelope.EventId == Guid.Empty)
             throw new ArgumentException("Archive identities must be nonempty.");
+
         await _gate.WaitAsync(token);
+
         try
         {
             var directory = Partition(envelope.TenantId, envelope.Event.ProjectId,
                 envelope.Event.DeploymentId ?? Guid.Empty);
+
             if (File.Exists(Path.Combine(Path.GetDirectoryName(directory)!, ".deleted")))
                 throw new InvalidOperationException("Deleted project cannot accept archive events.");
+
             Directory.CreateDirectory(directory);
             var path = Path.Combine(directory, envelope.EventId.ToString("N") + ".segment");
+
             if (File.Exists(path)) return await ReadSegmentAsync(path, token);
+
             envelope = Mask(envelope);
+
             var payload = JsonSerializer.Serialize(envelope, TelemetryHttpTransport.Json);
             var segment = new Segment(1, payload,
                 Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))));
+
             var temporary = path + ".tmp";
+
             // A previous incomplete, unacknowledged archive write may be replaced by its idempotent retry.
             await using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None,
                              8192, FileOptions.Asynchronous | FileOptions.WriteThrough))
@@ -199,9 +214,12 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
         long cursor, bool backwards, int limit, string? search, CancellationToken token, string? channel = null)
     {
         limit = Math.Clamp(limit, 1, 2001);
+
         if (search?.Length > 256) throw new ArgumentException("Archive search exceeds its bound.");
         if (channel?.Length > 128) throw new ArgumentException("Archive channel exceeds its bound.");
+
         await _gate.WaitAsync(token);
+
         try
         {
             // Retain only the requested page in memory, even when a partition contains years of output.
@@ -210,16 +228,18 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
             {
                 token.ThrowIfCancellationRequested();
                 var entry = await ReadSegmentAsync(path, token);
+
                 if (entry.Channel is null || entry.Event.Kind == DeploymentDiagnosticKind.Metric ||
                     (!string.IsNullOrEmpty(channel) && entry.Channel != channel) ||
                     (cursor != 0 && (backwards ? entry.OrderId >= cursor : entry.OrderId <= cursor)) ||
                     (!string.IsNullOrEmpty(search) &&
                      !entry.Event.Message.Contains(search, StringComparison.Ordinal))) continue;
+
                 page.TryAdd(entry.OrderId, entry);
                 if (page.Count > limit) page.Remove(backwards ? page.First().Key : page.Last().Key);
             }
 
-            return page.Values.ToArray();
+            return [.. page.Values];
         }
         finally
         {
@@ -259,12 +279,14 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
     {
         if (import.Tenant == Guid.Empty || import.Project == Guid.Empty || import.Deployment == Guid.Empty ||
             import.Points.Count > 3000) throw new ArgumentException("Invalid bounded metric import.");
+
         await _gate.WaitAsync(token);
         try
         {
             var directory = Partition(import.Tenant, import.Project, import.Deployment);
             if (File.Exists(Path.Combine(Path.GetDirectoryName(directory)!, ".deleted")))
                 throw new InvalidOperationException("Deleted project cannot accept archive events.");
+
             Directory.CreateDirectory(directory);
             foreach (var original in import.Points)
             {
@@ -276,10 +298,12 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
                     original.Average > original.Maximum ||
                     original.Timestamp > DateTimeOffset.UtcNow.AddMinutes(5))
                     throw new ArgumentException("Invalid metric statistics.");
+
                 var point = original with { Container = _redactor.RedactText(original.Container, 128) };
                 var identity = $"{point.Container}|{point.Name}|{point.Timestamp.UtcTicks}";
                 var path = Path.Combine(directory,
                     Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))) + ".metric");
+
                 if (File.Exists(path))
                 {
                     await ReadPayloadAsync(path, token);
@@ -289,6 +313,7 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
                 var payload = JsonSerializer.Serialize(point, TelemetryHttpTransport.Json);
                 var segment = new Segment(1, payload,
                     Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))));
+
                 await using (var stream = new FileStream(path + ".tmp", FileMode.Create, FileAccess.Write,
                                  FileShare.None,
                                  8192, FileOptions.Asynchronous | FileOptions.WriteThrough))
@@ -326,15 +351,18 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
         try
         {
             token.ThrowIfCancellationRequested();
+
             var path = Path.Combine(_root, tenant.ToString("N"), project.ToString("N"));
             if (Directory.Exists(path)) Directory.Delete(path, true);
             var checkpoint = Path.Combine(Path.GetDirectoryName(_root)!, "archive-backfill", tenant.ToString("N"),
                 project.ToString("N"));
+
             if (Directory.Exists(checkpoint)) Directory.Delete(checkpoint, true);
             Directory.CreateDirectory(path);
             // Retain a tiny durable tombstone so an in-flight cached collector cannot recreate deleted payloads.
-            using var marker = new FileStream(Path.Combine(path, ".deleted"), FileMode.Create, FileAccess.Write,
-                FileShare.None);
+            await using var marker = new FileStream(Path.Combine(path, ".deleted"),
+                FileMode.Create, FileAccess.Write, FileShare.None);
+
             marker.Flush(true);
         }
         finally
@@ -377,23 +405,29 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
         if (end <= start) throw new ArgumentException("Metric range must be positive.");
         maximumPoints = Math.Clamp(maximumPoints, 1, 1000);
         var interval = Math.Max(60, Math.Ceiling((end - start).TotalSeconds / maximumPoints));
+
         await _gate.WaitAsync(token);
+
         try
         {
             var buckets = new Dictionary<(string Container, string Name, string Unit, long Bucket), Aggregate>();
             foreach (var path in Files(tenant, project, deployment))
             {
                 token.ThrowIfCancellationRequested();
+
                 var entry = await ReadSegmentAsync(path, token);
                 var time = entry.Event.TimestampUtc;
-                if (time < start || time > end || (selected is not null &&
-                                                   !selected.Contains(entry.Event.TerminalChannel.Target ?? "unknown",
-                                                       StringComparer.Ordinal))) continue;
+                if (time < start || time > end
+                                 || (selected is not null
+                                     && !selected.Contains(entry.Event.TerminalChannel.Target ?? "unknown",
+                                         StringComparer.Ordinal))) continue;
+
                 foreach (var metric in entry.Event.Metrics ?? [])
                 {
                     if (!double.IsFinite(metric.Value)) continue;
                     var bucket = Math.Min(maximumPoints - 1, (long)((time - start).TotalSeconds / interval));
                     var key = (entry.Event.TerminalChannel.Target ?? "unknown", metric.Name, metric.Unit, bucket);
+
                     if (!buckets.TryGetValue(key, out var aggregate))
                     {
                         if (buckets.Count >= 300_000)
@@ -407,17 +441,29 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
 
             var rawKeys = buckets.Keys.ToHashSet();
             var directory = Partition(tenant, project, deployment);
-            if (Directory.Exists(directory))
+
+            if (!Directory.Exists(directory))
+                return
+                [
+                    .. buckets.Select(p => new DeploymentMetricPoint(p.Key.Container, p.Key.Name, p.Key.Unit,
+                            start.AddSeconds(p.Key.Bucket * interval), p.Value.Sum / p.Value.Count, p.Value.Minimum,
+                            p.Value.Maximum))
+                        .OrderBy(p => p.Timestamp)
+                ];
+            {
                 foreach (var path in Directory.EnumerateFiles(directory, "*.metric"))
                 {
                     var point = JsonSerializer.Deserialize<DeploymentMetricPoint>(await ReadPayloadAsync(path, token),
                         TelemetryHttpTransport.Json)!;
+
                     if (point.Timestamp < start || point.Timestamp > end ||
                         (selected is not null && !selected.Contains(point.Container, StringComparer.Ordinal))) continue;
+
                     var bucket = Math.Min(maximumPoints - 1, (long)((point.Timestamp - start).TotalSeconds / interval));
                     var key = (point.Container, point.Name, point.Unit, bucket);
                     if (rawKeys.Contains(key))
                         continue; // Raw samples already persisted by live ingestion take precedence.
+
                     if (!buckets.TryGetValue(key, out var aggregate))
                     {
                         if (buckets.Count >= 300_000)
@@ -427,11 +473,17 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
 
                     aggregate.Add(point.Average, point.Minimum, point.Maximum);
                 }
+            }
 
-            return buckets.Select(p => new DeploymentMetricPoint(p.Key.Container, p.Key.Name, p.Key.Unit,
-                    start.AddSeconds(p.Key.Bucket * interval), p.Value.Sum / p.Value.Count, p.Value.Minimum,
-                    p.Value.Maximum))
-                .OrderBy(p => p.Timestamp).ToArray();
+            return
+            [
+                .. buckets
+                    .Select(p =>
+                        new DeploymentMetricPoint(p.Key.Container, p.Key.Name, p.Key.Unit,
+                            start.AddSeconds(p.Key.Bucket * interval), p.Value.Sum / p.Value.Count,
+                            p.Value.Minimum, p.Value.Maximum))
+                    .OrderBy(p => p.Timestamp)
+            ];
         }
         finally
         {
@@ -491,9 +543,11 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
             throw new InvalidDataException("Archive segment exceeds its bound.");
         var segment = JsonSerializer.Deserialize<Segment>(await File.ReadAllTextAsync(path, token))
                       ?? throw new InvalidDataException("Missing archive segment.");
+
         if (segment.Version != 1 || segment.Checksum !=
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(segment.Payload))))
             throw new InvalidDataException("Archive checksum mismatch.");
+
         return segment.Payload;
     }
 

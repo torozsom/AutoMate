@@ -16,9 +16,12 @@ public sealed class CloudRuntimeConfigurationValidationTests
     {
         var database = new DatabaseConfigDto { DbType = "unsupported" };
         var config = new DeploymentConfigDto { Databases = [database] };
+
         Assert.Equal("Database engine 'unsupported' is not supported for Azure deployments.",
             CloudRuntimeConfigurationValidation.Validate(config, ["1INVALID"]));
+
         Assert.Same(database, Assert.Single(config.Databases));
+
         Assert.Equal("unsupported", database.DbType);
     }
 
@@ -45,6 +48,7 @@ public sealed class CloudRuntimeConfigurationValidationTests
                 }
             ]
         };
+
         Assert.Equal(valid, CloudRuntimeConfigurationValidation.Validate(config, [key]) is null);
         Assert.NotNull(CloudRuntimeConfigurationValidation.Validate(config, ["APP", "app"]));
     }

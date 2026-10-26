@@ -44,16 +44,21 @@ public sealed class AnalysisAdmissionTests
     public async Task Unapproved_current_account_has_an_explicit_safe_skip_reason()
     {
         await using var fixture = await Fixture.CreateAsync();
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(Guid.NewGuid());
         await using var db = fixture.NewDb();
+
         var service = fixture.Service(db);
         var result = await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], Guid.NewGuid());
+
         Assert.False(result.Accepted);
         Assert.Equal("tenant_not_approved", result.Analysis!.FailureCode);
         Assert.Contains("AI-approved account list", result.Analysis.Summary);
         Assert.False(await db.DeploymentAnalysisWorkItems.AnyAsync());
         Assert.False((await db.AiAnalysisRequests.SingleAsync()).ConsumesQuota);
+
         var saved = await service.GetLatestAsync(fixture.OwnerId, fixture.Deployments[0]);
+
         Assert.Equal("tenant_not_approved", saved!.FailureCode);
     }
 
@@ -74,26 +79,38 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.NewDb();
+
         var deploymentId = fixture.Deployments[0];
         var selection = new AssessmentSelection(IncludeMetrics: false);
+
         var admission = await fixture.Service(db)
             .RequestManualAsync(fixture.OwnerId, deploymentId, Guid.NewGuid(), selection);
+
         Assert.True(admission.Accepted);
+
         var now = DateTimeOffset.UtcNow;
         var snapshot = JsonSerializer.Serialize(new DeploymentConfigurationSnapshot("recorded", "Docker Compose",
             null, null, null, "Production", "net10.0", 8080, false, null, null, null, null));
-        await db.Deployments.Where(d => d.Id == deploymentId).ExecuteUpdateAsync(update => update
-            .SetProperty(d => d.Status, status).SetProperty(d => d.CreatedAt, now.AddHours(-2))
-            .SetProperty(d => d.UpdatedAt, now).SetProperty(d => d.ConfigurationSnapshotJson, snapshot));
+
+        await db.Deployments
+            .Where(d => d.Id == deploymentId)
+            .ExecuteUpdateAsync(update => update
+                .SetProperty(d => d.Status, status).SetProperty(d => d.CreatedAt, now.AddHours(-2))
+                .SetProperty(d => d.UpdatedAt, now).SetProperty(d => d.ConfigurationSnapshotJson, snapshot));
+
         var builder = new DeploymentAnalysisContextBuilder(db, null!, null!, new DiagnosticRedactor(),
             Options.Create(new AiAnalysisOptions()),
             Options.Create(new TelemetryStorageOptions()), TimeProvider.System);
+
         var context = await builder.BuildAsync(deploymentId, selection);
+
         Assert.Equal("", context.Text);
         Assert.Empty(context.EvidenceReferences);
         Assert.Equal(expected, context.Provenance!.EffectiveKind);
         Assert.Equal(status, context.Provenance.ObservedStatus);
+
         var requested = await db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
         Assert.Equal(selection.CanonicalJson(), requested.RequestedSelectionJson);
         Assert.False(await db.AiAnalysisBudgetEntries.AnyAsync(entry => entry.IsProviderAttempt));
         Assert.All(await db.AiAnalysisBudgetEntries.ToListAsync(), entry => Assert.Equal(0, entry.ReservedCostUnits));
@@ -109,26 +126,37 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.NewDb();
+
         var service = fixture.Service(db);
         var deployment = fixture.Deployments[0];
         var request = Guid.NewGuid();
         var chosen = new AssessmentSelection(AssessmentKind.RuntimeOverview, AssessmentSources.Web,
             false, AssessmentRange.LastHour);
+
         Assert.True(await service.SavePreferencesAsync(fixture.OwnerId, deployment, chosen));
         Assert.Equal(chosen.CanonicalJson(),
             (await service.GetPreferencesAsync(fixture.OwnerId, deployment))!.Selection.CanonicalJson());
+
         Assert.Null(await service.GetPreferencesAsync(Guid.NewGuid(), deployment));
         Assert.False(await service.SavePreferencesAsync(Guid.NewGuid(), deployment, new AssessmentSelection()));
+
         var accepted = await service.RequestManualAsync(fixture.OwnerId, deployment, request, chosen);
+
         Assert.True(accepted.Accepted);
+
         var changed = chosen with { Sources = AssessmentSources.Database, Kind = AssessmentKind.HistoricalReview };
+
         Assert.True(await service.SavePreferencesAsync(fixture.OwnerId, deployment, changed));
         Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, chosen)).Accepted);
         Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, changed)).Conflict);
+
         var saved = await db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
+
         Assert.Equal(chosen.CanonicalJson(), saved.RequestedSelectionJson);
         Assert.Single(await db.AiAnalysisBudgetEntries.ToArrayAsync());
+
         await db.AiAnalysisRequests.ExecuteDeleteAsync();
+
         Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, changed)).Conflict);
         Assert.True((await service.RequestManualAsync(fixture.OwnerId, deployment, request, chosen)).Accepted);
         Assert.Single(await db.AiDeploymentAnalyses.ToArrayAsync());
@@ -149,39 +177,53 @@ public sealed class AnalysisAdmissionTests
     public async Task Skipped_admission_is_idempotent_bounded_and_safe(string reason)
     {
         await using var fixture = await Fixture.CreateAsync();
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId,
             dailyLimit: reason == "quota" ? 0 : 5, egressEnabled: reason != "egress",
             provider: reason == "missing" ? null : reason == "unknown" ? "unknown" : "openai");
+
         var request = Guid.NewGuid();
         var responses = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => Task.Run(async () =>
         {
             await using var db = fixture.NewDb();
             return await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request);
         })));
+
         Assert.All(responses, item =>
         {
             Assert.False(item.Accepted);
             Assert.Equal(AiAnalysisStatus.Skipped, item.Analysis!.Status);
         });
+
         Assert.Single(responses.Select(item => item.Analysis!.Id).Distinct());
+
         await using var check = fixture.NewDb();
+
         Assert.Equal(0, await check.DeploymentAnalysisWorkItems.CountAsync());
         Assert.False((await check.AiAnalysisRequests.SingleAsync()).ConsumesQuota);
+
         await check.AiDeploymentAnalyses.ExecuteUpdateAsync(update => update
             .SetProperty(item => item.Summary, "private-provider-payload")
             .SetProperty(item => item.Model, "private-model-payload")
             .SetProperty(item => item.FailureCode, "private-error-payload"));
+
         var view = await fixture.Service(check).GetLatestAsync(fixture.OwnerId, fixture.Deployments[0]);
+
         Assert.DoesNotContain("private", view!.Summary!);
         Assert.Equal("unavailable", view.FailureCode);
         Assert.Empty(view.RecommendedSteps);
         Assert.Null(view.Model);
         Assert.Null(await fixture.Service(check).GetLatestAsync(Guid.NewGuid(), fixture.Deployments[0]));
+
         var deleted = await fixture.Service(check).DeleteAsync(fixture.OwnerId, fixture.Deployments[0], view.Id);
+
         Assert.Equal(DeploymentAnalysisDeletionResult.Deleted, deleted);
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId);
+
         Assert.Null((await fixture.Service(check).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request))
             .Analysis);
+
         Assert.Equal(0, await check.DeploymentAnalysisWorkItems.CountAsync());
     }
 
@@ -195,15 +237,20 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.NewDb();
+
         using var cancellation = new CancellationTokenSource();
         var notifier = new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance);
         var orchestrator = new LocalDeploymentOrchestrator(db, null!, null!, null!, null!,
             new DeploymentCapabilities(true, false), new CancelingDiagnostics(cancellation),
             NullLogger<LocalDeploymentOrchestrator>.Instance, notifier, new NoLocalDiagnostics());
+
         var project = await db.CsProjects.SingleAsync();
+
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => orchestrator.DeployLocalProjectAsync(
             new DeploymentConfigDto { ProjectId = project.AppId, CsProjectId = project.Id }, cancellation.Token));
+
         var failed = await db.Deployments.AsNoTracking().SingleAsync(item => item.Status == DeploymentStatus.Failed);
+
         Assert.NotEqual(fixture.Deployments[0], failed.Id);
         Assert.Equal(failed.Id, (await db.FailedDeploymentAnalysisEvents.SingleAsync()).DeploymentId);
         Assert.Equal(DeploymentStatus.Starting,
@@ -218,20 +265,25 @@ public sealed class AnalysisAdmissionTests
     public async Task Automatic_admission_coalesces_manual_work_and_shares_quota()
     {
         await using var fixture = await Fixture.CreateAsync(2, 1);
+
         fixture.Options.CurrentValue =
             AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true, dailyLimit: 1);
         await using var db = fixture.NewDb();
+
         var manual = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0]);
+
         await db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
         await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, fixture.Service(db), fixture.Clock,
             fixture.Deployments[0]);
         await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, fixture.Service(db), fixture.Clock,
             fixture.Deployments[1]);
+
         Assert.Equal(manual.Analysis!.Id,
             (await db.AiDeploymentAnalyses.SingleAsync(item => item.Status == AiAnalysisStatus.Queued)).Id);
         Assert.Equal("quota_exceeded",
             (await db.AiDeploymentAnalyses.SingleAsync(item => item.Status == AiAnalysisStatus.Skipped)).FailureCode);
+
         Assert.Equal(1, await db.DeploymentAnalysisWorkItems.CountAsync());
         Assert.Equal(1, await db.AiAnalysisRequests.CountAsync(item => item.ConsumesQuota));
         Assert.Equal(3, await db.AiAnalysisRequests.CountAsync());
@@ -247,32 +299,41 @@ public sealed class AnalysisAdmissionTests
     public async Task Automatic_dispatch_survives_restart_and_result_deletion()
     {
         await using var fixture = await Fixture.CreateAsync();
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+
         await using (var db = fixture.NewDb())
         {
             await db.Deployments.ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.Status, DeploymentStatus.Failed));
+
             Assert.Equal(1, await db.FailedDeploymentAnalysisEvents.CountAsync(item => item.CompletedAt == null));
         }
 
         await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => Task.Run(async () =>
         {
             await using var db = fixture.NewDb();
+
             await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, fixture.Service(db), fixture.Clock,
                 fixture.Deployments[0]);
         })));
+
         await using var check = fixture.NewDb();
+
         Assert.Equal(AiAnalysisTrigger.DeploymentFailed, (await check.AiDeploymentAnalyses.SingleAsync()).Trigger);
         Assert.Equal(1, await check.DeploymentAnalysisWorkItems.CountAsync());
         Assert.NotNull((await check.FailedDeploymentAnalysisEvents.SingleAsync()).CompletedAt);
+
         await check.AiDeploymentAnalyses.ExecuteDeleteAsync();
         await check.AiAnalysisRequests.ExecuteDeleteAsync();
         await check.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Running));
+
         await check.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
         await FailedDeploymentAnalysisDispatcher.DispatchAsync(check, fixture.Service(check), fixture.Clock,
             fixture.Deployments[0]);
+
         Assert.Equal(0, await check.AiDeploymentAnalyses.CountAsync());
         Assert.Equal(1, await check.FailedDeploymentAnalysisEvents.CountAsync());
     }
@@ -292,32 +353,44 @@ public sealed class AnalysisAdmissionTests
     public async Task Automatic_denials_do_not_create_work_or_backfill(string reason)
     {
         await using var fixture = await Fixture.CreateAsync(limit: reason == "quota" ? 0 : 5);
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId,
             dailyLimit: reason == "quota" ? 0 : 5, automatic: reason != "disabled", egressEnabled: reason != "egress");
+
         await using var db = fixture.NewDb();
+
         await db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
+
         if (reason == "consent")
             await db.AppConfigs.ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
         if (reason == "recovered")
             await db.Deployments.ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.Status, DeploymentStatus.Running));
+
         await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, fixture.Service(db), fixture.Clock,
             fixture.Deployments[0]);
+
         var skipped = reason is "quota" or "egress";
+
         Assert.Equal(skipped ? 1 : 0, await db.AiDeploymentAnalyses.CountAsync());
         Assert.Equal(skipped ? 1 : 0, await db.AiAnalysisRequests.CountAsync());
+
         if (skipped) Assert.Equal(AiAnalysisStatus.Skipped, (await db.AiDeploymentAnalyses.SingleAsync()).Status);
+
         Assert.Equal(0, await db.AiAnalysisRequests.CountAsync(item => item.ConsumesQuota));
         Assert.NotNull((await db.FailedDeploymentAnalysisEvents.SingleAsync()).CompletedAt);
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+
         await db.AppConfigs.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.AiDiagnosticEgressConsented, true));
         await db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
         await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, fixture.Service(db), fixture.Clock,
             fixture.Deployments[0]);
+
         Assert.Equal(0, await db.DeploymentAnalysisWorkItems.CountAsync());
     }
 
@@ -331,22 +404,30 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync(2);
         await using var db = fixture.NewDb();
+
         await using (var transaction = await db.Database.BeginTransactionAsync())
         {
-            await db.Deployments.Where(item => item.Id == fixture.Deployments[0])
+            await db.Deployments
+                .Where(item => item.Id == fixture.Deployments[0])
                 .ExecuteUpdateAsync(update => update.SetProperty(item => item.Status, DeploymentStatus.Failed));
+
             Assert.Equal(fixture.Deployments[0], (await db.FailedDeploymentAnalysisEvents.SingleAsync()).DeploymentId);
+
             await transaction.RollbackAsync();
         }
 
         Assert.Equal(0, await db.FailedDeploymentAnalysisEvents.CountAsync());
         Assert.All(await db.Deployments.ToListAsync(), item => Assert.Equal(DeploymentStatus.Starting, item.Status));
+
         await db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
         await db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
+
         Assert.Equal(2, await db.FailedDeploymentAnalysisEvents.CountAsync());
+
         await db.Deployments.ExecuteDeleteAsync();
+
         Assert.Equal(0, await db.FailedDeploymentAnalysisEvents.CountAsync());
     }
 
@@ -359,19 +440,26 @@ public sealed class AnalysisAdmissionTests
     public async Task Automatic_insert_failure_leaves_recoverable_wakeup()
     {
         await using var fixture = await Fixture.CreateAsync();
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
         var failure = new WorkInsertFailure();
+
         await using var db = fixture.NewDb(failure);
+
         await db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
         await Assert.ThrowsAsync<DbUpdateException>(() => FailedDeploymentAnalysisDispatcher.DispatchAsync(db,
             fixture.Service(db), fixture.Clock, fixture.Deployments[0]));
+
         Assert.Null((await db.FailedDeploymentAnalysisEvents.AsNoTracking().SingleAsync()).CompletedAt);
         Assert.Equal(DeploymentStatus.Failed, (await db.Deployments.SingleAsync()).Status);
         Assert.Equal(0, await db.AiAnalysisRequests.CountAsync());
+
         failure.Fail = false;
+
         await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, fixture.Service(db), fixture.Clock,
             fixture.Deployments[0]);
+
         Assert.Equal(1, await db.DeploymentAnalysisWorkItems.CountAsync());
     }
 
@@ -388,6 +476,7 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var request = Guid.NewGuid();
+
         var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(async () =>
         {
             await using var db = fixture.NewDb();
@@ -395,9 +484,12 @@ public sealed class AnalysisAdmissionTests
                 ? await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request)
                 : await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0]);
         })));
+
         Assert.All(responses, response => Assert.True(response.Accepted));
         Assert.Single(responses.Select(response => response.Analysis!.Id).Distinct());
+
         await using var check = fixture.NewDb();
+
         Assert.Equal(1, await check.AiDeploymentAnalyses.CountAsync());
         Assert.Equal(1, await check.DeploymentAnalysisWorkItems.CountAsync());
         Assert.Equal(1, await check.AiAnalysisRequests.CountAsync());
@@ -417,23 +509,30 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         var requests = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToArray();
+
         var responses = await Task.WhenAll(requests.Select(request => Task.Run(async () =>
         {
             await using var db = fixture.NewDb();
             return await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request);
         })));
+
         Assert.All(responses, response => Assert.True(response.Accepted));
         var analysis = Assert.Single(responses.Select(response => response.Analysis!.Id).Distinct());
+
         await using var check = fixture.NewDb();
+
         Assert.Equal(8, await check.AiAnalysisRequests.CountAsync());
         Assert.Equal(1, await check.AiAnalysisRequests.CountAsync(item => item.ConsumesQuota));
+
         await check.AiDeploymentAnalyses.ExecuteUpdateAsync(update => update.SetProperty(item => item.Status, terminal)
             .SetProperty(item => item.Summary, "A dependency could not start.")
             .SetProperty(item => item.CompletedAt, fixture.Clock.Now));
+
         foreach (var request in requests)
         {
             var replay = await fixture.Service(check)
                 .RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request);
+
             Assert.True(replay.Accepted);
             Assert.Equal(analysis, replay.Analysis!.Id);
             Assert.Equal(terminal, replay.Analysis.Status);
@@ -452,6 +551,7 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync(8, 2);
         DateTimeOffset updated;
+
         await using (var db = fixture.NewDb())
         {
             updated = (await db.CsProjects.SingleAsync()).UpdatedAt;
@@ -462,13 +562,18 @@ public sealed class AnalysisAdmissionTests
             await using var db = fixture.NewDb();
             return await fixture.Service(db).RequestManualAsync(fixture.OwnerId, deployment, Guid.NewGuid());
         })));
+
         Assert.Equal(2, responses.Count(response => response.Accepted));
         Assert.All(responses.Where(response => !response.Accepted),
             response => Assert.Equal("quota_exceeded", response.Analysis!.FailureCode));
+
         await using var check = fixture.NewDb();
+
         Assert.Equal(2, await check.AiAnalysisRequests.CountAsync(item => item.ConsumesQuota));
         Assert.Equal(2, await check.DeploymentAnalysisWorkItems.CountAsync());
+
         var project = await check.CsProjects.SingleAsync();
+
         Assert.Equal("web", project.Name);
         Assert.Equal(updated, project.UpdatedAt);
     }
@@ -484,18 +589,25 @@ public sealed class AnalysisAdmissionTests
         await using var fixture = await Fixture.CreateAsync(2, 1);
         var request = Guid.NewGuid();
         await using var db = fixture.NewDb();
+
         var service = fixture.Service(db);
         var admitted = await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request);
+
         Assert.True(admitted.Accepted);
         Assert.True((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0])).Accepted);
+
         await service.CancelAsync(fixture.OwnerId, fixture.Deployments[0], admitted.Analysis!.Id);
         await service.DeleteAsync(fixture.OwnerId, fixture.Deployments[0], admitted.Analysis.Id);
+
         Assert.Equal(1, await db.AiAnalysisRequests.CountAsync());
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request)).Accepted);
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[1], Guid.NewGuid()))
             .Accepted);
+
         Assert.Equal(AiAnalysisStatus.Skipped, (await db.AiDeploymentAnalyses.SingleAsync()).Status);
+
         fixture.Clock.Now = fixture.Clock.Now.AddDays(1);
+
         Assert.True(
             (await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[1], Guid.NewGuid())).Accepted);
         Assert.Equal(2, await db.AiAnalysisRequests.CountAsync(item => item.ConsumesQuota));
@@ -511,22 +623,32 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync(2);
         await using var db = fixture.NewDb();
+
         var service = fixture.Service(db);
         var request = Guid.NewGuid();
+
         Assert.False((await service.RequestManualAsync(Guid.NewGuid(), fixture.Deployments[0], request)).Accepted);
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, Guid.NewGuid(), request)).Accepted);
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], Guid.Empty)).Accepted);
+
         using var canceled = new CancellationTokenSource();
-        canceled.Cancel();
+
+        await canceled.CancelAsync();
+
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request, canceled.Token));
-        Assert.Equal(0, await db.AiAnalysisRequests.CountAsync());
+
+        Assert.Equal(0, await db.AiAnalysisRequests.CountAsync(CancellationToken.None));
+
         var first = await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request);
         var second = await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[1], request);
+
         Assert.True(first.Accepted);
         Assert.True(second.Accepted);
         Assert.NotEqual(first.Analysis!.Id, second.Analysis!.Id);
+
         fixture.Options.CurrentValue = new AiAnalysisOptions();
+
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request)).Accepted);
     }
 
@@ -541,15 +663,20 @@ public sealed class AnalysisAdmissionTests
         await using var fixture = await Fixture.CreateAsync();
         var failure = new WorkInsertFailure();
         await using var db = fixture.NewDb(failure);
+
         var service = fixture.Service(db);
         var request = Guid.NewGuid();
+
         await Assert.ThrowsAsync<DbUpdateException>(() =>
             service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request));
+
         Assert.Equal(0, await db.AiDeploymentAnalyses.CountAsync());
         Assert.Equal(0, await db.DeploymentAnalysisWorkItems.CountAsync());
         Assert.Equal(0, await db.AiAnalysisRequests.CountAsync());
         Assert.Empty(db.ChangeTracker.Entries<AiAnalysisRequest>());
+
         failure.Fail = false;
+
         Assert.True((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request)).Accepted);
         Assert.Equal(1, await db.AiAnalysisRequests.CountAsync());
     }
@@ -564,17 +691,23 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.NewDb();
+
         var request = Guid.NewGuid();
+
         await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request);
         fixture.Clock.Now = fixture.Clock.Now.AddDays(2);
         await db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.ExpiresAt, fixture.Clock.Now.AddSeconds(-1)));
-        Assert.Equal(0, await DeploymentAnalysisRetentionService.DeleteBatchAsync(db, fixture.Clock.Now, default));
+
+        Assert.Equal(0,
+            await DeploymentAnalysisRetentionService.DeleteBatchAsync(db, fixture.Clock.Now, CancellationToken.None));
         Assert.Equal(AiAnalysisStatus.Cancelled, await db.AiDeploymentAnalyses.Select(a => a.Status).SingleAsync());
         Assert.Equal(0,
-            await DeploymentAnalysisRetentionService.DeleteRequestBatchAsync(db, fixture.Clock.Now, default));
+            await DeploymentAnalysisRetentionService.DeleteRequestBatchAsync(db, fixture.Clock.Now,
+                CancellationToken.None));
         Assert.False((await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request))
             .Accepted);
+
         for (var i = 0; i < 1001; i++)
             db.AiAnalysisRequests.Add(new AiAnalysisRequest
             {
@@ -585,11 +718,15 @@ public sealed class AnalysisAdmissionTests
                 AdmissionDay = DateOnly.FromDateTime(fixture.Clock.Now.UtcDateTime),
                 ExpiresAt = fixture.Clock.Now.AddSeconds(-1)
             });
+
         await db.SaveChangesAsync();
+
         Assert.Equal(1000,
-            await DeploymentAnalysisRetentionService.DeleteRequestBatchAsync(db, fixture.Clock.Now, default));
+            await DeploymentAnalysisRetentionService.DeleteRequestBatchAsync(db, fixture.Clock.Now,
+                CancellationToken.None));
         Assert.Equal(1,
-            await DeploymentAnalysisRetentionService.DeleteRequestBatchAsync(db, fixture.Clock.Now, default));
+            await DeploymentAnalysisRetentionService.DeleteRequestBatchAsync(db, fixture.Clock.Now,
+                CancellationToken.None));
         Assert.Equal(1, await db.AiAnalysisRequests.CountAsync());
     }
 
@@ -606,6 +743,7 @@ public sealed class AnalysisAdmissionTests
         var request = Guid.NewGuid();
         var service = fixture.Service(db);
         var admitted = await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request);
+
         for (var i = 1; i < DeploymentAnalysisService.MaximumDailyRequestReceipts; i++)
             db.AiAnalysisRequests.Add(new AiAnalysisRequest
             {
@@ -616,7 +754,9 @@ public sealed class AnalysisAdmissionTests
                 AdmissionDay = DateOnly.FromDateTime(fixture.Clock.Now.UtcDateTime),
                 ExpiresAt = fixture.Clock.Now.AddDays(90)
             });
+
         await db.SaveChangesAsync();
+
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], Guid.NewGuid()))
             .Accepted);
         Assert.True((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], request)).Accepted);
@@ -635,11 +775,15 @@ public sealed class AnalysisAdmissionTests
         await using var fixture = await Fixture.CreateAsync(limit: 0);
         await using var db = fixture.NewDb();
         var service = fixture.Service(db);
+
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], Guid.NewGuid()))
             .Accepted);
+
         fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId);
+
         await db.Set<Configuration>()
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
+
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], Guid.NewGuid()))
             .Accepted);
         Assert.Equal(1, await db.AiAnalysisRequests.CountAsync());
@@ -657,14 +801,24 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.NewDb();
+
         var deployment = await db.Deployments.SingleAsync();
+
         deployment.ConfigurationSnapshotJson = "{\"ProjectName\":\"original\"}";
         deployment.Status = DeploymentStatus.Running;
+
         await db.SaveChangesAsync();
+
         Assert.Equal(DeploymentOutcome.Succeeded, deployment.Outcome);
+
         deployment.Status = DeploymentStatus.Stopped;
-        (await db.CsProjects.Include(p => p.Configuration).SingleAsync()).Configuration!.DotNetVersion = "changed";
+
+        (await db.CsProjects
+            .Include(p => p.Configuration)
+            .SingleAsync()).Configuration!.DotNetVersion = "changed";
+
         await db.SaveChangesAsync();
+
         Assert.Equal(DeploymentOutcome.Succeeded, deployment.Outcome);
         Assert.Contains("original", deployment.ConfigurationSnapshotJson);
         Assert.DoesNotContain("changed", deployment.ConfigurationSnapshotJson);
@@ -685,20 +839,30 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
         await using var db = fixture.NewDb();
+
         var deployment = await db.Deployments.SingleAsync();
+
         deployment.Status = status;
+
         await db.SaveChangesAsync();
         var request = Guid.NewGuid();
         var accepted = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, deployment.Id, request);
+
         Assert.True(accepted.Accepted);
+
         await db.AiDeploymentAnalyses.ExecuteUpdateAsync(u => u.SetProperty(a => a.Status, AiAnalysisStatus.Completed));
         fixture.Clock.Now = fixture.Clock.Now.AddDays(121);
         await db.AiAnalysisRequests.ExecuteDeleteAsync();
+
         Assert.Single(await fixture.Service(db).ListAsync(fixture.OwnerId, deployment.Id));
         Assert.Empty(await fixture.Service(db).ListAsync(Guid.NewGuid(), deployment.Id));
+
         var repeat = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, deployment.Id, request);
+
         Assert.Equal(accepted.Analysis!.Id, repeat.Analysis!.Id);
+
         var second = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, deployment.Id, Guid.NewGuid());
+
         Assert.True(second.Accepted);
         Assert.NotEqual(accepted.Analysis.Id, second.Analysis!.Id);
         Assert.Equal(2, await db.AiDeploymentAnalyses.CountAsync());
@@ -812,6 +976,7 @@ public sealed class AnalysisAdmissionTests
             if (Fail && command.CommandText.StartsWith("INSERT", StringComparison.Ordinal) &&
                 command.CommandText.Contains("DeploymentAnalysisWorkItems", StringComparison.Ordinal))
                 throw new InvalidOperationException("Synthetic work insert failure.");
+
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
@@ -846,6 +1011,7 @@ public sealed class AnalysisAdmissionTests
             File.Delete(path);
             File.Delete(path + "-wal");
             File.Delete(path + "-shm");
+
             return ValueTask.CompletedTask;
         }
 
@@ -858,7 +1024,9 @@ public sealed class AnalysisAdmissionTests
         {
             var options = new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(new SqliteConnectionStringBuilder
                 { DataSource = path, Pooling = false }.ToString());
+
             if (interceptor is not null) options.AddInterceptors(interceptor);
+
             return new AdmissionContext(options.Options);
         }
 
@@ -885,21 +1053,26 @@ public sealed class AnalysisAdmissionTests
             var fixture = new Fixture(Path.Combine(Path.GetTempPath(),
                 "automate-ai-admission-" + Guid.NewGuid().ToString("N") + ".sqlite"));
             await using var db = fixture.NewDb();
+
             await db.Database.EnsureCreatedAsync();
+
             // SQLite equivalent exercises application semantics. The opt-in PostgreSQL test executes production trigger SQL.
-            await db.Database.ExecuteSqlRawAsync("""
-                                                 CREATE TRIGGER capture_failure_update AFTER UPDATE OF Status ON Deployments
-                                                 WHEN NEW.Status = 3 AND OLD.Status <> NEW.Status
-                                                 BEGIN
-                                                     INSERT OR IGNORE INTO FailedDeploymentAnalysisEvents (DeploymentId, CreatedAt)
-                                                     VALUES (NEW.Id, 0);
-                                                 END;
-                                                 CREATE TRIGGER capture_failure_insert AFTER INSERT ON Deployments WHEN NEW.Status = 3
-                                                 BEGIN
-                                                     INSERT OR IGNORE INTO FailedDeploymentAnalysisEvents (DeploymentId, CreatedAt)
-                                                     VALUES (NEW.Id, 0);
-                                                 END;
-                                                 """);
+            await db.Database
+                .ExecuteSqlRawAsync("""
+                                    CREATE TRIGGER capture_failure_update AFTER UPDATE OF Status ON Deployments
+                                        WHEN NEW.Status = 3 AND OLD.Status <> NEW.Status
+                                        BEGIN
+                                            INSERT OR IGNORE INTO FailedDeploymentAnalysisEvents (DeploymentId, CreatedAt)
+                                            VALUES (NEW.Id, 0);
+                                        END;
+
+                                    CREATE TRIGGER capture_failure_insert AFTER INSERT ON Deployments WHEN NEW.Status = 3
+                                        BEGIN
+                                            INSERT OR IGNORE INTO FailedDeploymentAnalysisEvents (DeploymentId, CreatedAt)
+                                            VALUES (NEW.Id, 0);
+                                        END;
+                                    """);
+
             var owner = new LocalUser { Username = "test", Email = "test@example.invalid" };
             var project = new CsProject
             {
@@ -909,16 +1082,21 @@ public sealed class AnalysisAdmissionTests
                 Application = new Domain.Entities.Projects.Application
                     { Name = "sample", SourcePathOrUrl = "C:/sample", SourceType = SourceType.Local, User = owner }
             };
-            var deployments = Enumerable.Range(0, deploymentCount).Select(_ => new Deployment { CsProject = project })
+
+            var deployments = Enumerable.Range(0, deploymentCount)
+                .Select(_ => new Deployment { CsProject = project })
                 .ToArray();
+
             db.Deployments.AddRange(deployments);
             await db.SaveChangesAsync();
+
             fixture.OwnerId = owner.Id;
             fixture.ProjectId = project.Id;
-            fixture.Deployments = deployments.Select(item => item.Id).ToArray();
+            fixture.Deployments = [.. deployments.Select(item => item.Id)];
             fixture.Options =
                 new AnalysisEgressPolicyTests.Monitor(
                     AnalysisEgressPolicyTests.Approved(owner.Id, dailyLimit: limit, retentionDays: 1));
+
             return fixture;
         }
     }
@@ -955,7 +1133,9 @@ public sealed class AnalysisAdmissionTests
         protected override void OnModelCreating(ModelBuilder builder)
         {
             base.OnModelCreating(builder);
-            foreach (var property in builder.Model.GetEntityTypes().SelectMany(entity => entity.GetProperties())
+            foreach (var property in builder.Model
+                         .GetEntityTypes()
+                         .SelectMany(entity => entity.GetProperties())
                          .Where(property =>
                              property.ClrType == typeof(DateTimeOffset) || property.ClrType == typeof(DateTimeOffset?)))
                 property.SetValueConverter(new ValueConverter<DateTimeOffset, long>(value => value.UtcTicks,
