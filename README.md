@@ -350,6 +350,64 @@ local formatting and .NET analyzer policy without repository-wide reformatting. 
 External PostgreSQL checks use the owned disposable verification
 runners; they never use the application database.
 
+## Qodana code quality
+
+[Qodana Community for .NET](https://www.jetbrains.com/help/qodana/dotnet.html) scans all six projects in
+`AutoMate.slnx`, including tests, using the Release configuration and `qodana.recommended` profile in
+[`qodana.yaml`](qodana.yaml). Generated build outputs and vendored browser libraries are excluded. Community restores
+and builds the solution inside its container before analysis; a separate host build is unnecessary.
+
+### GitHub Actions
+
+The [Qodana workflow](.github/workflows/qodana_code_quality.yml) runs manually, on pushes to `main` and `feature`, and
+on internal pull requests targeting any branch. Fork pull requests are skipped because they cannot access the Cloud
+project token. Every scan analyzes the full solution; changed-file-only mode and automatic fixes are disabled.
+
+Set the repository secret `QODANA_TOKEN_245602675` to the existing Qodana Cloud project token. The workflow supplies it
+as `QODANA_TOKEN` and publishes to `https://qodana.cloud`. It checks that the secret is present without logging its value.
+Results appear in Qodana Cloud, GitHub check annotations, internal PR summary comments, the `qodana-report` workflow
+artifact, and GitHub's **Security > Code scanning** view under the `qodana` category. SARIF upload is attempted even
+after a scan failure when a report exists; it does not clear the original failure.
+
+Findings are initially report-only: no finding thresholds or baseline are configured, and no branch-protection settings
+are changed. Restore/build, scanner, authentication, and upload failures remain workflow failures. On the first CI run,
+verify Cloud publication, artifact availability, annotations and Code scanning ingestion; verify the summary comment
+on the first internal PR run. The existing Verify AutoMate workflow continues to own tests and build enforcement.
+
+### Rider and local scans
+
+1. Install or enable Rider's Qodana integration and start Docker Desktop with Linux containers. Use Qodana Community
+   for .NET version **2026.2** to match CI; allocate at least 6 GB of Docker memory for analysis.
+2. Open AutoMate in Rider and choose **Tools > Qodana > Try Code Analysis with Qodana** (or **Problems > Qodana >
+   Try Locally**, depending on the IDE version). Use the repository-root `qodana.yaml`, Community linter and Docker mode.
+3. Run the scan and inspect findings in the Qodana tool window. Community can run locally without a Cloud token.
+   To upload a local report, supply the project token through the IDE's credential UI or the `QODANA_TOKEN` environment
+   variable; never save it in YAML, scripts, documentation, or shared Rider settings.
+4. To inspect CI results, sign in to Qodana Cloud from Rider's Qodana tool window, link the existing AutoMate project,
+   and enable **Always load most relevant Qodana report**. This prefers a report matching the checked-out revision.
+   To inspect a downloaded `qodana-report` artifact, extract it and use **Open Local Report** in the Qodana tool window
+   to select its `qodana.sarif.json` report.
+
+Alternatively, with the Qodana CLI installed, run this from the repository root to match CI:
+
+```powershell
+qodana scan --image jetbrains/qodana-cdnet:2026.2 --results-dir .qodana/results
+qodana show --results-dir .qodana/results
+```
+
+`qodana.yaml` configures Qodana runs, not Rider's regular editor inspections. Continue to manage editor inspection
+severities and formatting through `.editorconfig` and the solution's team-shared `.DotSettings` layer; keep personal
+`.DotSettings.user` settings private. InspectCode also consumes applicable shared inspection settings, but IDE and CI
+results can differ because of their available inspections and plugins.
+
+Community provides ReSharper-based .NET analysis with narrower Blazor/Razor and frontend coverage than the Rider-based
+Ultimate linter. It does not provide JavaScript/TypeScript analysis, license audit, coverage reporting, or automatic
+fixes. If an Ultimate license becomes available, switch to `qodana-dotnet`, configure native mode with a .NET 10 SDK and
+a pre-analysis restore/build, and reassess those additional features before enabling them. See JetBrains'
+[IDE guide](https://www.jetbrains.com/help/qodana/qodana-ide-plugin.html),
+[configuration reference](https://www.jetbrains.com/help/qodana/configuration-reference.html), and
+[GitHub integration guide](https://www.jetbrains.com/help/qodana/github.html).
+
 ## Test organization
 
 [Test](Test/README.md) is the solution's single .NET test project, organized into Infra, App and Web modules with

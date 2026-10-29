@@ -1,50 +1,35 @@
-####################################################################################################################
-# WARNING: Do not store sensitive information in this file, as its contents will be included in the Qodana report. #
-####################################################################################################################
-
+# This file is included in reports. Keep Cloud tokens in CI secrets or the local environment.
 version: "1.0"
 linter: qodana-cdnet
+withinDocker: true
 
-#Specify IDE code to run analysis without container (Applied in CI/CD pipeline)
-ide: QDNET
+dotnet:
+  solution: AutoMate.slnx
+  configuration: Release
 
-#Specify inspection profile for code analysis
 profile:
-  name: qodana.starter
-
-#Enable inspections
-#include:
-#  - name: <SomeEnabledInspectionId>
-
-#Disable inspections
-#exclude:
-#  - name: <SomeDisabledInspectionId>
-#    paths:
-#      - <path/where/not/run/inspection>
-
-#Execute shell command before Qodana execution (Applied in CI/CD pipeline)
-#bootstrap: sh ./prepare-qodana.sh
-
-#Install IDE plugins before Qodana execution (Applied in CI/CD pipeline)
-#plugins:
-#  - id: <plugin.id> #(plugin id can be found at https://plugins.jetbrains.com)
-
-# Quality gate. Will fail the CI/CD pipeline if any condition is not met
-# severityThresholds - configures maximum thresholds for different problem severities
-# testCoverageThresholds - configures minimum code coverage on a whole project and newly added code
-# dependencyLicenses - fails the run on prohibited or unknown dependency licenses
-# Code Coverage is available in Ultimate and Ultimate Plus plans
-#failureConditions:
-#  severityThresholds:
-#    any: 15
-#    critical: 5
-#  testCoverageThresholds:
-#    fresh: 70
-#    total: 50
-#  dependencyLicenses:
-#    failOnProhibited: true
-#    failOnUnknown: false
-
   name: qodana.recommended
-include:
-  - name: CheckDependencyLicenses
+
+# Keep maintained sources, migrations, and tests in scope; omit generated and third-party files.
+exclude:
+  - name: All
+    paths:
+      - bin
+      - obj
+      - Domain/bin
+      - Domain/obj
+      - Application/bin
+      - Application/obj
+      - Infrastructure/bin
+      - Infrastructure/obj
+      - Web/bin
+      - Web/obj
+      - Telemetry/bin
+      - Telemetry/obj
+      - Test/bin
+      - Test/obj
+      - Test/Web/Browser/node_modules
+      - Web/wwwroot/lib
+
+# Community restores and builds the solution before analysis, including source generators.
+# Report-only: no failThreshold, baseline, or paid failureConditions are configured.

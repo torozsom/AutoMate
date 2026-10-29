@@ -1,28 +1,77 @@
 name: Qodana
+
 on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: # Specify your branches here
-      - main # The 'main' branch
-      - 'releases/*' # The release branches
+    branches:
+      - main
+      - feature
+
+concurrency:
+  group: qodana-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   qodana:
+    # Forks cannot access the Cloud project token; never run their code with base-repository secrets.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
       checks: write
+      pull-requests: write
+      security-events: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}  # to check out the actual pull request commit, not the merge commit
-          fetch-depth: 0  # a full history is required for pull request analysis
-      - name: 'Qodana Scan'
-        uses: JetBrains/qodana-action@v2026.1
-        with:
-          pr-mode: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check Qodana Cloud token
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_245602675 }}
-          QODANA_ENDPOINT: 'https://qodana.cloud'
+        run: |
+          if [ -z "$QODANA_TOKEN" ]; then
+            echo "::error::The QODANA_TOKEN_245602675 repository secret is required for Cloud publication."
+            exit 1
+          fi
+
+      - name: Qodana Scan
+        id: scan
+        uses: JetBrains/qodana-action@v2026.2
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_245602675 }}
+          QODANA_ENDPOINT: https://qodana.cloud
+        with:
+          args: --image jetbrains/qodana-cdnet:2026.2
+          results-dir: ${{ runner.temp }}/qodana/results
+          pr-mode: false
+          use-caches: true
+          post-pr-comment: ${{ github.event_name == 'pull_request' }}
+          use-annotations: true
+          upload-result: true
+          push-fixes: none
+
+      - name: Locate Qodana SARIF report
+        id: sarif
+        # Preserve reports from failed scans without masking the original failure.
+        if: ${{ !cancelled() }}
+        env:
+          QODANA_RESULTS_DIR: ${{ runner.temp }}/qodana/results
+        run: |
+          if [ -f "$QODANA_RESULTS_DIR/qodana.sarif.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish Qodana to GitHub Code scanning
+        if: ${{ !cancelled() && steps.sarif.outputs.exists == 'true' }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ runner.temp }}/qodana/results/qodana.sarif.json
+          category: qodana
