@@ -99,7 +99,7 @@ public sealed class DeploymentHistoryTests
         var js = new RecordingJs();
         var terminal = new Terminal();
 
-        SetProperty(terminal, "JSRuntime", js);
+        SetProperty(terminal, "JsRuntime", js);
         SetField(terminal, "_isReady", true);
         var page = new DeploymentHistory();
         var services = new ServiceCollection().AddSingleton(history).BuildServiceProvider();
@@ -186,7 +186,8 @@ public sealed class DeploymentHistoryTests
         ]));
         await first;
 
-        Assert.Equal(7, GetField<int>(page, "_loadedMetricDays"));
+        Assert.Equal(TimeSpan.FromDays(7),
+            GetField<DateTimeOffset>(page, "_metricEnd") - GetField<DateTimeOffset>(page, "_metricStart"));
         Assert.Equal("db", GetField<string>(page, "_metricContainer"));
         Assert.Equal(2, GetField<IReadOnlyList<DeploymentMetricPoint>>(page, "_metrics").Count);
         Assert.False(GetField<bool>(page, "_metricBusy"));

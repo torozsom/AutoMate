@@ -47,6 +47,7 @@ public sealed class SaaSTelemetryTests
     public async Task Runtime_tail_does_not_hide_saved_build_and_workflow_history()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var deploymentForCallbacks = fixture.Deployment;
         var path = Path.Combine(Path.GetTempPath(), "automate-channel-replay-" + Guid.NewGuid().ToString("N"));
         var diskOptions = Options.Create(new DiskSpoolOptions { Directory = path });
 
@@ -70,7 +71,7 @@ public sealed class SaaSTelemetryTests
                 new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), new EmptyLogs(), options,
                 new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
                 new DeploymentRuntimeViewers(TimeProvider.System), archive: archive);
-            var replay = await store.ReadRecentAsync(fixture.Project, fixture.Deployment, 6);
+            var replay = await store.ReadRecentAsync(fixture.Project, deploymentForCallbacks, 6);
 
             Assert.Contains(replay.Events, e => e.TerminalChannel == "build");
             Assert.Contains(replay.Events, e => e.TerminalChannel == "github-actions");
@@ -83,14 +84,14 @@ public sealed class SaaSTelemetryTests
 
             foreach (var channel in new[] { "build", "github-actions" })
             {
-                var page = await history.ReadLogsV2Async(fixture.User, fixture.Project, fixture.Deployment,
+                var page = await history.ReadLogsV2Async(fixture.User, fixture.Project, deploymentForCallbacks,
                     null, true, 2, channel: channel);
 
                 Assert.Equal(2, page.Events.Count);
                 Assert.All(page.Events, e => Assert.Equal(channel, e.TerminalChannel));
                 Assert.NotNull(page.EarlierCursor);
 
-                var earlier = await history.ReadLogsV2Async(fixture.User, fixture.Project, fixture.Deployment,
+                var earlier = await history.ReadLogsV2Async(fixture.User, fixture.Project, deploymentForCallbacks,
                     page.EarlierCursor, true, 2, channel: channel);
 
                 Assert.Single(earlier.Events);
@@ -98,7 +99,7 @@ public sealed class SaaSTelemetryTests
             }
 
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() => history.ReadLogsV2Async(Guid.NewGuid(),
-                fixture.Project, fixture.Deployment, null, true, 2, channel: "build"));
+                fixture.Project, deploymentForCallbacks, null, true, 2, channel: "build"));
         }
         finally
         {
@@ -250,10 +251,12 @@ public sealed class SaaSTelemetryTests
     public async Task Historical_ai_context_uses_archived_metrics_from_its_own_activity_window()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var end = DateTimeOffset.UtcNow.AddDays(-120);
+        var deploymentForCallbacks = fixture.Deployment;
+        // A valid timestamp deliberately contains "999"; isolation must inspect numeric signals, not raw JSON text.
+        var end = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(-120), TimeSpan.Zero).AddMilliseconds(999);
 
         await fixture.Db.Deployments
-            .Where(d => d.Id == fixture.Deployment)
+            .Where(d => d.Id == deploymentForCallbacks)
             .ExecuteUpdateAsync(update => update
                 .SetProperty(d => d.CreatedAt, end.AddHours(-2)).SetProperty(d => d.UpdatedAt, end)
                 .SetProperty(d => d.Status, DeploymentStatus.Stopped));
@@ -264,10 +267,12 @@ public sealed class SaaSTelemetryTests
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
                 new DiagnosticRedactor());
 
-            await archive.ImportMetricsAsync(new ArchiveMetricImport(fixture.User, fixture.Project, fixture.Deployment,
-                [
-                    new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", end.AddMinutes(-5), 2, 1, 3)
-                ]),
+            await archive.ImportMetricsAsync(new ArchiveMetricImport(fixture.User, fixture.Project,
+                    deploymentForCallbacks,
+                    [
+                        new DeploymentMetricPoint("web", "automate_cpu_usage_cores", "cores", end.AddMinutes(-5), 2, 1,
+                            3)
+                    ]),
                 CancellationToken.None);
             await archive.ImportMetricsAsync(new ArchiveMetricImport(fixture.User, fixture.Project, Guid.NewGuid(),
             [
@@ -277,11 +282,16 @@ public sealed class SaaSTelemetryTests
                 new DeploymentDiagnosticStore(fixture.Db, new DiagnosticRedactor()), new EmptyMetrics(),
                 new DiagnosticRedactor(),
                 Options.Create(new AiAnalysisOptions()), Options.Create(new TelemetryStorageOptions()),
-                TimeProvider.System, archive).BuildAsync(fixture.Deployment);
+                TimeProvider.System, archive).BuildAsync(deploymentForCallbacks);
 
             Assert.NotEmpty(context.Text);
             Assert.Contains(context.EvidenceReferences, value => value.StartsWith("metric:automate_cpu_usage_cores:"));
-            Assert.DoesNotContain("999", context.Text);
+            using var document = JsonDocument.Parse(context.Text);
+            var signal = Assert.Single(document.RootElement.GetProperty("metricSignals").EnumerateArray());
+            Assert.Equal("automate_cpu_usage_cores", signal.GetProperty("name").GetString());
+            Assert.Equal(2, signal.GetProperty("average").GetDouble());
+            Assert.Equal(1, signal.GetProperty("minimum").GetDouble());
+            Assert.Equal(3, signal.GetProperty("maximum").GetDouble());
         }
         finally
         {
@@ -317,7 +327,7 @@ public sealed class SaaSTelemetryTests
             Assert.Single(await fixture.Db.DeploymentArchiveCleanups.ToArrayAsync());
 
             var gateway = DispatchProxy.Create<IDeploymentArchive, CleanupArchiveProxy>();
-            var proxy = (CleanupArchiveProxy)gateway;
+            var proxy = Assert.IsAssignableFrom<CleanupArchiveProxy>(gateway);
 
             proxy.Archive = archive;
             using var worker = new DeploymentArchiveCleanupWorker(
@@ -352,12 +362,13 @@ public sealed class SaaSTelemetryTests
     public async Task Backfill_resumes_without_rewriting_or_duplicating_legacy_records()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var deploymentForCallbacks = fixture.Deployment;
 
         fixture.Db.DeploymentDiagnosticRecords.AddRange(Enumerable.Range(1, 1001).Select(i =>
             new DeploymentDiagnosticRecord
             {
                 ProjectId = fixture.Project,
-                DeploymentId = fixture.Deployment,
+                DeploymentId = deploymentForCallbacks,
                 OrderId = i,
                 TimestampUtc = DateTimeOffset.UtcNow.AddMinutes(-1),
                 ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
@@ -379,11 +390,10 @@ public sealed class SaaSTelemetryTests
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
                 new DiagnosticRedactor());
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-            /// <summary>
-            ///     Creates the configured worker instance over fixture-owned dependencies.
-            /// </summary>
-            /// <returns>The configured deployment archive backfill worker instance or response for this scenario.</returns>
+            // <summary>
+            //     Creates the configured worker instance over fixture-owned dependencies.
+            // </summary>
+            // <returns>The configured deployment archive backfill worker instance or response for this scenario.</returns>
             DeploymentArchiveBackfillWorker Worker()
             {
                 return new DeploymentArchiveBackfillWorker(services.GetRequiredService<IServiceScopeFactory>(), archive,
@@ -391,7 +401,6 @@ public sealed class SaaSTelemetryTests
                     Options.Create(new TelemetryStorageOptions()),
                     new BackfillTestLogger());
             }
-#pragma warning restore CS1587
 
             using (var first = Worker())
             {
@@ -399,7 +408,7 @@ public sealed class SaaSTelemetryTests
             }
 
             Assert.Equal(500,
-                (await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 2001, null,
+                (await archive.ReadAsync(fixture.User, fixture.Project, deploymentForCallbacks, 0, true, 2001, null,
                     CancellationToken.None)).Count);
 
             using (var restarted = Worker())
@@ -410,7 +419,8 @@ public sealed class SaaSTelemetryTests
                 await restarted.ImportBatchAsync(CancellationToken.None);
             }
 
-            var rows = await archive.ReadAsync(fixture.User, fixture.Project, fixture.Deployment, 0, true, 2001, null,
+            var rows = await archive.ReadAsync(fixture.User, fixture.Project, deploymentForCallbacks, 0, true, 2001,
+                null,
                 CancellationToken.None);
 
             Assert.Equal(1001, rows.Count);
@@ -494,6 +504,7 @@ public sealed class SaaSTelemetryTests
     public async Task Cross_owner_history_and_analytics_are_denied_before_provider_queries()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var deploymentForCallbacks = fixture.Deployment;
         var options = Options.Create(new TelemetryStorageOptions());
         var logs = new EmptyLogs();
         var store = new DeploymentTelemetryStore(fixture.Db,
@@ -504,7 +515,7 @@ public sealed class SaaSTelemetryTests
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => history.ReadLogsV2Async(Guid.NewGuid(),
             fixture.Project,
-            fixture.Deployment, null, true, 500));
+            deploymentForCallbacks, null, true, 500));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             new ProjectTelemetryAnalyticsService(fixture.Db, new DiagnosticRedactor())
                 .ReadAsync(Guid.NewGuid(), fixture.Project, DateTimeOffset.UtcNow.AddDays(-7), DateTimeOffset.UtcNow));
@@ -761,7 +772,7 @@ public sealed class SaaSTelemetryTests
         /// </returns>
         /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
         /// <exception cref="IOException">The returned task faults when the fixture failure is selected.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? arguments)
+        protected override object Invoke(MethodInfo? method, object?[]? arguments)
         {
             if (method?.Name != nameof(IDeploymentArchive.DeleteProjectAsync)) throw new NotSupportedException();
 

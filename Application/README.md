@@ -45,8 +45,8 @@ Preserve concise multiline XML summaries on handwritten types, constructors and 
 nested types. Document parameters/type parameters, results and actual exceptional conditions;
 fields/properties/events/enum members may use single-line summaries. Keep ownership, null results, bounds and
 compatibility defaults explicit. Do not replace method documentation with standalone inheritdoc tags or invent framework
-failures. Local-function summaries remain XML-formatted source context; C# does not emit them, and any CS1587
-suppression stays local.
+failures. Local-function summaries use ordinary source comments with XML-formatted text because C# does not emit XML
+documentation for local declarations.
 
 ## Related documentation
 

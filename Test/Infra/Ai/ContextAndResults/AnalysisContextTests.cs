@@ -67,6 +67,13 @@ public sealed class AnalysisContextTests
         Assert.Equal(2, records[0].GetProperty("occurrences").GetInt32());
         Assert.Equal(42, records[0].GetProperty("sequence").GetInt64());
         Assert.Equal($"event:{id:N}", records[0].GetProperty("reference").GetString());
+        Assert.Equal(2, records[0].GetProperty("order").GetInt64());
+        Assert.Equal(rows[1].TimestampUtc, records[0].GetProperty("timestamp").GetDateTimeOffset());
+        Assert.Equal(rows[0].TimestampUtc, records[0].GetProperty("firstTimestamp").GetDateTimeOffset());
+        Assert.Equal(rows[1].TimestampUtc, records[0].GetProperty("lastTimestamp").GetDateTimeOffset());
+        Assert.Equal("Information", records[0].GetProperty("severity").GetString());
+        Assert.StartsWith("channel-", records[0].GetProperty("channel").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(records[0].GetProperty("message").GetString()));
         Assert.DoesNotContain("order:1", context.EvidenceReferences);
     }
 
@@ -133,6 +140,18 @@ public sealed class AnalysisContextTests
 
         Assert.Equal(1, signal.GetProperty("minimum").GetDouble());
         Assert.Equal(3, signal.GetProperty("maximum").GetDouble());
+        Assert.Equal("automate_cpu_usage_cores", signal.GetProperty("name").GetString());
+        Assert.Equal("cores", signal.GetProperty("unit").GetString());
+        Assert.Equal(2, signal.GetProperty("average").GetDouble());
+        Assert.Equal(1, signal.GetProperty("returnedPoints").GetInt32());
+        Assert.Equal(row.TimestampUtc, signal.GetProperty("firstTimestamp").GetDateTimeOffset());
+        Assert.Equal(row.TimestampUtc, signal.GetProperty("lastTimestamp").GetDateTimeOffset());
+        Assert.StartsWith("container-", signal.GetProperty("container").GetString());
+        Assert.Equal(JsonValueKind.Null, signal.GetProperty("changeAcrossReturnedIntervals").ValueKind);
+        Assert.Contains(signal.GetProperty("reference").GetString(), context.EvidenceReferences);
+        var traceSignal = document.RootElement.GetProperty("traceSignals").EnumerateArray().Single();
+        Assert.Equal($"trace:{trace}", traceSignal.GetProperty("reference").GetString());
+        Assert.Equal(1, traceSignal.GetProperty("selectedEvents").GetInt32());
         Assert.True(document.RootElement.GetProperty("coverage").GetProperty("historyUnavailable").GetBoolean());
     }
 

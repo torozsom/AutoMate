@@ -97,7 +97,7 @@ public sealed class DeploymentCleanupHostedServiceTests
         ///     requires no value.
         /// </returns>
         /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        protected override object Invoke(MethodInfo? method, object?[]? args)
         {
             return method?.Name == nameof(IDockerService.GetRunningProjectNamesAsync)
                 ? Task.FromResult(new List<string>())

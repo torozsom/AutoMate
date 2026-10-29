@@ -10,7 +10,6 @@ using Domain.Enums.Deployments;
 using Domain.Enums.Projects;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.JSInterop;
 using Web.Components.Pages.Identity;
 using Web.Components.Pages.Projects;
 using Web.Components.Shared.Projects;
@@ -148,10 +147,6 @@ public partial class Dashboard : ComponentBase, IDisposable
     [Inject]
     private IDeploymentStatusNotifier DeploymentStatusNotifier { get; set; } = null!;
 
-    /// <summary>Browser interop for owned UI interactions.</summary>
-    [Inject]
-    private IJSRuntime JSRuntime { get; set; } = null!;
-
     /// <summary>Connection feedback supplied through the dashboard query parameter.</summary>
     [Parameter]
     [SupplyParameterFromQuery(Name = "azure_error")]
@@ -197,8 +192,8 @@ public partial class Dashboard : ComponentBase, IDisposable
         _lifetime.Cancel();
         _lifetime.Dispose();
 
-        if (AuthStateProvider is not null)
-            AuthStateProvider.AuthenticationStateChanged -= OnAuthenticationChanged;
+        if (AuthStateProvider is { } authentication)
+            authentication.AuthenticationStateChanged -= OnAuthenticationChanged;
 
         DeploymentStatusNotifier.OnStatusChanged -= OnDeploymentStatusChanged;
         DeploymentJobQueue.StateChanged -= OnQueueStateChanged;
@@ -676,32 +671,6 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Determines whether a project card's deploy action should be disabled.
-    /// </summary>
-    /// <param name="app">Saved project metadata used for this deployment.</param>
-    /// <returns>True during admission, for disabled local deployments, or when a remote project lacks an Azure connection.</returns>
-    private bool IsDeployDisabled(Domain.Entities.Projects.Application app)
-    {
-        return IsDeploying(app.Id) ||
-               (app.SourceType == SourceType.Local && !DeploymentCapabilities.LocalDeploymentsEnabled) ||
-               (app.SourceType == SourceType.Remote && !_isAzureConnected);
-    }
-
-
-    /// <summary>
-    ///     Gets a short tooltip explaining why a remote deploy action is disabled.
-    /// </summary>
-    /// <param name="app">Saved project metadata used for this deployment.</param>
-    /// <returns>Fixed Azure-connection guidance for a disconnected remote project; otherwise the deployment label.</returns>
-    private string GetDeployButtonTitle(Domain.Entities.Projects.Application app)
-    {
-        return app.SourceType == SourceType.Remote && !_isAzureConnected
-            ? "Connect to Azure to deploy GitHub projects."
-            : "Deploy project";
-    }
-
-
-    /// <summary>
     ///     Creates a cloud deployment configuration for a saved remote repository.
     /// </summary>
     /// <param name="app">Saved project metadata used for this deployment.</param>
@@ -733,19 +702,6 @@ public partial class Dashboard : ComponentBase, IDisposable
 
 
     /// <summary>
-    ///     Gets the latest deployment status of an app.
-    /// </summary>
-    /// <param name="app">Saved project metadata used for this deployment.</param>
-    /// <returns>The newest recorded deployment status, or null when no deployment exists.</returns>
-    private static DeploymentStatus? GetLatestStatus(Domain.Entities.Projects.Application app)
-    {
-        return app.CsProjects
-            .SelectMany(c => c.Deployments)
-            .MaxBy(d => d.CreatedAt)?.Status;
-    }
-
-
-    /// <summary>
     ///     Sets the deploying state for a specific app.
     /// </summary>
     /// <param name="appId">The ID of the app.</param>
@@ -769,16 +725,6 @@ public partial class Dashboard : ComponentBase, IDisposable
     {
         _globalErrorMessage = null;
         _globalSuccessMessage = null;
-    }
-
-
-    /// <summary>
-    ///     Navigates the user to the project details page for a specific project.
-    /// </summary>
-    /// <param name="appId">The ID of the project to navigate to.</param>
-    private void NavigateToProject(Guid appId)
-    {
-        NavigationManager.NavigateTo($"/project/{appId}");
     }
 
     /// <summary>

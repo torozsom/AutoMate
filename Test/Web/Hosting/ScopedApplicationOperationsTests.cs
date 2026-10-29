@@ -19,11 +19,10 @@ public sealed class ScopedApplicationOperationsTests
         var operations = new ScopedApplicationOperations(provider.GetRequiredService<IServiceScopeFactory>());
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var probes = new List<Probe>();
-#pragma warning disable CS1587 // C# cannot emit local-function XML documentation.
-        /// <summary>
-        ///     Starts a scope that stays active until the fixture releases both overlapping operations.
-        /// </summary>
-        /// <returns>The operation-owned probe after asynchronous scope disposal.</returns>
+        // <summary>
+        //     Starts a scope that stays active until the fixture releases both overlapping operations.
+        // </summary>
+        // <returns>The operation-owned probe after asynchronous scope disposal.</returns>
         Task<Probe> Start()
         {
             return operations.RunAsync<Probe, Probe>(async probe =>
@@ -36,7 +35,6 @@ public sealed class ScopedApplicationOperationsTests
                 return probe;
             });
         }
-#pragma warning restore CS1587
         var first = Start();
         var second = Start();
 

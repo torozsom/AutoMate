@@ -19,6 +19,9 @@ restart/identity, cursor binding and synthetic load. DeploymentDiagnosticReplayT
 new-write rejection. SaaSTelemetryTests covers gateway history, archive fallback/context, cleanup/backfill and analytics
 through controlled providers.
 
+The historical assessment-context test inspects parsed numeric metric signals for deployment isolation. Its timestamp
+deliberately contains `999`, so valid date fractions cannot be confused with the foreign deployment's numeric sample.
+
 ## Fixtures and boundaries
 
 Use owned temporary directories and isolated metadata, not live Loki/Mimir or cloud providers. Do not conflate temporary

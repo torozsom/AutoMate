@@ -94,7 +94,7 @@ public partial class ConsoleDialog
     {
         try
         {
-            _module = await JS.InvokeAsync<IJSObjectReference>("import", _lifetime.Token, "./js/console-ui.js");
+            _module = await Js.InvokeAsync<IJSObjectReference>("import", _lifetime.Token, "./js/console-ui.js");
             if (_lifetime.IsCancellationRequested) return;
             _reference = DotNetObjectReference.Create(this);
             _registration =

@@ -67,7 +67,7 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                 Count: group.Count(),
                 First: group.Min(row => row.TimestampUtc),
                 Last: group.Max(row => row.TimestampUtc)))
-            .OrderByDescending(group => kind == AssessmentKind.FailureDiagnosis ? Severity(group.Row) : 0)
+            .OrderByDescending(group => kind == AssessmentKind.FailureDiagnosis ? GetSeverityRank(group.Row) : 0)
             .ThenByDescending(group => kind == AssessmentKind.FailureDiagnosis && Relevant(group.Row.Message))
             .ThenByDescending(group => group.Row.TimestampUtc)
             .ThenByDescending(group => group.Row.OrderId).ToArray();
@@ -116,7 +116,7 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
             var message = redactor.RedactText(row.Message, 1024);
 
             var line = new Line(
-                Reference(row), row.OrderId, row.TimestampUtc, row.Sequence, row.Severity
+                GetEvidenceReference(row), row.OrderId, row.TimestampUtc, row.Sequence, row.Severity
                     is { } severity && Enum.IsDefined(severity)
                     ? Enum.GetName(severity)!
                     : "Unknown",
@@ -163,7 +163,7 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
 
         // Filter and group the rows by trace ID, taking the first 20 groups.
         foreach (var group in rows
-                     .Where(row => selectedIds.Contains(Reference(row)) && ValidTrace(row.TraceId))
+                     .Where(row => selectedIds.Contains(GetEvidenceReference(row)) && ValidTrace(row.TraceId))
                      .GroupBy(row => row.TraceId).Take(20))
         {
             traces.Add(new TraceSignal($"trace:{group.Key}", group.Count()));
@@ -204,9 +204,35 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
                     metricCandidatesTruncated = metrics.Count > 20000,
                     traceGroupsOmitted = availableTraces - traces.Count
                 },
-                records = selected.OrderBy(line => line.Timestamp).ThenBy(line => line.Order).ToArray(),
-                metricSignals = signals,
-                traceSignals = traces
+                // Project every evidence field explicitly so the serialized contract stays visible to analysis.
+                records = selected.OrderBy(line => line.Timestamp).ThenBy(line => line.Order).Select(line => new
+                {
+                    line.Reference,
+                    line.Order,
+                    line.Timestamp,
+                    line.Sequence,
+                    line.Severity,
+                    line.Message,
+                    line.Occurrences,
+                    line.FirstTimestamp,
+                    line.LastTimestamp,
+                    line.Channel
+                }).ToArray(),
+                metricSignals = signals.Select(signal => new
+                {
+                    signal.Reference,
+                    signal.Name,
+                    signal.Unit,
+                    signal.FirstTimestamp,
+                    signal.LastTimestamp,
+                    signal.ReturnedPoints,
+                    signal.Minimum,
+                    signal.Maximum,
+                    signal.Container,
+                    signal.Average,
+                    signal.ChangeAcrossReturnedIntervals
+                }).ToArray(),
+                traceSignals = traces.Select(trace => new { trace.Reference, trace.SelectedEvents }).ToArray()
             }, ContextJson);
         }
     }
@@ -217,7 +243,7 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     /// </summary>
     /// <param name="row">The terminal observation being normalized or ranked.</param>
     /// <returns>The event identity or durable ordering reference used to ground the observation.</returns>
-    private static string Reference(DeploymentTerminalLog row)
+    private static string GetEvidenceReference(DeploymentTerminalLog row)
     {
         return row.EventId is { } id && id != Guid.Empty
             ? $"event:{id:N}"
@@ -229,7 +255,7 @@ public sealed class AnalysisContextSelector(IDiagnosticRedactor redactor)
     /// </summary>
     /// <param name="row">The terminal observation being normalized or ranked.</param>
     /// <returns>The finite severity rank used to prioritize evidence.</returns>
-    private static int Severity(DeploymentTerminalLog row)
+    private static int GetSeverityRank(DeploymentTerminalLog row)
     {
         return row.Severity is { } severity && Enum.IsDefined(severity)
             ? (int)severity

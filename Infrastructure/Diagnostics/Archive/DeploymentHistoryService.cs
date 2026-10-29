@@ -100,7 +100,7 @@ public sealed class DeploymentHistoryService(
     public async Task SetManagedConsentAsync(Guid userId, Guid projectId, bool enabled,
         CancellationToken cancellationToken = default)
     {
-        if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
+        if (options.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed provider onboarding is not configured.");
         var changed = await db.Applications
             .Where(p => p.Id == projectId && p.UserId == userId)
@@ -252,12 +252,10 @@ public sealed class DeploymentHistoryService(
                         ? JsonSerializer
                             .Deserialize<DeploymentDiagnosticEvent>(r.DeliveryJson, TelemetryHttpTransport.Json)
                             ?.TerminalChannel.Target ?? "unknown"
-                        : r.Cursor is not null
-                            ? r.Cursor
-                            : r.SourceIdentityJson is not null
-                                ? JsonSerializer.Deserialize<DeploymentDiagnosticSourceIdentity>(r.SourceIdentityJson)
-                                    ?.InstanceId ?? "unknown"
-                                : "unknown"
+                        : r.Cursor ?? (r.SourceIdentityJson is not null
+                            ? JsonSerializer.Deserialize<DeploymentDiagnosticSourceIdentity>(r.SourceIdentityJson)
+                                ?.InstanceId ?? "unknown"
+                            : "unknown")
                 }))
             .GroupBy(p => new { p.Container, p.Sample.Name, p.Sample.Unit, p.Time })
             .Select(g =>

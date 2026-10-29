@@ -188,8 +188,11 @@ public class AutoMateDbContext(
     {
         foreach (var entry in ChangeTracker.Entries<Deployment>()
                      .Where(e => e.State is EntityState.Added or EntityState.Modified))
-            if (entry.Entity.Outcome == DeploymentOutcome.Unknown &&
-                entry.Entity.Status is DeploymentStatus.Running or DeploymentStatus.Failed)
+            if (entry.Entity is
+                {
+                    Outcome: DeploymentOutcome.Unknown,
+                    Status: DeploymentStatus.Running or DeploymentStatus.Failed
+                })
             {
                 entry.Entity.Outcome = entry.Entity.Status == DeploymentStatus.Running
                     ? DeploymentOutcome.Succeeded

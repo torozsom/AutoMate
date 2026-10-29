@@ -18,6 +18,15 @@ numeric/trace signals. AssessmentSelectionTests covers automatic focus/frozen wi
 filtering/v2 sections. AnalysisResultTests checks safe independent redacted copies and malformed metadata.
 AnalysisPersistenceTests runs real worker/service metadata flows and readback.
 
+Lease-coordinator tests share a FakeTimeProvider across the worker and fixture services. They enter the provider,
+commit owner cancellation or prepare renewal, then explicitly advance the heartbeat. This verifies renewal/cancellation
+ordering without relying on a five-second CI scheduling window; owned processing is stopped before fixture disposal.
+The cancellation barrier is signaled when the provider's awaited operation observes cancellation, avoiding a race
+between cancellation callbacks and registration disposal.
+Verification waits and database checks share a bounded test deadline independent of simulated worker shutdown, so
+assertions still execute after host cancellation. Temporary context-building callbacks are detached before fixture
+disposal and capture the specific service and scalar identities they need.
+
 ## Fixtures and boundaries
 
 Use synthetic diagnostic/provider data and owned SQLite state, not live LLM calls. Persistence cases include no-provider

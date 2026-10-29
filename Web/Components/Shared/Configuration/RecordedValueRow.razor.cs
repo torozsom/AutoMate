@@ -34,7 +34,7 @@ public partial class RecordedValueRow
     {
         try
         {
-            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/console-ui.js");
+            await using var module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/console-ui.js");
             await module.InvokeVoidAsync("copy", Value);
             _copied = true;
             _failed = false;

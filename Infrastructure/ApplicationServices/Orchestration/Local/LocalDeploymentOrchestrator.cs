@@ -376,7 +376,6 @@ public sealed class LocalDeploymentOrchestrator(
             throw new InvalidOperationException("Docker Compose process returned an error or timed out. " +
                                                 "Check server console for details.");
 
-        var systemUrl = $"http://localhost:{config.ExposedPort}";
         deployment.ResolvedHostPort = config.ExposedPort;
         logger.LogInformation("Deployment finished successfully.");
 

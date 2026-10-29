@@ -185,9 +185,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <summary>Safe workflow admission or progress guidance.</summary>
     private string? _workflowStatusMessage;
 
-    /// <summary>GitHub Actions workflow URL for the remote project.</summary>
-    private string? _workflowUrl;
-
     /// <summary>Route identity of the owner-scoped project.</summary>
     [Parameter]
     public Guid ProjectId { get; set; }
@@ -452,7 +449,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _isDeploying = true;
         _webHostPort = 0;
         _workflowStatusMessage = null;
-        _workflowUrl = null;
         StateHasChanged();
 
         if (finalConfig.IsCloudDeployment)
@@ -525,13 +521,12 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             }
 
             _workflowStatusMessage = "GitHub Actions workflow has been queued.";
-            _workflowUrl = $"https://github.com/{repository.Owner}/{repository.Name}/actions/workflows/deploy.yml";
             StateHasChanged();
         }
         catch (Exception ex)
         {
             Logger.LogError("Failed to queue cloud deployment for project {ProjectId} Failure {FailureType}.",
-                finalConfig.ProjectId, ex?.GetType().Name);
+                finalConfig.ProjectId, ex.GetType().Name);
             _workflowStatusMessage = "Cloud deployment failed to queue. Verify provider access and try again shortly.";
             _isDeploying = false;
             StateHasChanged();
@@ -680,8 +675,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;
             _databaseTabs =
             [
-                .. config.Databases.Select(db => new DatabaseTab(db.DbType,
-                    db.ContainerNameSuffix, db.DbType))
+                .. config.Databases.Select(db => new DatabaseTab(db.ContainerNameSuffix, db.DbType))
             ];
         }
 
@@ -1278,7 +1272,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                     {
                         Logger.LogWarning(
                             "Log hub connection could not rejoin the project group for project {ProjectId}. Failure {FailureType}.",
-                            ProjectId, exception?.GetType().Name);
+                            ProjectId, exception.GetType().Name);
                         await InvokeAsync(async () =>
                         {
                             _terminalReplayPending = false;
@@ -1345,7 +1339,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 catch (Exception ex)
                 {
                     Logger.LogError("Failed to start SignalR connection for project {ProjectId} Failure {FailureType}.",
-                        ProjectId, ex?.GetType().Name);
+                        ProjectId, ex.GetType().Name);
                     _terminalReplayPending = false;
                     await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
                 }
@@ -1736,34 +1730,11 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         return _webHostPort > 0 ? $"localhost:{_webHostPort}" : "Assigned during deploy";
     }
 
-    /// <summary>
-    ///     Chooses recorded URL, image or container metadata, with fixed guidance when no artifact
-    ///     exists.
-    /// </summary>
-    /// <param name="deployment">Deployment identity or metadata to inspect, if available.</param>
-    /// <returns>Recorded artifact metadata, or fixed pending/failure guidance.</returns>
-    private static string GetDeploymentMeta(Deployment deployment)
-    {
-        if (!string.IsNullOrWhiteSpace(deployment.CloudAppUrl))
-            return deployment.CloudAppUrl;
-
-        if (!string.IsNullOrWhiteSpace(deployment.ImageTag))
-            return deployment.ImageTag;
-
-        if (!string.IsNullOrWhiteSpace(deployment.DockerContainerId))
-            return deployment.DockerContainerId;
-
-        return deployment.Status == DeploymentStatus.Failed
-            ? "Failed before an artifact was recorded; see deployment logs"
-            : "Deployment artifact not yet recorded";
-    }
-
 
     /// <summary>
-    ///     Identifies one database terminal by provider, stable tab key and display label.
+    ///     Identifies one database terminal by stable tab key and display label.
     /// </summary>
-    /// <param name="Provider">Recorded database provider.</param>
     /// <param name="TabId">Stable terminal tab identity.</param>
     /// <param name="DisplayName">Human-readable database tab label.</param>
-    private record DatabaseTab(string Provider, string TabId, string DisplayName);
+    private record DatabaseTab(string TabId, string DisplayName);
 }

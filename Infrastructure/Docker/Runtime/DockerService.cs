@@ -96,7 +96,7 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
             return;
 
         _client.Dispose();
-        GC.SuppressFinalize(this);
+
         _disposed = true;
     }
 

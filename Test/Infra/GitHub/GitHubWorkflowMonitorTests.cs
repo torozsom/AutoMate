@@ -36,11 +36,10 @@ public sealed class GitHubWorkflowMonitorTests
     {
         var spans = new ConcurrentQueue<Activity>();
         using var listener = new ActivityListener
-        {
-            ShouldListenTo = source => source.Name == "AutoMate.Deployments",
-            Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded,
-            ActivityStopped = spans.Enqueue
-        };
+            ();
+        listener.ShouldListenTo = source => source.Name == "AutoMate.Deployments";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded;
+        listener.ActivityStopped = spans.Enqueue;
 
         ActivitySource.AddActivityListener(listener);
         await using var connection = new SqliteConnection("Data Source=:memory:");

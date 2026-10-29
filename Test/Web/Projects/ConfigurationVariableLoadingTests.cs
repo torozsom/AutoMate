@@ -21,7 +21,7 @@ public sealed class ConfigurationVariableLoadingTests
     public async Task Selected_project_is_scanned_and_existing_entries_are_preserved()
     {
         var scanner = DispatchProxy.Create<IProjectScannerService, Scanner>();
-        var probe = (Scanner)scanner;
+        var probe = Assert.IsAssignableFrom<Scanner>(scanner);
 
         probe.Result = Task.FromResult(new Dictionary<string, string> { ["EXISTING"] = "scanned", ["NEW"] = "value" });
         var form = Form(scanner);
@@ -30,7 +30,7 @@ public sealed class ConfigurationVariableLoadingTests
         await Invoke(form, "ConfirmDeploy");
 
         Assert.Equal(form.ProjectPath, probe.Path);
-        Assert.Equal("edited", form.Config.CustomEnvVars!["EXISTING"]);
+        Assert.Equal("edited", form.Config.CustomEnvVars["EXISTING"]);
         Assert.Equal("value", form.Config.CustomEnvVars["NEW"]);
         Assert.Contains("1 new", Message(form));
     }
@@ -47,7 +47,7 @@ public sealed class ConfigurationVariableLoadingTests
     {
         var scanner = DispatchProxy.Create<IProjectScannerService, Scanner>();
 
-        ((Scanner)scanner).Result = failed
+        (Assert.IsAssignableFrom<Scanner>(scanner)).Result = failed
             ? Task.FromException<Dictionary<string, string>>(new IOException("private-path-and-values"))
             : Task.FromResult(new Dictionary<string, string>());
         var form = Form(scanner);
@@ -66,7 +66,7 @@ public sealed class ConfigurationVariableLoadingTests
     public async Task Pending_scan_disables_duplicate_reads()
     {
         var scanner = DispatchProxy.Create<IProjectScannerService, Scanner>();
-        var probe = (Scanner)scanner;
+        var probe = Assert.IsAssignableFrom<Scanner>(scanner);
         var pending =
             new TaskCompletionSource<Dictionary<string, string>>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -153,7 +153,7 @@ public sealed class ConfigurationVariableLoadingTests
         ///     The configured response for the selected fixture member, including null when its contract
         ///     requires no value.
         /// </returns>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        protected override object Invoke(MethodInfo? method, object?[]? args)
         {
             Assert.Equal(nameof(IProjectScannerService.ExtractEnvironmentVariablesAsync), method?.Name);
 

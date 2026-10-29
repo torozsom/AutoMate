@@ -175,11 +175,12 @@ public sealed class AnalysisQueueLeaseTests
     public async Task Independent_owner_cancellations_retire_work_once()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var deploymentForCallbacks = fixture.DeploymentId;
         Guid owner, analysis;
 
         await using (var db = fixture.NewDb())
         {
-            owner = await db.Deployments.Select(item => item.CsProject!.Application!.UserId).SingleAsync();
+            owner = await db.Deployments.Select(item => item.CsProject!.Application.UserId).SingleAsync();
             analysis = await db.AiDeploymentAnalyses.Select(item => item.Id).SingleAsync();
         }
 
@@ -190,7 +191,7 @@ public sealed class AnalysisQueueLeaseTests
                 fixture.Clock,
                 new AnalysisEgressPolicyTests.Authorizer(), NullLogger<DeploymentAnalysisService>.Instance);
 
-            return await service.CancelAsync(owner, fixture.DeploymentId, analysis);
+            return await service.CancelAsync(owner, deploymentForCallbacks, analysis);
         })));
 
         Assert.All(results, result => Assert.Equal(DeploymentAnalysisCancellationResult.Cancelled, result));

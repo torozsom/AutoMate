@@ -431,9 +431,9 @@
                     <ConsoleDialog Title="AI Analysis" Eyebrow="Deployment assessment" OnClose="CloseAnalysisDialog">
                         <div class="console-dialog-body">
                             <DeploymentAnalysisSection OwnerId="_currentUserId" ProjectId="ProjectId"
-                                                       DeploymentId="@(latestDeployment?.Id)"
-                                                       CsProjectId="@(latestDeployment?.CsProjectId ?? Guid.Empty)"
-                                                       Consented="@(_app.CsProjects.FirstOrDefault(p => p.Id == latestDeployment?.CsProjectId)?.Configuration?.AiDiagnosticEgressConsented == true)"/>
+                                                       DeploymentId="@(latestDeployment.Id)"
+                                                       CsProjectId="@(latestDeployment.CsProjectId)"
+                                                       Consented="@(_app.CsProjects.FirstOrDefault(p => p.Id == latestDeployment.CsProjectId)?.Configuration?.AiDiagnosticEgressConsented == true)"/>
                         </div>
                     </ConsoleDialog>
                 }

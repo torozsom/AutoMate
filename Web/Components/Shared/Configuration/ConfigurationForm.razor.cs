@@ -95,7 +95,7 @@ public partial class ConfigurationForm : ComponentBase
     /// </summary>
     protected override void OnInitialized()
     {
-        Config.Databases ??= [];
+        if (Config is { Databases: null }) Config.Databases = [];
         Config.EnvironmentName = string.IsNullOrWhiteSpace(Config.EnvironmentName)
             ? DeploymentDefaults.DevelopmentEnvironmentName
             : Config.EnvironmentName;
@@ -104,8 +104,8 @@ public partial class ConfigurationForm : ComponentBase
         if (IsCloudDeployment)
             ApplyCloudDefaults(true);
 
-        if (Config.CustomEnvVars is not null)
-            foreach (var kvp in Config.CustomEnvVars)
+        if (Config is { CustomEnvVars: { } environment })
+            foreach (var kvp in environment)
                 _envVars.Add(new EnvVarItem { Key = kvp.Key, Value = kvp.Value });
     }
 
@@ -171,14 +171,15 @@ public partial class ConfigurationForm : ComponentBase
         if (IsCloudDeployment && !ValidateCloudRuntimeConfiguration())
             return;
 
-        Config.CustomEnvVars ??= new Dictionary<string, string>();
+        if (Config is { CustomEnvVars: null }) Config.CustomEnvVars = new Dictionary<string, string>();
         Config.CustomEnvVars.Clear();
 
         // Ignore completely empty keys to prevent dictionary crash or invalid configurations
         foreach (var item in _envVars)
             if (!string.IsNullOrWhiteSpace(item.Key))
                 // Clean the key from accidential whitespaces
-                Config.CustomEnvVars.TryAdd(item.Key.Trim(), item.Value?.Trim() ?? string.Empty);
+                Config.CustomEnvVars.TryAdd(item.Key.Trim(),
+                    item is { Value: { } value } ? value.Trim() : string.Empty);
 
         await OnDeployConfirmed.InvokeAsync(Config);
     }

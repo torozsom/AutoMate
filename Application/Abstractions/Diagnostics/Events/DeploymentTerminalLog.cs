@@ -59,8 +59,8 @@ public sealed record DeploymentTerminalLog(
         return new DeploymentTerminalLog(orderId, e.ProjectId, e.DeploymentId, channel, e.Message, e.EventId,
             e.SourceIdentity?.Stream, e.Severity, e.TimestampUtc, e.SourceIdentity?.InstanceId, e.Cursor,
             e.TraceId, e.SpanId, e.Sequence,
-            e.Source == DeploymentDiagnosticSource.AzureContainerApps &&
-            e.Kind == DeploymentDiagnosticKind.Annotation && e.Attributes?.ContainsKey("issue") == true);
+            e is { Source: DeploymentDiagnosticSource.AzureContainerApps, Kind: DeploymentDiagnosticKind.Annotation } &&
+            e.Attributes?.ContainsKey("issue") == true);
     }
 }
 

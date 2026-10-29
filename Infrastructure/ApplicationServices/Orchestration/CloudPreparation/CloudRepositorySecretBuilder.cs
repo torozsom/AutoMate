@@ -57,7 +57,7 @@ internal static class CloudRepositorySecretBuilder
             secrets[CloudDeploymentSecretNames.GetDatabaseUsernameSecretName(index)] =
                 Base64Encode(string.IsNullOrWhiteSpace(database.DbUser) ? "automateadmin" : database.DbUser.Trim());
             secrets[CloudDeploymentSecretNames.GetDatabasePasswordSecretName(index)] =
-                Base64Encode(database.DbPassword ?? string.Empty);
+                Base64Encode(database is { DbPassword: { } password } ? password : string.Empty);
         }
     }
 

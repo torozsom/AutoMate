@@ -47,7 +47,7 @@ public sealed class AnalysisProviderCatalog
                 item.Name.Length is < 1 or > 100
                 || !item.Name.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_')
                 || !typeof(ILlmAnalysisProvider).IsAssignableFrom(item.ImplementationType) ||
-                item.ApprovesRoute is null))
+                item is { ApprovesRoute: null }))
             throw new ArgumentException("Invalid analysis provider registration.", nameof(registrations));
 
         _providers = entries.ToDictionary(item => item.Name, StringComparer.Ordinal);

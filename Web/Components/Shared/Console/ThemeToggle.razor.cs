@@ -19,8 +19,8 @@ public partial class ThemeToggle
     {
         try
         {
-            var current = await JS.InvokeAsync<string>("window.getTheme");
-            await JS.InvokeVoidAsync("window.setTheme", current == "dark" ? "light" : "dark");
+            var current = await Js.InvokeAsync<string>("window.getTheme");
+            await Js.InvokeVoidAsync("window.setTheme", current == "dark" ? "light" : "dark");
         }
         catch (JSDisconnectedException)
         {

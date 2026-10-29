@@ -26,13 +26,14 @@ public sealed class DeploymentAnalysisActionTests
     public async Task Consent_updates_exact_project_in_fresh_scope()
     {
         using var fixture = new Fixture();
+        var ownerForCallbacks = fixture.Owner;
 
         fixture.Apps.Call = (method, args) =>
         {
             Assert.Equal("SetAiDiagnosticEgressConsentAsync", method?.Name);
             Assert.Equal(5, args!.Length);
             Assert.Equal(fixture.App.Id, args[0]);
-            Assert.Equal(fixture.Owner, args[1]);
+            Assert.Equal(ownerForCallbacks, args[1]);
             Assert.Equal(fixture.Selected.Id, args[2]);
             Assert.Equal(true, args[3]);
             Assert.True(((CancellationToken)args[4]!).CanBeCanceled);
@@ -85,6 +86,8 @@ public sealed class DeploymentAnalysisActionTests
         string message)
     {
         using var fixture = new Fixture();
+        var ownerForCallbacks = fixture.Owner;
+        var deploymentForCallbacks = fixture.Deployment.Id;
         var active = fixture.View(AiAnalysisStatus.Running);
 
         fixture.Set("_latest", active);
@@ -92,8 +95,8 @@ public sealed class DeploymentAnalysisActionTests
 
         fixture.Analyses.Call = (method, args) =>
         {
-            Assert.Equal(fixture.Owner, args![0]);
-            Assert.Equal(fixture.Deployment.Id, args[1]);
+            Assert.Equal(ownerForCallbacks, args![0]);
+            Assert.Equal(deploymentForCallbacks, args[1]);
 
             if (method?.Name == "CancelAsync")
             {
@@ -229,8 +232,8 @@ public sealed class DeploymentAnalysisActionTests
             var apps = DispatchProxy.Create<IApplicationService, OperationalLoggingTests.PortProxy>();
             var analyses = DispatchProxy.Create<IDeploymentAnalysisService, OperationalLoggingTests.PortProxy>();
 
-            Apps = (OperationalLoggingTests.PortProxy)apps;
-            Analyses = (OperationalLoggingTests.PortProxy)analyses;
+            Apps = Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(apps);
+            Analyses = Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(analyses);
             _services = new ServiceCollection().AddScoped(_ => apps).AddScoped(_ => analyses).BuildServiceProvider();
             typeof(DeploymentAnalysisSection).GetProperty("Scopes", Flags | BindingFlags.Public)!.SetValue(_component,
                 _services.GetRequiredService<IServiceScopeFactory>());

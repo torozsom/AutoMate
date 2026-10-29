@@ -127,9 +127,10 @@ public sealed class CloudRunMonitor(
 
         if (delivery is null) return false;
         var owner = Guid.NewGuid();
+        var deliveryId = delivery.Id;
 
         var claimed = await dbContext.CloudWebhookDeliveries
-            .Where(item => item.Id == delivery.Id
+            .Where(item => item.Id == deliveryId
                            && item.ProcessedAt == null
                            && (item.LeaseUntil == null || item.LeaseUntil < now))
             .ExecuteUpdateAsync(setters => setters
@@ -140,7 +141,7 @@ public sealed class CloudRunMonitor(
         dbContext.Entry(delivery).State = EntityState.Detached;
 
         delivery = await dbContext.CloudWebhookDeliveries
-            .SingleAsync(item => item.Id == delivery.Id, cancellationToken);
+            .SingleAsync(item => item.Id == deliveryId, cancellationToken);
 
         try
         {

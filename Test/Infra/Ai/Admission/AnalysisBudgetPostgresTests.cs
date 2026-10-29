@@ -1,3 +1,4 @@
+using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using Application.Ai.Policy;
 using Domain.Entities.Ai;
 using Domain.Entities.Deployments;
@@ -36,20 +37,17 @@ public sealed class AnalysisBudgetPostgresTests
     public async Task Concurrent_admission_and_project_deletion_preserve_owner_allowance()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var firstOwnerForCallbacks = fixture.Owners[0];
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], tenantLimit: 1);
+        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(firstOwnerForCallbacks, tenantLimit: 1);
 
         var requests = fixture.Deployments
             .Take(4)
             .Select(_ => Guid.NewGuid())
             .ToArray();
 
-        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(async index =>
-        {
-            await using var db = fixture.Db();
-            return await fixture.Service(db).RequestManualAsync(fixture.Owners[0], fixture.Deployments[index],
-                requests[index]);
-        }));
+        var results = await fixture.RequestConcurrentlyAsync(firstOwnerForCallbacks,
+            fixture.Deployments.Take(4).Zip(requests));
 
         var accepted = Assert.Single(results, result => result.Accepted).Analysis!;
         Assert.All(results.Where(result => !result.Accepted), result =>
@@ -58,7 +56,7 @@ public sealed class AnalysisBudgetPostgresTests
         await using var check = fixture.Db();
         var index = Array.IndexOf(fixture.Deployments, accepted.DeploymentId);
 
-        Assert.True((await fixture.Service(check).RequestManualAsync(fixture.Owners[0], accepted.DeploymentId,
+        Assert.True((await fixture.Service(check).RequestManualAsync(firstOwnerForCallbacks, accepted.DeploymentId,
             requests[index])).Accepted);
         Assert.Single(await check.AiAnalysisBudgetEntries.ToListAsync());
 
@@ -73,7 +71,8 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.Single(await restarted.AiAnalysisBudgetEntries.ToListAsync());
 
         var remaining = fixture.Deployments.Take(4).First(id => id != accepted.DeploymentId);
-        var denied = await fixture.Service(restarted).RequestManualAsync(fixture.Owners[0], remaining, Guid.NewGuid());
+        var denied = await fixture.Service(restarted)
+            .RequestManualAsync(firstOwnerForCallbacks, remaining, Guid.NewGuid());
 
         Assert.Equal("tenant_quota_exceeded", denied.Analysis!.FailureCode);
     }
@@ -237,10 +236,11 @@ public sealed class AnalysisBudgetPostgresTests
     public async Task Budget_migration_backfills_only_retained_consuming_admissions()
     {
         await using var fixture = await Fixture.CreateAsync(true);
+        var firstDeploymentForCallbacks = fixture.Deployments[0];
         await using var db = fixture.Db();
 
         var project = await db.Deployments
-            .Where(item => item.Id == fixture.Deployments[0])
+            .Where(item => item.Id == firstDeploymentForCallbacks)
             .Select(item => item.CsProjectId)
             .SingleAsync();
 
@@ -251,7 +251,7 @@ public sealed class AnalysisBudgetPostgresTests
             db.AiAnalysisRequests.Add(new AiAnalysisRequest
             {
                 ProjectId = project,
-                DeploymentId = fixture.Deployments[0],
+                DeploymentId = firstDeploymentForCallbacks,
                 AnalysisId = consumes ? deletedAnalysis : Guid.NewGuid(),
                 RequestKey = Guid.NewGuid().ToString("N"),
                 AdmissionDay = day,
@@ -286,9 +286,11 @@ public sealed class AnalysisBudgetPostgresTests
     public async Task Archive_cleanup_is_transactional_and_covers_account_cascades()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var firstDeploymentForCallbacks = fixture.Deployments[0];
+        var firstOwnerForCallbacks = fixture.Owners[0];
         await using var db = fixture.Db();
         var project = await db.Deployments
-            .Where(d => d.Id == fixture.Deployments[0])
+            .Where(d => d.Id == firstDeploymentForCallbacks)
             .Select(d => d.CsProject!.AppId)
             .SingleAsync();
 
@@ -304,11 +306,11 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.Empty(await db.DeploymentArchiveCleanups.ToArrayAsync());
         Assert.True(await db.Applications.AnyAsync(a => a.Id == project));
 
-        await db.Users.Where(u => u.Id == fixture.Owners[0]).ExecuteDeleteAsync();
+        await db.Users.Where(u => u.Id == firstOwnerForCallbacks).ExecuteDeleteAsync();
         var work = await db.DeploymentArchiveCleanups.ToArrayAsync();
 
         Assert.Equal(4, work.Length);
-        Assert.All(work, x => Assert.Equal(fixture.Owners[0], x.TenantId));
+        Assert.All(work, x => Assert.Equal(firstOwnerForCallbacks, x.TenantId));
         Assert.False(await db.Deployments.AnyAsync(d => fixture.Deployments.Take(4).Contains(d.Id)));
     }
 
@@ -425,6 +427,24 @@ public sealed class AnalysisBudgetPostgresTests
             {
                 await using var db = Db();
                 return await new AnalysisBudgetGuard(db, Settings, TimeProvider.System).ReserveAttemptAsync(item);
+            }));
+        }
+
+        /// <summary>
+        ///     Runs concurrent admissions and disposes each independent context before the batch completes.
+        /// </summary>
+        /// <param name="owner">Account whose requests share admission limits.</param>
+        /// <param name="requests">Deployment identities paired with their stable request IDs.</param>
+        /// <param name="cancellationToken">Cancels admission while preserving asynchronous context cleanup.</param>
+        /// <returns>A task that settles after every admission and context disposal, and faults if any request fails.</returns>
+        public Task<DeploymentAnalysisRequestResult[]> RequestConcurrentlyAsync(Guid owner,
+            IEnumerable<(Guid Deployment, Guid Request)> requests, CancellationToken cancellationToken = default)
+        {
+            return Task.WhenAll(requests.Select(async request =>
+            {
+                await using var db = Db();
+                return await Service(db)
+                    .RequestManualAsync(owner, request.Deployment, request.Request, cancellationToken);
             }));
         }
 

@@ -97,7 +97,7 @@
             </button>
         </div>
 
-        @if (Config.Databases is null || Config.Databases.Count == 0)
+        @if (Config is not { Databases.Count: > 0 })
         {
             <p class="text-muted small text-center my-3">No databases defined.</p>
         }

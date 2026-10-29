@@ -135,17 +135,15 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var seeded = await SeedAsync(services);
         var directory = Path.Combine(Path.GetTempPath(), "automate-integration-spool-" + Guid.NewGuid().ToString("N"));
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Creates the configured create instance over fixture-owned dependencies.
-        /// </summary>
-        /// <returns>The configured disk telemetry spool instance or response for this scenario.</returns>
+        // <summary>
+        //     Creates the configured create instance over fixture-owned dependencies.
+        // </summary>
+        // <returns>The configured disk telemetry spool instance or response for this scenario.</returns>
         DiskTelemetrySpool Create()
         {
             return new DiskTelemetrySpool(Options.Create(new DiskSpoolOptions { Directory = directory }),
                 Options.Create(settings), NullLogger<DiskTelemetrySpool>.Instance, new DiagnosticRedactor());
         }
-#pragma warning restore CS1587
 
         try
         {
@@ -195,8 +193,8 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                 .ReadDailyAsync(seeded.Owner, seeded.Project, seeded.Deployment, DateTimeOffset.UtcNow.AddMinutes(-10),
                     DateTimeOffset.UtcNow, CancellationToken.None);
 
-            Assert.Contains(daily,
-                row => row.Name == "automate_cpu_usage_cores" && row.SampleCount == 1 && row.Sum == 1.25);
+            Assert.Equal(1.25, Assert.Single(daily,
+                row => row is { Name: "automate_cpu_usage_cores", SampleCount: 1 }).Sum, precision: 6);
             Assert.Empty(await scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>()
                 .ReadAsync(Guid.NewGuid(), seeded.Project, seeded.Deployment, 0, false, 10, CancellationToken.None));
 
@@ -273,7 +271,8 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var points = await history.ReadMetricsAsync(seeded.Owner, seeded.Project, seeded.Deployment,
             DateTimeOffset.UtcNow.AddMinutes(-10), DateTimeOffset.UtcNow, 10);
 
-        points.Points.Should().Contain(p => p.Name == "automate_cpu_usage_cores" && p.Average == 2.5);
+        Assert.Equal(2.5, Assert.Single(points.Points, p => p.Name == "automate_cpu_usage_cores").Average,
+            precision: 6);
         await history.Invoking(h => h.ReadLogsAsync(Guid.NewGuid(), seeded.Project, seeded.Deployment, 0, true, 10))
             .Should().ThrowAsync<UnauthorizedAccessException>();
     }
@@ -319,7 +318,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
 
         await using (var scope = services.CreateAsyncScope())
         {
-            var store = scope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>();
+            _ = scope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>();
 
             await SeedLegacyBufferAsync(services, Event(seeded, "first"), "build");
             await SeedLegacyBufferAsync(services, Event(seeded, "second"), "build");

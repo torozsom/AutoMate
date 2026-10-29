@@ -135,7 +135,7 @@ internal static class TemplateModelFactory
         [
             .. config.Databases
                 .Where(database => !string.IsNullOrWhiteSpace(database.DbType))
-                .Select((database, index) => (object)CreateDatabaseTemplateModel(database, index))
+                .Select(CreateDatabaseTemplateModel)
         ];
     }
 
@@ -216,7 +216,8 @@ internal static class TemplateModelFactory
     /// <returns>The custom environment list selection with its documented bounds and ordering.</returns>
     private static List<object> CreateCustomEnvironmentList(DeploymentConfigDto config)
     {
-        return config.CustomEnvVars?
+        if (config is not { CustomEnvVars: { } environment }) return [];
+        return environment
             .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Key))
             .OrderBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase)
             .Select((kvp, index) => (object)new
@@ -230,7 +231,7 @@ internal static class TemplateModelFactory
                     kvp.Key.Trim()),
                 container_secret_name = TemplateNameNormalizer.NormalizeContainerAppSecretName($"env-{index}-{kvp.Key}")
             })
-            .ToList() ?? [];
+            .ToList();
     }
 
     /// <summary>

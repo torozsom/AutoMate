@@ -153,7 +153,7 @@ public sealed class UserService(AutoMateDbContext dbContext) : IUserService
     {
         var remoteUser = await QueryRemoteUsers()
             .Where(u => u.Id == userId)
-            .Select(u => new RemoteUserDetails(u.Id, u.AccountId, u.GitHubAccessToken))
+            .Select(u => new RemoteUserDetails(u.Id, u.GitHubAccessToken))
             .FirstOrDefaultAsync(cancellationToken);
 
         if (remoteUser is not null)
@@ -178,7 +178,7 @@ public sealed class UserService(AutoMateDbContext dbContext) : IUserService
     {
         var githubUser = await QueryRemoteUsers()
             .Where(u => u.AccountId == accountId)
-            .Select(u => new RemoteUserDetails(u.Id, u.AccountId, u.GitHubAccessToken))
+            .Select(u => new RemoteUserDetails(u.Id, u.GitHubAccessToken))
             .FirstOrDefaultAsync(cancellationToken);
 
         return githubUser is not null
@@ -216,7 +216,6 @@ public sealed class UserService(AutoMateDbContext dbContext) : IUserService
     ///     lookups.
     /// </summary>
     /// <param name="Id">The record identity.</param>
-    /// <param name="AccountId">External provider account identity.</param>
     /// <param name="GitHubAccessToken">Provider credential; never include it in diagnostic output.</param>
-    private sealed record RemoteUserDetails(Guid Id, string AccountId, string? GitHubAccessToken);
+    private sealed record RemoteUserDetails(Guid Id, string? GitHubAccessToken);
 }

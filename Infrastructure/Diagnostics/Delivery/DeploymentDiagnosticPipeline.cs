@@ -509,7 +509,7 @@ public sealed class DeploymentDiagnosticDispatcher(
     /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task DeliverMetricsAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken token)
     {
-        if (diagnosticEvent.DeploymentId is { } deployment && diagnosticEvent.Metrics is { Count: > 0 } samples)
+        if (diagnosticEvent is { DeploymentId: { } deployment, Metrics: { Count: > 0 } samples })
             await logStreamer.StreamDeploymentMetricsAsync(new DeploymentRuntimeMetricSnapshot(
                 diagnosticEvent.ProjectId,
                 deployment, diagnosticEvent.TerminalChannel.Target!,

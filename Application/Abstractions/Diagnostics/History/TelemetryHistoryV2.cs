@@ -60,7 +60,7 @@ public static class TelemetryHistoryCursor
         try
         {
             var parts = Encoding.UTF8.GetString(Convert.FromBase64String(cursor)).Split(':');
-            if (parts.Length == 4 && parts[0] == "2" && parts[1] == project.ToString("N") &&
+            if (parts is ["2", _, _, _] && parts[1] == project.ToString("N") &&
                 parts[2] == deployment.ToString("N") && long.TryParse(parts[3], out var order) &&
                 order > 0) return order;
         }
@@ -80,7 +80,7 @@ public static class TelemetryHistoryCursor
     /// <returns>Terminal records and resource-scoped navigation cursors preserving coverage flags.</returns>
     public static TelemetryLogPage Page(DeploymentTerminalHistory history, Guid project, Guid deployment)
     {
-        return new TelemetryLogPage(history.Events, history.EarlierOmitted && history.Events.Count > 0
+        return new TelemetryLogPage(history.Events, history is { EarlierOmitted: true, Events.Count: > 0 }
                 ? Encode(project, deployment, history.Events[0].OrderId)
                 : null,
             history.Events.Count > 0 ? Encode(project, deployment, history.Events[^1].OrderId) : null,

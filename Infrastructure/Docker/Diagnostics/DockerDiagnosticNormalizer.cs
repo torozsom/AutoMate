@@ -174,7 +174,7 @@ internal static partial class DockerDiagnosticNormalizer
     ///     Recognizes a bounded content-addressed image identity.
     /// </summary>
     /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
-    [GeneratedRegex(@"sha256:[0-9a-fA-F]{12,64}", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("sha256:[0-9a-fA-F]{12,64}", RegexOptions.CultureInvariant)]
     private static partial Regex ImageIdentity();
 
     /// <summary>

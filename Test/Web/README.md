@@ -23,7 +23,9 @@ Metrics/Presentation render real controls/fixtures. JavaScript and Browser have 
 
 ## Fixtures and boundaries
 
-Many .NET fixtures use real HtmlRenderer/dispatcher, loopback Kestrel, antiforgery or SDK serialization with synthetic
+Interactive lifecycle and event tests use bUnit public APIs; static output tests use HtmlRenderer. Both retain real
+Blazor lifecycle behavior without custom Renderer subclasses or raw render-tree traversal. Other .NET fixtures use
+loopback Kestrel, antiforgery or SDK serialization with synthetic
 ports; they do not start live cloud/LLM/collector dependencies. Rendering copies scoped CSS from the active build
 configuration, so Release-only checkouts need no Debug build. Build matching configuration before --no-build.
 

@@ -565,7 +565,8 @@ public sealed class DeploymentAnalysisService(
                 "The daily analysis request limit for this project has been reached.");
 
         AnalysisSkipReason? skip = approved ? null : AnalysisSkipReason.Unavailable;
-        if (skip is not null && settings.Enabled && settings.ApprovedTenantIds?.Contains(ownerId) != true)
+        if (skip is not null && settings.Enabled &&
+            (settings.ApprovedTenantIds is not { } approvedTenants || !approvedTenants.Contains(ownerId)))
             skip = AnalysisSkipReason.TenantNotApproved;
 
         if (skip is null && existing is null && await dbContext.AiAnalysisRequests
@@ -653,16 +654,14 @@ public sealed class DeploymentAnalysisService(
         }
 
         if (skip is null)
-            return new DeploymentAnalysisRequestResult(skip is null, skip is null
-                ? admitted ? "Analysis queued." : "An analysis is already in progress."
-                : AnalysisSkipPolicy.Message(analysis.FailureCode), ToView(analysis));
+            return new DeploymentAnalysisRequestResult(true,
+                admitted ? "Analysis queued." : "An analysis is already in progress.", ToView(analysis));
 
         using var correlation = OperationalLog.BeginCorrelation(logger, deploymentId, analysis.Id);
         OperationalLog.Record(logger, AuditOperation.Analysis, AuditOutcome.Denied);
 
-        return new DeploymentAnalysisRequestResult(skip is null, skip is null
-            ? admitted ? "Analysis queued." : "An analysis is already in progress."
-            : AnalysisSkipPolicy.Message(analysis.FailureCode), ToView(analysis));
+        return new DeploymentAnalysisRequestResult(false,
+            AnalysisSkipPolicy.Message(analysis.FailureCode), ToView(analysis));
     }
 
     /// <summary>

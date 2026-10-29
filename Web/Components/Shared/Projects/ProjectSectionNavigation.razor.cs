@@ -50,7 +50,7 @@ public partial class ProjectSectionNavigation
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/project-sections.js");
+        _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/project-sections.js");
         _controller = await _module.InvokeAsync<IJSObjectReference>("attach", _navigation);
     }
 }

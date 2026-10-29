@@ -165,7 +165,7 @@ public sealed class DeploymentJobQueue(
     /// <returns>The stored project counters, or the default zero-count state.</returns>
     private DeploymentQueueState GetStateUnderLock(Guid projectId)
     {
-        return _states.TryGetValue(projectId, out var state) ? state : default;
+        return _states.GetValueOrDefault(projectId);
     }
 
     /// <summary>
@@ -175,7 +175,7 @@ public sealed class DeploymentJobQueue(
     /// <param name="state">The project queue-state snapshot or fixed attention state.</param>
     private void SetStateUnderLock(Guid projectId, DeploymentQueueState state)
     {
-        if (state.Queued == 0 && state.Active == 0) _states.Remove(projectId);
+        if (state is { Queued: 0, Active: 0 }) _states.Remove(projectId);
         else _states[projectId] = state;
     }
 

@@ -10,7 +10,7 @@ Explicit exact-route registration and shared bounded Responses transport for dir
 | [AzureOpenAiAnalysisProvider.cs](AzureOpenAiAnalysisProvider.cs) | `AzureOpenAiAnalysisProvider`                                                           | Azure OpenAI Responses v1 adapter using an explicit resource API key and deployment alias.           |
 | [AzureOpenAiOptions.cs](AzureOpenAiOptions.cs)                   | `AzureOpenAiOptions`                                                                    | Azure resource identity and protected API-key configuration; never used as result or telemetry data. |
 | [OpenAiAnalysisProvider.cs](OpenAiAnalysisProvider.cs)           | `OpenAiAnalysisProvider`                                                                | Direct OpenAI adapter retaining its exact regional route and independent credential setting.         |
-| [ResponsesAnalysisTransport.cs](ResponsesAnalysisTransport.cs)   | `ResponsesAnalysisTransport`                                                            | Shared bounded Responses protocol for the explicitly registered OpenAI and Azure OpenAI adapters.    |
+| [ResponsesAnalysisTransport.cs](ResponsesAnalysisTransport.cs)   | `ResponsesAnalysisTransport`, `PolicyReloadCancellation`                                                            | Shared bounded Responses protocol for the explicitly registered OpenAI and Azure OpenAI adapters.    |
 
 ## Usage and integration
 
@@ -42,3 +42,6 @@ information without raw response prose.
 - [Azure tests](../../../Test/Infra/Ai/Providers/AzureOpenAiAnalysisProviderTests.cs)
 - [Routing tests](../../../Test/Infra/Ai/Providers/AnalysisProviderSelectionTests.cs)
 - [Azure setup](../../../docs/azure-openai-setup.md)
+
+The transport owns each request deadline and subscription. Its private policy-reload observer tracks changes atomically,
+borrows the deadline and tolerates callbacks already dispatched when request disposal completes.

@@ -19,7 +19,7 @@ public sealed class SafeLoggerFactory(
     ConsoleExceptionDiagnostics? diagnostics = null) : ILoggerFactory
 {
     /// <summary>Independent safe scope chain for console snapshots; no raw scope values are retained.</summary>
-    private readonly LoggerExternalScopeProvider scopes = new();
+    private readonly LoggerExternalScopeProvider _scopes = new();
 
     /// <summary>
     ///     Wraps a category logger so every record crosses the shared platform safety policy.
@@ -29,7 +29,7 @@ public sealed class SafeLoggerFactory(
     public ILogger CreateLogger(string categoryName)
     {
         var category = policy.Category(categoryName);
-        return new SafeLogger(inner.CreateLogger(category), policy, category, diagnostics, scopes);
+        return new SafeLogger(inner.CreateLogger(category), policy, category, diagnostics, _scopes);
     }
 
     /// <summary>
@@ -78,8 +78,8 @@ public sealed class SafeLoggerFactory(
         /// <typeparam name="TState">
         ///     Type of the structured state reviewed or persisted by this operation.
         /// </typeparam>
-        /// <returns>The owned safe correlation scope, or null when no reviewed scope can be created.</returns>
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+        /// <returns>The owned safe correlation scope.</returns>
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull
         {
             var fields = policy.Fields(state);
             var safe = new SafePlatformLog(

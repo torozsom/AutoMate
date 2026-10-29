@@ -1,3 +1,4 @@
+using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using System.Data.Common;
 using Application.Ai.Policy;
 using Domain.Entities.Ai;
@@ -63,16 +64,12 @@ public sealed class AnalysisBudgetTests
     public async Task Concurrent_cross_project_admission_and_deletion_preserve_tenant_allowance()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var ownerForCallbacks = fixture.Owner;
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner, tenantLimit: 1);
+        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(ownerForCallbacks, tenantLimit: 1);
 
-        var results = await Task.WhenAll(fixture.Deployments
-            .Take(4)
-            .Select(id => Task.Run(async () =>
-            {
-                await using var db = fixture.Db();
-                return await fixture.Service(db).RequestManualAsync(fixture.Owner, id, Guid.NewGuid());
-            })));
+        var results = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
+            fixture.Deployments.Take(4).Select(id => (id, Guid.NewGuid())));
 
         var accepted = Assert.Single(results, item => item.Accepted);
         Assert.All(results.Where(item => !item.Accepted), item =>
@@ -90,7 +87,7 @@ public sealed class AnalysisBudgetTests
         Assert.Single(await check.AiAnalysisBudgetEntries.ToListAsync());
 
         var remaining = fixture.Deployments.First(id => id != accepted.Analysis!.DeploymentId);
-        var denied = await fixture.Service(check).RequestManualAsync(fixture.Owner, remaining, Guid.NewGuid());
+        var denied = await fixture.Service(check).RequestManualAsync(ownerForCallbacks, remaining, Guid.NewGuid());
 
         Assert.Equal("tenant_quota_exceeded", denied.Analysis!.FailureCode);
     }
@@ -193,8 +190,9 @@ public sealed class AnalysisBudgetTests
     public async Task Shared_concurrency_follows_live_fenced_reservations(bool global)
     {
         await using var fixture = await Fixture.CreateAsync();
+        var ownerForCallbacks = fixture.Owner;
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner,
+        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(ownerForCallbacks,
             tenantConcurrency: 1, globalConcurrency: global ? 1 : 2);
 
         var work = await fixture.WorkAsync(0, 1, 4);
@@ -211,7 +209,7 @@ public sealed class AnalysisBudgetTests
                 update.SetProperty(item => item.LeaseUntil, fixture.Clock.Now.AddSeconds(-1)));
 
         Assert.Null(await guard.ReserveAttemptAsync(work[1]));
-        Assert.Equal(2, await db.AiAnalysisBudgetEntries.CountAsync(item => item.TenantId == fixture.Owner));
+        Assert.Equal(2, await db.AiAnalysisBudgetEntries.CountAsync(item => item.TenantId == ownerForCallbacks));
     }
 
     /// <summary>
@@ -333,9 +331,10 @@ public sealed class AnalysisBudgetTests
     public async Task Reload_during_reservation_is_unavailable_instead_of_exhausted_spending()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var ownerForCallbacks = fixture.Owner;
         var work = (await fixture.WorkAsync(0))[0];
         var reload = new ReloadDuringSum(() => fixture.Settings.CurrentValue =
-            AnalysisEgressPolicyTests.Approved(fixture.Owner));
+            AnalysisEgressPolicyTests.Approved(ownerForCallbacks));
         await using var db = fixture.Db(reload);
 
         Assert.Equal(AnalysisSkipReason.Unavailable,
@@ -431,6 +430,24 @@ public sealed class AnalysisBudgetTests
                 AnalysisResultTests.Validator(), Clock,
                 new AnalysisEgressAuthorizer(db, Settings, new DiagnosticRedactor()),
                 NullLogger<DeploymentAnalysisService>.Instance);
+        }
+
+        /// <summary>
+        ///     Runs concurrent admissions and disposes each independent context before the batch completes.
+        /// </summary>
+        /// <param name="owner">Account whose requests share admission limits.</param>
+        /// <param name="requests">Deployment identities paired with their stable request IDs.</param>
+        /// <param name="cancellationToken">Cancels admission while preserving asynchronous context cleanup.</param>
+        /// <returns>A task that settles after every admission and context disposal, and faults if any request fails.</returns>
+        public Task<DeploymentAnalysisRequestResult[]> RequestConcurrentlyAsync(Guid owner,
+            IEnumerable<(Guid Deployment, Guid Request)> requests, CancellationToken cancellationToken = default)
+        {
+            return Task.WhenAll(requests.Select(request => Task.Run(async () =>
+            {
+                await using var db = Db();
+                return await Service(db)
+                    .RequestManualAsync(owner, request.Deployment, request.Request, cancellationToken);
+            }, cancellationToken)));
         }
 
         /// <summary>

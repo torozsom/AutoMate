@@ -216,8 +216,10 @@ public sealed class AzureManagedDatabaseClientTests
                 "percentProcessorTime,usedmemory"),
             "token", CancellationToken.None);
 
-        Assert.Contains(samples, s => s.Name == "automate_cpu_usage_percent" && s.Value == 25 && s.Unit == "percent");
-        Assert.Contains(samples,
-            s => s.Name == "automate_memory_used_bytes" && s.Value == 1048576 && s.Unit == "bytes");
+        Assert.Equal(25,
+            Assert.Single(samples, s => s is { Name: "automate_cpu_usage_percent", Unit: "percent" }).Value,
+            precision: 6);
+        Assert.Equal(1048576, Assert.Single(samples,
+            s => s is { Name: "automate_memory_used_bytes", Unit: "bytes" }).Value, precision: 6);
     }
 }

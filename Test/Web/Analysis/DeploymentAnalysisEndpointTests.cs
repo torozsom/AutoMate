@@ -124,16 +124,17 @@ public sealed class DeploymentAnalysisEndpointTests
         var analysis = Guid.NewGuid();
         var calls = 0;
         var users = DispatchProxy.Create<IUserService, PortProxy>();
+        var userLookups = new List<object?[]?>();
 
-        ((PortProxy)users).Call = (_, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(users)).Call = (_, args) =>
         {
-            Assert.Equal(owner.ToString(), args![0]);
+            userLookups.Add(args);
 
             return Task.FromResult((validOwner ? owner : Guid.Empty, (string?)null, false));
         };
         var analyses = DispatchProxy.Create<IDeploymentAnalysisService, PortProxy>();
 
-        ((PortProxy)analyses).Call = (method, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(analyses)).Call = (method, args) =>
         {
             Assert.Equal(methodName, method!.Name);
             Assert.Equal(owner, args![0]);
@@ -143,7 +144,7 @@ public sealed class DeploymentAnalysisEndpointTests
             else Assert.Equal(analysis, args[2]);
             calls++;
 
-            return methodName switch
+            return method.Name switch
             {
                 "CancelAsync" => Task.FromResult((DeploymentAnalysisCancellationResult)outcome),
                 "RequestManualAsync" => Task.FromResult((DeploymentAnalysisRequestResult)outcome),
@@ -170,7 +171,8 @@ public sealed class DeploymentAnalysisEndpointTests
             Results.Text(antiforgery.GetAndStoreTokens(context).RequestToken!));
         await app.StartAsync();
         using var client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() })
-            { BaseAddress = new Uri(app.Urls.Single()) };
+            ;
+        client.BaseAddress = new Uri(app.Urls.Single());
 
         if (authenticated) client.DefaultRequestHeaders.Add("Fixture-Owner", owner.ToString());
         var requestToken = await client.GetStringAsync("/fixture-token");
@@ -187,6 +189,8 @@ public sealed class DeploymentAnalysisEndpointTests
             _ => await client.DeleteAsync(path)
         };
 
+        if (authenticated && csrf) Assert.Equal(owner.ToString(), Assert.Single(userLookups)![0]);
+        else Assert.Empty(userLookups);
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(authenticated && csrf && validOwner ? 1 : 0, calls);
     }
