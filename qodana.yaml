@@ -1,13 +1,9 @@
-#-------------------------------------------------------------------------------#
-#               Qodana analysis is configured by qodana.yaml file               #
-#             https://www.jetbrains.com/help/qodana/qodana-yaml.html            #
-#-------------------------------------------------------------------------------#
+####################################################################################################################
+# WARNING: Do not store sensitive information in this file, as its contents will be included in the Qodana report. #
+####################################################################################################################
 
-#################################################################################
-#              WARNING: Do not store sensitive information in this file,        #
-#               as its contents will be included in the Qodana report.          #
-#################################################################################
 version: "1.0"
+linter: qodana-cdnet
 
 #Specify IDE code to run analysis without container (Applied in CI/CD pipeline)
 ide: QDNET
@@ -48,3 +44,7 @@ profile:
 #  dependencyLicenses:
 #    failOnProhibited: true
 #    failOnUnknown: false
+
+  name: qodana.recommended
+include:
+  - name: CheckDependencyLicenses
