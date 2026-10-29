@@ -35,6 +35,39 @@ internal sealed class ResponsesAnalysisTransport(
     internal const int MaximumResponseBytes = 131_072;
 
     /// <summary>
+    ///     Tracks policy reloads atomically and cancels the borrowed request deadline safely when a callback races disposal.
+    /// </summary>
+    /// <param name="settings">The exact options instance approved for this request.</param>
+    /// <param name="deadline">The request-owned deadline; this observer does not dispose it.</param>
+    private sealed class PolicyReloadCancellation(AiAnalysisOptions settings, CancellationTokenSource deadline)
+    {
+        /// <summary>Whether a different options instance has been observed.</summary>
+        private int _changed;
+
+        /// <summary>Reports reloads with the same atomic visibility as the cancellation callback.</summary>
+        public bool Changed => Volatile.Read(ref _changed) != 0;
+
+        /// <summary>
+        ///     Marks a replacement policy and cancels pending work without leaking a disposal race from the callback.
+        /// </summary>
+        /// <param name="updated">The newly published options instance.</param>
+        /// <param name="_">The unused options name.</param>
+        public void OnChange(AiAnalysisOptions updated, string? _)
+        {
+            if (ReferenceEquals(settings, updated)) return;
+            Interlocked.Exchange(ref _changed, 1);
+            try
+            {
+                deadline.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // A dispatched reload may finish after subscription and request disposal.
+            }
+        }
+    }
+
+    /// <summary>
     ///     Executes one authorized request with adapter-specific credentials, route checks and
     ///     provenance.
     /// </summary>
@@ -89,21 +122,8 @@ internal sealed class ResponsesAnalysisTransport(
             throw new ArgumentException("Diagnostic context exceeds the configured limit.", nameof(request));
 
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var policyChanged = 0;
-
-        using var policySubscription = options.OnChange((updated, _) =>
-        {
-            if (ReferenceEquals(settings, updated)) return;
-            Interlocked.Exchange(ref policyChanged, 1);
-            try
-            {
-                deadline.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-                // An already-dispatched reload callback may outlive its subscription and completed request.
-            }
-        });
+        var policyReload = new PolicyReloadCancellation(settings, deadline);
+        using var policySubscription = options.OnChange(policyReload.OnChange);
 
         if (!AnalysisEgressPolicy.IsCommonConfigured(settings) || !approvesRoute(settings))
             throw new AnalysisProviderUnavailableException();
@@ -116,7 +136,7 @@ internal sealed class ResponsesAnalysisTransport(
             throw new AnalysisProviderUnavailableException();
 
         // A configuration reload during authorization must not send a request using the previous route/model.
-        if (Volatile.Read(ref policyChanged) != 0 || !ReferenceEquals(settings, options.CurrentValue))
+        if (policyReload.Changed || !ReferenceEquals(settings, options.CurrentValue))
             throw new AnalysisProviderUnavailableException();
 
         using var message = new HttpRequestMessage(HttpMethod.Post,
@@ -154,7 +174,7 @@ internal sealed class ResponsesAnalysisTransport(
         {
             bytes = await SendBoundedAsync(message, provider, deadline.Token, cancellationToken);
         }
-        catch (TransientAnalysisProviderException) when (Volatile.Read(ref policyChanged) != 0 &&
+        catch (TransientAnalysisProviderException) when (policyReload.Changed &&
                                                          !cancellationToken.IsCancellationRequested)
         {
             // Policy shutdown is terminally unavailable, not a transport timeout eligible for retry.
@@ -163,7 +183,7 @@ internal sealed class ResponsesAnalysisTransport(
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (Volatile.Read(ref policyChanged) != 0 || !ReferenceEquals(settings, options.CurrentValue))
+        if (policyReload.Changed || !ReferenceEquals(settings, options.CurrentValue))
             throw new AnalysisProviderUnavailableException();
 
         var parsingAnswer = false;

@@ -81,6 +81,8 @@ public sealed class AnalysisReadinessTests
         builder.Services.AddScoped<IDeploymentAnalysisReadiness>(_ => port);
         builder.Services.AddHealthChecks().AddCheck<AnalysisReadinessHealthCheck>("ai_analysis",
             tags: [AnalysisHealthChecks.ReadinessTag], timeout: TimeSpan.FromMilliseconds(100));
+        builder.Services.AddHttpClient("Loopback")
+            .ConfigurePrimaryHttpMessageHandler(static () => new HttpClientHandler { AllowAutoRedirect = false });
         await using var app = builder.Build();
 
         app.UseAuthentication();
@@ -88,10 +90,8 @@ public sealed class AnalysisReadinessTests
         app.MapApplicationHealthChecks();
         app.MapGet("/private", () => "Protected");
         await app.StartAsync();
-        using var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
-        {
-            BaseAddress = new Uri(app.Urls.Single())
-        };
+        using var client = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient("Loopback");
+        client.BaseAddress = new Uri(app.Urls.Single());
 
         Assert.Equal(HttpStatusCode.Redirect, (await client.GetAsync("/private")).StatusCode);
 

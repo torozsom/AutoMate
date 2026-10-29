@@ -77,7 +77,7 @@ public sealed class DeploymentAnalysisContextBuilder(
             ]
         };
 
-        var unavailable = storage.Value.ManagedService && !storage.Value.ManagedDataProcessingApproved;
+        var unavailable = storage.Value is { ManagedService: true, ManagedDataProcessingApproved: false };
         IReadOnlyList<DeploymentMetricPoint> points = [];
         if (unavailable)
             return new AnalysisContextSelector(redactor)
@@ -142,7 +142,7 @@ public sealed class DeploymentAnalysisContextBuilder(
             deployment.Status, deployment.Outcome, now, window);
 
         if (window.End <= window.Start ||
-            (storage.Value.ManagedService && !storage.Value.ManagedDataProcessingApproved))
+            storage.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             return new DeploymentAnalysisContext("", [], provenance);
 
         var query = new ArchiveAssessmentQuery(deployment.Owner, deployment.Project, deploymentId, selection, window);

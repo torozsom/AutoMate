@@ -3,6 +3,10 @@
 The solution's single .NET 10 xUnit project, with Node-only JavaScript and Playwright browser suites alongside it.
 Test.csproj references Application, Domain, Infrastructure, Web and Telemetry.
 
+Microsoft.Extensions.TimeProvider.Testing supplies test-only controllable clocks for lease-heartbeat scenarios;
+production projects do not reference it. These tests advance the timer after their provider/cancellation barriers,
+with wall-clock timeouts used only as deadlock guards.
+
 ## Contents
 
 | File                               | Test or fixture types | Responsibility                                                                       |

@@ -25,6 +25,6 @@ internal static partial class DockerRegexes
     ///     Matches characters that are unsafe in Docker Compose project names.
     /// </summary>
     /// <returns>The cached pattern for this documented normalization or validation rule.</returns>
-    [GeneratedRegex(@"[^a-z0-9_-]+")]
+    [GeneratedRegex("[^a-z0-9_-]+")]
     public static partial Regex ProjectNameRegex();
 }

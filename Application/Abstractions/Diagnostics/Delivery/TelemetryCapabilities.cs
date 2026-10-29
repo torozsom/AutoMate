@@ -11,9 +11,8 @@ public sealed record TelemetryCapabilities(int Version, IReadOnlyList<string> Ar
     public const int CurrentVersion = 1;
 
     /// <summary>Archive operations required before Web reads or maintains permanent history.</summary>
-    public static IReadOnlyList<string> RequiredArchiveOperations { get; } = Array.AsReadOnly(new[]
-    {
+    public static IReadOnlyList<string> RequiredArchiveOperations { get; } = Array.AsReadOnly<string>([
         "logs", "channel-logs", "metrics", "metric-batch", "assessment", "assessment-metrics", "import",
         "import-metrics", "delete"
-    });
+    ]);
 }

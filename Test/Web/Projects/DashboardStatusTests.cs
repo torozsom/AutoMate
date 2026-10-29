@@ -33,7 +33,7 @@ public sealed class DashboardStatusTests
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
         LocalDeploymentJob? submitted = null;
 
-        ((OperationalLoggingTests.PortProxy)queue).Call = (method, args) =>
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (method, args) =>
         {
             Assert.Equal(nameof(IDeploymentJobQueue.EnqueueAsync), method!.Name);
 
@@ -100,7 +100,7 @@ public sealed class DashboardStatusTests
         };
         var query = DispatchProxy.Create<IApplicationService, OperationalLoggingTests.PortProxy>();
 
-        ((OperationalLoggingTests.PortProxy)query).Call = (method, args) =>
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(query)).Call = (method, args) =>
         {
             Assert.Equal(nameof(IApplicationService.GetAppByIdAsync), method!.Name);
             Assert.Equal(id, args![0]);
@@ -110,11 +110,11 @@ public sealed class DashboardStatusTests
         };
         var capabilities = DispatchProxy.Create<IDeploymentCapabilities, OperationalLoggingTests.PortProxy>();
 
-        ((OperationalLoggingTests.PortProxy)capabilities).Call = (_, _) => localEnabled;
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(capabilities)).Call = (_, _) => localEnabled;
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
         StopLocalDeploymentJob? submitted = null;
 
-        ((OperationalLoggingTests.PortProxy)queue).Call = (method, args) =>
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (method, args) =>
         {
             if (method!.Name == nameof(IDeploymentJobQueue.GetProjectState))
                 return new DeploymentQueueState(0, 0, 0, 0);
@@ -148,18 +148,16 @@ public sealed class DashboardStatusTests
             Assert.Equal(app.CsProjects.Single().Path, submitted.CsProjectPath);
         }
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Supplies provider-free Application ports.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="value">Fixture member value to assign.</param>
+        // <summary>
+        //     Supplies provider-free Application ports.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="value">Fixture member value to assign.</param>
         void Property(string name, object value)
         {
             typeof(Dashboard).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
                 value);
         }
-#pragma warning restore CS1587
     }
 
     /// <summary>
@@ -199,7 +197,7 @@ public sealed class DashboardStatusTests
             .SetValue(component, new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
 
-        ((OperationalLoggingTests.PortProxy)queue).Call = (_, _) => null;
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (_, _) => null;
         typeof(Dashboard).GetProperty("DeploymentJobQueue", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(
             component, queue);
         await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
@@ -218,18 +216,16 @@ public sealed class DashboardStatusTests
 
         Assert.Equal(status, deployment.Status);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Seeds presentation state without database or authentication work.
-        /// </summary>
-        /// <param name="field">Private field name accessed by the fixture.</param>
-        /// <param name="value">Fixture member value to assign.</param>
+        // <summary>
+        //     Seeds presentation state without database or authentication work.
+        // </summary>
+        // <param name="field">Private field name accessed by the fixture.</param>
+        // <param name="value">Fixture member value to assign.</param>
         void Set(string field, object value)
         {
             typeof(Dashboard).GetField(field, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
                 value);
         }
-#pragma warning restore CS1587
     }
 
     /// <summary>
@@ -262,7 +258,7 @@ public sealed class DashboardStatusTests
         var query = DispatchProxy.Create<IWorkspaceQuery, OperationalLoggingTests.PortProxy>();
         var reads = 0;
 
-        ((OperationalLoggingTests.PortProxy)query).Call = (method, args) =>
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(query)).Call = (method, args) =>
         {
             Assert.Equal(nameof(IWorkspaceQuery.ProjectsAsync), method!.Name);
             Assert.Equal(owner, args![0]);
@@ -284,7 +280,7 @@ public sealed class DashboardStatusTests
             new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
 
-        ((OperationalLoggingTests.PortProxy)queue).Call = (_, _) => null;
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (_, _) => null;
         Property("DeploymentJobQueue", queue);
         await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
         reads = 0;
@@ -300,31 +296,27 @@ public sealed class DashboardStatusTests
         Assert.Equal(DeploymentStatus.Failed, deployment.Status);
         Assert.Empty(renderer.Errors);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Seeds actual notification state.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="value">Fixture member value to assign.</param>
+        // <summary>
+        //     Seeds actual notification state.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="value">Fixture member value to assign.</param>
         void Set(string name, object value)
         {
             typeof(Dashboard).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(component, value);
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Supplies provider-free Application ports.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="value">Fixture member value to assign.</param>
+        // <summary>
+        //     Supplies provider-free Application ports.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="value">Fixture member value to assign.</param>
         void Property(string name, object value)
         {
             typeof(Dashboard).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
                 value);
         }
-#pragma warning restore CS1587
     }
 
     /// <summary>Records actual NavigationManager requests without opening a browser document.</summary>
@@ -374,7 +366,6 @@ public sealed class DashboardStatusTests
         }
     }
 
-#pragma warning disable BL0006 // A real test renderer is required to verify dispatcher behavior.
     /// <summary>
     ///     Captures actual render commits and renderer exceptions.
     /// </summary>
@@ -421,5 +412,4 @@ public sealed class DashboardStatusTests
             return Task.CompletedTask;
         }
     }
-#pragma warning restore BL0006
 }

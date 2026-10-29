@@ -47,12 +47,14 @@ public sealed class TelemetryHostSafetyTests
             builder.Services.RemoveAll<IHostedService>();
             builder.Logging.ClearProviders().SetMinimumLevel(LogLevel.Trace).AddProvider(capture);
             builder.Services.AddSafePlatformLogging();
+            builder.Services.AddHttpClient("Loopback");
         });
 
         Assert.IsType<SafeLoggerFactory>(app.Services.GetRequiredService<ILoggerFactory>());
 
         await app.StartAsync();
-        using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+        using var client = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient("Loopback");
+        client.BaseAddress = new Uri(app.Urls.Single());
         using var unauthorized = await client.GetAsync("/status?password=private-query");
 
         Assert.Equal(HttpStatusCode.Unauthorized, unauthorized.StatusCode);
@@ -75,9 +77,8 @@ public sealed class TelemetryHostSafetyTests
         Assert.DoesNotContain(token, capabilityJson);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "/ingest?password=private-query")
-        {
-            Content = new StringContent("{password=private-body")
-        };
+            ;
+        request.Content = new StringContent("{password=private-body");
 
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -91,9 +92,8 @@ public sealed class TelemetryHostSafetyTests
         Assert.Equal(HttpStatusCode.Unauthorized, missingCredential.StatusCode);
 
         using var malformedBatch = new HttpRequestMessage(HttpMethod.Post, "/archive/metric-batch")
-        {
-            Content = new StringContent("{password=private-body")
-        };
+            ;
+        malformedBatch.Content = new StringContent("{password=private-body");
 
         malformedBatch.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         malformedBatch.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);

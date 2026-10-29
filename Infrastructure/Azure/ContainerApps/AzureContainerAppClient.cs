@@ -134,8 +134,6 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
 
         var cpu = UnknownMetricValue;
         var memory = UnknownMetricValue;
-        double? cpuCores = null;
-        double? memoryBytes = null;
 
         if (!document.RootElement.TryGetProperty("value", out var values) || values.ValueKind != JsonValueKind.Array)
             return null;
@@ -143,8 +141,8 @@ internal sealed class AzureContainerAppClient(IHttpClientFactory httpClientFacto
         var observations = AzureMetricObservations.Parse(document.RootElement, "Average", true);
         var latest = observations.LastOrDefault();
 
-        cpuCores = latest?.Samples.FirstOrDefault(s => s.Unit == "cores")?.Value;
-        memoryBytes = latest?.Samples.FirstOrDefault(s => s.Unit == "bytes")?.Value;
+        var cpuCores = latest?.Samples.FirstOrDefault(s => s.Unit == "cores")?.Value;
+        var memoryBytes = latest?.Samples.FirstOrDefault(s => s.Unit == "bytes")?.Value;
 
         if (cpuCores is { } cores) cpu = string.Create(CultureInfo.InvariantCulture, $"{cores:0.##} cores");
         if (memoryBytes is { } bytes) memory = FormatBytes(bytes);

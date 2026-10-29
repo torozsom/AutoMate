@@ -129,7 +129,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
     public async Task Pending_metric_recovery_ignores_page_disposal(bool failure)
     {
         var history = DispatchProxy.Create<IDeploymentHistoryService, HistoryProxy>();
-        var proxy = (HistoryProxy)history;
+        var proxy = Assert.IsAssignableFrom<HistoryProxy>(history);
         await using var services = new ServiceCollection().AddSingleton(history).BuildServiceProvider();
         var logger = new RecordingLogger();
         var page = new ProjectDetails();
@@ -233,7 +233,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         ///     requires no value.
         /// </returns>
         /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        protected override object Invoke(MethodInfo? method, object?[]? args)
         {
             if (method?.Name != nameof(IDeploymentHistoryService.ReadMetricsAsync)) throw new NotSupportedException();
             Reads++;

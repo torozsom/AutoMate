@@ -33,20 +33,18 @@ public sealed class DeploymentMetricDisplayTests
     {
         var now = DateTimeOffset.UtcNow;
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Creates point data with the supplied identities and synthetic scenario values.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="unit">The native metric unit associated with the sample.</param>
-        /// <param name="value">Synthetic numeric observation.</param>
-        /// <param name="timestamp">Recorded timestamp, if available.</param>
-        /// <returns>The configured deployment metric point instance or response for this scenario.</returns>
+        // <summary>
+        //     Creates point data with the supplied identities and synthetic scenario values.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="unit">The native metric unit associated with the sample.</param>
+        // <param name="value">Synthetic numeric observation.</param>
+        // <param name="timestamp">Recorded timestamp, if available.</param>
+        // <returns>The configured deployment metric point instance or response for this scenario.</returns>
         DeploymentMetricPoint Point(string name, string unit, double value, DateTimeOffset timestamp)
         {
             return new DeploymentMetricPoint("web", name, unit, timestamp, value, value, value);
         }
-#pragma warning restore CS1587
 
         var display = DeploymentMetricDisplay.Latest([
             Point("automate_cpu_usage_cores", "cores", 0.1, now.AddMinutes(-1)),

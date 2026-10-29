@@ -402,7 +402,7 @@ public sealed class PlatformTelemetrySafetyTests
             /// <param name="state">Synthetic readiness or structured logger state.</param>
             /// <typeparam name="TState">Type of structured logger state.</typeparam>
             /// <returns>A disposable scope from the fixture external scope provider.</returns>
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+            public IDisposable BeginScope<TState>(TState state) where TState : notnull
             {
                 return owner._scopes.Push(state);
             }

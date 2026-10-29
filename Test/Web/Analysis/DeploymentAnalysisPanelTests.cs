@@ -1,14 +1,11 @@
-using System.Reflection;
 using System.Text.RegularExpressions;
 using Application.Abstractions.Ai.Execution;
-using Application.Ai.Policy;
 using Application.Ai.Results;
 using Domain.Enums.Ai;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Web.Components.Shared;
 
 namespace Test.Web.Analysis;
@@ -253,110 +250,5 @@ public sealed class DeploymentAnalysisPanelTests
             directory = directory.Parent;
 
         return directory?.FullName ?? throw new InvalidOperationException("Repository root unavailable.");
-    }
-
-    /// <summary>
-    ///     Records exact consent identities and supplies newly persisted configuration through the
-    ///     application port.
-    /// </summary>
-    public class ConsentPort : DispatchProxy
-    {
-        /// <summary>Configuration returned by authorized readback.</summary>
-        public Domain.Entities.Projects.Application? Saved { get; set; }
-
-        /// <summary>Exact application, owner, project and consent passed by the page.</summary>
-        public (Guid App, Guid Owner, Guid Project, bool Consent) Target { get; private set; }
-
-        /// <summary>
-        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
-        /// </summary>
-        /// <param name="method">Reflected member or client method selected for invocation.</param>
-        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
-        /// <returns>
-        ///     The configured response for the selected fixture member, including null when its contract
-        ///     requires no value.
-        /// </returns>
-        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
-        {
-            if (method?.Name == "SetAiDiagnosticEgressConsentAsync" && args?.Length == 5)
-            {
-                Target = ((Guid)args[0]!, (Guid)args[1]!, (Guid)args[2]!, (bool)args[3]!);
-
-                return Task.FromResult(true);
-            }
-
-            if (method?.Name == "GetAppByIdAsync") return Task.FromResult(Saved);
-            throw new NotSupportedException();
-        }
-    }
-
-    /// <summary>
-    ///     Enabled UI options do not imply approved egress; the fake port never transmits anything.
-    /// </summary>
-    private sealed class EnabledOptions : IOptionsMonitor<AiAnalysisOptions>
-    {
-        /// <summary>Current synthetic analysis options.</summary>
-        public AiAnalysisOptions CurrentValue { get; } = new() { Enabled = true };
-
-        /// <summary>
-        ///     Returns current synthetic options without selecting by option name.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller; ignored by this fixture.</param>
-        /// <returns>The current synthetic options instance.</returns>
-        public AiAnalysisOptions Get(string? name)
-        {
-            return CurrentValue;
-        }
-
-        /// <summary>
-        ///     Returns no change subscription because this options fixture does not notify listeners.
-        /// </summary>
-        /// <param name="listener">Options-change callback supplied by the caller; ignored by this fixture.</param>
-        /// <returns>Null; this fixture does not subscribe to options changes.</returns>
-        public IDisposable? OnChange(Action<AiAnalysisOptions, string?> listener)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    ///     Captures actual owner/deployment/stable-ID arguments and simulates one uncertain admission
-    ///     response.
-    /// </summary>
-    public class RequestPort : DispatchProxy
-    {
-        /// <summary>Stable identities observed by the Application port.</summary>
-        public List<Guid> Requests { get; } = [];
-
-        /// <summary>Owner metadata supplied by the page.</summary>
-        public Guid Owner { get; private set; }
-
-        /// <summary>Actual deployment metadata supplied by the page.</summary>
-        public Guid Deployment { get; private set; }
-
-        /// <summary>
-        ///     Dispatches supported synthetic port calls to configured responses or the fixture callback.
-        /// </summary>
-        /// <param name="method">Reflected member or client method selected for invocation.</param>
-        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
-        /// <returns>
-        ///     The configured response for the selected fixture member, including null when its contract
-        ///     requires no value.
-        /// </returns>
-        /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
-        {
-            if (method?.Name != "RequestManualAsync" || args![2] is not Guid id) throw new NotSupportedException();
-            Owner = (Guid)args[0]!;
-            Deployment = (Guid)args[1]!;
-            Requests.Add(id);
-
-            return Requests.Count == 1
-                ? Task.FromException<DeploymentAnalysisRequestResult>(
-                    new InvalidOperationException("private-provider-error"))
-                : Task.FromResult(new DeploymentAnalysisRequestResult(true, "Analysis queued.",
-                    Result(AiAnalysisStatus.Queued) with { DeploymentId = Deployment }));
-        }
     }
 }

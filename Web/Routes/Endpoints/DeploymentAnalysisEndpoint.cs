@@ -134,7 +134,7 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
         if (owner == Guid.Empty)
             return Results.Forbid();
 
-        if (request.Selection is null || request.RequestId == Guid.Empty)
+        if (request is { Selection: null } || request.RequestId == Guid.Empty)
             return Results.BadRequest("Invalid assessment request.");
 
         var result =

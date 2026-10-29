@@ -125,7 +125,7 @@ public sealed class DeploymentAnalysisEndpointTests
         var calls = 0;
         var users = DispatchProxy.Create<IUserService, PortProxy>();
 
-        ((PortProxy)users).Call = (_, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(users)).Call = (_, args) =>
         {
             Assert.Equal(owner.ToString(), args![0]);
 
@@ -133,7 +133,7 @@ public sealed class DeploymentAnalysisEndpointTests
         };
         var analyses = DispatchProxy.Create<IDeploymentAnalysisService, PortProxy>();
 
-        ((PortProxy)analyses).Call = (method, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(analyses)).Call = (method, args) =>
         {
             Assert.Equal(methodName, method!.Name);
             Assert.Equal(owner, args![0]);
@@ -170,7 +170,8 @@ public sealed class DeploymentAnalysisEndpointTests
             Results.Text(antiforgery.GetAndStoreTokens(context).RequestToken!));
         await app.StartAsync();
         using var client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer() })
-            { BaseAddress = new Uri(app.Urls.Single()) };
+            ;
+        client.BaseAddress = new Uri(app.Urls.Single());
 
         if (authenticated) client.DefaultRequestHeaders.Add("Fixture-Owner", owner.ToString());
         var requestToken = await client.GetStringAsync("/fixture-token");

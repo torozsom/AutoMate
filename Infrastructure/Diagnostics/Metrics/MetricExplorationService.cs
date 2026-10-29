@@ -51,7 +51,7 @@ public sealed class MetricExplorationService(
     public async Task<MetricExplorationResult> ReadAsync(MetricExplorationQuery query,
         CancellationToken token = default)
     {
-        if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
+        if (options.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
 
         query.Range.Validate(clock.GetUtcNow());
@@ -90,9 +90,9 @@ public sealed class MetricExplorationService(
                             && db.Applications
                                 .Any(p => p.Id == d.ProjectId && p.UserId == query.Owner)
                             && db.Deployments
-                                .Any(deployment => deployment.Id == d.DeploymentId
-                                                   && deployment.CsProject!.AppId == d.ProjectId
-                                                   && deployment.CsProject.Application.UserId == query.Owner)
+                                .Any(candidate => candidate.Id == d.DeploymentId
+                                                  && candidate.CsProject!.AppId == d.ProjectId
+                                                  && candidate.CsProject.Application.UserId == query.Owner)
                             && d.SampleCount > 0);
 
             try

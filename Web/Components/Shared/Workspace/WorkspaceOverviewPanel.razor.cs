@@ -159,7 +159,7 @@ public partial class WorkspaceOverviewPanel
         if (!firstRender) return;
         try
         {
-            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/console-ui.js");
+            var module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/console-ui.js");
             if (_lifetime.IsCancellationRequested)
             {
                 await module.DisposeAsync();

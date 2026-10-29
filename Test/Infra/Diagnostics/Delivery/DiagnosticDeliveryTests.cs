@@ -115,11 +115,10 @@ public sealed class DiagnosticDeliveryTests
     {
         var spans = new ConcurrentQueue<Activity>();
         using var listener = new ActivityListener
-        {
-            ActivityStopped = spans.Enqueue,
-            ShouldListenTo = source => source.Name == "AutoMate.Deployments",
-            Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded
-        };
+            ();
+        listener.ActivityStopped = spans.Enqueue;
+        listener.ShouldListenTo = source => source.Name == "AutoMate.Deployments";
+        listener.Sample = (ref _) => ActivitySamplingResult.AllDataAndRecorded;
 
         ActivitySource.AddActivityListener(listener);
         var store = new TestStore();
@@ -198,7 +197,7 @@ public sealed class DiagnosticDeliveryTests
     {
         return new ServiceCollection().AddSingleton<IDeploymentDiagnosticStore>(store)
             .AddSingleton<ILogStreamer>(live)
-            .AddSingleton<IOptions<TelemetryStorageOptions>>(Options.Create(new TelemetryStorageOptions
+            .AddSingleton(Options.Create(new TelemetryStorageOptions
                 { Backend = "LokiMimir", DeliveryMode = "DiskGateway" })).BuildServiceProvider();
     }
 

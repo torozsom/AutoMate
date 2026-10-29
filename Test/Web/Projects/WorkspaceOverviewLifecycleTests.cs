@@ -19,7 +19,6 @@ namespace Test.Web.Projects;
 ///     Exercises identity changes and disposal against actual asynchronous overview read lifetime.
 /// </summary>
 /// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
-#pragma warning disable BL0006 // Real renderer required for interleaved lifecycle callbacks.
 public sealed class WorkspaceOverviewLifecycleTests
 {
     /// <summary>
@@ -83,58 +82,50 @@ public sealed class WorkspaceOverviewLifecycleTests
             await renderer.DisposeAsync();
         }
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Seeds actual private component state without production-only test hooks.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="value">Fixture member value to assign.</param>
+        // <summary>
+        //     Seeds actual private component state without production-only test hooks.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="value">Fixture member value to assign.</param>
         void SetField(string name, object value)
         {
             typeof(WorkspaceOverviewPanel).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(
                 panel, value);
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Reads the component's accepted projection.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <returns>The selected reflected fixture value, which may be null.</returns>
+        // <summary>
+        //     Reads the component's accepted projection.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <returns>The selected reflected fixture value, which may be null.</returns>
         object? GetField(string name)
         {
             return typeof(WorkspaceOverviewPanel).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(panel);
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Injects the real independent scope and authentication boundaries.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="value">Fixture member value to assign.</param>
+        // <summary>
+        //     Injects the real independent scope and authentication boundaries.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="value">Fixture member value to assign.</param>
         void SetProperty(string name, object value)
         {
             typeof(WorkspaceOverviewPanel).GetProperty(name,
                 BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.SetValue(panel, value);
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Runs real lifecycle helpers on the renderer dispatcher.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
-        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
+        // <summary>
+        //     Runs real lifecycle helpers on the renderer dispatcher.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="args">Arguments for the selected fixture port or reflected component member.</param>
+        // <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         Task Call(string name, params object?[] args)
         {
             return (Task)typeof(WorkspaceOverviewPanel).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(panel, args)!;
         }
-#pragma warning restore CS1587
     }
 
     /// <summary>
@@ -302,5 +293,4 @@ public sealed class WorkspaceOverviewLifecycleTests
             return Task.CompletedTask;
         }
     }
-#pragma warning restore BL0006
 }

@@ -217,7 +217,6 @@ public sealed class ProjectDetailsNotificationTests
         }
     }
 
-#pragma warning disable BL0006 // A real renderer is necessary to assert circuit fault isolation.
     /// <summary>Captures errors crossing the Blazor renderer boundary.</summary>
     private sealed class TestRenderer(IServiceProvider services) : Renderer(services, NullLoggerFactory.Instance)
     {
@@ -245,5 +244,4 @@ public sealed class ProjectDetailsNotificationTests
             return Task.CompletedTask;
         }
     }
-#pragma warning restore BL0006
 }

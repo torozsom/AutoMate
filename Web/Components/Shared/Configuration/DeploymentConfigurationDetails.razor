@@ -103,7 +103,7 @@
                 <RecordedValueRow Label="Revision" Value="@(Deployment.CloudContainerRevision ?? CloudMissing)"
                                   Copyable="true"/>
                 <RecordedValueRow Label="Docker container"
-                                  Value="@(Deployment.DockerContainerId ?? (snapshot?.Provider?.Contains("Azure", StringComparison.OrdinalIgnoreCase) == true ? "Not applicable" : null))"
+                                  Value="@(Deployment.DockerContainerId ?? (snapshot is { Provider: { } provider } && provider.Contains("Azure", StringComparison.OrdinalIgnoreCase) ? "Not applicable" : null))"
                                   Copyable="true"/>
                 <RecordedValueRow Label="Workflow run"
                                   Value="@(Deployment.CloudGitHubActionRunId?.ToString() ?? CloudMissing)"

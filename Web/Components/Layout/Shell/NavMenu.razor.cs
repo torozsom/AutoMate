@@ -21,7 +21,7 @@ public partial class NavMenu : ComponentBase
 
     /// <summary>Browser interop for owned UI interactions.</summary>
     [Inject]
-    private IJSRuntime JS { get; set; } = null!;
+    private IJSRuntime Js { get; set; } = null!;
 
     /// <summary>Reviewed operational logger for the component.</summary>
     [Inject]
@@ -76,7 +76,7 @@ public partial class NavMenu : ComponentBase
 
         try
         {
-            var theme = await JS.InvokeAsync<string>("window.getTheme");
+            var theme = await Js.InvokeAsync<string>("window.getTheme");
             _isDarkMode = theme == "dark";
             StateHasChanged();
         }
@@ -98,7 +98,7 @@ public partial class NavMenu : ComponentBase
 
         try
         {
-            await JS.InvokeVoidAsync("window.setTheme", theme);
+            await Js.InvokeVoidAsync("window.setTheme", theme);
         }
         catch (JSException ex)
         {

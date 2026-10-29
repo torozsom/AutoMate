@@ -365,7 +365,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         if (transient) Assert.Equal(42, Assert.IsType<TransientAnalysisProviderException>(error).RetryAfterSeconds);
         else Assert.IsType<HttpRequestException>(error);
 
-        Assert.DoesNotContain("private-value", error!.ToString());
+        Assert.DoesNotContain("private-value", error.ToString());
         Assert.Equal(1, calls);
     }
 

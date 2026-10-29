@@ -64,10 +64,10 @@ internal sealed class DeploymentAnalysisProcessor(
         if (work.LeaseId == Guid.Empty) return AnalysisOutcome.Discarded;
 
         var analysisId = work.AnalysisId;
-        var now = clock.GetUtcNow();
+        var startedAt = clock.GetUtcNow();
 
         var analysis = await db.AiDeploymentAnalyses.AsNoTracking().FirstOrDefaultAsync(
-            item => item.Id == analysisId && item.ExpiresAt > now, cancellationToken);
+            item => item.Id == analysisId && item.ExpiresAt > startedAt, cancellationToken);
 
         if (analysis is null) return AnalysisOutcome.Discarded;
 
@@ -81,17 +81,17 @@ internal sealed class DeploymentAnalysisProcessor(
         if (await db.AiDeploymentAnalyses
                 .Where(item =>
                     item.Id == analysisId
-                    && item.ExpiresAt > now
+                    && item.ExpiresAt > startedAt
                     && (item.Status == AiAnalysisStatus.Queued ||
                         item.Status == AiAnalysisStatus.Running)
                     && db.DeploymentAnalysisWorkItems
                         .Any(row =>
                             row.AnalysisId == analysisId
                             && row.LeaseId == work.LeaseId
-                            && row.CompletedAt == null && row.LeaseUntil > now))
+                            && row.CompletedAt == null && row.LeaseUntil > startedAt))
                 .ExecuteUpdateAsync(update =>
                     update.SetProperty(item => item.Status, AiAnalysisStatus.Running)
-                        .SetProperty(item => item.StartedAt, now)
+                        .SetProperty(item => item.StartedAt, startedAt)
                         .SetProperty(item => item.RetryCount, work.ProviderRetryCount), cancellationToken) ==
             0) return AnalysisOutcome.Discarded;
 
@@ -126,18 +126,18 @@ internal sealed class DeploymentAnalysisProcessor(
                 throw new AnalysisProviderUnavailableException(AnalysisSkipReason.UnsupportedData);
 
             var evidence = Array.AsReadOnly([.. context.EvidenceReferences]);
-            now = clock.GetUtcNow();
+            var contextCheckedAt = clock.GetUtcNow();
 
             if (!await db.AiDeploymentAnalyses
                     .AsNoTracking()
                     .AnyAsync(item => item.Id == analysisId
-                                      && item.ExpiresAt > now
+                                      && item.ExpiresAt > contextCheckedAt
                                       && db.DeploymentAnalysisWorkItems
                                           .Any(row =>
                                               row.AnalysisId == analysisId
                                               && row.LeaseId == work.LeaseId
                                               && row.CompletedAt == null
-                                              && row.LeaseUntil > now),
+                                              && row.LeaseUntil > contextCheckedAt),
                         cancellationToken)
                )
                 return AnalysisOutcome.Discarded;
@@ -158,7 +158,7 @@ internal sealed class DeploymentAnalysisProcessor(
                 throw new AnalysisProviderUnavailableException(reason);
             }
 
-            now = clock.GetUtcNow();
+            var providerCheckedAt = clock.GetUtcNow();
 
             if (!await db.DeploymentAnalysisWorkItems
                     .AsNoTracking()
@@ -166,8 +166,8 @@ internal sealed class DeploymentAnalysisProcessor(
                             item.AnalysisId == analysisId
                             && item.LeaseId == work.LeaseId
                             && item.CompletedAt == null
-                            && item.LeaseUntil > now
-                            && item.Analysis.ExpiresAt > now
+                            && item.LeaseUntil > providerCheckedAt
+                            && item.Analysis.ExpiresAt > providerCheckedAt
                             && item.Analysis.Status == AiAnalysisStatus.Running,
                         cancellationToken)) return AnalysisOutcome.Discarded;
 
@@ -295,21 +295,21 @@ internal sealed class DeploymentAnalysisProcessor(
         using var publication =
             AnalysisTelemetry.Start(AnalysisOperation.Publish, analysis.DeploymentId, analysisId, cancellationToken);
 
-        now = clock.GetUtcNow();
+        var publicationCheckedAt = clock.GetUtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
         // Update the analysis record only if it is still running and the work item is still valid.
         var stored = await db.AiDeploymentAnalyses
             .Where(item =>
                 item.Id == analysisId
-                && item.ExpiresAt > now
+                && item.ExpiresAt > publicationCheckedAt
                 && item.Status == AiAnalysisStatus.Running
                 && db.DeploymentAnalysisWorkItems
                     .Any(row =>
                         row.AnalysisId == analysisId
                         && row.LeaseId == work.LeaseId
                         && row.CompletedAt == null
-                        && row.LeaseUntil > now))
+                        && row.LeaseUntil > publicationCheckedAt))
             .ExecuteUpdateAsync(update => update
                 .SetProperty(item => item.Provider, analysis.Provider)
                 .SetProperty(item => item.Model, analysis.Model)
@@ -337,15 +337,15 @@ internal sealed class DeploymentAnalysisProcessor(
             return AnalysisOutcome.Discarded;
         }
 
-        now = clock.GetUtcNow();
+        var completedAt = clock.GetUtcNow();
 
         // Update the work item record only if it is still valid.
         var completed = await db.DeploymentAnalysisWorkItems
             .Where(item => item.AnalysisId == analysisId
                            && item.LeaseId == work.LeaseId
                            && item.CompletedAt == null
-                           && item.LeaseUntil > now)
-            .ExecuteUpdateAsync(update => update.SetProperty(item => item.CompletedAt, now)
+                           && item.LeaseUntil > completedAt)
+            .ExecuteUpdateAsync(update => update.SetProperty(item => item.CompletedAt, completedAt)
                 .SetProperty(item => item.LeaseUntil, (DateTimeOffset?)null), cancellationToken);
 
         if (completed == 0)
@@ -389,8 +389,8 @@ internal sealed class DeploymentAnalysisProcessor(
     private static async Task<bool> ScheduleRetryAsync(AutoMateDbContext db, TimeProvider clock,
         DeploymentAnalysisWorkItem work, TimeSpan delay, CancellationToken token)
     {
-        var now = clock.GetUtcNow();
-        var next = now.Add(delay);
+        var scheduledAt = clock.GetUtcNow();
+        var next = scheduledAt.Add(delay);
 
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         var changed = await db.AiDeploymentAnalyses
@@ -403,20 +403,20 @@ internal sealed class DeploymentAnalysisProcessor(
                         row.AnalysisId == work.AnalysisId
                         && row.LeaseId == work.LeaseId
                         && row.CompletedAt == null
-                        && row.LeaseUntil > now
+                        && row.LeaseUntil > scheduledAt
                         && row.ProviderRetryCount == work.ProviderRetryCount))
             .ExecuteUpdateAsync(update =>
                 update.SetProperty(item => item.Status, AiAnalysisStatus.Queued)
                     .SetProperty(item => item.RetryCount, work.ProviderRetryCount + 1), token);
 
         if (changed == 0) return false;
-        now = clock.GetUtcNow();
+        var retryCheckedAt = clock.GetUtcNow();
 
         changed = await db.DeploymentAnalysisWorkItems
             .Where(item => item.AnalysisId == work.AnalysisId
                            && item.LeaseId == work.LeaseId
                            && item.CompletedAt == null
-                           && item.LeaseUntil > now
+                           && item.LeaseUntil > retryCheckedAt
                            && item.ProviderRetryCount == work.ProviderRetryCount)
             .ExecuteUpdateAsync(update => update
                 .SetProperty(item => item.ProviderRetryCount, work.ProviderRetryCount + 1)

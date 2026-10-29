@@ -56,7 +56,8 @@ internal static class AzureMetricObservations
                 _ => default
             };
 
-            if (mapping.Item1 is null || !metric.TryGetProperty("timeseries", out var series)) continue;
+            if (mapping is not ({ } name, { } unit, _) ||
+                !metric.TryGetProperty("timeseries", out var series)) continue;
             var values = new List<(DateTimeOffset Time, double Value)>();
 
             foreach (var dimension in series.EnumerateArray())
@@ -82,7 +83,7 @@ internal static class AzureMetricObservations
                 if (!buckets.TryGetValue(minute.Key, out var samples))
                     buckets[minute.Key] = samples = [];
 
-                samples.Add(new DeploymentMetricSample(mapping.Item1, value, mapping.Item2));
+                samples.Add(new DeploymentMetricSample(name, value, unit));
             }
         }
 

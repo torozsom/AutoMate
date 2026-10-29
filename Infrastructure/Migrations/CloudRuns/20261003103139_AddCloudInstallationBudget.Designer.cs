@@ -22,7 +22,6 @@ namespace Infrastructure.Migrations.CloudRuns
         /// <param name="modelBuilder">Builds the documented EF entity mappings or historical model.</param>
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
-#pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
@@ -1263,7 +1262,6 @@ namespace Infrastructure.Migrations.CloudRuns
                 {
                     b.Navigation("Applications");
                 });
-#pragma warning restore 612, 618
         }
     }
 }

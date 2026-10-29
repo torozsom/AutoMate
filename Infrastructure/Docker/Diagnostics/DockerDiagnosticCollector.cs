@@ -98,10 +98,11 @@ internal sealed class DockerDiagnosticCollector(
             try
             {
                 using var subscription = CancellationTokenSource.CreateLinkedTokenSource(token);
+                var subscriptionToken = subscription.Token;
                 var pending = Channel.CreateBounded<DeploymentDiagnosticEvent>(new BoundedChannelOptions(256)
                     { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
                 var omitted = 0;
-                var receiver = ReceiveAsync();
+                var receiver = ReceiveAsync(lastSecond);
                 if (!ready)
                 {
                     subscribed();
@@ -142,18 +143,18 @@ internal sealed class DockerDiagnosticCollector(
                 }
 
                 // The SDK owns JSON framing. Only normalized, redacted events enter the bounded queue.
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-                /// <summary>
-                ///     Normalizes synchronous SDK observations and awaits the cancellable receiver.
-                /// </summary>
-                /// <returns>A task representing completion of the asynchronous operation.</returns>
-                async Task ReceiveAsync()
+                // <summary>
+                //     Normalizes synchronous SDK observations and awaits the cancellable receiver.
+                // </summary>
+                // <param name="since">The confirmed overlap boundary at subscription startup.</param>
+                // <returns>A task representing completion of the asynchronous operation.</returns>
+                async Task ReceiveAsync(long since)
                 {
                     try
                     {
                         await client.System.MonitorEventsAsync(new ContainerEventsParameters
                         {
-                            Since = lastSecond.ToString(CultureInfo.InvariantCulture),
+                            Since = since.ToString(CultureInfo.InvariantCulture),
                             Filters = new Dictionary<string, IDictionary<string, bool>>
                             {
                                 ["type"] = new Dictionary<string, bool> { ["container"] = true },
@@ -175,7 +176,7 @@ internal sealed class DockerDiagnosticCollector(
                             {
                                 Failed(DeploymentDiagnosticSource.DockerDaemon, exception);
                             }
-                        }), subscription.Token);
+                        }), subscriptionToken);
                         pending.Writer.TryComplete();
                     }
                     catch (Exception exception)
@@ -184,7 +185,6 @@ internal sealed class DockerDiagnosticCollector(
                         throw;
                     }
                 }
-#pragma warning restore CS1587
 
                 DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Completed);
                 await NoticeAsync(target, null, DeploymentDiagnosticSource.DockerDaemon,
@@ -213,13 +213,12 @@ internal sealed class DockerDiagnosticCollector(
 
             await Task.Delay(Backoff(++attempt), clock, token);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-            /// <summary>
-            ///     Confirms owned lifecycle ingestion before advancing the overlap checkpoint.
-            /// </summary>
-            /// <param name="e">Normalized diagnostic to redact before persistence or presentation.</param>
-            /// <returns>A task representing completion of the asynchronous operation.</returns>
-            /// <exception cref="IOException">Diagnostic admission was not confirmed.</exception>
+            // <summary>
+            //     Confirms owned lifecycle ingestion before advancing the overlap checkpoint.
+            // </summary>
+            // <param name="e">Normalized diagnostic to redact before persistence or presentation.</param>
+            // <returns>A task representing completion of the asynchronous operation.</returns>
+            // <exception cref="IOException">Diagnostic admission was not confirmed.</exception>
             async Task EmitAsync(DeploymentDiagnosticEvent e)
             {
                 if (delivered.Contains(e.EventId!.Value))
@@ -247,7 +246,6 @@ internal sealed class DockerDiagnosticCollector(
                 order.Enqueue(e.EventId.Value);
                 lastSecond = Math.Max(lastSecond, e.TimestampUtc.ToUnixTimeSeconds() - 1);
             }
-#pragma warning restore CS1587
         }
     }
 
@@ -262,7 +260,7 @@ internal sealed class DockerDiagnosticCollector(
     internal async Task MonitorContainerAsync(DockerDeploymentTarget target, DockerContainerTarget container,
         CancellationToken token)
     {
-        var window = new DockerLogReplayWindow();
+        var replayWindow = new DockerLogReplayWindow();
         string? previousId = null;
         var attempt = 0;
         var ended = false;
@@ -288,8 +286,8 @@ internal sealed class DockerDiagnosticCollector(
                 if (previousId != inspect.ID)
                 {
                     await RecordContainerAsync(target, container, inspect, token);
-                    window = new DockerLogReplayWindow();
-                    await RestoreAsync(target, inspect.ID, window, token);
+                    replayWindow = new DockerLogReplayWindow();
+                    await RestoreAsync(target, inspect.ID, replayWindow, token);
                     previousId = inspect.ID;
                     ended = false;
                 }
@@ -300,7 +298,9 @@ internal sealed class DockerDiagnosticCollector(
                     continue;
                 }
 
+                var window = replayWindow;
                 window.BeginSubscription();
+                var containerId = inspect.ID;
                 var tty = inspect.Config?.Tty == true;
                 if (tty && !ttyReported)
                 {
@@ -309,7 +309,7 @@ internal sealed class DockerDiagnosticCollector(
                         "This container uses a TTY; Docker combines stdout and stderr into one output stream.", token);
                 }
 
-                using var stream = await client.Containers.GetContainerLogsAsync(inspect.ID,
+                using var stream = await client.Containers.GetContainerLogsAsync(containerId,
                     inspect.Config?.Tty == true,
                     new ContainerLogsParameters
                     {
@@ -366,13 +366,12 @@ internal sealed class DockerDiagnosticCollector(
                     "Container output stream ended; waiting for the container to run again.", token,
                     DeploymentDiagnosticKind.Lifecycle);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-                /// <summary>
-                ///     Redacts before deriving replay identity and confirms each source occurrence durably.
-                /// </summary>
-                /// <param name="line">Decoded bounded Docker output with its timestamp and omission metadata.</param>
-                /// <param name="output">Output stream classification or normalized process output.</param>
-                /// <returns>A task representing completion of the asynchronous operation.</returns>
+                // <summary>
+                //     Redacts before deriving replay identity and confirms each source occurrence durably.
+                // </summary>
+                // <param name="line">Decoded bounded Docker output with its timestamp and omission metadata.</param>
+                // <param name="output">Output stream classification or normalized process output.</param>
+                // <returns>A task representing completion of the asynchronous operation.</returns>
                 async Task EmitAsync(DockerLogLine line, DeploymentDiagnosticStream output)
                 {
                     var e = redactor.Redact(new DeploymentDiagnosticEvent(target.ProjectId, target.DeploymentId,
@@ -384,7 +383,7 @@ internal sealed class DockerDiagnosticCollector(
                         new Dictionary<string, string> { ["phase"] = "runtime", ["stream"] = output.ToString() },
                         SourceIdentity: new DeploymentDiagnosticSourceIdentity(container.IsDatabase
                             ? DeploymentDiagnosticComponent.Database
-                            : DeploymentDiagnosticComponent.Web, output, inspect.ID))).Event;
+                            : DeploymentDiagnosticComponent.Web, output, containerId))).Event;
                     var occurrence = line.ProviderTimestamp is null
                         ? null
                         : window.Observe(line.ProviderTimestamp, output, e.Message);
@@ -399,7 +398,7 @@ internal sealed class DockerDiagnosticCollector(
                         {
                             Cursor = cursor.Cursor,
                             EventId = DockerDiagnosticNormalizer.Identity(
-                                $"{target.DeploymentId:N}/{inspect.ID}/{cursor.Key}/{cursor.Occurrence}")
+                                $"{target.DeploymentId:N}/{containerId}/{cursor.Key}/{cursor.Occurrence}")
                         };
                     if (!await ConfirmAsync(e, token)) throw new IOException("Diagnostic admission was not confirmed.");
                     if (occurrence is { } confirmation)
@@ -412,7 +411,6 @@ internal sealed class DockerDiagnosticCollector(
                             token);
                     }
                 }
-#pragma warning restore CS1587
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {

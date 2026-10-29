@@ -30,21 +30,19 @@ public sealed class TelemetryPresentationTests
     {
         var date = new DateTimeOffset(2026, 10, 4, 0, 0, 0, TimeSpan.Zero);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Creates row data with the supplied identities and synthetic scenario values.
-        /// </summary>
-        /// <param name="day">The UTC day represented by the activity bucket.</param>
-        /// <param name="count">Recorded deployment total used to size the bar.</param>
-        /// <param name="value">Synthetic numeric observation, or null when unavailable.</param>
-        /// <returns>The configured deployment analytics row instance or response for this scenario.</returns>
+        // <summary>
+        //     Creates row data with the supplied identities and synthetic scenario values.
+        // </summary>
+        // <param name="day">The UTC day represented by the activity bucket.</param>
+        // <param name="count">Recorded deployment total used to size the bar.</param>
+        // <param name="value">Synthetic numeric observation, or null when unavailable.</param>
+        // <returns>The configured deployment analytics row instance or response for this scenario.</returns>
         DeploymentAnalyticsRow Row(DateTimeOffset day, long count, double? value)
         {
             return new DeploymentAnalyticsRow(Guid.NewGuid(), day, "web", TelemetryPresentation.Cpu, "cores", count,
                 value, value, value, 0,
                 true, day);
         }
-#pragma warning restore CS1587
 
         var rows = new[]
             { Row(date, 1, .01), Row(date, 9, .03), Row(date.AddDays(2), 1, 0), Row(date.AddDays(1), 0, null) };

@@ -504,7 +504,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         else Assert.IsType<HttpRequestException>(error);
 
         Assert.Equal(1, calls);
-        Assert.DoesNotContain("private-value", error!.ToString());
+        Assert.DoesNotContain("private-value", error.ToString());
         Assert.Null(error.InnerException);
     }
 
@@ -574,7 +574,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         if (transient) Assert.IsType<TransientAnalysisProviderException>(error);
         else Assert.IsType<HttpRequestException>(error);
 
-        Assert.DoesNotContain("private-value", error!.ToString());
+        Assert.DoesNotContain("private-value", error.ToString());
     }
 
     /// <summary>

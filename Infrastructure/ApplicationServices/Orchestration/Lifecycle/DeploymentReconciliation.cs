@@ -61,7 +61,9 @@ internal sealed class DeploymentReconciliation(
                 if (deployment.CsProject == null) continue;
 
                 var expectedProjectName = OrchestrationNameNormalizer.NormalizeComposeProjectName(
-                    deployment.CsProject.Application?.Name ?? deployment.CsProject.Name);
+                    deployment.CsProject is { Application: { } application }
+                        ? application.Name
+                        : deployment.CsProject.Name);
                 var isActuallyRunning =
                     runningProjectsInDocker.Contains(expectedProjectName, StringComparer.OrdinalIgnoreCase);
 

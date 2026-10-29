@@ -58,9 +58,6 @@ public partial class DeploymentHistory
     /// <summary>Bounded current output page.</summary>
     private DeploymentTerminalHistory? _history;
 
-    /// <summary>Range belonging to the displayed response while a newer range is loading.</summary>
-    private int _loadedMetricDays = 30;
-
     /// <summary>Preserves the selected page/channel across unchanged route parameters.</summary>
     private (Guid Project, Guid Deployment)? _loadedRoute;
 
@@ -130,9 +127,6 @@ public partial class DeploymentHistory
         }
     }
 
-    /// <summary>Gap threshold consistent with the bounded history query interval.</summary>
-    private TimeSpan ChartGap => new MetricTimeRange(_metricStart, _metricEnd).Interval + TimeSpan.FromSeconds(5);
-
     /// <summary>
     ///     Cancels outstanding history and metric reads and releases the page lifetime source.
     /// </summary>
@@ -188,16 +182,6 @@ public partial class DeploymentHistory
         var selected = raw.Length > 0 ? raw : points;
         return selected.Sum(p => p.Sum) /
                Math.Max(1, selected.Sum(p => p.Samples > 0 ? p.Samples : p.ImportedIntervals));
-    }
-
-    /// <summary>
-    ///     Adapts existing aggregates to the reusable presentation component.
-    /// </summary>
-    /// <param name="metric">Stored metric series name.</param>
-    /// <returns>Observed chart points in timestamp order, without synthetic missing samples.</returns>
-    private IReadOnlyList<TelemetryChartPoint> ChartPoints(string metric)
-    {
-        return [.. Selected(metric).Select(p => new TelemetryChartPoint(p.Timestamp, p.Average, p.Minimum, p.Maximum))];
     }
 
     /// <summary>
@@ -390,7 +374,6 @@ public partial class DeploymentHistory
             _metrics = result.Points;
             _observations = observations;
             _metricEnd = rangeEnd;
-            _loadedMetricDays = days;
             _metricStart = rangeStart;
             _metricAvailability = (result.Availability +
                                    (truncatedLifetime

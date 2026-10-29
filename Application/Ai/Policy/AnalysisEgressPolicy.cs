@@ -31,7 +31,8 @@ public static class AnalysisEgressPolicy
     {
         if (!options.Enabled || !options.ProviderEgressEnabled ||
             !options.RegionalProcessingApproved || options.ProcessingRegion is not ("us" or "eu") ||
-            options.ApprovedRegions?.Contains(options.ProcessingRegion, StringComparer.Ordinal) != true ||
+            options.ApprovedRegions is not { } approvedRegions ||
+            !approvedRegions.Contains(options.ProcessingRegion, StringComparer.Ordinal) ||
             options.ApprovedTenantIds is not { Length: > 0 } || options.ApprovedTenantIds.Contains(Guid.Empty) ||
             options.AllowedDataCategories is not { Length: 3 } ||
             options.Model is not { Length: >= 1 and <= 128 } ||

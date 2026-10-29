@@ -159,7 +159,7 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     ///     and control text.
     /// </summary>
     /// <returns>The cached pattern for bounded non-secret provenance identifiers.</returns>
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:/-]*$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._:/-]*$", RegexOptions.CultureInvariant)]
     private static partial Regex IdentifierPattern();
 }
 

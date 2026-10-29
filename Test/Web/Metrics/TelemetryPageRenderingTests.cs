@@ -387,7 +387,7 @@ public sealed class TelemetryPageRenderingTests
         /// <exception cref="InvalidOperationException">
         ///     The fixture injects a configured failure or detects an unexpected operation.
         /// </exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        protected override object Invoke(MethodInfo? method, object?[]? args)
         {
             throw new InvalidOperationException("Unexpected user lookup");
         }
@@ -409,7 +409,7 @@ public sealed class TelemetryPageRenderingTests
         ///     requires no value.
         /// </returns>
         /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        protected override object Invoke(MethodInfo? method, object?[]? args)
         {
             var now = DateTimeOffset.UtcNow;
             return method?.Name switch

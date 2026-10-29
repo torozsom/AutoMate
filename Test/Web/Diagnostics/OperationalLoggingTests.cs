@@ -133,7 +133,7 @@ public sealed class OperationalLoggingTests
         using var exporter = new SnapshotExporter();
         var authentication = DispatchProxy.Create<IAuthenticationService, PortProxy>();
 
-        ((PortProxy)authentication).Call = (method, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(authentication)).Call = (method, args) =>
         {
             ((HttpContext)args![0]!).Response.StatusCode = method!.Name == "ChallengeAsync" ? 401 : 403;
 
@@ -191,11 +191,11 @@ public sealed class OperationalLoggingTests
         using var exporter = new SnapshotExporter();
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
 
-        ((PortProxy)store).Call = (_, _) =>
+        (Assert.IsAssignableFrom<PortProxy>(store)).Call = (_, _) =>
             Task.FromException<long>(new InvalidOperationException("password=private-storage-body"));
         var live = DispatchProxy.Create<ILogStreamer, PortProxy>();
 
-        ((PortProxy)live).Call = (_, _) => Task.CompletedTask;
+        (Assert.IsAssignableFrom<PortProxy>(live)).Call = (_, _) => Task.CompletedTask;
         await using var services = new ServiceCollection().AddSingleton(store).AddSingleton(live)
             .AddSingleton(Options.Create(new TelemetryStorageOptions
                 { Backend = "LokiMimir", DeliveryMode = "DiskGateway" }))
@@ -255,7 +255,7 @@ public sealed class OperationalLoggingTests
             new TaskCompletionSource<DeploymentTerminalLog>(TaskCreationOptions.RunContinuationsAsynchronously);
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
 
-        ((PortProxy)store).Call = (_, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(store)).Call = (_, args) =>
         {
             persisted.TrySetResult((DeploymentDiagnosticEvent)args![0]!);
 
@@ -263,7 +263,7 @@ public sealed class OperationalLoggingTests
         };
         var live = DispatchProxy.Create<ILogStreamer, PortProxy>();
 
-        ((PortProxy)live).Call = (_, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(live)).Call = (_, args) =>
         {
             delivered.TrySetResult((DeploymentTerminalLog)args![0]!);
 
@@ -332,7 +332,7 @@ public sealed class OperationalLoggingTests
         using var exporter = new SnapshotExporter();
         var auth = DispatchProxy.Create<IAuthService, PortProxy>();
 
-        ((PortProxy)auth).Call = (method, args) =>
+        (Assert.IsAssignableFrom<PortProxy>(auth)).Call = (method, args) =>
         {
             Assert.Equal("LoginAsync", method!.Name);
             Assert.Equal("private-email@example.invalid", args![0]);
@@ -358,6 +358,8 @@ public sealed class OperationalLoggingTests
         builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
         builder.Services.AddAuthorization();
         builder.Services.AddAntiforgery();
+        builder.Services.AddHttpClient("Loopback").ConfigurePrimaryHttpMessageHandler(static () =>
+            new HttpClientHandler { AllowAutoRedirect = false, CookieContainer = new CookieContainer() });
         await using var app = builder.Build();
 
         app.UseAuthentication();
@@ -367,9 +369,8 @@ public sealed class OperationalLoggingTests
         app.MapGet("/fixture-token", (HttpContext context, IAntiforgery antiforgery) =>
             Results.Text(antiforgery.GetAndStoreTokens(context).RequestToken!));
         await app.StartAsync();
-        using var client = new HttpClient(new HttpClientHandler
-                { AllowAutoRedirect = false, CookieContainer = new CookieContainer() })
-            { BaseAddress = new Uri(app.Urls.Single()) };
+        using var client = app.Services.GetRequiredService<IHttpClientFactory>().CreateClient("Loopback");
+        client.BaseAddress = new Uri(app.Urls.Single());
         var token = await client.GetStringAsync("/fixture-token");
         using var response = await client.PostAsync("/api/auth/login", new FormUrlEncodedContent(
             new Dictionary<string, string>
@@ -445,7 +446,7 @@ public sealed class OperationalLoggingTests
             : new IOException("private-cache-password", new Exception("private-inner-token"));
         var cache = DispatchProxy.Create<IDistributedCache, PortProxy>();
 
-        ((PortProxy)cache).Call = (method, _) =>
+        (Assert.IsAssignableFrom<PortProxy>(cache)).Call = (method, _) =>
         {
             if (method!.Name == (write ? "SetAsync" : "GetAsync")) throw failure;
 
@@ -497,7 +498,7 @@ public sealed class OperationalLoggingTests
         }));
         var cache = DispatchProxy.Create<IDistributedCache, PortProxy>();
 
-        ((PortProxy)cache).Call = (_, _) => Task.FromResult<byte[]?>(null);
+        (Assert.IsAssignableFrom<PortProxy>(cache)).Call = (_, _) => Task.FromResult<byte[]?>(null);
         using var handler = new RepositoryHandler
         {
             Failure = new HttpRequestException("private-url-token", new Exception("private-inner-token"))

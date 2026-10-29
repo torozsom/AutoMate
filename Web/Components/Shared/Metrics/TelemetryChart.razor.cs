@@ -103,7 +103,7 @@ public partial class TelemetryChart
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/telemetry-chart.js");
+        _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/telemetry-chart.js");
         await _module.InvokeVoidAsync("attach", _root);
     }
 }

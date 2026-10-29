@@ -37,7 +37,7 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
         var calls = new List<string>();
         var users = DispatchProxy.Create<IUserService, OperationalLoggingTests.PortProxy>();
 
-        ((OperationalLoggingTests.PortProxy)users).Call = (method, args) =>
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(users)).Call = (method, args) =>
         {
             calls.Add(method!.Name);
             if (method.Name == nameof(IUserService.GetAzureCloudCredentialsAsync))
@@ -75,7 +75,7 @@ public sealed class ConnectedCloudDeploymentAdmissionTests
     {
         var users = DispatchProxy.Create<IUserService, OperationalLoggingTests.PortProxy>();
 
-        ((OperationalLoggingTests.PortProxy)users).Call = (method, _) =>
+        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(users)).Call = (method, _) =>
         {
             Assert.Equal(nameof(IUserService.GetAzureCloudCredentialsAsync), method!.Name);
 

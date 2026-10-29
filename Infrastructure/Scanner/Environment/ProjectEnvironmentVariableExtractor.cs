@@ -119,8 +119,7 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
     }
 
     /// <summary>
-    ///     Reads launchSettings.json Project profiles and extracts environment variables and the
-    ///     first HTTP port.
+    ///     Reads launchSettings.json Project profiles, extracts environment variables and validates the first HTTP port.
     /// </summary>
     /// <param name="projectPath">The local project path whose configuration files are scanned.</param>
     /// <param name="cancellationToken">Cancels the underlying operation when observed.</param>
@@ -132,15 +131,14 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
         CancellationToken cancellationToken)
     {
         var envVars = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        int? defaultPort = null;
 
         var directory = Path.GetDirectoryName(projectPath);
         if (string.IsNullOrEmpty(directory))
-            return new LaunchSettingsScanResult(envVars, defaultPort);
+            return new LaunchSettingsScanResult(envVars);
 
         var launchSettingsPath = Path.Combine(directory, "Properties", "launchSettings.json");
         if (!File.Exists(launchSettingsPath))
-            return new LaunchSettingsScanResult(envVars, defaultPort);
+            return new LaunchSettingsScanResult(envVars);
 
         try
         {
@@ -156,7 +154,8 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
                         continue;
 
                     ReadLaunchEnvironmentVariables(profile.Value, envVars);
-                    defaultPort = ReadLaunchHttpPort(profile.Value);
+                    // Retain URL validation and its existing error handling while returning only consumed environment data.
+                    _ = ReadLaunchHttpPort(profile.Value);
                     break;
                 }
         }
@@ -172,7 +171,7 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
             if (ex is IOException or UnauthorizedAccessException) throw;
         }
 
-        return new LaunchSettingsScanResult(envVars, defaultPort);
+        return new LaunchSettingsScanResult(envVars);
     }
 
     /// <summary>
@@ -305,6 +304,5 @@ internal sealed class ProjectEnvironmentVariableExtractor(ILogger logger)
     ///     Launch settings data extracted from a Project profile.
     /// </summary>
     /// <param name="EnvVars">Runtime environment values; can contain secrets and must not be logged.</param>
-    /// <param name="DefaultPort">Recorded default application port, if available.</param>
-    private readonly record struct LaunchSettingsScanResult(Dictionary<string, string> EnvVars, int? DefaultPort);
+    private readonly record struct LaunchSettingsScanResult(Dictionary<string, string> EnvVars);
 }

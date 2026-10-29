@@ -30,7 +30,7 @@ public sealed class DeploymentAnalysisSectionTests
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
         var service = DispatchProxy.Create<IDeploymentAnalysisService, Port>();
-        var port = (Port)service;
+        var port = Assert.IsAssignableFrom<Port>(service);
         var pending =
             new TaskCompletionSource<DeploymentAnalysisView?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -106,7 +106,7 @@ public sealed class DeploymentAnalysisSectionTests
         ///     requires no value.
         /// </returns>
         /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        protected override object Invoke(MethodInfo? method, object?[]? args)
         {
             return method?.Name switch
             {

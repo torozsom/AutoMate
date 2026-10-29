@@ -170,20 +170,21 @@ public sealed class WorkspaceQueryTests
     public async Task Telemetry_outage_is_isolated_and_invalid_inputs_are_rejected()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var ownerForCallbacks = fixture.Owner;
         await using var db = fixture.Db();
 
         await db.Database.ExecuteSqlRawAsync("DROP TABLE deployment_daily_telemetry");
         var service = new WorkspaceQuery(db, fixture.Clock);
-        var result = await service.OverviewAsync(fixture.Owner, 90);
+        var result = await service.OverviewAsync(ownerForCallbacks, 90);
 
         Assert.Equal(4, result.Attempts);
         Assert.Empty(result.Resources);
         Assert.Contains("temporarily unavailable", result.ResourceNotice);
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.OverviewAsync(Guid.Empty, 30));
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.OverviewAsync(fixture.Owner, 365));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.OverviewAsync(ownerForCallbacks, 365));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            service.OverviewAsync(fixture.Owner, 7, new CancellationToken(true)));
+            service.OverviewAsync(ownerForCallbacks, 7, new CancellationToken(true)));
     }
 
     /// <summary>
@@ -194,6 +195,8 @@ public sealed class WorkspaceQueryTests
     public async Task Detailed_metrics_page_containers_and_authorize_private_batches()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var projectForCallbacks = fixture.PrimaryProject;
+        var otherOwnerForCallbacks = fixture.OtherOwner;
         await using var db = fixture.Db();
         var path = Path.Combine(Path.GetTempPath(), "automate-range-sql-" + Guid.NewGuid().ToString("N"));
 
@@ -206,7 +209,7 @@ public sealed class WorkspaceQueryTests
             var port = new BatchPort(reader, disk);
             var service = new MetricExplorationService(db, port, settings, TimeProvider.System);
             var deployment = await db.Deployments
-                .Where(d => d.CsProject!.AppId == fixture.PrimaryProject)
+                .Where(d => d.CsProject!.AppId == projectForCallbacks)
                 .OrderBy(d => d.CreatedAt)
                 .Select(d => d.Id).FirstAsync();
             var now = DateTimeOffset.UtcNow.AddSeconds(-1);
@@ -218,7 +221,7 @@ public sealed class WorkspaceQueryTests
                 var time = now.AddMinutes(-2);
 
                 await disk.AppendAsync(new DeploymentLogEnvelope(id, fixture.Owner, i + 1, time, time.AddDays(30),
-                    new DeploymentDiagnosticEvent(fixture.PrimaryProject, deployment,
+                    new DeploymentDiagnosticEvent(projectForCallbacks, deployment,
                         DeploymentDiagnosticSource.DockerContainer,
                         DeploymentDiagnosticKind.Metric, DeploymentDiagnosticSeverity.Information, time, "",
                         new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "web-" + i),
@@ -230,9 +233,9 @@ public sealed class WorkspaceQueryTests
             }
 
             var first = await service.ReadAsync(
-                new MetricExplorationQuery(fixture.Owner, range, fixture.PrimaryProject));
+                new MetricExplorationQuery(fixture.Owner, range, projectForCallbacks));
             var second =
-                await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, fixture.PrimaryProject,
+                await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, projectForCallbacks,
                     Page: 2));
 
             Assert.Equal(120, first.Total);
@@ -242,23 +245,23 @@ public sealed class WorkspaceQueryTests
             Assert.Equal(first.Chart, second.Chart);
 
             var selected = await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range,
-                fixture.PrimaryProject, Container: "web-59"));
+                projectForCallbacks, Container: "web-59"));
 
             Assert.Equal(2, selected.Total);
             Assert.All(selected.Items, p => Assert.Equal("web-59", p.Container));
 
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
-                service.ReadAsync(new MetricExplorationQuery(fixture.OtherOwner, range, fixture.PrimaryProject)));
+                service.ReadAsync(new MetricExplorationQuery(otherOwnerForCallbacks, range, projectForCallbacks)));
             await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
                 reader.ReadAsync(
-                    new ArchiveMetricBatchRequest(fixture.OtherOwner, range, fixture.PrimaryProject, deployment),
+                    new ArchiveMetricBatchRequest(otherOwnerForCallbacks, range, projectForCallbacks, deployment),
                     CancellationToken.None));
             var overview = await new WorkspaceQuery(db, TimeProvider.System, exploration: service)
                 .OverviewAsync(fixture.Owner, range);
 
             Assert.Equal(60, overview.Resources.Single(p => p.Metric == "automate_cpu_usage_cores").Samples);
 
-            var consent = new MetricExplorationService(db, port,
+            _ = new MetricExplorationService(db, port,
                 Options.Create(new TelemetryStorageOptions
                     { ManagedService = true, ManagedDataProcessingApproved = true }), TimeProvider.System);
             var privateReader = new ArchiveMetricBatchReader(db, disk,
@@ -267,11 +270,11 @@ public sealed class WorkspaceQueryTests
 
             Assert.NotEmpty(
                 (await privateReader.ReadAsync(
-                    new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject),
+                    new ArchiveMetricBatchRequest(fixture.Owner, range, projectForCallbacks),
                     CancellationToken.None)).Items);
             Assert.Null(
                 (await privateReader.ReadAsync(
-                    new ArchiveMetricBatchRequest(fixture.Owner, range, fixture.PrimaryProject),
+                    new ArchiveMetricBatchRequest(fixture.Owner, range, projectForCallbacks),
                     CancellationToken.None)).Availability);
         }
         finally
@@ -289,15 +292,17 @@ public sealed class WorkspaceQueryTests
     public async Task Long_windows_use_complete_days_without_boundary_double_counting()
     {
         await using var fixture = await Fixture.CreateAsync();
+        var projectForCallbacks = fixture.PrimaryProject;
+        var otherOwnerForCallbacks = fixture.OtherOwner;
         await using var db = fixture.Db();
         var day = new DateTimeOffset(DateTimeOffset.UtcNow.UtcDateTime.Date, TimeSpan.Zero).AddDays(-1);
-        var deployment = await db.Deployments.Where(d => d.CsProject!.AppId == fixture.PrimaryProject)
+        var deployment = await db.Deployments.Where(d => d.CsProject!.AppId == projectForCallbacks)
             .Select(d => d.Id).FirstAsync();
 
         db.DeploymentDailyTelemetry.Add(new DeploymentDailyTelemetry
         {
             UserId = fixture.Owner,
-            ProjectId = fixture.PrimaryProject,
+            ProjectId = projectForCallbacks,
             DeploymentId = deployment,
             DayUtc = day,
             Container = "web",
@@ -310,7 +315,7 @@ public sealed class WorkspaceQueryTests
         });
         await db.SaveChangesAsync();
         await db.DeploymentDailyTelemetry
-            .Where(d => d.UserId == fixture.OtherOwner)
+            .Where(d => d.UserId == otherOwnerForCallbacks)
             .ExecuteUpdateAsync(update => update.SetProperty(d => d.DayUtc, day));
         var path = Path.Combine(Path.GetTempPath(), "automate-day-sql-" + Guid.NewGuid().ToString("N"));
 
@@ -324,14 +329,14 @@ public sealed class WorkspaceQueryTests
                 settings, TimeProvider.System);
             var range = new MetricTimeRange(day.AddDays(-1).AddHours(12), DateTimeOffset.UtcNow.AddSeconds(-1));
             var result =
-                await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, fixture.PrimaryProject));
+                await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, projectForCallbacks));
 
             var row = Assert.Single(result.Chart);
             Assert.Equal(day, row.Timestamp);
             Assert.Equal(4, row.Samples);
             Assert.Equal(.5, row.Average);
             // A malformed legacy aggregate cannot disclose another owner's deployment identity or samples.
-            Assert.Empty((await service.ReadAsync(new MetricExplorationQuery(fixture.OtherOwner, range))).Chart);
+            Assert.Empty((await service.ReadAsync(new MetricExplorationQuery(otherOwnerForCallbacks, range))).Chart);
 
             Assert.DoesNotContain(result.Chart, p => p.Timestamp == day.AddDays(1));
 
@@ -339,14 +344,14 @@ public sealed class WorkspaceQueryTests
                 new BatchPort(new ArchiveMetricBatchReader(db, disk, settings), disk, true),
                 settings, TimeProvider.System);
             var partial =
-                await offline.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, fixture.PrimaryProject));
+                await offline.ReadAsync(new MetricExplorationQuery(fixture.Owner, range, projectForCallbacks));
 
             Assert.Equal(4, Assert.Single(partial.Chart).Samples);
             Assert.Contains("unavailable", partial.Availability);
 
             var fiveYears = new MetricTimeRange(range.End.AddYears(-5), range.End);
             var longResult =
-                await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, fiveYears, fixture.PrimaryProject));
+                await service.ReadAsync(new MetricExplorationQuery(fixture.Owner, fiveYears, projectForCallbacks));
 
             Assert.Equal(4, Assert.Single(longResult.Chart).Samples);
         }

@@ -172,7 +172,7 @@ public sealed class DockerCollectorTests
         var target = DockerOutputTests.Target();
         using var token = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var publisher = new RecordingPublisher();
-        var containers = Proxy<IContainerOperations>((method, args) => method.Name switch
+        var containers = Proxy<IContainerOperations>((method, _) => method.Name switch
         {
             "InspectContainerAsync" => Task.FromResult(new ContainerInspectResponse
             {
@@ -305,15 +305,14 @@ public sealed class DockerCollectorTests
             e => e.Source == DeploymentDiagnosticSource.DockerDaemon && e.Kind == DeploymentDiagnosticKind.Lifecycle);
 
         // The custom progress adapter executes synchronously and is governed by the source cancellation token.
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Reports controlled Docker lifecycle events and waits for cancellation before signaling
-        ///     shutdown.
-        /// </summary>
-        /// <param name="progress">Sink receiving synthetic Docker lifecycle events.</param>
-        /// <param name="cancellation">Cancellation source owning this supervised operation.</param>
-        /// <returns>A pending operation that completes through cancellation rather than producing a value.</returns>
-        /// <exception cref="OperationCanceledException">The caller cancellation or fixture deadline ends the pending operation.</exception>
+        // <summary>
+        //     Reports controlled Docker lifecycle events and waits for cancellation before signaling
+        //     shutdown.
+        // </summary>
+        // <param name="progress">Sink receiving synthetic Docker lifecycle events.</param>
+        // <param name="cancellation">Cancellation source owning this supervised operation.</param>
+        // <returns>A pending operation that completes through cancellation rather than producing a value.</returns>
+        // <exception cref="OperationCanceledException">The caller cancellation or fixture deadline ends the pending operation.</exception>
         async Task ReceiveAsync(IProgress<Message> progress, CancellationToken cancellation)
         {
             try
@@ -332,7 +331,6 @@ public sealed class DockerCollectorTests
                 exited.TrySetResult();
             }
         }
-#pragma warning restore CS1587
     }
 
     /// <summary>

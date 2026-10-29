@@ -25,7 +25,7 @@ public sealed class DeploymentAnalysisPollingTests
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
         var port = DispatchProxy.Create<IDeploymentAnalysisService, Port>();
-        var probe = (Port)port;
+        var probe = Assert.IsAssignableFrom<Port>(port);
         var pending =
             new TaskCompletionSource<DeploymentAnalysisView?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -138,7 +138,7 @@ public sealed class DeploymentAnalysisPollingTests
         ///     requires no value.
         /// </returns>
         /// <exception cref="NotSupportedException">The selected fixture member or operation is deliberately unsupported.</exception>
-        protected override object? Invoke(MethodInfo? method, object?[]? args)
+        protected override object Invoke(MethodInfo? method, object?[]? args)
         {
             if (method?.Name == "GetLatestAsync")
             {

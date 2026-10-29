@@ -156,7 +156,8 @@ internal sealed class DockerCli(
                 return;
             }
 
-            await using var registration = cancellationToken.Register(() => KillProcessTree(process));
+            await using var registration = cancellationToken.Register(
+                static state => KillProcessTree((Process)state!), process);
 
             using var reader = process.StandardOutput;
             var delivery = new DockerMetricDelivery(diagnostics, live, redactor, viewers, clock, sampleSeconds, logger);
@@ -256,6 +257,7 @@ internal sealed class DockerCli(
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         deadline.CancelAfter(TimeSpan.FromMinutes(options.ComposeTimeoutMinutes));
+        var deadlineToken = deadline.Token;
 
         var readers = new List<Task>();
         var composeProject = startInfo.ArgumentList[2];
@@ -266,7 +268,8 @@ internal sealed class DockerCli(
         {
             process.Start();
 
-            await using var registration = deadline.Token.Register(() => KillProcessTree(process));
+            await using var registration = deadline.Token.Register(
+                static state => KillProcessTree((Process)state!), process);
             readers.Add(ReadOutputAsync(process.StandardOutput.BaseStream, DeploymentDiagnosticStream.StandardOutput));
             readers.Add(ReadOutputAsync(process.StandardError.BaseStream, DeploymentDiagnosticStream.StandardError));
 
@@ -344,7 +347,7 @@ internal sealed class DockerCli(
             var buffer = new byte[8192];
             int count;
 
-            while ((count = await stream.ReadAsync(buffer, deadline.Token)) != 0)
+            while ((count = await stream.ReadAsync(buffer, deadlineToken)) != 0)
                 foreach (var line in decoder.Feed(buffer.AsSpan(0, count)))
                     await PublishLineAsync(line, output);
             foreach (var line in decoder.Feed([], true)) await PublishLineAsync(line, output);

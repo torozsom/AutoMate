@@ -31,7 +31,7 @@ public sealed class ConsoleExceptionDiagnostics(
     ///     Serializes complete records from concurrent worker slots without owning the console
     ///     writer.
     /// </summary>
-    private readonly object gate = new();
+    private readonly Lock _gate = new();
 
     /// <summary>
     ///     Snapshots approved correlation and exception details; any formatting or console failure
@@ -94,7 +94,7 @@ public sealed class ConsoleExceptionDiagnostics(
                         text.Append("Provider request ID: ").Append(requestId).AppendLine();
                 }
 
-                foreach (var frame in new StackTrace(entry.Error, false).GetFrames()?.Take(20) ?? [])
+                foreach (var frame in new StackTrace(entry.Error, false).GetFrames().Take(20))
                 {
                     var method = frame.GetMethod();
                     // Reflection supplies symbols only; no source files, argument values or raw StackTrace text.
@@ -116,7 +116,7 @@ public sealed class ConsoleExceptionDiagnostics(
 
             if (pending.Count > 0) text.AppendLine("[exceptions truncated]");
             var safeText = Bound(Mask(text.ToString(), credentials, MaximumBytes));
-            lock (gate)
+            lock (_gate)
             {
                 (writer ?? Console.Error).WriteLine(safeText);
             }

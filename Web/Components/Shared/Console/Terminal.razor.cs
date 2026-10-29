@@ -45,7 +45,7 @@ public partial class Terminal
     {
         try
         {
-            await JSRuntime.InvokeVoidAsync("xtermWrapper.dispose", Id);
+            await JsRuntime.InvokeVoidAsync("xtermWrapper.dispose", Id);
         }
         catch (JSDisconnectedException ex)
         {
@@ -76,18 +76,18 @@ public partial class Terminal
     {
         if (firstRender)
         {
-            await JSRuntime.InvokeVoidAsync("xtermWrapper.init", Id);
+            await JsRuntime.InvokeVoidAsync("xtermWrapper.init", Id);
 
             while (_pendingWrites.TryDequeue(out var pending))
             {
                 _pendingCharacters -= pending.Length;
-                await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id, pending);
+                await JsRuntime.InvokeVoidAsync("xtermWrapper.write", Id, pending);
             }
 
             _isReady = true;
             if (_pendingOverflow)
             {
-                await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id,
+                await JsRuntime.InvokeVoidAsync("xtermWrapper.write", Id,
                     "\r\n[Some output was omitted while the terminal initialized. Reload to recover available history.]\r\n");
                 _pendingOverflow = false;
             }
@@ -124,7 +124,7 @@ public partial class Terminal
             return;
         }
 
-        await JSRuntime.InvokeVoidAsync("xtermWrapper.write", Id, text);
+        await JsRuntime.InvokeVoidAsync("xtermWrapper.write", Id, text);
     }
 
     /// <summary>
@@ -141,7 +141,7 @@ public partial class Terminal
         _pendingCharacters = 0;
         _pendingOverflow = false;
         if (!_isReady) return Task.CompletedTask;
-        return JSRuntime.InvokeVoidAsync("xtermWrapper.clear", Id).AsTask();
+        return JsRuntime.InvokeVoidAsync("xtermWrapper.clear", Id).AsTask();
     }
 
 

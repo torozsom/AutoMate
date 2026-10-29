@@ -73,7 +73,7 @@ public sealed class DeploymentArchiveBackfillWorker(
     /// <exception cref="InvalidOperationException">Managed telemetry processing is not approved.</exception>
     public async Task ImportBatchAsync(CancellationToken token)
     {
-        if (settings.Value.ManagedService && !settings.Value.ManagedDataProcessingApproved)
+        if (settings.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
 
         await using var scope = scopes.CreateAsyncScope();
@@ -134,13 +134,15 @@ public sealed class DeploymentArchiveBackfillWorker(
                         .FirstOrDefaultAsync(token);
 
                     var now = DateTimeOffset.UtcNow;
+                    var legacyCursor = state.LegacyCursor;
+                    var cutoff = state.Cutoff;
                     var rows = await db.DeploymentDiagnosticRecords
                         .AsNoTracking()
                         .Where(r =>
                             r.ProjectId == deployment.Project
                             && r.ExpiresAt > now
-                            && r.OrderId > state.LegacyCursor
-                            && r.TimestampUtc < state.Cutoff
+                            && r.OrderId > legacyCursor
+                            && r.TimestampUtc < cutoff
                             && (r.DeploymentId == deployment.Id
                                 || (r.DeploymentId == null
                                     && r.DeliveryJson == null

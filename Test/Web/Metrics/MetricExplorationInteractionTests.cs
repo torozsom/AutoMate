@@ -9,7 +9,6 @@ using Web.Components.Shared.Metrics;
 
 namespace Test.Web.Metrics;
 
-#pragma warning disable BL0006 // Actual renderer exercises server event callbacks, without a browser fixture shim.
 /// <summary>
 ///     Checks actual pagination events and preservation of complete chart input.
 /// </summary>
@@ -82,7 +81,9 @@ public sealed class MetricExplorationInteractionTests
         /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
         {
-            return ValueTask.FromResult(typeof(TValue) == typeof(IJSObjectReference) ? (TValue)(object)this : default!);
+            return ValueTask.FromResult<TValue>(typeof(TValue) == typeof(IJSObjectReference)
+                ? (TValue)(object)this
+                : default!);
         }
 
         /// <summary>
@@ -207,4 +208,3 @@ public sealed class MetricExplorationInteractionTests
         }
     }
 }
-#pragma warning restore BL0006

@@ -461,6 +461,11 @@ qodana scan --image jetbrains/qodana-cdnet:2026.2 --results-dir .qodana/results
 qodana show --results-dir .qodana/results
 ```
 
+Keep analyzer findings visible: do not add source-level message suppressions, warning pragmas or vendor-specific
+usage annotations to clear reports. Preserve public/serialized contracts and meaningful fixture lifetimes; when a
+behavior-preserving correction is not appropriate, retain the finding and report the reason. The renderer-based
+Blazor tests intentionally expose BL0006 framework-API cautions rather than suppress them.
+
 `qodana.yaml` configures Qodana runs, not Rider's regular editor inspections. Continue to manage editor inspection
 severities and formatting through `.editorconfig` and the solution's team-shared `.DotSettings` layer; keep personal
 `.DotSettings.user` settings private. InspectCode also consumes applicable shared inspection settings, but IDE and CI

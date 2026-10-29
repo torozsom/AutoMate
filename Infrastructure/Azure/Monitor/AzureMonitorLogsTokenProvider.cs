@@ -49,17 +49,15 @@ public sealed class AzureMonitorLogsTokenProvider(
             return new AzureMonitorLogsTokenResult(null,
                 "Reconnect Azure to grant offline access for Azure Monitor Logs.");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, settings.TokenEndpoint)
+        using var request = new HttpRequestMessage(HttpMethod.Post, settings.TokenEndpoint);
+        request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["client_id"] = settings.ClientId,
-                ["client_secret"] = settings.ClientSecret,
-                ["grant_type"] = "refresh_token",
-                ["refresh_token"] = remoteUser.AzureRefreshToken,
-                ["scope"] = settings.Scope
-            })
-        };
+            ["client_id"] = settings.ClientId,
+            ["client_secret"] = settings.ClientSecret,
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = remoteUser.AzureRefreshToken,
+            ["scope"] = settings.Scope
+        });
 
         using var response = await httpClientFactory.CreateClient().SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)

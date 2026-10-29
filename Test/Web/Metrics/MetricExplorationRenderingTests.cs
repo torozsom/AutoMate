@@ -25,7 +25,7 @@ public sealed class MetricExplorationRenderingTests
     public async Task Picker_and_statistics_render_all_ranges_and_paginate_without_limiting_charts()
     {
         using var services = new ServiceCollection().AddLogging()
-            .AddSingleton<IJSRuntime>(DispatchProxy.Create<IJSRuntime, ConsoleRenderingTests.EmptyPort>())
+            .AddSingleton(DispatchProxy.Create<IJSRuntime, ConsoleRenderingTests.EmptyPort>())
             .BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
 
@@ -104,42 +104,36 @@ public sealed class MetricExplorationRenderingTests
         Assert.Equal(lifetimeEnd.AddYears(-5), published[1].Start);
         Assert.Contains("truncated", (string)Get("_notice")!);
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Updates the selected fixture component member through reflection.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <param name="value">Fixture member value to assign.</param>
+        // <summary>
+        //     Updates the selected fixture component member through reflection.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <param name="value">Fixture member value to assign.</param>
         void Set(string name, object value)
         {
             typeof(MetricRangePicker).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(picker,
                 value);
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Reads the selected private fixture component field through reflection.
-        /// </summary>
-        /// <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        /// <returns>The selected private field value, which may be null.</returns>
+        // <summary>
+        //     Reads the selected private fixture component field through reflection.
+        // </summary>
+        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
+        // <returns>The selected private field value, which may be null.</returns>
         object? Get(string name)
         {
             return typeof(MetricRangePicker).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(picker);
         }
-#pragma warning restore CS1587
 
-#pragma warning disable CS1587 // C# does not emit local-function XML documentation.
-        /// <summary>
-        ///     Invokes the private range-application handler on the fixture picker.
-        /// </summary>
-        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
+        // <summary>
+        //     Invokes the private range-application handler on the fixture picker.
+        // </summary>
+        // <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
         Task Apply()
         {
             return (Task)typeof(MetricRangePicker).GetMethod("ApplyAsync",
                 BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(picker, null)!;
         }
-#pragma warning restore CS1587
     }
 }

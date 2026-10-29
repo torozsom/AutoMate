@@ -45,7 +45,7 @@ public sealed class ArchiveMetricBatchReader(
     /// <exception cref="UnauthorizedAccessException">Metric access denied.</exception>
     public async Task<ArchiveMetricBatch> ReadAsync(ArchiveMetricBatchRequest request, CancellationToken token)
     {
-        if (options.Value.ManagedService && !options.Value.ManagedDataProcessingApproved)
+        if (options.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
 
         ValidateArchiveWindow(request.Range);
