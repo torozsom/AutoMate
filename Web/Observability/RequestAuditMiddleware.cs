@@ -20,11 +20,12 @@ public sealed class RequestAuditMiddleware(RequestDelegate next, ILogger<Request
     {
         var requestId = Guid.NewGuid();
         var started = Stopwatch.GetTimestamp();
+        var method = AuditMethod(context.Request.Method);
         var area = Area(context.Request.Path);
         using var scope = logger.BeginScope(new Dictionary<string, object?> { ["RequestId"] = requestId });
 
         logger.LogInformation("Request started: method {HttpMethod}, area {RequestArea}, request {RequestId}.",
-            context.Request.Method, area, requestId);
+            method, area, requestId);
 
         try
         {
@@ -35,7 +36,7 @@ public sealed class RequestAuditMiddleware(RequestDelegate next, ILogger<Request
 
             logger.Log(context.Response.StatusCode >= 400 ? LogLevel.Warning : LogLevel.Information,
                 "Request finished: method {HttpMethod}, area {RequestArea}, request {RequestId}, status {StatusCode}, duration {DurationMs} ms, authentication {AuthenticationState}, user {UserId}.",
-                context.Request.Method, area, requestId, context.Response.StatusCode,
+                method, area, requestId, context.Response.StatusCode,
                 Stopwatch.GetElapsedTime(started).TotalMilliseconds,
                 context.User.Identity?.IsAuthenticated == true ? "authenticated" : "anonymous", userId);
         }
@@ -46,6 +47,28 @@ public sealed class RequestAuditMiddleware(RequestDelegate next, ILogger<Request
                 requestId, Stopwatch.GetElapsedTime(started).TotalMilliseconds, exception.GetType().Name);
             throw;
         }
+    }
+
+    /// <summary>
+    ///     Maps untrusted request methods to literal audit labels before any logger sees them.
+    /// </summary>
+    /// <param name="method">Request method, which may contain custom or unsafe text.</param>
+    /// <returns>A standard method label or the fixed fallback for unrecognized methods.</returns>
+    private static string AuditMethod(string method)
+    {
+        return method switch
+        {
+            "GET" => "GET",
+            "POST" => "POST",
+            "PUT" => "PUT",
+            "PATCH" => "PATCH",
+            "DELETE" => "DELETE",
+            "HEAD" => "HEAD",
+            "OPTIONS" => "OPTIONS",
+            "CONNECT" => "CONNECT",
+            "TRACE" => "TRACE",
+            _ => "OTHER"
+        };
     }
 
     /// <summary>

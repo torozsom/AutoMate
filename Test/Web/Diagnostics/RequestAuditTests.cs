@@ -13,6 +13,51 @@ namespace Test.Web.Diagnostics;
 public sealed class RequestAuditTests
 {
     /// <summary>
+    ///     Request methods become finite labels before reaching any logger, including when downstream
+    ///     middleware mutates the request method.
+    /// </summary>
+    /// <param name="method">Standard, custom or hostile method supplied by the request.</param>
+    /// <param name="expected">Fixed label expected in both audit records.</param>
+    [Theory]
+    [InlineData("GET", "GET")]
+    [InlineData("POST", "POST")]
+    [InlineData("PUT", "PUT")]
+    [InlineData("PATCH", "PATCH")]
+    [InlineData("DELETE", "DELETE")]
+    [InlineData("HEAD", "HEAD")]
+    [InlineData("OPTIONS", "OPTIONS")]
+    [InlineData("CONNECT", "CONNECT")]
+    [InlineData("TRACE", "TRACE")]
+    [InlineData("CUSTOM", "OTHER")]
+    [InlineData("get", "OTHER")]
+    [InlineData("GET\r\nforged-entry", "OTHER")]
+    [InlineData("<script>private</script>", "OTHER")]
+    public async Task Request_methods_are_safe_without_a_sanitizing_logger(string method, string expected)
+    {
+        using var capture = new Capture();
+        using var factory = LoggerFactory.Create(logging => logging.AddProvider(capture));
+        var context = new DefaultHttpContext();
+        context.Request.Method = method;
+        var middleware = new RequestAuditMiddleware(http =>
+        {
+            http.Request.Method = "private-mutated\r\nforged-entry";
+            return Task.CompletedTask;
+        }, factory.CreateLogger<RequestAuditMiddleware>());
+
+        await middleware.InvokeAsync(context);
+
+        Assert.Equal(2, capture.Messages.Count);
+        Assert.All(capture.Messages, text =>
+        {
+            Assert.Contains($"method {expected},", text);
+            Assert.DoesNotContain('\r', text);
+            Assert.DoesNotContain('\n', text);
+            Assert.DoesNotContain("private", text);
+            Assert.DoesNotContain("forged-entry", text);
+        });
+    }
+
+    /// <summary>
     ///     Every response preserves method, status, duration, actor and module without request
     ///     payloads.
     /// </summary>

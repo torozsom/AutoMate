@@ -14,6 +14,7 @@ using Domain.Entities.Users;
 using Domain.Enums.Deployments;
 using Infrastructure.Diagnostics.Delivery;
 using Infrastructure.Diagnostics.Policy;
+using Infrastructure.Email;
 using Infrastructure.GitHub.Api;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -43,6 +44,38 @@ namespace Test.Web.Diagnostics;
 /// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class OperationalLoggingTests
 {
+    /// <summary>
+    ///     SMTP attempt logs omit recipient, subject, body and credentials even without the shared
+    ///     sanitizing logger; cancellation prevents a network connection.
+    /// </summary>
+    [Fact]
+    public async Task Email_attempt_does_not_log_message_content()
+    {
+        using var exporter = new SnapshotExporter();
+        using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
+        {
+            options.IncludeFormattedMessage = true;
+            options.AddProcessor(new SimpleLogRecordExportProcessor(exporter));
+        }));
+        var sender = new GmailSenderService(Options.Create(new EmailOptions
+        {
+            SenderEmail = "private-sender@example.test",
+            AppPassword = "private-password",
+            SmtpHost = "127.0.0.1",
+            SmtpPort = 1
+        }), factory.CreateLogger<GmailSenderService>());
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sender.SendEmailAsync(
+            "private-recipient@example.test", "private-subject", "private-body", cancellation.Token));
+
+        var record = Assert.Single(exporter.Records);
+        Assert.Equal("[GmailSenderService] Attempting to send email.", record.Message);
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(record));
+        Assert.DoesNotContain("Subject", record.Attributes.Keys);
+    }
+
     /// <summary>
     ///     Fixed events retain GUID scopes and ambient trace correlation; exporter failure does not
     ///     escape.

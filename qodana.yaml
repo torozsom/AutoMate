@@ -1,10 +1,35 @@
-####################################################################################################################
-# WARNING: Do not store sensitive information in this file, as its contents will be included in the Qodana report. #
-####################################################################################################################
-
+# This file is included in reports. Keep Cloud tokens in CI secrets or the local environment.
 version: "1.0"
 linter: qodana-cdnet
+withinDocker: true
+
+dotnet:
+  solution: AutoMate.slnx
+  configuration: Release
+
 profile:
   name: qodana.recommended
-include:
-  - name: CheckDependencyLicenses
+
+# Keep maintained sources, migrations, and tests in scope; omit generated and third-party files.
+exclude:
+  - name: All
+    paths:
+      - bin
+      - obj
+      - Domain/bin
+      - Domain/obj
+      - Application/bin
+      - Application/obj
+      - Infrastructure/bin
+      - Infrastructure/obj
+      - Web/bin
+      - Web/obj
+      - Telemetry/bin
+      - Telemetry/obj
+      - Test/bin
+      - Test/obj
+      - Test/Web/Browser/node_modules
+      - Web/wwwroot/lib
+
+# Community restores and builds the solution before analysis, including source generators.
+# Report-only: no failThreshold, baseline, or paid failureConditions are configured.
