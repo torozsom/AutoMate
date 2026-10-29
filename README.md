@@ -340,15 +340,77 @@ for coverage and supported export/redaction boundaries. Deployment log/metric pe
 ## Engineering verification
 
 The [refinement record](docs/engineering-refinement.md) describes the behavior-preserving boundaries and excluded
-behavioral changes. `.github/workflows/verify.yml` checks pull requests and main/master pushes with a warning-free
-Release build, credential-free .NET tests and project-section browser checks. The broader console layout audit reports
-known baseline 200% zoom overflow without changing repository page styles; see [browser verification](Test/Web/Browser/README.md).
+behavioral changes. [CI - Build and test](.github/workflows/verify.yml) checks pull requests targeting `main`, with
+separate jobs for a warning-free Release build/.NET tests, JavaScript behavior tests, browser verification and source
+hygiene. The .NET job publishes rendered fixtures for the browser job, avoiding a second build. TRX results and
+browser screenshots are retained as workflow artifacts. The console layout audit remains advisory for its known
+200% zoom baseline; see [browser verification](Test/Web/Browser/README.md).
 Rider's built-in formatter owns C# code layout. Pull requests use `git diff --check` on changed C# lines to reject
 trailing whitespace and added blank lines at EOF, accepting both LF and CRLF line endings. CI does not impose
 `dotnet format` indentation or wrapping on Rider-formatted code. `.editorconfig` and Directory.Build.props provide
 local formatting and .NET analyzer policy without repository-wide reformatting. SDK compatibility remains unchanged.
 External PostgreSQL checks use the owned disposable verification
 runners; they never use the application database.
+
+### Pipeline responsibilities and triggers
+
+| Pipeline | Pull request to main | Push to main | Scheduled | Manual | Responsibility |
+|---|---|---|---|---|---|
+| [CI - Build and test](.github/workflows/verify.yml) | Yes, including updated commits | No | No | Yes | Release build, .NET/JS/browser tests, whitespace and aggregate CI gate |
+| [Security - CodeQL](.github/workflows/codeql.yml) | Yes | Yes | Monday 04:17 UTC | Yes | Extended C#, JavaScript/TypeScript and Actions security analysis |
+| [Security - Dependency review](.github/workflows/dependency-review.yml) | Yes | No | No | No | Reject introduced high/critical vulnerable dependencies |
+| [Quality - Qodana](.github/workflows/qodana_code_quality.yml) | Internal PRs | Yes | Monday 04:47 UTC | Yes | Full-solution Community quality reports and scanning baseline |
+
+Ordinary feature-branch pushes do not duplicate PR pipelines. PR jobs rerun on new commits and reopened PRs, rather
+than only when a PR is first created. Superseded runs are cancelled within each workflow. CI tests GitHub's PR merge
+commit; Qodana intentionally checks the PR head revision. After merging, only security/quality baseline scans run.
+CodeQL's C# job still compiles the solution to capture generated Blazor code, but does not repeat the test suite.
+Scheduled scans use the default branch and detect findings from updated analysis rules even without source changes.
+
+CodeQL uses the `security-extended` query suite and separate language jobs. Its C# job initializes CodeQL before a
+clean .NET 10 Release build, including source generators. The security gate checks scanner execution; the main
+ruleset's CodeQL finding thresholds enforce vulnerability policy. Qodana findings remain report-only.
+
+### GitHub activation and merge requirements
+
+Commit the workflow files and `.github/dependabot.yml`; Dependabot reads its configuration from the default branch.
+Repository settings are separate from these versioned files:
+
+1. Switch **Settings > Advanced Security > CodeQL analysis** from default to advanced setup before using the custom
+   CodeQL workflow. Default setup blocks custom CodeQL uploads. Rerun the PR's CodeQL workflow after switching,
+   verify all three languages, then merge and verify the new `main` baseline. See
+   [GitHub's migration instructions](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/configure-code-scanning/configuring-advanced-setup-for-code-scanning).
+2. Keep the dependency graph and Dependabot alerts enabled; enable **Dependabot security updates** in Advanced Security.
+   YAML grouping does not turn on that repository setting. No automatic PR merging is configured.
+3. After the new jobs have run successfully, add these required checks to the main branch ruleset:
+   **CI: Required checks**, **CodeQL: Required checks**, **Dependencies: Vulnerability review**, and
+   **Qodana: Full solution**. Retain the existing CodeQL high/critical-security and error-level finding policy.
+   Qodana's job is skipped for fork PRs and GitHub treats that skip as successful; CI, CodeQL and dependency review
+   still cover fork contributions. Keep any separate GitHub Code Quality requirement only with that service enabled;
+   it is not satisfied by Qodana or by the security-only CodeQL workflow.
+4. Require PRs and **Require branches to be up to date before merging**. With PR-only build/tests, this prevents
+   an older successful run from authorizing a merge against an untested newer base. Do not add workflow-level path
+   filters to required pipelines, because missing checks can block merging indefinitely.
+
+The existing owner/admin bypass remains a deliberate exception: direct pushes to `main` run security/quality scans
+but do not run CI. Use PRs for ordinary owner changes too, or manually dispatch CI for an emergency direct push.
+Ruleset changes, enabling security updates, and switching off CodeQL default setup are not applied by editing YAML.
+No image publishing or deployment is attached to PR validation; the existing local-only release workflow is not
+activated by these changes.
+
+### Dependabot maintenance
+
+[Dependabot configuration](.github/dependabot.yml) checks all six NuGet project directories, the browser-test npm
+manifest, Actions references, the tracked Telemetry Dockerfile, deployment Compose files, and the root .NET SDK
+configuration on staggered Monday schedules in `Europe/Budapest`. NuGet EF Core and OpenTelemetry maintenance updates
+are grouped to keep related packages coordinated; other minor/patch updates are grouped per ecosystem and major
+updates receive separate PRs. .NET SDK major updates are excluded so a runtime upgrade remains a deliberate change.
+NuGet/npm security updates have separate groups and remain vulnerability-triggered, independent of weekly version
+update schedules. PR limits bound routine update volume. Add the root Dockerfile to monitoring when it is versioned.
+
+Dependency review checks GitHub's dependency-graph diff; it does not replace a container-image vulnerability scanner
+or identify vulnerabilities in manually vendored browser assets. No arbitrary license policy is enforced. See
+[Dependabot options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference).
 
 ## Qodana code quality
 
@@ -359,8 +421,8 @@ and builds the solution inside its container before analysis; a separate host bu
 
 ### GitHub Actions
 
-The [Qodana workflow](.github/workflows/qodana_code_quality.yml) runs manually, on pushes to `main` and `feature`, and
-on internal pull requests targeting any branch. Fork pull requests are skipped because they cannot access the Cloud
+The [Qodana workflow](.github/workflows/qodana_code_quality.yml) runs manually, weekly, on pushes to `main`, and
+on internal pull requests targeting `main`. Fork pull requests are skipped because they cannot access the Cloud
 project token. Every scan analyzes the full solution; changed-file-only mode and automatic fixes are disabled.
 
 Set the repository secret `QODANA_TOKEN_245602675` to the existing Qodana Cloud project token. The workflow supplies it
@@ -369,10 +431,14 @@ Results appear in Qodana Cloud, GitHub check annotations, internal PR summary co
 artifact, and GitHub's **Security > Code scanning** view under the `qodana` category. SARIF upload is attempted even
 after a scan failure when a report exists; it does not clear the original failure.
 
+Dependabot PRs run Community without a Cloud token, PR comments or check annotations, retaining the result artifact
+and SARIF upload. This avoids requiring Actions secrets or write-dependent reporting on Dependabot events. The
+Cloud token presence check still applies to ordinary trusted runs. No `pull_request_target` workflow executes PR code.
+
 Findings are initially report-only: no finding thresholds or baseline are configured, and no branch-protection settings
 are changed. Restore/build, scanner, authentication, and upload failures remain workflow failures. On the first CI run,
 verify Cloud publication, artifact availability, annotations and Code scanning ingestion; verify the summary comment
-on the first internal PR run. The existing Verify AutoMate workflow continues to own tests and build enforcement.
+on the first internal PR run. CI - Build and test owns tests and build enforcement.
 
 ### Rider and local scans
 

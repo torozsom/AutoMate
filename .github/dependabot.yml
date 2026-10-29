@@ -1,0 +1,104 @@
+version: 2
+
+# Version-update schedules are independent of vulnerability-triggered security updates.
+# Keep updates targeting main so its PR checks and security-update configuration apply.
+updates:
+  - package-ecosystem: nuget
+    directories:
+      - /Domain
+      - /Application
+      - /Infrastructure
+      - /Web
+      - /Telemetry
+      - /Test
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:00'
+      timezone: Europe/Budapest
+    open-pull-requests-limit: 5
+    groups:
+      nuget-security:
+        applies-to: security-updates
+        patterns: ['*']
+      entity-framework-maintenance:
+        patterns: ['Microsoft.EntityFrameworkCore*', 'EFCore.NamingConventions']
+        update-types: [minor, patch]
+      opentelemetry-maintenance:
+        patterns: ['OpenTelemetry*']
+        update-types: [minor, patch]
+      nuget-maintenance:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /Test/Web/Browser
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:15'
+      timezone: Europe/Budapest
+    open-pull-requests-limit: 3
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns: ['*']
+      npm-maintenance:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:30'
+      timezone: Europe/Budapest
+    open-pull-requests-limit: 5
+    groups:
+      actions-maintenance:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    # The repository-root Dockerfile is currently local-only; monitor the tracked host image.
+    directory: /Telemetry
+    schedule:
+      interval: weekly
+      day: monday
+      time: '07:45'
+      timezone: Europe/Budapest
+    open-pull-requests-limit: 3
+    groups:
+      dotnet-image-maintenance:
+        patterns: ['mcr.microsoft.com/dotnet/*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker-compose
+    directories:
+      - /deploy/app
+      - /deploy/infrastructure
+      - /deploy/telemetry
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: Europe/Budapest
+    open-pull-requests-limit: 5
+    groups:
+      compose-maintenance:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:15'
+      timezone: Europe/Budapest
+    open-pull-requests-limit: 2
+    # Advancing the target runtime is a separate project change; maintain the .NET 10 SDK.
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
