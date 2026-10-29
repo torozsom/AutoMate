@@ -1,6 +1,10 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Application.Abstractions.Ai.Context;
 using Application.Abstractions.Ai.Execution;
 using Application.Abstractions.Ai.Policy;
@@ -25,6 +29,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenTelemetry;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 using Test.Web.Diagnostics;
@@ -38,6 +44,91 @@ namespace Test.Web.Hosting;
 /// </summary>
 public sealed class HostingProfileRegistrationTests
 {
+    /// <summary>
+    ///     Production composition exports all signals using SDK settings supplied by IDE launches,
+    ///     preserves the custom endpoint override, and keeps unconfigured export disabled.
+    /// </summary>
+    /// <param name="standardEndpoint">Whether the IDE supplies the standard endpoint.</param>
+    /// <param name="customEndpoint">Whether the operator supplies AutoMate's endpoint override.</param>
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void Otlp_exports_all_signals_when_an_endpoint_is_configured(bool standardEndpoint, bool customEndpoint)
+    {
+        var builder = CreateBuilder("SelfHosted");
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["OTEL_EXPORTER_OTLP_ENDPOINT"] = standardEndpoint ? "http://ide.invalid:17011" : null,
+            ["OTEL_EXPORTER_OTLP_PROTOCOL"] = "http/protobuf",
+            ["OpenTelemetry:OtlpEndpoint"] = customEndpoint ? "http://collector.invalid:4318" : null
+        });
+        builder.AddApplicationServices();
+        using var capture = new OtlpCaptureHandler();
+        builder.Services.PostConfigureAll<OtlpExporterOptions>(options =>
+            options.HttpClientFactory = () => new HttpClient(capture, false));
+        using var services = builder.Services.BuildServiceProvider();
+        var traces = services.GetRequiredService<TracerProvider>();
+        var metrics = services.GetRequiredService<MeterProvider>();
+        var logs = services.GetRequiredService<LoggerProvider>();
+
+        using (AutoMateTelemetry.Deployments.StartActivity("deployment.local.execute")) { }
+        using var meter = new Meter(AutoMateTelemetry.DeploymentMeter.Name);
+        meter.CreateCounter<long>("automate.deployment.jobs.started").Add(1);
+        services.GetRequiredService<ILoggerFactory>().CreateLogger("AppStartup")
+            .LogInformation("[Startup] Database migrations are current.");
+
+        Assert.True(traces.ForceFlush());
+        Assert.True(metrics.ForceFlush());
+        Assert.True(logs.ForceFlush());
+        if (!standardEndpoint && !customEndpoint)
+        {
+            Assert.Empty(capture.Requests);
+            return;
+        }
+
+        var host = customEndpoint ? "collector.invalid" : "ide.invalid";
+        if (!customEndpoint)
+            foreach (var signal in new[] { "logs", "traces", "metrics" })
+                Assert.Contains(capture.Requests, request =>
+                    request.Endpoint.Host == host && request.Endpoint.AbsolutePath == $"/v1/{signal}");
+        Assert.All(capture.Requests, request => Assert.Equal(host, request.Endpoint.Host));
+        Assert.Contains(capture.Requests, request => request.Body.Contains("deployment.local.execute"));
+        Assert.Contains(capture.Requests, request => request.Body.Contains("automate.deployment.jobs.started"));
+        Assert.Contains(capture.Requests, request => request.Body.Contains("Database migrations are current"));
+    }
+
+    /// <summary>
+    ///     Captures actual OTLP protobuf requests without contacting a collector or starting host workers.
+    /// </summary>
+    private sealed class OtlpCaptureHandler : HttpMessageHandler
+    {
+        /// <summary>Serialized signal requests and their resolved collector endpoints.</summary>
+        public ConcurrentQueue<(Uri Endpoint, string Body)> Requests { get; } = new();
+
+        /// <summary>Handles the metric exporter's synchronous HTTP transport in the test fixture.</summary>
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            using var bytes = new MemoryStream();
+            request.Content!.ReadAsStream(cancellationToken).CopyTo(bytes);
+            Requests.Enqueue((request.RequestUri!, Encoding.UTF8.GetString(bytes.ToArray())));
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([]) };
+        }
+
+        /// <summary>Records a packet and returns an empty successful OTLP protobuf response.</summary>
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var bytes = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+            Requests.Enqueue((request.RequestUri!, Encoding.UTF8.GetString(bytes)));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent([])
+            };
+        }
+    }
+
     /// <summary>
     ///     Azure reconnect requests newly declared delegated permissions without tenant-wide consent.
     /// </summary>

@@ -277,6 +277,9 @@ public static class ServiceConfiguration
             var exportConsole = options.ExportConsole;
             var hasOtlpEndpoint =
                 OpenTelemetryOptionsValidator.TryGetCollectorEndpoint(options.OtlpEndpoint, out var otlpEndpoint);
+            // Rider supplies the standard endpoint at launch; let the SDK read its transport and credentials.
+            var exportOtlp = hasOtlpEndpoint ||
+                             !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
 
             var serviceVersion = typeof(ServiceConfiguration).Assembly.GetName().Version?.ToString() ?? "unknown";
 
@@ -290,7 +293,10 @@ public static class ServiceConfiguration
                     new SafeLogProcessor(services.GetRequiredService<PlatformTelemetryPolicy>()));
 
                 if (exportConsole) logging.AddConsoleExporter();
-                if (hasOtlpEndpoint) logging.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
+                if (exportOtlp) logging.AddOtlpExporter(exporter =>
+                {
+                    if (hasOtlpEndpoint) exporter.Endpoint = otlpEndpoint!;
+                });
             });
 
             builder.Services.AddOpenTelemetry()
@@ -313,7 +319,10 @@ public static class ServiceConfiguration
                     tracing.AddSource(AnalysisTelemetry.Source.Name);
                     tracing.AddSource("Microsoft.AspNetCore.SignalR.Server");
                     if (exportConsole) tracing.AddConsoleExporter();
-                    if (hasOtlpEndpoint) tracing.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
+                    if (exportOtlp) tracing.AddOtlpExporter(exporter =>
+                    {
+                        if (hasOtlpEndpoint) exporter.Endpoint = otlpEndpoint!;
+                    });
                 })
                 .WithMetrics(metrics =>
                 {
@@ -326,7 +335,10 @@ public static class ServiceConfiguration
                     metrics.AddMeter(AnalysisTelemetry.Meter.Name);
                     metrics.AddMeter("AutoMate.TelemetryStorage");
                     if (exportConsole) metrics.AddConsoleExporter();
-                    if (hasOtlpEndpoint) metrics.AddOtlpExporter(exporter => exporter.Endpoint = otlpEndpoint!);
+                    if (exportOtlp) metrics.AddOtlpExporter(exporter =>
+                    {
+                        if (hasOtlpEndpoint) exporter.Endpoint = otlpEndpoint!;
+                    });
                 });
         }
 

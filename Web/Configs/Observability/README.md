@@ -16,6 +16,12 @@ OpenTelemetryOptions configures service/environment labels, console export and o
 OpenTelemetryOptionsValidator checks typed settings before exporter registration. SecurityAuditResultHandler records
 finite challenge/forbid outcomes while preserving framework behavior. Hosting wires SDK sources/meters/processors.
 
+OTLP export is enabled when either `OpenTelemetry:OtlpEndpoint` or the standard
+`OTEL_EXPORTER_OTLP_ENDPOINT` is present. The custom endpoint takes precedence; otherwise the SDK resolves the standard
+endpoint, protocol, headers and timeout. With neither endpoint configured, OTLP export stays disabled.
+Rider's OpenTelemetry plugin supplies the standard endpoint and gRPC protocol when launching Web from a supported run
+configuration with its receiver running. Restart Web after changing exporter settings; no fixed IDE port is required.
+
 ## Contracts and lifecycle
 
 OTLP URLs must be bounded absolute HTTP (S) without user info, query/fragment or whitespace; credentials belong in
