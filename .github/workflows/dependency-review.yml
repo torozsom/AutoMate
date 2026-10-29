@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
 
       - name: Reject newly introduced high or critical vulnerabilities
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
           # No arbitrary license policy or write-token requirement for fork and bot PRs.
