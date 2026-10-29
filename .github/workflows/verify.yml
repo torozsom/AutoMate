@@ -40,7 +40,7 @@ jobs:
           --logger "trx;LogFileName=automate.trx" --results-directory .artifacts/test-results
       - name: Publish test results
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dotnet-test-results
           path: .artifacts/test-results/*.trx
@@ -48,7 +48,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Share rendered browser fixtures
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-fixtures
           path: |
@@ -116,7 +116,7 @@ jobs:
           echo 'Console layout audit: advisory failure (known 200% zoom baseline). See the audit log.' >> "$GITHUB_STEP_SUMMARY"
       - name: Publish browser screenshots
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-screenshots
           path: .artifacts/**/*.png
