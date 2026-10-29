@@ -1,20 +1,22 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using Application.Abstractions.Hosting;
+using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Orchestration.Jobs;
 using Application.Orchestration.Status;
+using Bunit;
 using Domain.DTO.Deployment;
 using Domain.Entities.Deployments;
 using Domain.Entities.Projects;
 using Domain.Enums.Deployments;
 using Domain.Enums.Projects;
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
-using Microsoft.AspNetCore.Components.RenderTree;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Web.Diagnostics;
+using Web.Services;
 using Dashboard = Web.Components.Pages.Workspace.Dashboard;
 
 namespace Test.Web.Projects;
@@ -41,16 +43,14 @@ public sealed class DashboardStatusTests
 
             return ValueTask.CompletedTask;
         };
-        using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new TestRenderer(services);
+        await using var context = CreateContext();
         var component = new FixtureDashboard();
 
-        typeof(Dashboard).GetProperty("DeploymentJobQueue", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(component, queue);
-        typeof(Dashboard).GetProperty("NavigationManager", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(component, navigation);
-        await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
-        await renderer.Dispatcher.InvokeAsync(async () =>
+        context.Services.AddSingleton<NavigationManager>(navigation);
+        context.Services.AddSingleton(queue);
+        context.ComponentFactories.Add(component);
+        var rendered = context.Render<FixtureDashboard>();
+        await rendered.InvokeAsync(async () =>
             await (Task)typeof(Dashboard).GetMethod("ExecuteDeploymentAsync",
                     BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(component, [new DeploymentConfigDto { ProjectId = project, ProjectName = "fixture" }])!);
@@ -58,7 +58,7 @@ public sealed class DashboardStatusTests
         Assert.NotNull(submitted);
         Assert.Equal($"/project/{project}", navigation.Destination);
         Assert.False(navigation.ForceLoad);
-        Assert.Empty(renderer.Errors);
+        Assert.False(context.Renderer.UnhandledException.IsCompleted);
     }
 
     /// <summary>
@@ -172,8 +172,7 @@ public sealed class DashboardStatusTests
     [InlineData(DeploymentStatus.Stopped)]
     public async Task Background_terminal_status_updates_render_on_dispatcher(DeploymentStatus status)
     {
-        using var services = new ServiceCollection().BuildServiceProvider();
-        await using var renderer = new TestRenderer(services);
+        await using var context = CreateContext();
         var component = new FixtureDashboard();
         var deployment = new Deployment { Status = DeploymentStatus.Starting };
         var app = new Domain.Entities.Projects.Application
@@ -191,16 +190,12 @@ public sealed class DashboardStatusTests
                 BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(component)!;
 
         states[app.Id] = true;
-        typeof(Dashboard).GetProperty("Logger", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
-            NullLogger<Dashboard>.Instance);
-        typeof(Dashboard).GetProperty("DeploymentStatusNotifier", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .SetValue(component, new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
 
         (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (_, _) => null;
-        typeof(Dashboard).GetProperty("DeploymentJobQueue", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(
-            component, queue);
-        await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
+        context.Services.AddSingleton(queue);
+        context.ComponentFactories.Add(component);
+        var rendered = context.Render<FixtureDashboard>();
         var handler =
             typeof(Dashboard).GetMethod("DispatchStatusChangedAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
@@ -208,8 +203,8 @@ public sealed class DashboardStatusTests
 
         Assert.Equal(status, deployment.Status);
         Assert.False(states.ContainsKey(app.Id));
-        Assert.True(renderer.RenderCount >= 2);
-        Assert.Empty(renderer.Errors);
+        Assert.True(rendered.RenderCount >= 2);
+        Assert.False(context.Renderer.UnhandledException.IsCompleted);
 
         component.Dispose();
         await Task.Run(async () => await (Task)handler.Invoke(component, [app.Id, DeploymentStatus.Starting])!);
@@ -267,34 +262,30 @@ public sealed class DashboardStatusTests
 
             return Task.FromResult(updated);
         };
-        using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
-        await using var renderer = new TestRenderer(services);
+        await using var context = CreateContext(query);
         var component = new FixtureDashboard();
 
         Set("_apps", new List<Domain.Entities.Projects.Application> { app });
         Set("_inventory", initial);
         Set("_currentUserId", owner);
-        Property("ServiceScopes", services.GetRequiredService<IServiceScopeFactory>());
-        Property("Logger", NullLogger<Dashboard>.Instance);
-        Property("DeploymentStatusNotifier",
-            new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
 
         (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (_, _) => null;
-        Property("DeploymentJobQueue", queue);
-        await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(component));
-        reads = 0;
+        context.Services.AddSingleton(queue);
+        context.ComponentFactories.Add(component);
+        context.Render<FixtureDashboard>();
+        var initialReads = reads;
         var handler =
             typeof(Dashboard).GetMethod("DispatchStatusChangedAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
         await Task.Run(async () => await (Task)handler.Invoke(component, [project, DeploymentStatus.Failed])!);
 
-        Assert.Equal(1, reads);
+        Assert.Equal(initialReads + 1, reads);
         Assert.Equal(DeploymentStatus.Failed,
             ((ProjectInventoryPage)typeof(Dashboard).GetField("_inventory",
                 BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(component)!).Items[0].Status);
         Assert.Equal(DeploymentStatus.Failed, deployment.Status);
-        Assert.Empty(renderer.Errors);
+        Assert.False(context.Renderer.UnhandledException.IsCompleted);
 
         // <summary>
         //     Seeds actual notification state.
@@ -306,17 +297,23 @@ public sealed class DashboardStatusTests
             typeof(Dashboard).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(component, value);
         }
+    }
 
-        // <summary>
-        //     Supplies provider-free Application ports.
-        // </summary>
-        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        // <param name="value">Fixture member value to assign.</param>
-        void Property(string name, object value)
-        {
-            typeof(Dashboard).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(component,
-                value);
-        }
+    /// <summary>Registers unused page ports and preserves the scenario's operation-scoped queries.</summary>
+    /// <param name="query">Optional controlled inventory query used by status-refresh scenarios.</param>
+    /// <returns>A context owned and asynchronously disposed by the test.</returns>
+    private static BunitContext CreateContext(IWorkspaceQuery? query = null)
+    {
+        var context = new BunitContext();
+        context.AddAuthorization();
+        if (query is not null) context.Services.AddSingleton(query);
+        context.Services.AddScoped<ScopedApplicationOperations>().AddScoped<ConnectedCloudDeploymentAdmission>();
+        context.Services.AddSingleton(DispatchProxy
+            .Create<IProjectScannerService, OperationalLoggingTests.PortProxy>());
+        context.Services.AddSingleton<IDeploymentCapabilities>(new DeploymentCapabilities(true, true));
+        context.Services.AddSingleton<IDeploymentStatusNotifier>(
+            new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
+        return context;
     }
 
     /// <summary>Records actual NavigationManager requests without opening a browser document.</summary>
@@ -363,53 +360,6 @@ public sealed class DashboardStatusTests
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
             builder.AddContent(0, "fixture");
-        }
-    }
-
-    /// <summary>
-    ///     Captures actual render commits and renderer exceptions.
-    /// </summary>
-    /// <param name="services">Fixture dependency provider.</param>
-    private sealed class TestRenderer(IServiceProvider services) : Renderer(services, NullLoggerFactory.Instance)
-    {
-        /// <summary>Renderer dispatcher used to serialize fixture component updates.</summary>
-        public override Dispatcher Dispatcher { get; } = Dispatcher.CreateDefault();
-
-        /// <summary>Successful renders observed on the dispatcher.</summary>
-        public int RenderCount { get; private set; }
-
-        /// <summary>Unhandled renderer errors.</summary>
-        public List<Exception> Errors { get; } = [];
-
-        /// <summary>
-        ///     Attaches the real component to the test renderer.
-        /// </summary>
-        /// <param name="component">Component rendered by the fixture.</param>
-        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
-        public Task AttachAsync(IComponent component)
-        {
-            return RenderRootComponentAsync(AssignRootComponentId(component));
-        }
-
-        /// <summary>
-        ///     Captures renderer failures for scenario assertions.
-        /// </summary>
-        /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
-        protected override void HandleException(Exception exception)
-        {
-            Errors.Add(exception);
-        }
-
-        /// <summary>
-        ///     Completes a renderer update without a browser and records any configured render count.
-        /// </summary>
-        /// <param name="renderBatch">Renderer update batch supplied by Blazor; ignored by this fixture.</param>
-        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
-        protected override Task UpdateDisplayAsync(in RenderBatch renderBatch)
-        {
-            RenderCount++;
-
-            return Task.CompletedTask;
         }
     }
 }

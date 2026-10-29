@@ -15,6 +15,7 @@
         <ProjectReference Include="../Telemetry/Telemetry.csproj"/>
     </ItemGroup>
     <ItemGroup>
+        <PackageReference Include="bunit" Version="2.9.0"/>
         <PackageReference Include="EFCore.NamingConventions" Version="10.0.1"/>
         <PackageReference Include="FluentAssertions" Version="8.11.0"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.14"/>

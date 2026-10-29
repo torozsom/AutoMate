@@ -1,15 +1,18 @@
 using System.Reflection;
+using Application.Abstractions.Docker;
 using Application.Abstractions.Hosting;
+using Application.Abstractions.Scanning;
 using Application.Data.Apps;
 using Application.Orchestration.Jobs;
 using Application.Orchestration.Status;
+using Bunit;
 using Domain.Enums.Projects;
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
-using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Test.Web.Diagnostics;
+using Web.Services;
 using ProjectDetails = Web.Components.Pages.Projects.ProjectDetails;
 
 namespace Test.Web.Projects;
@@ -22,22 +25,22 @@ public sealed class ProjectDetailsNotificationTests
     public async Task Failed_initial_read_can_be_retried_in_the_same_renderer()
     {
         var query = new ControlledQuery { Fail = true };
-        using var services = Services(query);
-        await using var renderer = new TestRenderer(services);
-        var page = Page(services);
+        await using var context = CreateContext(query);
+        var page = Page();
 
-        await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(page));
-        await renderer.Dispatcher.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
+        context.ComponentFactories.Add(page);
+        var rendered = context.Render<FixturePage>();
+        await rendered.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
 
         Assert.NotNull(Field(page, "_projectReadError"));
         Assert.False((bool)Field(page, "_isLoading")!);
 
         query.Fail = false;
-        await renderer.Dispatcher.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
+        await rendered.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
 
         Assert.Null(Field(page, "_projectReadError"));
         Assert.NotNull(Field(page, "_app"));
-        Assert.Empty(renderer.Errors);
+        Assert.False(context.Renderer.UnhandledException.IsCompleted);
     }
 
     /// <summary>Notifications coalesce around one in-flight read and disposal suppresses late callbacks.</summary>
@@ -45,19 +48,19 @@ public sealed class ProjectDetailsNotificationTests
     public async Task Overlapping_refreshes_are_serialized_and_late_callbacks_are_ignored()
     {
         var query = new ControlledQuery();
-        using var services = Services(query);
-        await using var renderer = new TestRenderer(services);
-        var page = Page(services);
+        await using var context = CreateContext(query);
+        var page = Page();
 
-        await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(page));
-        await renderer.Dispatcher.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
+        context.ComponentFactories.Add(page);
+        var rendered = context.Render<FixturePage>();
+        await rendered.InvokeAsync(() => Call(page, "LoadCurrentProjectAsync"));
         query.Pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         query.Entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var refresh = renderer.Dispatcher.InvokeAsync(() => Call(page, "RefreshProjectAsync", false));
+        var refresh = rendered.InvokeAsync(() => Call(page, "RefreshProjectAsync", false));
 
         await query.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Task.WhenAll(Enumerable.Range(0, 10)
-            .Select(_ => renderer.Dispatcher.InvokeAsync(() => Call(page, "RefreshProjectAsync", false))));
+            .Select(_ => rendered.InvokeAsync(() => Call(page, "RefreshProjectAsync", false))));
 
         Assert.Equal(2, query.Reads);
 
@@ -72,7 +75,7 @@ public sealed class ProjectDetailsNotificationTests
         await Call(page, "DispatchNotificationAsync",
             (Func<Task>)(() => throw new InvalidOperationException("synthetic")));
 
-        Assert.Empty(renderer.Errors);
+        Assert.False(context.Renderer.UnhandledException.IsCompleted);
 
         SetField(page, "_analysisDisposed", true);
         await Call(page, "DispatchNotificationAsync", (Func<Task>)(() =>
@@ -85,28 +88,34 @@ public sealed class ProjectDetailsNotificationTests
         Assert.False(called);
     }
 
-    /// <summary>Builds an operation-scoped provider without external services.</summary>
-    private static ServiceProvider Services(ControlledQuery query)
+    /// <summary>Supplies component injection while retaining controlled query responses.</summary>
+    /// <param name="query">Scenario-controlled metadata responses.</param>
+    /// <returns>A context owned and asynchronously disposed by the test.</returns>
+    private static BunitContext CreateContext(IProjectDetailsQuery query)
     {
-        return new ServiceCollection().AddLogging()
-            .AddSingleton<IProjectDetailsQuery>(query).BuildServiceProvider();
+        var context = new BunitContext();
+        context.AddAuthorization();
+        context.Services.AddSingleton(query);
+        context.Services.AddDataProtection();
+        context.Services.AddScoped<ScopedApplicationOperations>().AddScoped<ConnectedCloudDeploymentAdmission>();
+        context.Services.AddSingleton(DispatchProxy
+            .Create<IProjectScannerService, OperationalLoggingTests.PortProxy>());
+        context.Services.AddSingleton(DispatchProxy.Create<IDockerService, OperationalLoggingTests.PortProxy>());
+        context.Services.AddSingleton<IDeploymentCapabilities>(new DeploymentCapabilities(true, true));
+        context.Services.AddSingleton<IDeploymentStatusNotifier>(
+            new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
+        context.Services.AddSingleton<IDeploymentJobQueue>(
+            new DeploymentJobQueue(Options.Create(new DeploymentConcurrencyOptions())));
+        return context;
     }
 
     /// <summary>Supplies the real component's lifecycle and Application boundaries.</summary>
-    private static FixturePage Page(IServiceProvider services)
+    private static FixturePage Page()
     {
         var page = new FixturePage();
 
         SetField(page, "_currentUserId", Guid.NewGuid());
         SetField(page, "_isLoading", false);
-        Property(page, "ScopeFactory", services.GetRequiredService<IServiceScopeFactory>());
-        Property(page, "Logger", NullLogger<ProjectDetails>.Instance);
-        Property(page, "DeploymentCapabilities", new DeploymentCapabilities(true, true));
-        Property(page, "DeploymentStatusNotifier",
-            new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
-        Property(page, "DeploymentJobQueue",
-            new DeploymentJobQueue(Options.Create(new DeploymentConcurrencyOptions())));
-
         return page;
     }
 
@@ -127,12 +136,6 @@ public sealed class ProjectDetailsNotificationTests
     private static void SetField(ProjectDetails page, string name, object value)
     {
         typeof(ProjectDetails).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(page, value);
-    }
-
-    /// <summary>Supplies an injected dependency without a live host.</summary>
-    private static void Property(ProjectDetails page, string name, object value)
-    {
-        typeof(ProjectDetails).GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(page, value);
     }
 
     /// <summary>Holds one detached metadata response to model dispatcher reentrancy.</summary>
@@ -214,34 +217,6 @@ public sealed class ProjectDetailsNotificationTests
         protected override void BuildRenderTree(RenderTreeBuilder builder)
         {
             builder.AddContent(0, "fixture");
-        }
-    }
-
-    /// <summary>Captures errors crossing the Blazor renderer boundary.</summary>
-    private sealed class TestRenderer(IServiceProvider services) : Renderer(services, NullLoggerFactory.Instance)
-    {
-        /// <summary>Serializes UI operations.</summary>
-        public override Dispatcher Dispatcher { get; } = Dispatcher.CreateDefault();
-
-        /// <summary>Unhandled callback and rendering failures.</summary>
-        public List<Exception> Errors { get; } = [];
-
-        /// <summary>Attaches a fixture to the dispatcher.</summary>
-        public Task AttachAsync(IComponent page)
-        {
-            return RenderRootComponentAsync(AssignRootComponentId(page));
-        }
-
-        /// <summary>Records renderer failures for assertions.</summary>
-        protected override void HandleException(Exception exception)
-        {
-            Errors.Add(exception);
-        }
-
-        /// <summary>Completes display updates without a browser.</summary>
-        protected override Task UpdateDisplayAsync(in RenderBatch renderBatch)
-        {
-            return Task.CompletedTask;
         }
     }
 }

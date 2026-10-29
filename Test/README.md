@@ -7,6 +7,10 @@ Microsoft.Extensions.TimeProvider.Testing supplies test-only controllable clocks
 production projects do not reference it. These tests advance the timer after their provider/cancellation barriers,
 with wall-clock timeouts used only as deadlock guards.
 
+Interactive component tests use the test-only bUnit dependency for dispatcher operations, disposal, DOM events and
+component input assertions. Static markup tests retain HtmlRenderer. Do not subclass Blazor Renderer or inspect raw
+render-tree frames/event-handler IDs; these implementation APIs trigger BL0006 and couple tests to framework internals.
+
 ## Contents
 
 | File                               | Test or fixture types | Responsibility                                                                       |

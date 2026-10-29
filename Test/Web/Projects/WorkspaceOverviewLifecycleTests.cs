@@ -4,10 +4,9 @@ using System.Threading.Channels;
 using Application.Data.Apps;
 using Application.Data.Users;
 using Application.Orchestration.Status;
-using Microsoft.AspNetCore.Components;
+using Bunit;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Rendering;
-using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Web.Presentation;
@@ -33,26 +32,26 @@ public sealed class WorkspaceOverviewLifecycleTests
         var secondOwner = Guid.NewGuid();
         var query = new ControlledQuery();
         var authentication = new FixtureAuthentication(secondOwner);
-        using var services = new ServiceCollection().AddSingleton<IWorkspaceQuery>(query)
-            .AddSingleton(DispatchProxy.Create<IUserService, ConsoleRenderingTests.EmptyPort>()).BuildServiceProvider();
         var panel = new FixturePanel();
 
         SetField("_owner", firstOwner);
-        SetProperty("Scopes", services.GetRequiredService<IServiceScopeFactory>());
-        SetProperty("Authentication", authentication);
-        SetProperty("Logger", NullLogger<WorkspaceOverviewPanel>.Instance);
-        SetProperty("StatusNotifier", new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
-        var renderer = new FixtureRenderer(services);
+        await using var context = new BunitContext();
+        context.Services.AddSingleton<IWorkspaceQuery>(query);
+        context.Services.AddSingleton(DispatchProxy.Create<IUserService, ConsoleRenderingTests.EmptyPort>());
+        context.Services.AddSingleton<AuthenticationStateProvider>(authentication);
+        context.Services.AddSingleton<IDeploymentStatusNotifier>(
+            new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance));
+        context.ComponentFactories.Add(panel);
 
         try
         {
-            await renderer.Dispatcher.InvokeAsync(() => renderer.AttachAsync(panel));
-            var oldRead = renderer.Dispatcher.InvokeAsync(() => Call("LoadAsync"));
+            var rendered = context.Render<FixturePanel>();
+            var oldRead = rendered.InvokeAsync(() => Call("LoadAsync"));
             var oldRequest = await query.NextAsync();
 
             Assert.Equal(firstOwner, oldRequest.Owner);
 
-            var switched = renderer.Dispatcher.InvokeAsync(() => Call("RefreshNotificationAsync", true));
+            var switched = rendered.InvokeAsync(() => Call("RefreshNotificationAsync", true));
             var currentRequest = await query.NextAsync();
 
             Assert.Equal(secondOwner, currentRequest.Owner);
@@ -67,19 +66,19 @@ public sealed class WorkspaceOverviewLifecycleTests
 
             Assert.Equal(2, ((WorkspaceOverview)GetField("_data")!).SavedProjects);
 
-            var pending = renderer.Dispatcher.InvokeAsync(() => Call("LoadAsync"));
+            var pending = rendered.InvokeAsync(() => Call("LoadAsync"));
             var request = await query.NextAsync();
 
-            await renderer.DisposeAsync();
+            await context.DisposeComponentsAsync();
             await pending;
 
             Assert.True(request.Token.IsCancellationRequested);
             Assert.Equal(2, ((WorkspaceOverview)GetField("_data")!).SavedProjects);
-            Assert.Empty(renderer.Errors);
+            Assert.False(context.Renderer.UnhandledException.IsCompleted);
         }
         finally
         {
-            await renderer.DisposeAsync();
+            await context.DisposeComponentsAsync();
         }
 
         // <summary>
@@ -102,17 +101,6 @@ public sealed class WorkspaceOverviewLifecycleTests
         {
             return typeof(WorkspaceOverviewPanel).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(panel);
-        }
-
-        // <summary>
-        //     Injects the real independent scope and authentication boundaries.
-        // </summary>
-        // <param name="name">Fixture member, option or metric name selected by the caller.</param>
-        // <param name="value">Fixture member value to assign.</param>
-        void SetProperty(string name, object value)
-        {
-            typeof(WorkspaceOverviewPanel).GetProperty(name,
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.SetValue(panel, value);
         }
 
         // <summary>
@@ -251,46 +239,4 @@ public sealed class WorkspaceOverviewLifecycleTests
     /// <param name="Reply">Completion source controlling the queued overview response.</param>
     /// <param name="Token">Cancellation token for the fixture operation.</param>
     private sealed record Request(Guid Owner, TaskCompletionSource<WorkspaceOverview> Reply, CancellationToken Token);
-
-    /// <summary>
-    ///     Captures renderer failures without browser dependencies.
-    /// </summary>
-    /// <param name="services">Fixture dependency provider.</param>
-    private sealed class FixtureRenderer(IServiceProvider services) : Renderer(services, NullLoggerFactory.Instance)
-    {
-        /// <summary>Renderer dispatcher used to serialize fixture component updates.</summary>
-        public override Dispatcher Dispatcher { get; } = Dispatcher.CreateDefault();
-
-        /// <summary>Unexpected render failures.</summary>
-        public List<Exception> Errors { get; } = [];
-
-        /// <summary>
-        ///     Attaches a component to its actual render handle.
-        /// </summary>
-        /// <param name="component">Component rendered by the fixture.</param>
-        /// <returns>A task completing after the fixture operation and its awaited callbacks finish.</returns>
-        public Task AttachAsync(IComponent component)
-        {
-            return RenderRootComponentAsync(AssignRootComponentId(component));
-        }
-
-        /// <summary>
-        ///     Captures renderer failures for scenario assertions.
-        /// </summary>
-        /// <param name="exception">Connection failure, or null for a normal disconnect.</param>
-        protected override void HandleException(Exception exception)
-        {
-            Errors.Add(exception);
-        }
-
-        /// <summary>
-        ///     Completes immediately without executing live update display work.
-        /// </summary>
-        /// <param name="renderBatch">Renderer update batch supplied by Blazor; ignored by this fixture.</param>
-        /// <returns>An already completed task; this fixture performs no work.</returns>
-        protected override Task UpdateDisplayAsync(in RenderBatch renderBatch)
-        {
-            return Task.CompletedTask;
-        }
-    }
 }
