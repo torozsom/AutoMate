@@ -47,7 +47,7 @@ public sealed class ConfigurationVariableLoadingTests
     {
         var scanner = DispatchProxy.Create<IProjectScannerService, Scanner>();
 
-        (Assert.IsAssignableFrom<Scanner>(scanner)).Result = failed
+        Assert.IsAssignableFrom<Scanner>(scanner).Result = failed
             ? Task.FromException<Dictionary<string, string>>(new IOException("private-path-and-values"))
             : Task.FromResult(new Dictionary<string, string>());
         var form = Form(scanner);

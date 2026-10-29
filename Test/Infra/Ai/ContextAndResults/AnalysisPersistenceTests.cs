@@ -113,8 +113,8 @@ public sealed class AnalysisPersistenceTests
 
         await fixture.Db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(d => d.Status, DeploymentStatus.Stopped));
-        (Assert.IsAssignableFrom<ContextProxy>(fixture.Services
-            .GetRequiredService<IDeploymentAnalysisContextBuilder>())).Build = () =>
+        Assert.IsAssignableFrom<ContextProxy>(fixture.Services
+            .GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = () =>
             Task.FromResult(new DeploymentAnalysisContext(empty ? "" : "redacted activity", empty ? [] : ["order:1"],
                 provenance));
 
@@ -296,7 +296,7 @@ public sealed class AnalysisPersistenceTests
         var logPort = DispatchProxy.Create<IDeploymentDiagnosticStore, ReadPort>();
         var logReads = new List<(string? Method, object?[]? Arguments)>();
 
-        (Assert.IsAssignableFrom<ReadPort>(logPort)).Call = (method, args) =>
+        Assert.IsAssignableFrom<ReadPort>(logPort).Call = (method, args) =>
         {
             logReads.Add((method?.Name, args));
 
@@ -311,7 +311,7 @@ public sealed class AnalysisPersistenceTests
         var metricCalls = 0;
         var metricPort = DispatchProxy.Create<IDeploymentMetricQuery, ReadPort>();
 
-        (Assert.IsAssignableFrom<ReadPort>(metricPort)).Call = (method, args) =>
+        Assert.IsAssignableFrom<ReadPort>(metricPort).Call = (method, args) =>
         {
             metricCalls++;
 
@@ -989,8 +989,8 @@ public sealed class AnalysisPersistenceTests
         for (var attempt = 0; attempt < 3; attempt++)
             Assert.True(await queue.ReleaseAsync((await queue.ClaimNextAsync())!));
 
-        (Assert.IsAssignableFrom<ContextProxy>(fixture.Services
-                .GetRequiredService<IDeploymentAnalysisContextBuilder>())).Build =
+        Assert.IsAssignableFrom<ContextProxy>(fixture.Services
+                .GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build =
             () => throw new InvalidOperationException("Context must not be loaded after recovery exhaustion.");
 
         await fixture.ProcessAsync();
@@ -1027,8 +1027,8 @@ public sealed class AnalysisPersistenceTests
             ? Task.FromException<LlmAnalysisResponse>(new TransientAnalysisProviderException(40))
             : Task.FromResult(AnalysisResultTests.Valid()), audit);
 
-        (Assert.IsAssignableFrom<ContextProxy>(fixture.Services
-            .GetRequiredService<IDeploymentAnalysisContextBuilder>())).Build = () =>
+        Assert.IsAssignableFrom<ContextProxy>(fixture.Services
+            .GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = () =>
         {
             builds++;
 

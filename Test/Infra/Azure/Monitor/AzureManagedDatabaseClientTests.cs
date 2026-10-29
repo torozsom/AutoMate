@@ -218,8 +218,8 @@ public sealed class AzureManagedDatabaseClientTests
 
         Assert.Equal(25,
             Assert.Single(samples, s => s is { Name: "automate_cpu_usage_percent", Unit: "percent" }).Value,
-            precision: 6);
+            6);
         Assert.Equal(1048576, Assert.Single(samples,
-            s => s is { Name: "automate_memory_used_bytes", Unit: "bytes" }).Value, precision: 6);
+            s => s is { Name: "automate_memory_used_bytes", Unit: "bytes" }).Value, 6);
     }
 }

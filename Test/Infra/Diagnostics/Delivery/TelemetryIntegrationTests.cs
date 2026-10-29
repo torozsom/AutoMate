@@ -194,7 +194,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                     DateTimeOffset.UtcNow, CancellationToken.None);
 
             Assert.Equal(1.25, Assert.Single(daily,
-                row => row is { Name: "automate_cpu_usage_cores", SampleCount: 1 }).Sum, precision: 6);
+                row => row is { Name: "automate_cpu_usage_cores", SampleCount: 1 }).Sum, 6);
             Assert.Empty(await scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>()
                 .ReadAsync(Guid.NewGuid(), seeded.Project, seeded.Deployment, 0, false, 10, CancellationToken.None));
 
@@ -272,7 +272,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
             DateTimeOffset.UtcNow.AddMinutes(-10), DateTimeOffset.UtcNow, 10);
 
         Assert.Equal(2.5, Assert.Single(points.Points, p => p.Name == "automate_cpu_usage_cores").Average,
-            precision: 6);
+            6);
         await history.Invoking(h => h.ReadLogsAsync(Guid.NewGuid(), seeded.Project, seeded.Deployment, 0, true, 10))
             .Should().ThrowAsync<UnauthorizedAccessException>();
     }

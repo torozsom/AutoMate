@@ -19,6 +19,7 @@ public sealed class ScopedApplicationOperationsTests
         var operations = new ScopedApplicationOperations(provider.GetRequiredService<IServiceScopeFactory>());
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var probes = new List<Probe>();
+
         // <summary>
         //     Starts a scope that stays active until the fixture releases both overlapping operations.
         // </summary>
@@ -35,6 +36,7 @@ public sealed class ScopedApplicationOperationsTests
                 return probe;
             });
         }
+
         var first = Start();
         var second = Start();
 

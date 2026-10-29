@@ -27,7 +27,8 @@ module-resolution override, not a production setting.
 
 CI downloads console-preview/metrics-preview artifacts from the .NET test job instead of rebuilding the solution in
 the browser job. The artifact includes generated scoped CSS and Bootstrap copies produced by the rendering tests;
-maintained static assets come from the checked-out source. CI keeps project-section checks blocking and marks the console audit advisory because of documented repository-page
+maintained static assets come from the checked-out source. CI keeps project-section checks blocking and marks the
+console audit advisory because of documented repository-page
 overflow at 200% zoom. npm test retains all assertions and can fail on that audit; no passing live-browser result is
 implied by installing dependencies or rendering previews.
 

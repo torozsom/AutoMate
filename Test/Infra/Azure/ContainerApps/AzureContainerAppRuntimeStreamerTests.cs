@@ -464,9 +464,9 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             e => e.SourceIdentity?.Component == DeploymentDiagnosticComponent.Database &&
                  e.Kind == DeploymentDiagnosticKind.Metric);
         Assert.Equal(42, Assert.Single(metric.Metrics!,
-            m => m is { Name: "automate_cpu_usage_percent", Unit: "percent" }).Value, precision: 6);
+            m => m is { Name: "automate_cpu_usage_percent", Unit: "percent" }).Value, 6);
         Assert.Equal(65, Assert.Single(metric.Metrics!, m => m.Name == "automate_memory_used_percent").Value,
-            precision: 6);
+            6);
 
         await using var check = new AutoMateDbContext(dbOptions, protector);
 

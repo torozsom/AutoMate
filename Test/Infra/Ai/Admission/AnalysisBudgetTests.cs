@@ -1,4 +1,3 @@
-using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using System.Data.Common;
 using Application.Ai.Policy;
 using Domain.Entities.Ai;
@@ -17,6 +16,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Infra.Ai.ContextAndResults;
+using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 using Work = Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem;
 

@@ -73,7 +73,10 @@ public sealed class HostingProfileRegistrationTests
         var metrics = services.GetRequiredService<MeterProvider>();
         var logs = services.GetRequiredService<LoggerProvider>();
 
-        using (AutoMateTelemetry.Deployments.StartActivity("deployment.local.execute")) { }
+        using (AutoMateTelemetry.Deployments.StartActivity("deployment.local.execute"))
+        {
+        }
+
         using var meter = new Meter(AutoMateTelemetry.DeploymentMeter.Name);
         meter.CreateCounter<long>("automate.deployment.jobs.started").Add(1);
         services.GetRequiredService<ILoggerFactory>().CreateLogger("AppStartup")
@@ -97,36 +100,6 @@ public sealed class HostingProfileRegistrationTests
         Assert.Contains(capture.Requests, request => request.Body.Contains("deployment.local.execute"));
         Assert.Contains(capture.Requests, request => request.Body.Contains("automate.deployment.jobs.started"));
         Assert.Contains(capture.Requests, request => request.Body.Contains("Database migrations are current"));
-    }
-
-    /// <summary>
-    ///     Captures actual OTLP protobuf requests without contacting a collector or starting host workers.
-    /// </summary>
-    private sealed class OtlpCaptureHandler : HttpMessageHandler
-    {
-        /// <summary>Serialized signal requests and their resolved collector endpoints.</summary>
-        public ConcurrentQueue<(Uri Endpoint, string Body)> Requests { get; } = new();
-
-        /// <summary>Handles the metric exporter's synchronous HTTP transport in the test fixture.</summary>
-        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            using var bytes = new MemoryStream();
-            request.Content!.ReadAsStream(cancellationToken).CopyTo(bytes);
-            Requests.Enqueue((request.RequestUri!, Encoding.UTF8.GetString(bytes.ToArray())));
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([]) };
-        }
-
-        /// <summary>Records a packet and returns an empty successful OTLP protobuf response.</summary>
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            var bytes = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
-            Requests.Enqueue((request.RequestUri!, Encoding.UTF8.GetString(bytes)));
-            return new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new ByteArrayContent([])
-            };
-        }
     }
 
     /// <summary>
@@ -774,5 +747,35 @@ public sealed class HostingProfileRegistrationTests
         });
 
         return builder;
+    }
+
+    /// <summary>
+    ///     Captures actual OTLP protobuf requests without contacting a collector or starting host workers.
+    /// </summary>
+    private sealed class OtlpCaptureHandler : HttpMessageHandler
+    {
+        /// <summary>Serialized signal requests and their resolved collector endpoints.</summary>
+        public ConcurrentQueue<(Uri Endpoint, string Body)> Requests { get; } = new();
+
+        /// <summary>Handles the metric exporter's synchronous HTTP transport in the test fixture.</summary>
+        protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            using var bytes = new MemoryStream();
+            request.Content!.ReadAsStream(cancellationToken).CopyTo(bytes);
+            Requests.Enqueue((request.RequestUri!, Encoding.UTF8.GetString(bytes.ToArray())));
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([]) };
+        }
+
+        /// <summary>Records a packet and returns an empty successful OTLP protobuf response.</summary>
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            var bytes = await request.Content!.ReadAsByteArrayAsync(cancellationToken);
+            Requests.Enqueue((request.RequestUri!, Encoding.UTF8.GetString(bytes)));
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent([])
+            };
+        }
     }
 }

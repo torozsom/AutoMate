@@ -52,7 +52,8 @@ Use concise multiline XML summaries for handwritten types, constructors, methods
 internal/private/nested declarations. Document parameters/type parameters, results and actual exception conditions;
 fields/properties may use single-line summaries. Adapter comments must describe concrete ownership, cancellation,
 durability and failure behavior. Preserve EF generated markers, migration identities and SQL/model operations;
-regeneration may replace generated comments. Local-function XML uses ordinary source comments so the compiler needs no documentation-warning suppression.
+regeneration may replace generated comments. Local-function XML uses ordinary source comments so the compiler needs no
+documentation-warning suppression.
 
 ## Related documentation
 
