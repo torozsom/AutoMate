@@ -217,9 +217,9 @@ public sealed class AzureManagedDatabaseClientTests
             "token", CancellationToken.None);
 
         Assert.Equal(25,
-            Assert.Single(samples, s => s.Name == "automate_cpu_usage_percent" && s.Unit == "percent").Value,
+            Assert.Single(samples, s => s is { Name: "automate_cpu_usage_percent", Unit: "percent" }).Value,
             precision: 6);
         Assert.Equal(1048576, Assert.Single(samples,
-            s => s.Name == "automate_memory_used_bytes" && s.Unit == "bytes").Value, precision: 6);
+            s => s is { Name: "automate_memory_used_bytes", Unit: "bytes" }).Value, precision: 6);
     }
 }

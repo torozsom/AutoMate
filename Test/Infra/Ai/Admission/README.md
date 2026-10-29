@@ -28,6 +28,11 @@ construction fails, proving the probe does not resolve it. Production PostgreSQL
 generated schemas/migrations must target an isolated test database, never an application database. Same-lease
 reuse/recovery charges, canceled lock waits and receipt backfill are separate from SQLite coverage.
 
+Concurrent admission batches are fixture operations: each request creates and asynchronously disposes an independent
+context, and the batch settles only after every started request and its cleanup complete. SQLite batches retain
+thread-pool concurrency; PostgreSQL batches retain independent asynchronous connections. Await each batch before
+disposing its fixture. Verification after simulated cancellation uses a separate deadline from the canceled operation.
+
 ## Running
 
 From the repository root:

@@ -1,3 +1,4 @@
+using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using System.Data.Common;
 using Application.Ai.Policy;
 using Domain.Entities.Ai;
@@ -67,13 +68,8 @@ public sealed class AnalysisBudgetTests
 
         fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(ownerForCallbacks, tenantLimit: 1);
 
-        var results = await Task.WhenAll(fixture.Deployments
-            .Take(4)
-            .Select(id => Task.Run(async () =>
-            {
-                await using var db = fixture.Db();
-                return await fixture.Service(db).RequestManualAsync(ownerForCallbacks, id, Guid.NewGuid());
-            })));
+        var results = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
+            fixture.Deployments.Take(4).Select(id => (id, Guid.NewGuid())));
 
         var accepted = Assert.Single(results, item => item.Accepted);
         Assert.All(results.Where(item => !item.Accepted), item =>
@@ -434,6 +430,24 @@ public sealed class AnalysisBudgetTests
                 AnalysisResultTests.Validator(), Clock,
                 new AnalysisEgressAuthorizer(db, Settings, new DiagnosticRedactor()),
                 NullLogger<DeploymentAnalysisService>.Instance);
+        }
+
+        /// <summary>
+        ///     Runs concurrent admissions and disposes each independent context before the batch completes.
+        /// </summary>
+        /// <param name="owner">Account whose requests share admission limits.</param>
+        /// <param name="requests">Deployment identities paired with their stable request IDs.</param>
+        /// <param name="cancellationToken">Cancels admission while preserving asynchronous context cleanup.</param>
+        /// <returns>A task that settles after every admission and context disposal, and faults if any request fails.</returns>
+        public Task<DeploymentAnalysisRequestResult[]> RequestConcurrentlyAsync(Guid owner,
+            IEnumerable<(Guid Deployment, Guid Request)> requests, CancellationToken cancellationToken = default)
+        {
+            return Task.WhenAll(requests.Select(request => Task.Run(async () =>
+            {
+                await using var db = Db();
+                return await Service(db)
+                    .RequestManualAsync(owner, request.Deployment, request.Request, cancellationToken);
+            }, cancellationToken)));
         }
 
         /// <summary>

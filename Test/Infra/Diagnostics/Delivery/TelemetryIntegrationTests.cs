@@ -194,7 +194,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
                     DateTimeOffset.UtcNow, CancellationToken.None);
 
             Assert.Equal(1.25, Assert.Single(daily,
-                row => row.Name == "automate_cpu_usage_cores" && row.SampleCount == 1).Sum, precision: 6);
+                row => row is { Name: "automate_cpu_usage_cores", SampleCount: 1 }).Sum, precision: 6);
             Assert.Empty(await scope.ServiceProvider.GetRequiredService<IDeploymentLogQuery>()
                 .ReadAsync(Guid.NewGuid(), seeded.Project, seeded.Deployment, 0, false, 10, CancellationToken.None));
 

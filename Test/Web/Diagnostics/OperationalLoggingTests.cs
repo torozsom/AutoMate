@@ -331,12 +331,11 @@ public sealed class OperationalLoggingTests
     {
         using var exporter = new SnapshotExporter();
         var auth = DispatchProxy.Create<IAuthService, PortProxy>();
+        var loginCalls = new List<(string? Method, object?[]? Arguments)>();
 
         (Assert.IsAssignableFrom<PortProxy>(auth)).Call = (method, args) =>
         {
-            Assert.Equal("LoginAsync", method!.Name);
-            Assert.Equal("private-email@example.invalid", args![0]);
-            Assert.Equal("private-password", args[1]);
+            loginCalls.Add((method?.Name, args));
 
             return Task.FromResult<(LocalUser?, string?)>(accepted
                 ? (
@@ -380,6 +379,10 @@ public sealed class OperationalLoggingTests
                 ["__RequestVerificationToken"] = token
             }));
 
+        var login = Assert.Single(loginCalls);
+        Assert.Equal("LoginAsync", login.Method);
+        Assert.Equal("private-email@example.invalid", login.Arguments![0]);
+        Assert.Equal("private-password", login.Arguments[1]);
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Equal(accepted ? "/" : "/login?error=private-auth-error", response.Headers.Location!.OriginalString);
         Assert.Equal(accepted, response.Headers.Contains("Set-Cookie"));

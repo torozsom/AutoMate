@@ -1,3 +1,4 @@
+using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using Application.Ai.Policy;
 using Domain.Entities.Ai;
 using Domain.Entities.Deployments;
@@ -45,12 +46,8 @@ public sealed class AnalysisBudgetPostgresTests
             .Select(_ => Guid.NewGuid())
             .ToArray();
 
-        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(async index =>
-        {
-            await using var db = fixture.Db();
-            return await fixture.Service(db).RequestManualAsync(firstOwnerForCallbacks, fixture.Deployments[index],
-                requests[index]);
-        }));
+        var results = await fixture.RequestConcurrentlyAsync(firstOwnerForCallbacks,
+            fixture.Deployments.Take(4).Zip(requests));
 
         var accepted = Assert.Single(results, result => result.Accepted).Analysis!;
         Assert.All(results.Where(result => !result.Accepted), result =>
@@ -430,6 +427,24 @@ public sealed class AnalysisBudgetPostgresTests
             {
                 await using var db = Db();
                 return await new AnalysisBudgetGuard(db, Settings, TimeProvider.System).ReserveAttemptAsync(item);
+            }));
+        }
+
+        /// <summary>
+        ///     Runs concurrent admissions and disposes each independent context before the batch completes.
+        /// </summary>
+        /// <param name="owner">Account whose requests share admission limits.</param>
+        /// <param name="requests">Deployment identities paired with their stable request IDs.</param>
+        /// <param name="cancellationToken">Cancels admission while preserving asynchronous context cleanup.</param>
+        /// <returns>A task that settles after every admission and context disposal, and faults if any request fails.</returns>
+        public Task<DeploymentAnalysisRequestResult[]> RequestConcurrentlyAsync(Guid owner,
+            IEnumerable<(Guid Deployment, Guid Request)> requests, CancellationToken cancellationToken = default)
+        {
+            return Task.WhenAll(requests.Select(async request =>
+            {
+                await using var db = Db();
+                return await Service(db)
+                    .RequestManualAsync(owner, request.Deployment, request.Request, cancellationToken);
             }));
         }
 

@@ -124,10 +124,11 @@ public sealed class DeploymentAnalysisEndpointTests
         var analysis = Guid.NewGuid();
         var calls = 0;
         var users = DispatchProxy.Create<IUserService, PortProxy>();
+        var userLookups = new List<object?[]?>();
 
         (Assert.IsAssignableFrom<PortProxy>(users)).Call = (_, args) =>
         {
-            Assert.Equal(owner.ToString(), args![0]);
+            userLookups.Add(args);
 
             return Task.FromResult((validOwner ? owner : Guid.Empty, (string?)null, false));
         };
@@ -143,7 +144,7 @@ public sealed class DeploymentAnalysisEndpointTests
             else Assert.Equal(analysis, args[2]);
             calls++;
 
-            return methodName switch
+            return method.Name switch
             {
                 "CancelAsync" => Task.FromResult((DeploymentAnalysisCancellationResult)outcome),
                 "RequestManualAsync" => Task.FromResult((DeploymentAnalysisRequestResult)outcome),
@@ -188,6 +189,8 @@ public sealed class DeploymentAnalysisEndpointTests
             _ => await client.DeleteAsync(path)
         };
 
+        if (authenticated && csrf) Assert.Equal(owner.ToString(), Assert.Single(userLookups)![0]);
+        else Assert.Empty(userLookups);
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(authenticated && csrf && validOwner ? 1 : 0, calls);
     }

@@ -185,12 +185,8 @@ public sealed class AnalysisAdmissionTests
             provider: reason == "missing" ? null : reason == "unknown" ? "unknown" : "openai");
 
         var request = Guid.NewGuid();
-        var responses = await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => Task.Run(async () =>
-        {
-            await using var db = fixture.NewDb();
-            return await fixture.Service(db)
-                .RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request);
-        })));
+        var responses = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
+            Enumerable.Range(0, 6).Select(_ => (firstDeploymentForCallbacks, (Guid?)request)));
 
         Assert.All(responses, item =>
         {
@@ -244,22 +240,26 @@ public sealed class AnalysisAdmissionTests
         await using var db = fixture.NewDb();
 
         using var cancellation = new CancellationTokenSource();
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var verificationToken = verificationDeadline.Token;
         var notifier = new DeploymentStatusNotifier(NullLogger<DeploymentStatusNotifier>.Instance);
         var orchestrator = new LocalDeploymentOrchestrator(db, null!, null!, null!, null!,
             new DeploymentCapabilities(true, false), new CancelingDiagnostics(cancellation),
             NullLogger<LocalDeploymentOrchestrator>.Instance, notifier, new NoLocalDiagnostics());
 
-        var project = await db.CsProjects.SingleAsync();
+        var project = await db.CsProjects.SingleAsync(verificationToken);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => orchestrator.DeployLocalProjectAsync(
             new DeploymentConfigDto { ProjectId = project.AppId, CsProjectId = project.Id }, cancellation.Token));
 
-        var failed = await db.Deployments.AsNoTracking().SingleAsync(item => item.Status == DeploymentStatus.Failed);
+        var failed = await db.Deployments.AsNoTracking()
+            .SingleAsync(item => item.Status == DeploymentStatus.Failed, verificationToken);
 
         Assert.NotEqual(firstDeploymentForCallbacks, failed.Id);
-        Assert.Equal(failed.Id, (await db.FailedDeploymentAnalysisEvents.SingleAsync()).DeploymentId);
+        Assert.Equal(failed.Id, (await db.FailedDeploymentAnalysisEvents.SingleAsync(verificationToken)).DeploymentId);
         Assert.Equal(DeploymentStatus.Starting,
-            (await db.Deployments.AsNoTracking().SingleAsync(item => item.Id == firstDeploymentForCallbacks)).Status);
+            (await db.Deployments.AsNoTracking()
+                .SingleAsync(item => item.Id == firstDeploymentForCallbacks, verificationToken)).Status);
     }
 
     /// <summary>
@@ -488,13 +488,8 @@ public sealed class AnalysisAdmissionTests
         var firstDeploymentForCallbacks = fixture.Deployments[0];
         var request = Guid.NewGuid();
 
-        var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(async () =>
-        {
-            await using var db = fixture.NewDb();
-            return stableId
-                ? await fixture.Service(db).RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request)
-                : await fixture.Service(db).RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks);
-        })));
+        var responses = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
+            Enumerable.Range(0, 8).Select(_ => (firstDeploymentForCallbacks, stableId ? (Guid?)request : null)));
 
         Assert.All(responses, response => Assert.True(response.Accepted));
         Assert.Single(responses.Select(response => response.Analysis!.Id).Distinct());
@@ -523,12 +518,8 @@ public sealed class AnalysisAdmissionTests
         var firstDeploymentForCallbacks = fixture.Deployments[0];
         var requests = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToArray();
 
-        var responses = await Task.WhenAll(requests.Select(request => Task.Run(async () =>
-        {
-            await using var db = fixture.NewDb();
-            return await fixture.Service(db)
-                .RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request);
-        })));
+        var responses = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
+            requests.Select(request => (firstDeploymentForCallbacks, (Guid?)request)));
 
         Assert.All(responses, response => Assert.True(response.Accepted));
         var analysis = Assert.Single(responses.Select(response => response.Analysis!.Id).Distinct());
@@ -572,11 +563,8 @@ public sealed class AnalysisAdmissionTests
             updated = (await db.CsProjects.SingleAsync()).UpdatedAt;
         }
 
-        var responses = await Task.WhenAll(fixture.Deployments.Select(deployment => Task.Run(async () =>
-        {
-            await using var db = fixture.NewDb();
-            return await fixture.Service(db).RequestManualAsync(ownerForCallbacks, deployment, Guid.NewGuid());
-        })));
+        var responses = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
+            fixture.Deployments.Select(deployment => (deployment, (Guid?)Guid.NewGuid())));
 
         Assert.Equal(2, responses.Count(response => response.Accepted));
         Assert.All(responses.Where(response => !response.Accepted),
@@ -641,25 +629,33 @@ public sealed class AnalysisAdmissionTests
         var firstDeploymentForCallbacks = fixture.Deployments[0];
         await using var db = fixture.NewDb();
 
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var verificationToken = verificationDeadline.Token;
         var service = fixture.Service(db);
         var request = Guid.NewGuid();
 
-        Assert.False((await service.RequestManualAsync(Guid.NewGuid(), firstDeploymentForCallbacks, request)).Accepted);
-        Assert.False((await service.RequestManualAsync(ownerForCallbacks, Guid.NewGuid(), request)).Accepted);
-        Assert.False((await service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, Guid.Empty))
+        Assert.False((await service.RequestManualAsync(Guid.NewGuid(), firstDeploymentForCallbacks, request,
+            verificationToken)).Accepted);
+        Assert.False((await service.RequestManualAsync(ownerForCallbacks, Guid.NewGuid(), request, verificationToken))
+            .Accepted);
+        Assert.False((await service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, Guid.Empty,
+                verificationToken))
             .Accepted);
 
         using var canceled = new CancellationTokenSource();
+        var canceledToken = canceled.Token;
 
         await canceled.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request, canceled.Token));
+            service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request, canceledToken));
 
-        Assert.Equal(0, await db.AiAnalysisRequests.CountAsync(CancellationToken.None));
+        Assert.Equal(0, await db.AiAnalysisRequests.CountAsync(verificationToken));
 
-        var first = await service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request);
-        var second = await service.RequestManualAsync(ownerForCallbacks, fixture.Deployments[1], request);
+        var first = await service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request,
+            verificationToken);
+        var second =
+            await service.RequestManualAsync(ownerForCallbacks, fixture.Deployments[1], request, verificationToken);
 
         Assert.True(first.Accepted);
         Assert.True(second.Accepted);
@@ -667,7 +663,8 @@ public sealed class AnalysisAdmissionTests
 
         fixture.Options.CurrentValue = new AiAnalysisOptions();
 
-        Assert.False((await service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request))
+        Assert.False((await service.RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request,
+                verificationToken))
             .Accepted);
     }
 
@@ -1062,6 +1059,26 @@ public sealed class AnalysisAdmissionTests
             return new DeploymentAnalysisService(db, Options, AnalysisResultTests.Validator(), Clock,
                 new AnalysisEgressAuthorizer(db, Options, new DiagnosticRedactor()),
                 NullLogger<DeploymentAnalysisService>.Instance);
+        }
+
+        /// <summary>
+        ///     Runs parallel admissions on independently owned contexts and completes after every context is disposed.
+        /// </summary>
+        /// <param name="owner">Account whose requests share admission limits.</param>
+        /// <param name="requests">Deployment/request identities; a null request selects legacy admission.</param>
+        /// <param name="cancellationToken">Cancels scheduling and admission without canceling owned context disposal.</param>
+        /// <returns>A task that settles after every request and context disposal, and faults if any request fails.</returns>
+        public Task<DeploymentAnalysisRequestResult[]> RequestConcurrentlyAsync(Guid owner,
+            IEnumerable<(Guid Deployment, Guid? Request)> requests, CancellationToken cancellationToken = default)
+        {
+            return Task.WhenAll(requests.Select(request => Task.Run(async () =>
+            {
+                await using var db = NewDb();
+                var service = Service(db);
+                return request.Request is { } key
+                    ? await service.RequestManualAsync(owner, request.Deployment, key, cancellationToken)
+                    : await service.RequestManualAsync(owner, request.Deployment, cancellationToken);
+            }, cancellationToken)));
         }
 
         /// <summary>

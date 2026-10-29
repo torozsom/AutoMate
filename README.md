@@ -435,8 +435,11 @@ Dependabot PRs run Community without a Cloud token, PR comments or check annotat
 and SARIF upload. This avoids requiring Actions secrets or write-dependent reporting on Dependabot events. The
 Cloud token presence check still applies to ordinary trusted runs. No `pull_request_target` workflow executes PR code.
 
-Findings are initially report-only: no finding thresholds or baseline are configured, and no branch-protection settings
-are changed. Restore/build, scanner, authentication, and upload failures remain workflow failures. On the first CI run,
+The scanner has no finding thresholds or baseline configured, and the workflow does not change branch protection.
+GitHub evaluates uploaded SARIF separately: its `QDNETC` code-scanning check can fail on new PR alerts according to
+repository severity settings even when `Qodana: Full solution` succeeds. Correct those alerts without suppressing
+findings or lowering the check's severity threshold. See [GitHub's code-scanning check guidance](https://docs.github.com/en/code-security/how-tos/manage-security-alerts/manage-code-scanning-alerts/triage-alerts-in-pull-requests).
+Restore/build, scanner, authentication, and upload failures remain workflow failures. On the first CI run,
 verify Cloud publication, artifact availability, annotations and Code scanning ingestion; verify the summary comment
 on the first internal PR run. CI - Build and test owns tests and build enforcement.
 

@@ -23,6 +23,9 @@ commit owner cancellation or prepare renewal, then explicitly advance the heartb
 ordering without relying on a five-second CI scheduling window; owned processing is stopped before fixture disposal.
 The cancellation barrier is signaled when the provider's awaited operation observes cancellation, avoiding a race
 between cancellation callbacks and registration disposal.
+Verification waits and database checks share a bounded test deadline independent of simulated worker shutdown, so
+assertions still execute after host cancellation. Temporary context-building callbacks are detached before fixture
+disposal and capture the specific service and scalar identities they need.
 
 ## Fixtures and boundaries
 
