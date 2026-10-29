@@ -1,12 +1,14 @@
-name: Qodana
+name: Quality - Qodana
 
 on:
   workflow_dispatch:
   pull_request:
+    branches: [main]
   push:
     branches:
       - main
-      - feature
+  schedule:
+    - cron: '47 4 * * 1'
 
 concurrency:
   group: qodana-${{ github.event.pull_request.number || github.ref }}
@@ -17,6 +19,7 @@ permissions:
 
 jobs:
   qodana:
+    name: 'Qodana: Full solution'
     # Forks cannot access the Cloud project token; never run their code with base-repository secrets.
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
@@ -34,8 +37,9 @@ jobs:
           persist-credentials: false
 
       - name: Check Qodana Cloud token
+        if: github.actor != 'dependabot[bot]'
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_245602675 }}
+          QODANA_TOKEN: ${{ github.actor != 'dependabot[bot]' && secrets.QODANA_TOKEN_245602675 || '' }}
         run: |
           if [ -z "$QODANA_TOKEN" ]; then
             echo "::error::The QODANA_TOKEN_245602675 repository secret is required for Cloud publication."
@@ -46,15 +50,16 @@ jobs:
         id: scan
         uses: JetBrains/qodana-action@v2026.2
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_245602675 }}
+          # Dependabot runs Community locally without accessing Actions secrets or Cloud.
+          QODANA_TOKEN: ${{ github.actor != 'dependabot[bot]' && secrets.QODANA_TOKEN_245602675 || '' }}
           QODANA_ENDPOINT: https://qodana.cloud
         with:
           args: --image jetbrains/qodana-cdnet:2026.2
           results-dir: ${{ runner.temp }}/qodana/results
           pr-mode: false
           use-caches: true
-          post-pr-comment: ${{ github.event_name == 'pull_request' }}
-          use-annotations: true
+          post-pr-comment: ${{ github.event_name == 'pull_request' && github.actor != 'dependabot[bot]' }}
+          use-annotations: ${{ github.actor != 'dependabot[bot]' }}
           upload-result: true
           push-fixes: none
 

@@ -1,0 +1,86 @@
+name: Security - CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Refresh the default-branch security baseline even when source code has not changed.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: 'CodeQL: ${{ matrix.name }}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            name: C#
+            build-mode: manual
+          - language: javascript-typescript
+            name: JavaScript and TypeScript
+            build-mode: none
+          - language: actions
+            name: GitHub Actions
+            build-mode: none
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      # Build after initialization so CodeQL observes compiled and generated Blazor code.
+      - name: Restore and build C# solution
+        if: matrix.language == 'csharp'
+        run: |
+          dotnet restore AutoMate.slnx
+          dotnet build AutoMate.slnx --no-restore --configuration Release --no-incremental
+
+      - name: Analyze and publish security findings
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  required:
+    name: 'CodeQL: Required checks'
+    if: ${{ always() }}
+    needs: analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all language analyses to succeed
+        env:
+          ANALYSIS_RESULT: ${{ needs.analyze.result }}
+        run: |
+          if [ "$ANALYSIS_RESULT" != success ]; then
+            echo "::error::CodeQL analysis did not succeed: $ANALYSIS_RESULT"
+            exit 1
+          fi

@@ -21,6 +21,9 @@ riderModule.iml
 !.github/workflows/
 .github/workflows/*
 !.github/workflows/verify.yml
+!.github/workflows/codeql.yml
+!.github/workflows/dependency-review.yml
+!.github/dependabot.yml
 
 # Local documentation is deliberately excluded from version control.
 /docs/

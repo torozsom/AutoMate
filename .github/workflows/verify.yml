@@ -1,51 +1,165 @@
-name: Verify AutoMate
+name: CI - Build and test
 
 on:
   pull_request:
-  push:
-    branches: [main, master]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  dotnet:
+    name: 'CI: Build and .NET tests'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
-      AUTOMATE_AI_TEST_DB: ""
-      AUTOMATE_TELEMETRY_TEST_DB: ""
-      AUTOMATE_DOCKER_SMOKE: ""
-      AUTOMATE_BROWSER_CHANNEL: chromium
+      AUTOMATE_AI_TEST_DB: ''
+      AUTOMATE_TELEMETRY_TEST_DB: ''
+      AUTOMATE_DOCKER_SMOKE: ''
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out source
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - uses: actions/setup-dotnet@v4
+          persist-credentials: false
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - uses: actions/setup-node@v4
+      - name: Restore solution
+        run: dotnet restore AutoMate.slnx
+      - name: Build Release with warnings as errors
+        run: dotnet build AutoMate.slnx --no-restore --configuration Release --warnaserror
+      - name: Run .NET tests and render browser fixtures
+        run: >-
+          dotnet test AutoMate.slnx --no-build --no-restore --configuration Release
+          --logger "trx;LogFileName=automate.trx" --results-directory .artifacts/test-results
+      - name: Publish test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: .artifacts/test-results/*.trx
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Share rendered browser fixtures
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-fixtures
+          path: |
+            .artifacts/console-preview/
+            .artifacts/metrics-preview/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+
+  javascript:
+    name: 'CI: JavaScript tests'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: dotnet restore AutoMate.slnx
-      - run: dotnet build AutoMate.slnx --no-restore --configuration Release --warnaserror
-      - run: dotnet test AutoMate.slnx --no-build --no-restore --configuration Release
-      - run: npm ci --prefix Test/Web/Browser
-      - run: npx playwright install --with-deps chromium
+      - name: Run browser-module behavior tests
+        run: node --test Test/Web/JavaScript/telemetry-chart.test.cjs Test/Web/JavaScript/xterm-wrapper.test.cjs
+
+  browser:
+    name: 'CI: Browser verification'
+    needs: dotnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AUTOMATE_BROWSER_CHANNEL: chromium
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Test/Web/Browser/package-lock.json
+      - name: Download rendered fixtures
+        uses: actions/download-artifact@v4
+        with:
+          name: browser-fixtures
+          path: .artifacts
+      - name: Install browser-test dependencies
+        run: npm ci --prefix Test/Web/Browser
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
         working-directory: Test/Web/Browser
       - name: Verify project navigation and focus
         run: node --test Test/Web/Browser/project-sections.test.cjs
-      - name: Console layout audit (known baseline zoom overflow)
-        # The original revision also fails repository-page 200% zoom checks; keep the failure visible without
-        # requiring a visual behavior change in this refactor. Make this blocking when that baseline debt is fixed.
+      - name: Console layout audit (advisory)
+        id: console-audit
+        # Preserve the known repository-page 200% zoom baseline without hiding navigation failures.
         continue-on-error: true
         run: node --test Test/Web/Browser/console-ui.test.cjs
+      - name: Record advisory audit result
+        if: ${{ !cancelled() && steps.console-audit.outcome == 'failure' }}
+        run: |
+          echo '::warning::Console layout audit failed; the known 200% zoom baseline remains advisory.'
+          echo 'Console layout audit: advisory failure (known 200% zoom baseline). See the audit log.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish browser screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-screenshots
+          path: .artifacts/**/*.png
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+  hygiene:
+    name: 'CI: Source hygiene'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source and PR history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Check whitespace in changed C# lines
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        shell: bash
         run: |
-          # Rider owns code layout. Reject trailing whitespace and added blank lines at EOF,
-          # while accepting both Windows and Unix line endings and IDE-specific indentation.
+          # Rider owns layout; reject only trailing whitespace and blank lines at EOF.
           git -c core.whitespace=blank-at-eol,blank-at-eof,cr-at-eol \
             diff --check "$BASE_SHA...HEAD" -- '*.cs'
+
+  required:
+    name: 'CI: Required checks'
+    if: ${{ always() }}
+    needs: [dotnet, javascript, browser, hygiene]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every blocking CI job to succeed
+        env:
+          DOTNET_RESULT: ${{ needs.dotnet.result }}
+          JAVASCRIPT_RESULT: ${{ needs.javascript.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+          HYGIENE_RESULT: ${{ needs.hygiene.result }}
+        run: |
+          for result in "$DOTNET_RESULT" "$JAVASCRIPT_RESULT" "$BROWSER_RESULT" "$HYGIENE_RESULT"; do
+            if [ "$result" != success ]; then
+              echo "::error::A required CI job did not succeed: $result"
+              exit 1
+            fi
+          done
