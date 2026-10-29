@@ -23,7 +23,8 @@ public sealed class GmailSenderService(
     private readonly EmailOptions _options = options.Value;
 
     /// <summary>
-    ///     Sends an email with the specified subject and HTML message asynchronously.
+    ///     Sends an email with the specified subject and HTML message asynchronously, logging only
+    ///     fixed delivery events without message content.
     /// </summary>
     /// <param name="toEmail">The recipient's email address.</param>
     /// <param name="subject">The subject of the email.</param>
@@ -42,8 +43,7 @@ public sealed class GmailSenderService(
 
         EnsureCredentialsConfigured();
 
-        logger.LogInformation(
-            "[GmailSenderService] Attempting to send email with subject '{Subject}'...", subject);
+        logger.LogInformation("[GmailSenderService] Attempting to send email.");
 
         var mimeMessage = CreateMessage(toEmail, subject, message);
 

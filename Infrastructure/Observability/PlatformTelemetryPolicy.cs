@@ -158,7 +158,7 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         {
             if (value is HttpMethod method) value = method.Method;
             return value is "GET" or "POST" or "PUT" or "PATCH" or "DELETE" or "HEAD" or "OPTIONS" or "CONNECT"
-                or "TRACE"
+                or "TRACE" or "OTHER"
                 ? value
                 : null;
         }

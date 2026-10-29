@@ -238,7 +238,7 @@ internal static class PlatformLogCatalog
         "[GitHubService] GitHub API returned error status code: {StatusCode} for getting repositories.",
         "[GitHubService] Successfully retrieved and cached {Count} repositories from GitHub API.",
         "[GitHubService] Successfully retrieved {Count} GitHub repositories from cache.",
-        "[GmailSenderService] Attempting to send email with subject '{Subject}'...",
+        "[GmailSenderService] Attempting to send email.",
         "[GmailSenderService] Email sender credentials are not configured.",
         "[GmailSenderService] Email successfully sent.",
         "[LocalDeploymentOrchestrator] Deployment failed: Database record for CsProject {Id} not found.",

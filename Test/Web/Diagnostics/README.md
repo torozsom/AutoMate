@@ -19,6 +19,8 @@ OperationalLoggingTests captures SDK records/scopes and actual login/authorizati
 DeploymentTracingTests checks exported parentage/results/privacy. RealTimeLogStreamerTests records real client-proxy
 arguments and canceled writes. LogHubCancellationTests separates navigation disconnect from active-provider
 cancellation. RequestAudit/ConsoleException tests cover safe HTTP boundaries and detached bounded operator snapshots.
+RequestAudit tests also exercise hostile/custom methods through an ordinary logger, and OperationalLogging tests
+verify SMTP attempt events omit message content without the shared sanitization layer or a network connection.
 
 ## Fixtures and boundaries
 

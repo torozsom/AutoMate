@@ -18,7 +18,8 @@ controls sender identity, SMTP host/port and app password. The host binds option
 
 Defaults are smtp.gmail.com:587 and sender name AutoMate. The implementation owns SMTP
 connection/authentication/send/disconnect and propagates cancellation. Credentials and verification message/link content
-are sensitive; do not log whole messages/options. Send completion is not confirmation the recipient received or read
+are sensitive; delivery logs contain only fixed events, without recipients, subjects, bodies or credentials.
+Send completion is not confirmation the recipient received or read
 mail.
 
 ## Related documentation

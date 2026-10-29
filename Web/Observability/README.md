@@ -17,7 +17,8 @@ OpenTelemetry SDK processors, finite metric/resource policy and safe HTTP operat
 SafeLogProcessor rechecks SDK state after Infrastructure SafeLoggerFactory sanitization. SafeTraceProcessor sanitizes
 activities before export and omits immutable untrusted events/links. SafeMetricPolicy controls identities/dimensions
 before aggregation. SafeResourceDetector supplies reviewed resource labels. RequestAuditMiddleware logs finite HTTP
-operation areas/outcomes.
+operation areas/outcomes. Request methods are mapped to fixed standard labels (or `OTHER`) before logging;
+both boundary events use the method captured when the request started.
 
 ## Contracts and lifecycle
 

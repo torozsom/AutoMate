@@ -18,19 +18,19 @@
         <PackageReference Include="Azure.ResourceManager.Resources" Version="1.12.0"/>
         <PackageReference Include="Docker.DotNet" Version="3.125.15"/>
         <PackageReference Include="Ignore" Version="0.2.1"/>
-        <PackageReference Include="MailKit" Version="4.18.1"/>
-        <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.13"/>
-        <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.13"/>
-        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.13"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.13"/>
-        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.13"/>
-        <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.13"/>
+        <PackageReference Include="MailKit" Version="4.18.2" />
+        <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.14" />
+        <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14" />
+        <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.14" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
+        <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.14" />
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3"/>
         <PackageReference Include="Octokit" Version="14.0.0"/>
-        <PackageReference Include="Scriban" Version="7.5.1"/>
+        <PackageReference Include="Scriban" Version="7.5.3" />
         <PackageReference Include="Sodium.Core" Version="1.4.1"/>
         <!-- Override MimeKit's transitive minimum with the patched PKCS implementation in every consuming host. -->
-        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13"/>
+        <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     </ItemGroup>
 
     <ItemGroup>
