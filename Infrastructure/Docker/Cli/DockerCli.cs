@@ -25,6 +25,7 @@ namespace Infrastructure.Docker.Cli;
 /// <param name="live">Delivers redacted observations to authorized browser groups.</param>
 /// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
 /// <param name="viewers">Provides the deployment runtime viewers boundary used by this operation.</param>
+/// <param name="liveMetricIntervalMilliseconds">Minimum callback interval per container.</param>
 /// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
 internal sealed class DockerCli(
     DockerOptions options,
@@ -34,7 +35,8 @@ internal sealed class DockerCli(
     ILogStreamer live,
     IDiagnosticRedactor redactor,
     IDeploymentRuntimeViewers viewers,
-    TimeProvider clock)
+    TimeProvider clock,
+    int liveMetricIntervalMilliseconds = 1000)
 {
     /// <summary>Timeout used while listing running Docker Compose projects.</summary>
     private static readonly TimeSpan ComposeListTimeout = TimeSpan.FromSeconds(30);
@@ -160,7 +162,9 @@ internal sealed class DockerCli(
                 static state => KillProcessTree((Process)state!), process);
 
             using var reader = process.StandardOutput;
-            var delivery = new DockerMetricDelivery(diagnostics, live, redactor, viewers, clock, sampleSeconds, logger);
+            await using var delivery = new DockerMetricDelivery(diagnostics, live, redactor, viewers, clock,
+                sampleSeconds, logger,
+                liveMetricIntervalMilliseconds);
 
             while (!cancellationToken.IsCancellationRequested)
             {

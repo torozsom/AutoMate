@@ -35,3 +35,7 @@ configuration can contain secrets. SaaS uses a disabled Docker implementation an
 - [Local workflows](../../Orchestration/Local/README.md)
 - [Supervision tests](../../../Test/Infra/Orchestration/LocalDiagnosticSupervisionTests.cs)
 - [Collector tests](../../../Test/Infra/Diagnostics/Docker/DockerCollectorTests.cs)
+
+StopRuntimeAsync cancels and awaits container log/metric sources before Compose removal while daemon lifecycle
+collection continues. Exact deployment identity fences stale requests; SetOperationAsync (false) resumes runtime
+admission after an unsuccessful stop.

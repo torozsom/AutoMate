@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -7,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using Application.Abstractions.Diagnostics.Delivery;
 using Application.Abstractions.Diagnostics.Events;
+using Application.Diagnostics;
 using Infrastructure.Azure.Monitor;
 using Microsoft.Extensions.Logging;
 
@@ -157,6 +159,7 @@ internal sealed class AzureContainerAppLiveLogs(
         {
             while (!token.IsCancellationRequested && session.Target.LeaseUntil > DateTimeOffset.UtcNow)
             {
+                var discoveryStarted = Stopwatch.GetTimestamp();
                 try
                 {
                     using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -174,6 +177,7 @@ internal sealed class AzureContainerAppLiveLogs(
                         connections.Remove(key);
                         session.Issues.TryRemove(key, out _);
                         session.Issues.TryRemove(key + "-connected", out _);
+                        session.Failures.TryRemove(key, out _);
                     }
 
                     foreach (var endpoint in endpoints)
@@ -194,7 +198,10 @@ internal sealed class AzureContainerAppLiveLogs(
                             "ACA has no running replica for this deployment. Console streaming will resume when a replica starts.",
                             token);
                     else session.Issues.TryRemove("replicas", out _);
+                    if (session.Failures.TryRemove("discovery", out _))
+                        RecordCollector(session, "discovery", "discovery", "recovered", Stopwatch.GetTimestamp());
                     session.Issues.TryRemove("discovery", out _);
+                    OperationalMetrics.Record("AzureContainerApps", "discovery", "completed", discoveryStarted);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
@@ -202,8 +209,8 @@ internal sealed class AzureContainerAppLiveLogs(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning("ACA live discovery failed for deployment {DeploymentId}. Failure {FailureType}.",
-                        session.Target.DeploymentId, ex.GetType().Name);
+                    RecordCollector(session, "discovery", "discovery",
+                        FailureOutcome(ex), discoveryStarted);
                     await NoticeAsync(session, "discovery", FailureMessage(ex), token);
                 }
 
@@ -303,6 +310,10 @@ internal sealed class AzureContainerAppLiveLogs(
     /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task FollowAsync(Session session, AzureLiveLogEndpoint endpoint, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
+        var operation = new CollectorOperationState();
+        var outcome = "completed";
+        var refresh = CancellationToken.None;
         try
         {
             var target = session.Target;
@@ -324,6 +335,7 @@ internal sealed class AzureContainerAppLiveLogs(
             if (duration <= TimeSpan.Zero) throw new InvalidOperationException("ACA returned an expired stream token.");
 
             // Reconnect periodically to recheck credentials and collection ownership even on a quiet stream.
+            refresh = lifetime.Token;
             lifetime.CancelAfter(duration < TimeSpan.FromSeconds(90) ? duration : TimeSpan.FromSeconds(90));
             await ReadAsync(endpoint, token, async record =>
             {
@@ -337,6 +349,7 @@ internal sealed class AzureContainerAppLiveLogs(
                 var identity = diagnostic.EventId!.Value;
 
                 if (session.Delivered.ContainsKey(identity)) return;
+                operation.Stage = "publication";
                 if (publisher is IDurableDeploymentDiagnosticPublisher durable &&
                     await durable.PublishDurablyAsync(diagnostic, lifetime.Token))
                 {
@@ -359,33 +372,86 @@ internal sealed class AzureContainerAppLiveLogs(
                 {
                     await publisher.PublishAsync(diagnostic, lifetime.Token);
                 }
+
+                operation.Stage = "reading";
             }, async () =>
             {
+                OperationalMetrics.Record("AzureContainerApps", "connection", "completed", started);
+                if (session.Failures.TryRemove(endpoint.Key, out _))
+                    RecordCollector(session, endpoint.Key, "connection", "recovered", Stopwatch.GetTimestamp());
+                operation.Stage = "reading";
+                started = Stopwatch.GetTimestamp();
                 session.Issues.TryRemove(endpoint.Key, out _);
                 await NoticeAsync(session, endpoint.Key + "-connected", endpoint.System
                         ? "ACA live system log stream connected."
                         : $"ACA live console connected: {endpoint.Container} / {endpoint.Replica}.", lifetime.Token,
                     DeploymentDiagnosticSeverity.Information);
             }, lifetime.Token);
+            outcome = "remote_eof";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            outcome = session.Cancellation.IsCancellationRequested ? "shutdown" : "ownership_refresh";
         }
         catch (OperationCanceledException ex) when (ex.InnerException is TimeoutException)
         {
+            outcome = "timeout";
             await NoticeAsync(session, endpoint.Key,
                 "ACA live log connection timed out; AutoMate will reconnect automatically.", cancellationToken);
         }
         catch (OperationCanceledException)
         {
-            /* Token/ownership refresh reconnects on the next discovery tick. */
+            outcome = refresh.IsCancellationRequested ? "ownership_refresh" : "timeout";
         }
         catch (Exception ex)
         {
-            logger.LogWarning("ACA live stream failed for deployment {DeploymentId}. Failure {FailureType}.",
-                session.Target.DeploymentId, ex.GetType().Name);
+            outcome = FailureOutcome(ex);
             await NoticeAsync(session, endpoint.Key, FailureMessage(ex), cancellationToken);
         }
+        finally
+        {
+            RecordCollector(session, endpoint.Key, operation.Stage, outcome, started);
+        }
+    }
+
+    /// <summary>
+    ///     Distinguishes provider response failures from transport failures without inspecting response prose.
+    /// </summary>
+    /// <param name="exception">Failure observed by the owning collector boundary.</param>
+    /// <returns>A finite operational outcome.</returns>
+    internal static string FailureOutcome(Exception exception)
+    {
+        return exception switch
+        {
+            OperationCanceledException => "timeout",
+            HttpRequestException { StatusCode: HttpStatusCode.Conflict } => "provider_conflict",
+            HttpRequestException { StatusCode: not null } => "provider_rejected",
+            _ => "transport_failure"
+        };
+    }
+
+    /// <summary>
+    ///     Records one owning collector boundary with finite labels and GUID-only correlation.
+    /// </summary>
+    /// <param name="session">Owning deployment session.</param>
+    /// <param name="key">Internal endpoint state key; never exported.</param>
+    /// <param name="stage">Fixed operation stage.</param>
+    /// <param name="outcome">Fixed termination classification.</param>
+    /// <param name="started">Monotonic operation start.</param>
+    private void RecordCollector(Session session, string key, string stage, string outcome, long started)
+    {
+        OperationalMetrics.Record("AzureContainerApps", stage, outcome, started);
+        var level = outcome is "timeout" or "transport_failure" or "provider_conflict" or "provider_rejected"
+            ? LogLevel.Warning
+            : outcome == "recovered"
+                ? LogLevel.Information
+                : LogLevel.Debug;
+        if (level == LogLevel.Warning) session.Failures.TryAdd(key, 0);
+        using var correlation = OperationalLog.BeginCorrelation(logger, session.Target.DeploymentId,
+            projectId: session.Target.ProjectId);
+        logger.Log(level,
+            "Collector operation {CollectorOperation} outcome {CollectorOutcome} for deployment {DeploymentId}.",
+            stage, outcome, session.Target.DeploymentId);
     }
 
     /// <summary>
@@ -640,6 +706,15 @@ internal sealed class AzureContainerAppLiveLogs(
     }
 
     /// <summary>
+    ///     Retains the current stage across awaited stream callbacks and their exception propagation.
+    /// </summary>
+    private sealed class CollectorOperationState
+    {
+        /// <summary>Finite stage observed by the owning connection's completion handler.</summary>
+        public string Stage { get; set; } = "connection";
+    }
+
+    /// <summary>
     ///     Owns one deployment's lifetime, latest credentials and bounded confirmed-delivery cache.
     /// </summary>
     /// <param name="target">Verified Azure app, revision and collector lifetime metadata.</param>
@@ -657,6 +732,9 @@ internal sealed class AzureContainerAppLiveLogs(
 
         /// <summary>Per-source notices suppressed until the corresponding recovery or replica removal.</summary>
         public ConcurrentDictionary<string, byte> Issues { get; } = new();
+
+        /// <summary>Active endpoint failures retained only until recovery or inventory removal.</summary>
+        public ConcurrentDictionary<string, byte> Failures { get; } = new();
 
         /// <summary>Recent confirmed event identities suppress reconnect tail duplication.</summary>
         public ConcurrentDictionary<Guid, byte> Delivered { get; } = new();

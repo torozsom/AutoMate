@@ -1,7 +1,7 @@
 using Application.Abstractions.Diagnostics.Redaction;
 using OpenTelemetry.Resources;
 
-namespace Web.Observability;
+namespace Infrastructure.Observability.OpenTelemetry;
 
 /// <summary>
 ///     Builds only reviewed resource fields; environment detectors cannot import arbitrary
@@ -19,6 +19,9 @@ public sealed class SafeResourceDetector(
     string version,
     string profile) : IResourceDetector
 {
+    /// <summary>Random identity shared by every provider in this process.</summary>
+    private static readonly string InstanceId = Guid.NewGuid().ToString("N");
+
     /// <summary>
     ///     Builds an SDK resource containing only reviewed operator labels.
     /// </summary>
@@ -28,6 +31,7 @@ public sealed class SafeResourceDetector(
         return new Resource(new Dictionary<string, object>
         {
             ["service.name"] = Label(service, "AutoMate"),
+            ["service.instance.id"] = InstanceId,
             ["service.version"] = Label(version, "unknown"),
             ["deployment.environment"] = Label(environment, "unknown"),
             ["automate.hosting_profile"] = profile == "SaaS" ? "SaaS" : "SelfHosted"

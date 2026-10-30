@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Text;
 using System.Text.Json;
+using Infrastructure.Observability.OpenTelemetry;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -11,7 +12,6 @@ using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
-using Web.Observability;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
 namespace Test.Web.Hosting;
@@ -41,7 +41,8 @@ public sealed class MetricResourceSafetyTests
             .AddDetector(new SafeResourceDetector(new DiagnosticRedactor(), service, environment, "1.0.0", "SaaS"))
             .Build().Attributes.ToDictionary(pair => pair.Key, pair => pair.Value);
 
-        Assert.Equal(4, resource.Count);
+        Assert.Equal(5, resource.Count);
+        Assert.True(Guid.TryParse(resource["service.instance.id"].ToString(), out _));
         Assert.Equal(expectedService, resource["service.name"]);
         Assert.Equal(expectedEnvironment, resource["deployment.environment"]);
         Assert.DoesNotContain("private", JsonSerializer.Serialize(resource));

@@ -86,6 +86,33 @@ public sealed class DiskTelemetryDeliveryWorker(
     /// <returns>A task returning whether the documented deliver async condition holds.</returns>
     public async Task<bool> DeliverAsync(string path, CancellationToken token)
     {
+        var outcome = "failed";
+        try
+        {
+            var complete = await DeliverCoreAsync(path, token);
+            outcome = complete ? "completed" : "pending";
+
+            return complete;
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            outcome = "canceled";
+            throw;
+        }
+        finally
+        {
+            TelemetryStorageMetrics.DeliveryAttempts.Add(1, new KeyValuePair<string, object?>("outcome", outcome));
+        }
+    }
+
+    /// <summary>
+    ///     Retains pending segments until every permitted event is query-visible.
+    /// </summary>
+    /// <param name="path">Verified segment path.</param>
+    /// <param name="token">Cancels backend requests.</param>
+    /// <returns>Whether the segment was retired.</returns>
+    private async Task<bool> DeliverCoreAsync(string path, CancellationToken token)
+    {
         var events = spool.ReadSegment(path);
         var lost = new List<DeploymentLogEnvelope>();
         var complete = true;
@@ -136,6 +163,9 @@ public sealed class DiskTelemetryDeliveryWorker(
 
         if (!complete) return complete;
 
+        foreach (var item in events.Except(lost))
+            TelemetryStorageMetrics.VisibilitySeconds.Record(Math.Max(0,
+                (DateTimeOffset.UtcNow - item.StoredAt).TotalSeconds));
         await spool.RemoveAsync(path, lost, token);
         if (lost.Count > 0) TelemetryStorageMetrics.Dropped.Add(lost.Count);
 

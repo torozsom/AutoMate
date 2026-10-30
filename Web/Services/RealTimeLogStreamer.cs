@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Diagnostics.Metrics;
 using Application.Abstractions.Diagnostics.Redaction;
@@ -128,6 +129,8 @@ public sealed class RealTimeLogStreamer(
     private async Task SendAsync(Guid projectId, string method, object?[] arguments,
         CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
+        var outcome = "completed";
         using var activity = DeploymentTracing.Start(DeploymentOperation.SignalRSend, projectId);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(options.Value.DeliveryTimeoutSeconds));
@@ -141,18 +144,25 @@ public sealed class RealTimeLogStreamer(
         catch (OperationCanceledException) when (deadline.IsCancellationRequested &&
                                                  !cancellationToken.IsCancellationRequested)
         {
+            outcome = "timed_out";
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.TimedOut);
             throw new TimeoutException("Live diagnostic delivery exceeded its deadline.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            outcome = "canceled";
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Canceled);
             throw;
         }
         catch (Exception)
         {
+            outcome = "failed";
             DeploymentTracing.Finish(activity, DeploymentTraceOutcome.Failed);
             throw;
+        }
+        finally
+        {
+            OperationalMetrics.Record("SignalR", "send", outcome, started);
         }
     }
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -8,6 +9,7 @@ using Application.Abstractions.Diagnostics.Metrics;
 using Application.Abstractions.Diagnostics.Redaction;
 using Application.Ai.Context;
 using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Metrics;
 using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -151,6 +153,8 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
         if (envelope.TenantId == Guid.Empty || envelope.Event.ProjectId == Guid.Empty || envelope.EventId == Guid.Empty)
             throw new ArgumentException("Archive identities must be nonempty.");
 
+        var started = Stopwatch.GetTimestamp();
+        var outcome = "completed";
         await _gate.WaitAsync(token);
 
         try
@@ -189,9 +193,21 @@ public sealed partial class DiskDeploymentArchive : IDeploymentArchive, IDeploym
             await IndexMetricEnvelopeAsync(envelope, token);
             return envelope;
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            outcome = "canceled";
+            throw;
+        }
+        catch (Exception)
+        {
+            outcome = "failed";
+            throw;
+        }
         finally
         {
             _gate.Release();
+            TelemetryStorageMetrics.ArchiveWriteDuration.Record(Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                new KeyValuePair<string, object?>("outcome", outcome));
         }
     }
 

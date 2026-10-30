@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Application.Diagnostics;
 using Infrastructure.Observability;
+using Infrastructure.Observability.OpenTelemetry;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -15,7 +16,6 @@ using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Trace;
 using Test.Web.Diagnostics;
-using Web.Observability;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
 namespace Test.Web.Hosting;
@@ -25,6 +25,25 @@ namespace Test.Web.Hosting;
 /// </summary>
 public sealed class PlatformTelemetrySafetyTests
 {
+    /// <summary>
+    ///     Reviewed EF query warnings retain numeric event identity without SQL or provider prose.
+    /// </summary>
+    [Fact]
+    public void Query_warning_retains_category_and_event_code_without_sensitive_details()
+    {
+        var capture = new CaptureProvider();
+        using var inner = LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
+        using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
+        factory.CreateLogger("Microsoft.EntityFrameworkCore.Query")
+            .LogWarning(new EventId(20504), "Unreviewed SQL {Sql}", "private SQL token=secret");
+        var text = JsonSerializer.Serialize(capture.Records);
+        Assert.Contains("Microsoft.EntityFrameworkCore.Query", text);
+        Assert.Contains("Module event 20504", text);
+        Assert.DoesNotContain("private", text);
+        Assert.DoesNotContain("secret", text);
+        Assert.DoesNotContain("Unreviewed SQL", text);
+    }
+
     /// <summary>
     ///     Actual HttpClientFactory framework events retain safe request/response details through the
     ///     host factory.
@@ -38,6 +57,7 @@ public sealed class PlatformTelemetrySafetyTests
 
         services.AddLogging(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         services.AddSafePlatformLogging();
+        services.AddLogging(logging => logging.AddFilter("System.Net.Http.HttpClient", LogLevel.Information));
         services.AddHttpClient("Default").ConfigurePrimaryHttpMessageHandler(() => new SafeHttpFixture());
         await using var provider = services.BuildServiceProvider();
         using var response = await provider.GetRequiredService<IHttpClientFactory>().CreateClient("Default")

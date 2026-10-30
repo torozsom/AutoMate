@@ -31,3 +31,8 @@ socket enables local deployments. Authenticated telemetry ingestion remains on t
 HTTP uses the existing development-only configuration option.
 
 See [local setup](../README.md) for first-time credentials and the complete three-command sequence.
+
+Platform OTLP export is optional and independent per host. AUTOMATE_PLATFORM_OTLP_ENDPOINT and
+TELEMETRY_PLATFORM_OTLP_ENDPOINT select operator-provided collectors; matching *_PROTOCOL defaults to grpc and
+*_HEADERS belongs in protected environment configuration. Empty endpoints disable export; no collector container is
+added. See [platform operation](../../docs/platform-observability.md).

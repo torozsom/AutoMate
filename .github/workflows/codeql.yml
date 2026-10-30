@@ -2,9 +2,9 @@ name: Security - CodeQL
 
 on:
   pull_request:
-    branches: [main]
+    branches: [ main ]
   push:
-    branches: [main]
+    branches: [ main ]
   schedule:
     # Refresh the default-branch security baseline even when source code has not changed.
     - cron: '17 4 * * 1'

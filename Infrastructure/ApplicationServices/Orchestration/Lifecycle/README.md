@@ -37,3 +37,7 @@ SafeUpdateAsync retains nonthrowing compatibility and safe failure-type logging.
 - [Notifications](../../../../Application/Orchestration/Status/README.md)
 - [Recovery tests](../../../../Test/Infra/Orchestration/DeploymentCleanupHostedServiceTests.cs)
 - [Workflow tests](../../../../Test/Infra/GitHub/GitHubWorkflowMonitorTests.cs)
+
+Compose project names are reused across launches. Startup reconciles only an unambiguously newest deployment per
+application, considering all statuses when selecting that launch. Older history and ambiguous timestamp ties are
+untouched; a failed latest launch cannot resurrect an older stopped record.

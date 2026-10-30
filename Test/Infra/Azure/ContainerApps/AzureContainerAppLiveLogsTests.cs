@@ -19,6 +19,23 @@ namespace Test.Infra.Azure.ContainerApps;
 public sealed class AzureContainerAppLiveLogsTests
 {
     /// <summary>
+    ///     Numeric provider responses remain distinguishable without exposing exception text.
+    /// </summary>
+    /// <param name="status">Optional provider HTTP response.</param>
+    /// <param name="expected">Reviewed finite classification.</param>
+    [Theory]
+    [InlineData(HttpStatusCode.Conflict, "provider_conflict")]
+    [InlineData(HttpStatusCode.Forbidden, "provider_rejected")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "provider_rejected")]
+    [InlineData(null, "transport_failure")]
+    public void Provider_response_is_not_misclassified_as_transport_failure(HttpStatusCode? status, string expected)
+    {
+        var failure = new HttpRequestException("private provider body", null, status);
+        Assert.Equal(expected, AzureContainerAppLiveLogs.FailureOutcome(failure));
+        Assert.Equal("timeout", AzureContainerAppLiveLogs.FailureOutcome(new TaskCanceledException()));
+    }
+
+    /// <summary>
     ///     A record is delivered before the server ends its response, and cancellation closes a quiet
     ///     stream.
     /// </summary>

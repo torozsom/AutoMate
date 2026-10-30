@@ -65,11 +65,12 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
     /// <param name="redactor">Applies shared credential and unsafe-text masking.</param>
     /// <param name="viewers">Provides the deployment runtime viewers boundary used by this operation.</param>
     /// <param name="clock">Time source used for deterministic sampling and deadlines.</param>
+    /// <param name="diagnosticOptions">Live metric callback cadence, independent of durable history.</param>
     /// <param name="scopes">Creates independent scopes for concurrent background work.</param>
     public DockerService(ILogger<DockerService> logger, IDeploymentDiagnosticPublisher diagnostics,
         IOptions<DockerOptions> options, IOptions<TelemetryStorageOptions> telemetry,
         ILogStreamer live, IDiagnosticRedactor redactor, IDeploymentRuntimeViewers viewers, TimeProvider clock,
-        IServiceScopeFactory scopes)
+        IServiceScopeFactory scopes, IOptions<DeploymentDiagnosticOptions>? diagnosticOptions = null)
     {
         _logger = logger;
         _options = options.Value;
@@ -83,7 +84,7 @@ public sealed class DockerService : IDockerService, IDockerDiagnosticSource, IDi
         _client = new DockerClientConfiguration(dockerUri).CreateClient();
         _buildContextArchive = new DockerBuildContextArchive(_options, _logger);
         _dockerCli = new DockerCli(_options, diagnostics, _logger, telemetry.Value.RuntimeSampleSeconds,
-            live, redactor, viewers, clock);
+            live, redactor, viewers, clock, diagnosticOptions?.Value.LiveMetricIntervalMilliseconds ?? 1000);
         _collector = new DockerDiagnosticCollector(_client, diagnostics, redactor, clock, _logger, scopes);
     }
 
