@@ -154,7 +154,7 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
     /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
     /// <param name="token">Cancels the current read, request or delivery operation.</param>
     /// <returns>A task returning the HTTP outcome of the authorized operation.</returns>
-    internal static async Task<IResult> DeleteAsync(HttpContext context, IUserService users,
+    private static async Task<IResult> DeleteAsync(HttpContext context, IUserService users,
         IDeploymentAnalysisService analyses, IAntiforgery antiforgery, Guid deploymentId, Guid analysisId,
         CancellationToken token)
     {
@@ -196,7 +196,7 @@ public sealed class DeploymentAnalysisEndpoint : IEndpoint
     /// <param name="analysisId">The analysis identity used for ownership or correlation.</param>
     /// <param name="token">Cancels the current read, request or delivery operation.</param>
     /// <returns>A task returning the HTTP outcome of the authorized operation.</returns>
-    internal static async Task<IResult> CancelAsync(HttpContext context, IUserService users,
+    private static async Task<IResult> CancelAsync(HttpContext context, IUserService users,
         IDeploymentAnalysisService analyses, IAntiforgery antiforgery, Guid deploymentId, Guid analysisId,
         CancellationToken token)
     {

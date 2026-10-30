@@ -7,25 +7,25 @@ namespace Domain.Entities.Diagnostics;
 public sealed class DeploymentDailyTelemetry : BaseEntity
 {
     /// <summary>Owner-account identity used to scope the aggregate.</summary>
-    public Guid UserId { get; set; }
+    public Guid UserId { get; init; }
 
     /// <summary>Application identity associated with the recorded observations.</summary>
-    public Guid ProjectId { get; set; }
+    public Guid ProjectId { get; init; }
 
     /// <summary>Deployment identity associated with the aggregate.</summary>
-    public Guid DeploymentId { get; set; }
+    public Guid DeploymentId { get; init; }
 
     /// <summary>UTC day represented by these sufficient statistics.</summary>
-    public DateTimeOffset DayUtc { get; set; }
+    public DateTimeOffset DayUtc { get; init; }
 
     /// <summary>Recorded container or resource identity for the series.</summary>
     public string Container { get; set; } = "";
 
     /// <summary>Fixed provider-neutral metric-series name.</summary>
-    public string Metric { get; set; } = "";
+    public string Metric { get; init; } = "";
 
     /// <summary>Native unit associated with the metric values.</summary>
-    public string Unit { get; set; } = "";
+    public string Unit { get; init; } = "";
 
     /// <summary>Number of underlying observations represented by the aggregate.</summary>
     public long SampleCount { get; set; }

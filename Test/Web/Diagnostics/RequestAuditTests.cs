@@ -38,8 +38,7 @@ public sealed class RequestAuditTests
         var capture = new Capture();
         using var factory =
             LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
-        var context = new DefaultHttpContext();
-        context.Request.Method = method;
+        var context = new DefaultHttpContext { Request = { Method = method } };
         var middleware = new RequestAuditMiddleware(http =>
         {
             http.Request.Method = "private-mutated\r\nforged-entry";
@@ -82,13 +81,15 @@ public sealed class RequestAuditTests
             User = new ClaimsPrincipal(new ClaimsIdentity([
                 new Claim(ClaimTypes.NameIdentifier, actor.ToString()),
                 new Claim(ClaimTypes.Email, "private-email")
-            ], "Cookies"))
+            ], "Cookies")),
+            Request =
+            {
+                Method = "POST",
+                Path = "/api/deployments/private-path",
+                QueryString = new QueryString("?token=private-query"),
+                Headers = { Authorization = "Bearer private-header" }
+            }
         };
-
-        context.Request.Method = "POST";
-        context.Request.Path = "/api/deployments/private-path";
-        context.Request.QueryString = new QueryString("?token=private-query");
-        context.Request.Headers.Authorization = "Bearer private-header";
         var middleware = new RequestAuditMiddleware(http =>
         {
             http.Response.StatusCode = status;

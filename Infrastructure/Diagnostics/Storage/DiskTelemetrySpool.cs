@@ -22,10 +22,10 @@ namespace Infrastructure.Diagnostics.Storage;
 public sealed class DiskSpoolOptions
 {
     /// <summary>Absolute persistent-volume path for the private spool; one writer owns the volume.</summary>
-    public string Directory { get; set; } = "";
+    public string Directory { get; init; } = "";
 
     /// <summary>Maximum pending events flushed together before durable acknowledgement.</summary>
-    public int BatchSize { get; set; } = 100;
+    public int BatchSize { get; init; } = 100;
 }
 
 /// <summary>
@@ -131,7 +131,8 @@ public sealed class DiskTelemetrySpool : BackgroundService
         _writerLock = new FileStream(Path.Combine(_directory, "writer.lock"), FileMode.OpenOrCreate,
             FileAccess.ReadWrite, FileShare.None);
         var clockPath = Path.Combine(_directory, "clock.json");
-        if (File.Exists(clockPath)) _lastOrder = JsonSerializer.Deserialize<long>(File.ReadAllText(clockPath));
+        if (File.Exists(clockPath))
+            _lastOrder = JsonSerializer.Deserialize<long>(await File.ReadAllTextAsync(clockPath, cancellationToken));
         // Complete temporary segments are safe to recover; partial writes fail closed, never silently skip records.
         foreach (var path in Directory.EnumerateFiles(_directory, "*.tmp"))
             try
@@ -160,12 +161,13 @@ public sealed class DiskTelemetrySpool : BackgroundService
 
         var lossPath = Path.Combine(_directory, "losses.json");
         if (File.Exists(lossPath))
-            foreach (var pair in JsonSerializer.Deserialize<Dictionary<Guid, long>>(File.ReadAllText(lossPath))!)
+            foreach (var pair in JsonSerializer.Deserialize<Dictionary<Guid, long>>(
+                         await File.ReadAllTextAsync(lossPath, cancellationToken))!)
                 _drops[pair.Key] = pair.Value;
         var seriesPath = Path.Combine(_directory, "series.json");
         if (File.Exists(seriesPath))
             foreach (var pair in JsonSerializer.Deserialize<Dictionary<Guid, Dictionary<string, DateTimeOffset>>>(
-                         File.ReadAllText(seriesPath))!)
+                         await File.ReadAllTextAsync(seriesPath, cancellationToken))!)
                 _series[pair.Key] = pair.Value;
         await base.StartAsync(cancellationToken);
     }

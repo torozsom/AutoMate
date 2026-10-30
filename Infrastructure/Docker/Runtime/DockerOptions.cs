@@ -9,19 +9,19 @@ public class DockerOptions
     public const string SectionName = "Docker";
 
     /// <summary>Default container port used when callers do not provide a specific internal port.</summary>
-    public int DefaultContainerPort { get; set; } = 8080;
+    public int DefaultContainerPort { get; init; } = 8080;
 
     /// <summary>Maximum duration allowed for Docker Compose commands before they are cancelled.</summary>
-    public int ComposeTimeoutMinutes { get; set; } = 8;
+    public int ComposeTimeoutMinutes { get; init; } = 8;
 
     /// <summary>Docker daemon URI used on Windows hosts.</summary>
-    public string WindowsDockerUri { get; set; } = "npipe://./pipe/docker_engine";
+    public string WindowsDockerUri { get; init; } = "npipe://./pipe/docker_engine";
 
     /// <summary>Docker daemon URI used on Unix-like hosts.</summary>
-    public string UnixDockerUri { get; set; } = "unix:///var/run/docker.sock";
+    public string UnixDockerUri { get; init; } = "unix:///var/run/docker.sock";
 
     /// <summary>Default build-context ignore patterns used when a project has no .dockerignore file.</summary>
-    public string[] DefaultDockerIgnore { get; set; } =
+    public string[] DefaultDockerIgnore { get; init; } =
     [
         "bin/", "obj/", ".git/", ".vs/", "node_modules/", "TestResults/", ".DS_Store"
     ];

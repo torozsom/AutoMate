@@ -24,7 +24,7 @@ public sealed class DeploymentAnalysisRetentionService(
     : BackgroundService
 {
     /// <summary>Bounds each database delete to keep cleanup work predictable.</summary>
-    internal const int BatchSize = 1_000;
+    private const int BatchSize = 1_000;
 
     /// <summary>
     ///     Expires bounded analysis metadata while preserving saved results marked for retention.

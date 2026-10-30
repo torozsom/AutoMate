@@ -41,7 +41,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     [TelemetryIntegrationFact]
     public async Task Assessment_filters_selected_sources_before_backend_limits()
     {
-        using var services = Services();
+        await using var services = Services();
         var seed = await SeedAsync(services);
         await using var scope = services.CreateAsyncScope();
         var logs = scope.ServiceProvider.GetRequiredService<IDeploymentLogWriter>();
@@ -131,7 +131,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         var settings = TelemetryStorageTests.Specialized();
 
         settings.DeliveryMode = "DiskGateway";
-        using var services = Services(settings);
+        await using var services = Services(settings);
         var seeded = await SeedAsync(services);
         var directory = Path.Combine(Path.GetTempPath(), "automate-integration-spool-" + Guid.NewGuid().ToString("N"));
 
@@ -213,7 +213,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     [TelemetryIntegrationFact]
     public async Task Real_stores_replay_redacted_logs_and_numeric_metrics_after_buffer_removal()
     {
-        using var services = Services();
+        await using var services = Services();
         var seeded = await SeedAsync(services);
 
         await using (var scope = services.CreateAsyncScope())
@@ -285,7 +285,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     [TelemetryIntegrationFact]
     public async Task Concurrent_legacy_ingestion_is_rejected_without_database_payloads()
     {
-        using var services = Services();
+        await using var services = Services();
         var seeded = await SeedAsync(services);
 
         await Parallel.ForEachAsync(Enumerable.Range(0, 100), new ParallelOptions { MaxDegreeOfParallelism = 12 },
@@ -313,7 +313,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     public async Task Lease_recovery_waits_for_complete_visibility_and_records_buffer_expiry()
     {
         var sinks = new DelayedSinks();
-        using var services = Services(sinks: sinks);
+        await using var services = Services(sinks: sinks);
         var seeded = await SeedAsync(services);
 
         await using (var scope = services.CreateAsyncScope())
@@ -372,7 +372,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     [TelemetryIntegrationFact]
     public async Task Legacy_history_is_pageable_and_expired_rows_stay_hidden_in_both_modes()
     {
-        using var services = Services(sinks: new DelayedSinks());
+        await using var services = Services(sinks: new DelayedSinks());
         var seeded = await SeedAsync(services);
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
@@ -431,7 +431,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         earlier.Events.Should().ContainSingle().Which.Message.Should().Be("legacy earlier");
         earlier.Events[0].TerminalChannel.Should().Be("build");
 
-        using var fallback = Services(new TelemetryStorageOptions());
+        await using var fallback = Services(new TelemetryStorageOptions());
         await using var fallbackScope = fallback.CreateAsyncScope();
         var history = fallbackScope.ServiceProvider.GetRequiredService<IDeploymentHistoryService>();
 
@@ -463,7 +463,7 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
         settings.ManagedDataProcessingApproved = true;
         settings.ProcessingRegion = "EU";
         var sinks = new DelayedSinks();
-        using var services = Services(settings, sinks);
+        await using var services = Services(settings, sinks);
         var seeded = await SeedAsync(services);
         await using var scope = services.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DeploymentTelemetryStore>();

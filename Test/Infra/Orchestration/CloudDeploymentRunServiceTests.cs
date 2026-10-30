@@ -20,6 +20,18 @@ namespace Test.Infra.Orchestration;
 /// </summary>
 public sealed class CloudDeploymentRunServiceTests
 {
+    /// <summary>Run receipts remain owner-scoped when read through the Application service contract.</summary>
+    [Fact]
+    public async Task Run_lookup_requires_the_admitting_owner()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        ICloudDeploymentRunService service = fixture.Service();
+        var start = fixture.Start("read-receipt");
+        var receipt = await service.StartAsync(start);
+        Assert.Equal(receipt, await service.GetAsync(start.UserId, receipt.RunId));
+        Assert.Null(await service.GetAsync(Guid.NewGuid(), receipt.RunId));
+    }
+
     /// <summary>
     ///     An explicit clock samples queue eligibility at the original admission point without changing snapshot persistence.
     /// </summary>

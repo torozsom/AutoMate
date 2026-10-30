@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using Application.Diagnostics;
+using Infrastructure.Diagnostics.Metrics;
 using Infrastructure.Observability;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
@@ -15,6 +16,32 @@ namespace Test.Web.Diagnostics;
 /// </summary>
 public sealed class DeploymentTracingTests
 {
+    /// <summary>
+    ///     Dashboard-facing instrument names, units and observable kinds remain stable without introducing identity
+    ///     labels.
+    /// </summary>
+    [Fact]
+    public void Cloud_and_storage_instrument_schema_remains_stable()
+    {
+        (System.Diagnostics.Metrics.ObservableGauge<long> Instrument, string Name, string? Unit)[] gauges =
+        [
+            (AutoMateTelemetry.CloudQueued, "automate.cloud.queue.depth", null),
+            (AutoMateTelemetry.CloudActive, "automate.cloud.launches.active", null),
+            (AutoMateTelemetry.CloudWebhookBacklog, "automate.cloud.webhook.backlog", null),
+            (AutoMateTelemetry.CloudReconciliationBacklog, "automate.cloud.reconciliation.backlog", null),
+            (AutoMateTelemetry.CloudOldestQueueAge, "automate.cloud.queue.oldest_age", "ms")
+        ];
+        foreach (var gauge in gauges)
+        {
+            Assert.Equal(gauge.Name, gauge.Instrument.Name);
+            Assert.Equal(gauge.Unit, gauge.Instrument.Unit);
+            Assert.True(gauge.Instrument.IsObservable);
+        }
+
+        Assert.Equal("telemetry.ingested.bytes", TelemetryStorageMetrics.IngestedBytes.Name);
+        Assert.False(TelemetryStorageMetrics.IngestedBytes.IsObservable);
+    }
+
     /// <summary>
     ///     Analysis SDK export retains reviewed names, parentage and GUID correlation while removing
     ///     injected payloads.

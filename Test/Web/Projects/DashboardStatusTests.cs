@@ -127,7 +127,7 @@ public sealed class DashboardStatusTests
 
             return null;
         };
-        using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
+        await using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
         var component = new FixtureDashboard();
 
         typeof(Dashboard).GetField("_currentUserId", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(

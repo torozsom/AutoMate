@@ -57,7 +57,7 @@ public sealed class AssessmentContextControlsTests
     [Fact]
     public async Task Custom_picker_and_v2_sections_render_accessible_bounded_content()
     {
-        using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
         var html = await renderer.Dispatcher.InvokeAsync(async () =>
             (await renderer.RenderComponentAsync<AssessmentContextControls>(ParameterView.FromDictionary(

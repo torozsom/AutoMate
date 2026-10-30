@@ -67,17 +67,17 @@ public sealed class ConsoleRenderingTests
                  })
         foreach (var property in type
                      .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
-                                 !p.PropertyType.IsGenericType))
-            if (!services.Any(s => s.ServiceType == property.PropertyType))
+                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType is
+                         { IsInterface: true, IsGenericType: false }))
+            if (services.All(s => s.ServiceType != property.PropertyType))
                 services.AddSingleton(property.PropertyType,
                     DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
-        if (!services.Any(registration => registration.ServiceType == typeof(IUserService)))
+        if (services.All(registration => registration.ServiceType != typeof(IUserService)))
             services.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
-        if (!services.Any(registration => registration.ServiceType == typeof(IApplicationService)))
+        if (services.All(registration => registration.ServiceType != typeof(IApplicationService)))
             services.AddSingleton(DispatchProxy.Create<IApplicationService, EmptyPort>());
         services.AddScoped<ScopedApplicationOperations>().AddScoped<ConnectedCloudDeploymentAdmission>();
-        using var provider = services.BuildServiceProvider();
+        await using var provider = services.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(provider, provider.GetRequiredService<ILoggerFactory>());
         var root = Root();
         var directory = Path.Combine(root, ".artifacts", "console-preview");
@@ -173,7 +173,7 @@ public sealed class ConsoleRenderingTests
     ///     Example data covers partial observations, runtime stops and legacy missing durations.
     /// </summary>
     /// <returns>The configured workspace overview instance or response for this scenario.</returns>
-    internal static WorkspaceOverview Data()
+    private static WorkspaceOverview Data()
     {
         var now = DateTimeOffset.UtcNow;
         var start = new DateTimeOffset(now.UtcDateTime.Date.AddDays(-29), TimeSpan.Zero);
@@ -379,7 +379,7 @@ public sealed class ConsoleRenderingTests
     /// <summary>
     ///     Real Projects markup with isolated presentation state.
     /// </summary>
-    public class PreviewProjects : Dashboard
+    private class PreviewProjects : Dashboard
     {
         /// <summary>
         ///     Seeds the project inventory and connected presentation state without live owner queries.
@@ -407,7 +407,7 @@ public sealed class ConsoleRenderingTests
     /// <summary>
     ///     Real connection dialog presentation.
     /// </summary>
-    public sealed class PreviewAzure : PreviewProjects
+    private sealed class PreviewAzure : PreviewProjects
     {
         /// <summary>
         ///     Seeds the dashboard preview and opens its Azure connection panel.
@@ -423,7 +423,7 @@ public sealed class ConsoleRenderingTests
     /// <summary>
     ///     Real source list presentation.
     /// </summary>
-    public sealed class PreviewGitHub : GitHubRepos
+    private sealed class PreviewGitHub : GitHubRepos
     {
         /// <summary>
         ///     Seeds GitHub repository cards without authentication or provider calls.
@@ -456,7 +456,7 @@ public sealed class ConsoleRenderingTests
     /// <summary>
     ///     Real local source list presentation.
     /// </summary>
-    public sealed class PreviewLocal : LocalGitRepos
+    private sealed class PreviewLocal : LocalGitRepos
     {
         /// <summary>
         ///     Seeds local repository discovery cards without filesystem scanning.
@@ -517,7 +517,7 @@ public sealed class ConsoleRenderingTests
     /// <summary>
     ///     Real email confirmation guidance without token operations.
     /// </summary>
-    public sealed class PreviewVerify : VerifyEmail
+    private sealed class PreviewVerify : VerifyEmail
     {
         /// <summary>
         ///     Selects the check-email presentation without executing verification.

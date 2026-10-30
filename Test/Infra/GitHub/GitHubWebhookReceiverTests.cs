@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Domain.Entities.Cloud;
 using Domain.Entities.Users;
@@ -82,7 +81,7 @@ public sealed class GitHubWebhookReceiverTests
             }
         });
         var signature = "sha256=" + Convert.ToHexString(HMACSHA256.HashData(
-            Encoding.UTF8.GetBytes("test-signing-secret"), body)).ToLowerInvariant();
+            "test-signing-secret"u8.ToArray(), body)).ToLowerInvariant();
 
         var invalid = async () => await receiver.ReceiveAsync(body, "sha256=00", "delivery-1",
             "workflow_run", CancellationToken.None);

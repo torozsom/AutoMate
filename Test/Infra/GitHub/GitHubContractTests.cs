@@ -1,15 +1,69 @@
+using System.Net;
 using System.Text.Json;
+using Application.Abstractions.GitHub;
 using Domain.DTO.Azure;
 using Domain.DTO.GitHub;
+using Infrastructure.GitHub.Api;
 using Infrastructure.GitHub.Authentication;
 using Infrastructure.GitHub.Secrets;
+using Infrastructure.GitHub.Workflows;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Test.Infra.GitHub;
 
 /// <summary>Protects provider wire names, optional workflow metadata and configuration binding.</summary>
 public sealed class GitHubContractTests
 {
+    /// <summary>Provider JSON projects completed job steps and selects the requested workflow ahead of newer unrelated runs.</summary>
+    [Fact]
+    public void Workflow_wire_models_preserve_projection_and_selection()
+    {
+        var now = new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero);
+        var selected = new GitHubWorkflowRunItem(42, 0, "completed", "success", "https://example.test/run",
+            "abc123", "main", ".github/workflows/deploy.yml", now);
+        var wire = new GitHubWorkflowRunsResponse([
+            selected, selected with
+            {
+                Id = 43, Path = ".github/workflows/other.yml", CreatedAt = now.AddMinutes(1)
+            }
+        ]);
+        var restored = JsonSerializer.Deserialize<GitHubWorkflowRunsResponse>(JsonSerializer.Serialize(wire))!;
+        var run = GitHubWorkflowRunMapper.SelectLatestMatchingRun(restored.WorkflowRuns, "deploy.yml", "abc123");
+        Assert.NotNull(run);
+        Assert.Equal(42, run.Id);
+        Assert.Equal(1, run.Attempt);
+        var jobs = new GitHubWorkflowJobsResponse([
+            new GitHubWorkflowJobItem(7, "build", "completed", "success", "https://example.test/job", now,
+                now.AddMinutes(2), [new GitHubWorkflowStepItem(1, "compile", "completed", "success")])
+        ]);
+        var restoredJobs = JsonSerializer.Deserialize<GitHubWorkflowJobsResponse>(JsonSerializer.Serialize(jobs))!;
+        var job = Assert.Single(GitHubWorkflowJobMapper.Map(restoredJobs.Jobs));
+        Assert.Equal(7, job.Id);
+        Assert.Equal(now.AddMinutes(2), job.CompletedAt);
+        Assert.Equal("compile", Assert.Single(job.Steps).Name);
+    }
+
+    /// <summary>The Application workflow-dispatch port sends the selected branch with the required GitHub route and payload.</summary>
+    [Fact]
+    public async Task Workflow_dispatch_preserves_branch_and_endpoint()
+    {
+        using var handler = new WorkflowDispatchHandler();
+        using var client = new HttpClient(handler, false);
+        var cache = new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
+        IGitHubService service = new GitHubService(client, cache,
+            NullLogger<GitHubService>.Instance);
+        await service.DispatchWorkflowAsync("synthetic-token", "owner", "repository", "deploy.yml", "feature/fixture");
+        var request = handler.Request ?? throw new InvalidOperationException("No dispatch request was sent.");
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal("/repos/owner/repository/actions/workflows/deploy.yml/dispatches", request.Path);
+        using var json = JsonDocument.Parse(request.Body);
+        Assert.Equal("feature/fixture", json.RootElement.GetProperty("ref").GetString());
+    }
+
     /// <summary>Repository secret requests preserve GitHub's required snake-case payload fields.</summary>
     [Fact]
     public void Secret_and_dispatch_payloads_preserve_wire_names()
@@ -55,5 +109,21 @@ public sealed class GitHubContractTests
         var options = new GitHubAppOptions { AppId = 1 };
         configuration.GetSection("GitHubApp").Bind(options);
         Assert.Equal(123456, options.AppId);
+    }
+
+    /// <summary>Captures a dispatch request before its HTTP message/content are disposed.</summary>
+    private sealed class WorkflowDispatchHandler : HttpMessageHandler
+    {
+        /// <summary>Detached method, route and payload observed at the transport boundary.</summary>
+        public (HttpMethod Method, string Path, string Body)? Request { get; private set; }
+
+        /// <summary>Copies the cancellation-aware payload and simulates GitHub accepting the dispatch.</summary>
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Request = (request.Method, request.RequestUri!.AbsolutePath,
+                await request.Content!.ReadAsStringAsync(cancellationToken));
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        }
     }
 }

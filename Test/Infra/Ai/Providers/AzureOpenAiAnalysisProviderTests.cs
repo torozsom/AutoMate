@@ -250,7 +250,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         var services = new ServiceCollection();
 
         services.AddOptions<AiAnalysisOptions>().Bind(configuration.GetSection("AiAnalysis"));
-        using var container = services.BuildServiceProvider();
+        await using var container = services.BuildServiceProvider();
         var monitor = container.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var handler = new ShutdownHandler(started, readingBody);

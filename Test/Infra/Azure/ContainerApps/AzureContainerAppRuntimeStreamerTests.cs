@@ -69,7 +69,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             CreatedAt = DateTimeOffset.UtcNow
         });
         await seeded.SaveChangesAsync();
-        using var services = new ServiceCollection()
+        await using var services = new ServiceCollection()
             .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(options, protector)).BuildServiceProvider();
         var publisher = new RecordingPublisher();
         var factory = new StubHttpClientFactory(new DelegateHttpMessageHandler(request =>
@@ -145,7 +145,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             LastIngestionTieBreaker = "hash-a"
         });
         await seeded.SaveChangesAsync();
-        using var services = new ServiceCollection()
+        await using var services = new ServiceCollection()
             .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(options, protector)).BuildServiceProvider();
         var publisher = new RecordingPublisher { Accepted = accepted };
 
@@ -225,7 +225,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             seeded.Deployments.Add(new Deployment
                 { Id = second, CsProjectId = (await seeded.Deployments.SingleAsync()).CsProjectId });
             await seeded.SaveChangesAsync();
-            using var services = new ServiceCollection()
+            await using var services = new ServiceCollection()
                 .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(dbOptions, protector)).BuildServiceProvider();
             var publisher = new RecordingPublisher();
             var handler = new DelegateHttpMessageHandler(request =>
@@ -323,7 +323,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         await seeded.SaveChangesAsync();
         var viewers = new DeploymentRuntimeViewers(TimeProvider.System);
 
-        using var serviceProvider = new ServiceCollection()
+        await using var serviceProvider = new ServiceCollection()
             .AddSingleton<IDeploymentRuntimeViewers>(viewers)
             .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(dbOptions, protector))
             .BuildServiceProvider();
@@ -398,7 +398,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         await SeedDeploymentAsync(dbOptions, protector, deploymentId);
         await using var seeded = new AutoMateDbContext(dbOptions, protector);
         var project = await seeded.Applications.SingleAsync();
-        using var services = new ServiceCollection()
+        await using var services = new ServiceCollection()
             .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(dbOptions, protector)).BuildServiceProvider();
         var publisher = new RecordingPublisher { Accepted = accepted };
         const string dbResource =

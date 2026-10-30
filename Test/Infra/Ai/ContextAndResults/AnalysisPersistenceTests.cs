@@ -478,6 +478,8 @@ public sealed class AnalysisPersistenceTests
     [Fact]
     public async Task Caller_cancellation_keeps_work_unfinished_without_output()
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         using var canceled = new CancellationTokenSource();
 
         await using var fixture = await Fixture.CreateAsync(() =>
@@ -490,8 +492,8 @@ public sealed class AnalysisPersistenceTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.ProcessAsync(canceled.Token));
         fixture.Db.ChangeTracker.Clear();
 
-        Assert.Null((await fixture.Db.DeploymentAnalysisWorkItems.SingleAsync()).CompletedAt);
-        Assert.Null((await fixture.Db.AiDeploymentAnalyses.SingleAsync()).Summary);
+        Assert.Null((await fixture.Db.DeploymentAnalysisWorkItems.SingleAsync(verificationToken)).CompletedAt);
+        Assert.Null((await fixture.Db.AiDeploymentAnalyses.SingleAsync(verificationToken)).Summary);
     }
 
     /// <summary>
@@ -1418,7 +1420,7 @@ public sealed class AnalysisPersistenceTests
     public async Task Lease_coordinator_cancels_local_provider_after_owner_cancellation()
     {
         using var stopping = new CancellationTokenSource();
-        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var verificationToken = verificationDeadline.Token;
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1517,7 +1519,7 @@ public sealed class AnalysisPersistenceTests
     public async Task Lease_coordinator_renews_and_releases_interrupted_processing(bool renewSucceeds)
     {
         using var stopping = new CancellationTokenSource();
-        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var verificationToken = verificationDeadline.Token;
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

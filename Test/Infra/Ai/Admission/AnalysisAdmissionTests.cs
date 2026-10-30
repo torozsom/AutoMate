@@ -39,6 +39,22 @@ namespace Test.Infra.Ai.Admission;
 /// </summary>
 public sealed class AnalysisAdmissionTests
 {
+    /// <summary>Automatic admission returns the durable receipt and trigger that callers can read back.</summary>
+    [Fact]
+    public async Task Automatic_admission_returns_the_persisted_outcome()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+        await using var db = fixture.NewDb();
+        await db.Deployments.ExecuteUpdateAsync(update =>
+            update.SetProperty(item => item.Status, DeploymentStatus.Failed));
+        var result = await fixture.Service(db).RequestAutomaticAsync(fixture.Deployments[0]);
+        Assert.True(result.Accepted);
+        Assert.NotNull(result.Analysis);
+        Assert.Equal(AiAnalysisTrigger.DeploymentFailed, result.Analysis.Trigger);
+        Assert.Equal(result.Analysis.Id, (await db.AiDeploymentAnalyses.SingleAsync()).Id);
+    }
+
     /// <summary>An owner missing from the approved cohort receives an actionable skip without work or quota charges.</summary>
     [Fact]
     public async Task Unapproved_current_account_has_an_explicit_safe_skip_reason()

@@ -12,7 +12,7 @@ public sealed class AiDeploymentAnalysis : BaseEntity
     ///     Canonical immutable assessment options saved at admission; contains no diagnostic
     ///     payload.
     /// </summary>
-    public string? RequestedSelectionJson { get; set; }
+    public string? RequestedSelectionJson { get; init; }
 
     /// <summary>Recorded effective selection, deployment state and evidence-window metadata.</summary>
     public string? AssessmentProvenanceJson { get; set; }
@@ -21,16 +21,16 @@ public sealed class AiDeploymentAnalysis : BaseEntity
     public string? AssessmentSectionsJson { get; set; }
 
     /// <summary>Retains saved results independently of the finite execution expiry.</summary>
-    public bool RetainUntilDeleted { get; set; }
+    public bool RetainUntilDeleted { get; init; }
 
     /// <summary>Identity of the deployment being analyzed.</summary>
-    public Guid DeploymentId { get; set; }
+    public Guid DeploymentId { get; init; }
 
     /// <summary>Deployment associated with this analysis.</summary>
-    public Deployment Deployment { get; set; } = null!;
+    public Deployment Deployment { get; init; } = null!;
 
     /// <summary>Manual or deployment-failure trigger that admitted the analysis.</summary>
-    public AiAnalysisTrigger Trigger { get; set; }
+    public AiAnalysisTrigger Trigger { get; init; }
 
     /// <summary>Durable analysis lifecycle state.</summary>
     public AiAnalysisStatus Status { get; set; }
@@ -72,10 +72,10 @@ public sealed class AiDeploymentAnalysis : BaseEntity
     public string? CostCurrency { get; set; }
 
     /// <summary>Stable admission key used to avoid duplicate analysis requests.</summary>
-    public string IdempotencyKey { get; set; } = string.Empty;
+    public string IdempotencyKey { get; init; } = string.Empty;
 
     /// <summary>Recorded number of scheduled transient provider retries.</summary>
-    public int RetryCount { get; set; }
+    public int RetryCount { get; init; }
 
     /// <summary>Validated and redacted overview; null until a result is published.</summary>
     public string? Summary { get; set; }

@@ -58,7 +58,7 @@ public sealed class LocalRuntimeRecoveryService(
     /// </summary>
     /// <param name="token">Cancels the underlying operation when observed.</param>
     /// <returns>A task representing completion of the asynchronous operation.</returns>
-    internal async Task RecoverOnceAsync(CancellationToken token)
+    private async Task RecoverOnceAsync(CancellationToken token)
     {
         await using var scope = scopes.CreateAsyncScope();
 

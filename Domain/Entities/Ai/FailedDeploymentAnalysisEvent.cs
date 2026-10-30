@@ -12,14 +12,14 @@ public sealed class FailedDeploymentAnalysisEvent
     ///     Deployment identity and primary key; prevents repeated failures from creating another
     ///     automatic request.
     /// </summary>
-    public Guid DeploymentId { get; set; }
+    public Guid DeploymentId { get; init; }
 
     /// <summary>Owning deployment; deletion removes the wakeup and its completion marker.</summary>
-    public Deployment Deployment { get; set; } = null!;
+    public Deployment Deployment { get; init; } = null!;
 
     /// <summary>Database UTC time of the first persisted failure.</summary>
-    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; init; }
 
     /// <summary>Admission or policy denial completion; null remains recoverable after a worker restart.</summary>
-    public DateTimeOffset? CompletedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; init; }
 }

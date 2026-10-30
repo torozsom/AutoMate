@@ -52,3 +52,6 @@ container/schema resources.
 - [Queries](../../../Infrastructure/ApplicationServices/Data/Apps/README.md)
 - [Owned workspace runner](../../../deploy/verification/Test-WorkspacePostgres.ps1)
 - [Shared PostgreSQL gate](../Ai/Processing/README.md)
+
+MigrationDiscoveryTests protects all 24 historical migration IDs, concrete types and forward operation metadata
+without applying migrations. PersistenceModelTests still verifies that runtime mappings match the existing snapshot.

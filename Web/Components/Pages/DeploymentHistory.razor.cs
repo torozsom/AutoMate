@@ -34,6 +34,10 @@ public partial class DeploymentHistory
     /// <summary>Selected original terminal channel.</summary>
     private string _channel = "";
 
+    /// <summary>Atomic memoized projection keyed by response identity and selected container.</summary>
+    private (IReadOnlyList<MetricObservation>? Source, string Container, IReadOnlyList<MetricObservation> Items)
+        _containerCache = (null, "", []);
+
     /// <summary>Owner-authorized metadata for this exact history route.</summary>
     private Deployment? _deployment;
 
@@ -45,15 +49,6 @@ public partial class DeploymentHistory
 
     /// <summary>Safe history failure message.</summary>
     private string? _error;
-
-    /// <summary>Cached numeric and chart observations for the selected container.</summary>
-    private IReadOnlyList<MetricObservation> _filtered = [];
-
-    /// <summary>Container associated with the cached selection.</summary>
-    private string _filteredContainer = "";
-
-    /// <summary>Last filtered container data identity for independent table paging.</summary>
-    private IReadOnlyList<MetricObservation>? _filteredSource;
 
     /// <summary>Bounded current output page.</summary>
     private DeploymentTerminalHistory? _history;
@@ -116,14 +111,12 @@ public partial class DeploymentHistory
     {
         get
         {
-            if (!ReferenceEquals(_filteredSource, _observations) || _filteredContainer != _metricContainer)
-            {
-                _filteredSource = _observations;
-                _filteredContainer = _metricContainer;
-                _filtered = [.. _observations.Where(p => p.Container == _metricContainer)];
-            }
+            if (!ReferenceEquals(_containerCache.Source, _observations) ||
+                _containerCache.Container != _metricContainer)
+                _containerCache = (_observations, _metricContainer,
+                    [.. _observations.Where(p => p.Container == _metricContainer)]);
 
-            return _filtered;
+            return _containerCache.Items;
         }
     }
 
@@ -380,7 +373,7 @@ public partial class DeploymentHistory
                                        ? " Deployment lifetime is truncated to the most recent five years."
                                        : "")).Trim();
             if (_metricAvailability.Length == 0) _metricAvailability = null;
-            if (!_metrics.Any(p => p.Container == _metricContainer))
+            if (_metrics.All(p => p.Container != _metricContainer))
                 _metricContainer = _metrics.Select(p => p.Container).Distinct().Order().FirstOrDefault() ?? "";
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested)

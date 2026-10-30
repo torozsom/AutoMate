@@ -15,10 +15,10 @@ public sealed class TelemetryStorageOptions
     public string DeliveryMode { get; set; } = "PostgresOutbox";
 
     /// <summary>Private authenticated telemetry gateway endpoint.</summary>
-    public string GatewayUrl { get; set; } = "";
+    public string GatewayUrl { get; init; } = "";
 
     /// <summary>Server-only ingestion credential; never expose it to clients or logs.</summary>
-    public string GatewayToken { get; set; } = "";
+    public string GatewayToken { get; init; } = "";
 
     /// <summary>Selects the required private spool/archive gateway for new diagnostic writes.</summary>
     public bool DiskGateway => DeliveryMode == "DiskGateway";
@@ -27,22 +27,22 @@ public sealed class TelemetryStorageOptions
     public string LokiUrl { get; set; } = "";
 
     /// <summary>Mimir OTLP metrics endpoint, also supported by managed OTLP gateways.</summary>
-    public string MetricsWriteUrl { get; set; } = "";
+    public string MetricsWriteUrl { get; init; } = "";
 
     /// <summary>Prometheus query API base URI including /prometheus/ for Mimir.</summary>
-    public string MetricsQueryUrl { get; set; } = "";
+    public string MetricsQueryUrl { get; init; } = "";
 
     /// <summary>Gateway authorization header supplied through a secret store.</summary>
-    public string Authorization { get; set; } = "";
+    public string Authorization { get; init; } = "";
 
     /// <summary>
     ///     Optional operator-selected public CA certificate for a private TLS gateway; applies only
     ///     to telemetry HTTP.
     /// </summary>
-    public string CaCertificatePath { get; set; } = "";
+    public string CaCertificatePath { get; init; } = "";
 
     /// <summary>Allows plaintext transport only on private development networks.</summary>
-    public bool AllowInsecureDevelopment { get; set; }
+    public bool AllowInsecureDevelopment { get; init; }
 
     /// <summary>External managed storage requires approved region, DPA, and explicit consent.</summary>
     public bool ManagedService { get; set; }
@@ -54,28 +54,28 @@ public sealed class TelemetryStorageOptions
     public string ProcessingRegion { get; set; } = "";
 
     /// <summary>Maximum redacted buffer age during outages.</summary>
-    public int BufferHours { get; set; } = 24;
+    public int BufferHours { get; init; } = 24;
 
     /// <summary>Per-owner buffer byte budget.</summary>
-    public long TenantBufferBytes { get; set; } = 128 * 1024 * 1024;
+    public long TenantBufferBytes { get; init; } = 128 * 1024 * 1024;
 
     /// <summary>Cluster-wide buffer byte budget.</summary>
-    public long GlobalBufferBytes { get; set; } = 2L * 1024 * 1024 * 1024;
+    public long GlobalBufferBytes { get; init; } = 2L * 1024 * 1024 * 1024;
 
     /// <summary>Maximum tenant diagnostic ingestion bytes in a rolling minute.</summary>
-    public long TenantBytesPerMinute { get; set; } = 8 * 1024 * 1024;
+    public long TenantBytesPerMinute { get; init; } = 8 * 1024 * 1024;
 
     /// <summary>Maximum simultaneous container identities per owner.</summary>
-    public int MaximumMetricContainers { get; set; } = 100;
+    public int MaximumMetricContainers { get; init; } = 100;
 
     /// <summary>Bounded delivery batch size.</summary>
-    public int BatchSize { get; set; } = 100;
+    public int BatchSize { get; init; } = 100;
 
     /// <summary>Process-local expensive query concurrency bound.</summary>
-    public int QueryConcurrency { get; set; } = 4;
+    public int QueryConcurrency { get; init; } = 4;
 
     /// <summary>Runtime metric interval in seconds.</summary>
-    public int RuntimeSampleSeconds { get; set; } = 60;
+    public int RuntimeSampleSeconds { get; init; } = 60;
 
     /// <summary>Whether specialized storage is selected.</summary>
     public bool Specialized => Backend == "LokiMimir";

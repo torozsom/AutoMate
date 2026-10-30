@@ -51,7 +51,7 @@ public sealed class DeploymentJobWorkerTests
 
         foreach (var project in projects) harness.Tracker.Release(project);
         foreach (var project in projects)
-            await harness.WaitForStateAsync(project, state => state.QueuedStops == 0 && state.ActiveStops == 0);
+            await harness.WaitForStateAsync(project, state => state is { QueuedStops: 0, ActiveStops: 0 });
     }
 
     /// <summary>
@@ -572,7 +572,7 @@ public sealed class DeploymentJobWorkerTests
         {
             _pending = true;
             Pending.TrySetResult();
-            using var registration = Token.Register(() => Cancelled.TrySetResult());
+            await using var registration = Token.Register(() => Cancelled.TrySetResult());
 
             await Cancelled.Task;
             await Settle.Task;

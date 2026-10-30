@@ -263,18 +263,15 @@ public sealed class AnalysisReadinessTests
     /// <summary>Reloadable analysis policy and injected validation failures.</summary>
     private sealed class SettingsMonitor : IOptionsMonitor<AiAnalysisOptions>
     {
-        /// <summary>Current synthetic settings.</summary>
-        private AiAnalysisOptions _settings = new();
-
         /// <summary>Optional validation failure injected during reads.</summary>
         public Exception? Failure { get; set; }
 
         /// <summary>Current synthetic analysis options.</summary>
         public AiAnalysisOptions CurrentValue
         {
-            get => Failure is null ? _settings : throw Failure;
-            set => _settings = value;
-        }
+            get => Failure is null ? field : throw Failure;
+            set;
+        } = new();
 
         /// <summary>
         ///     Returns current synthetic options without selecting by option name.

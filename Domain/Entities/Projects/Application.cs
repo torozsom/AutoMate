@@ -19,26 +19,26 @@ public class Application : BaseEntity
     ///     Legacy compatibility flag; approved telemetry storage is automatic, independently of AI
     ///     consent.
     /// </summary>
-    public bool ManagedTelemetryConsent { get; set; } = true;
+    public bool ManagedTelemetryConsent { get; init; } = true;
 
     /// <summary>The unique identifier of the user who owns the project.</summary>
-    public Guid UserId { get; set; }
+    public Guid UserId { get; init; }
 
     /// <summary>The user who owns the project.</summary>
-    public User? User { get; set; }
+    public User? User { get; init; }
 
     /// <summary>The name of the project. This is a required field.</summary>
     public required string Name { get; set; }
 
     /// <summary>The source type (e.g., Local or Remote) for the project.</summary>
-    public required SourceType SourceType { get; set; }
+    public required SourceType SourceType { get; init; }
 
     /// <summary>The path (for local) or URL (for remote) to the project's source code.</summary>
-    public required string SourcePathOrUrl { get; set; }
+    public required string SourcePathOrUrl { get; init; }
 
     /// <summary>The type of the application (e.g., WebApi, Blazor, Mvc).</summary>
-    public AppType AppType { get; set; }
+    public AppType AppType { get; init; }
 
     /// <summary>The collection of C# projects in the application.</summary>
-    public ICollection<CsProject> CsProjects { get; set; } = [];
+    public ICollection<CsProject> CsProjects { get; init; } = [];
 }

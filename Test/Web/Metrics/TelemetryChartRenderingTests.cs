@@ -91,7 +91,7 @@ public sealed class TelemetryChartRenderingTests
     /// <returns>A task returning the synthetic text produced for this scenario.</returns>
     private static async Task<string> RenderAsync(IReadOnlyList<TelemetryChartPoint> points, DateTimeOffset end)
     {
-        using var services = new ServiceCollection().AddLogging().AddSingleton<IJSRuntime, NoBrowserJs>()
+        await using var services = new ServiceCollection().AddLogging().AddSingleton<IJSRuntime, NoBrowserJs>()
             .BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
 

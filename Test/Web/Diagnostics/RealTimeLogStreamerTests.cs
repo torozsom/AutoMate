@@ -192,6 +192,8 @@ public sealed class RealTimeLogStreamerTests
     public async Task Send_spans_distinguish_caller_cancellation_from_deadline(bool cancel, string outcome,
         ActivityStatusCode status)
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         using var exporter = new TraceSnapshotExporter();
         using var provider = Sdk.CreateTracerProviderBuilder().AddSource(AutoMateTelemetry.Deployments.Name)
             .AddProcessor(new SimpleActivityExportProcessor(exporter)).Build();
@@ -204,7 +206,7 @@ public sealed class RealTimeLogStreamerTests
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         });
         var send = streamer.StreamTerminalNoticeAsync(project, "private-message", canceled.Token);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), verificationToken);
         if (cancel) await canceled.CancelAsync();
 
         if (cancel)

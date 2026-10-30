@@ -6,7 +6,7 @@ namespace Domain.Entities.Users;
 public class RemoteUser : User
 {
     /// <summary>The unique identifier of the user on the remote provider.</summary>
-    public required string AccountId { get; set; }
+    public required string AccountId { get; init; }
 
     /// <summary>The URL of the user's avatar image on the remote provider.</summary>
     public string? AvatarUrl { get; set; }

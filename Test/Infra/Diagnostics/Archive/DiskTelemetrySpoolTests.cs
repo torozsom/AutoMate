@@ -168,10 +168,9 @@ public sealed class DiskTelemetrySpoolTests
         var directory = Path.Combine(Path.GetTempPath(), "automate-spool-" + Guid.NewGuid().ToString("N"));
         var tenant = Guid.NewGuid();
         var e = Event();
-        DeploymentLogEnvelope receipt;
-
         try
         {
+            DeploymentLogEnvelope receipt;
             using (var spool = Create(directory))
             {
                 await spool.StartAsync(CancellationToken.None);

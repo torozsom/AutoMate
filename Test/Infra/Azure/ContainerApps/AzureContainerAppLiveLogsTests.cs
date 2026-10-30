@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using Application.Abstractions.Diagnostics.Delivery;
 using Application.Abstractions.Diagnostics.Events;
@@ -27,6 +26,8 @@ public sealed class AzureContainerAppLiveLogsTests
     [Fact]
     public async Task Console_is_delivered_before_eof_and_quiet_reader_cancels()
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         var pipe = new Pipe();
         var received = new TaskCompletionSource<AzureLiveLogRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -52,17 +53,18 @@ public sealed class AzureContainerAppLiveLogsTests
             return Task.CompletedTask;
         }, cancellation.Token);
 
-        await connected.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(3), verificationToken);
         var request = Assert.Single(requests);
         Assert.Equal("aca-token", request.Token);
         Assert.Contains("follow=true", request.Query);
         Assert.Contains("tailLines=100", request.Query);
         // Force split JSON/UTF-8 boundaries and include an invalid line before a valid stderr envelope.
-        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("bad json\n{\"TimeStamp\":\"2026-10-11T12:00:00Z\","));
-        await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("\"Log\":\"árvíz\",\"Stream\":\"stderr\"}\n"));
-        var actual = await received.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await pipe.Writer.WriteAsync("bad json\n{\"TimeStamp\":\"2026-10-11T12:00:00Z\","u8.ToArray(),
+            verificationToken);
+        await pipe.Writer.WriteAsync("\"Log\":\"ĂˇrvĂ­z\",\"Stream\":\"stderr\"}\n"u8.ToArray(), verificationToken);
+        var actual = await received.Task.WaitAsync(TimeSpan.FromSeconds(3), verificationToken);
 
-        Assert.Equal("árvíz", actual.Message);
+        Assert.Equal("ĂˇrvĂ­z", actual.Message);
         Assert.Equal(DeploymentDiagnosticStream.StandardError, actual.Stream);
         Assert.False(reading.IsCompleted);
 
@@ -190,6 +192,8 @@ public sealed class AzureContainerAppLiveLogsTests
     [Fact]
     public async Task Supervisor_streams_without_monitor_token_and_filters_other_revisions()
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         var publisher = new RecordingPublisher();
         var target = Target();
         var authCalls = 0;
@@ -230,12 +234,12 @@ public sealed class AzureContainerAppLiveLogsTests
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         collector.Update(target, lifetime.Token);
-        await publisher.Delivered.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        await collector.StopAsync().WaitAsync(TimeSpan.FromSeconds(3));
+        await publisher.Delivered.Task.WaitAsync(TimeSpan.FromSeconds(3), verificationToken);
+        await collector.StopAsync().WaitAsync(TimeSpan.FromSeconds(3), verificationToken);
 
         Assert.Equal(2, authCalls);
         Assert.DoesNotContain(publisher.Events, e => e.Message == "wrong");
-        Assert.Contains(publisher.Events, e => e.Message == "live" && e.TerminalChannel.Target == "cloud-web" &&
+        Assert.Contains(publisher.Events, e => e is { Message: "live", TerminalChannel.Target: "cloud-web" } &&
                                                e.ProjectId == target.ProjectId &&
                                                e.DeploymentId == target.DeploymentId);
     }
@@ -248,13 +252,15 @@ public sealed class AzureContainerAppLiveLogsTests
     [Fact]
     public async Task Access_denied_is_visible_in_system_terminal_without_provider_payload()
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         var publisher = new RecordingPublisher();
         var collector = Create(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
             { Content = new StringContent("private-provider-secret") }, publisher);
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         collector.Update(Target(), lifetime.Token);
-        await publisher.Notice.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await publisher.Notice.Task.WaitAsync(TimeSpan.FromSeconds(3), verificationToken);
         await collector.StopAsync();
 
         Assert.Contains(publisher.Events, e => e.Message.Contains("log-stream permission") &&
@@ -270,6 +276,8 @@ public sealed class AzureContainerAppLiveLogsTests
     [Fact]
     public async Task Reconnect_deduplicates_confirmed_tail_and_reconciles_exact_history()
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         var publisher = new RecordingPublisher();
         var target = Target();
         var secondConsole = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -308,7 +316,7 @@ public sealed class AzureContainerAppLiveLogsTests
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         collector.Update(target, lifetime.Token);
-        await secondConsole.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await secondConsole.Task.WaitAsync(TimeSpan.FromSeconds(3), verificationToken);
         var history = new AzureMonitorLogRecord(DateTimeOffset.Parse("2026-10-11T12:00:01Z"), "live",
             "web", "rev-1", "stderr", "ContainerAppConsoleLogs", ReplicaName: "pod-1");
 

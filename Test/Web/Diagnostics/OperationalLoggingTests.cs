@@ -65,7 +65,7 @@ public sealed class OperationalLoggingTests
             SmtpPort = 1
         }), factory.CreateLogger<GmailSenderService>());
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sender.SendEmailAsync(
             "private-recipient@example.test", "private-subject", "private-body", cancellation.Token));
@@ -142,10 +142,15 @@ public sealed class OperationalLoggingTests
         await using var services = new ServiceCollection().AddSingleton(authentication)
             .AddLogging(logging => logging.AddOpenTelemetry(options =>
                 options.AddProcessor(new SimpleLogRecordExportProcessor(exporter)))).BuildServiceProvider();
-        var context = new DefaultHttpContext { RequestServices = services };
-
-        context.Request.QueryString = new QueryString("?token=private-query");
-        context.Request.Headers.Authorization = "Bearer private-credential";
+        var context = new DefaultHttpContext
+        {
+            RequestServices = services,
+            Request =
+            {
+                QueryString = new QueryString("?token=private-query"),
+                Headers = { Authorization = "Bearer private-credential" }
+            }
+        };
         var handler =
             new SecurityAuditResultHandler(services.GetRequiredService<ILogger<SecurityAuditResultHandler>>());
         var nextCalled = false;

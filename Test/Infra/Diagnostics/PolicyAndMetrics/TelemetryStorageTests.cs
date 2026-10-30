@@ -365,7 +365,7 @@ public sealed class TelemetryStorageTests
     ///     Constructs a safe immutable envelope.
     /// </summary>
     /// <returns>The configured deployment log envelope instance or response for this scenario.</returns>
-    internal static DeploymentLogEnvelope Envelope()
+    private static DeploymentLogEnvelope Envelope()
     {
         return new DeploymentLogEnvelope(Guid.NewGuid(), Guid.NewGuid(), 11,
             DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(30), new DeploymentDiagnosticEvent(Guid.NewGuid(),

@@ -384,7 +384,7 @@ public sealed class SaaSTelemetryTests
         try
         {
             var logs = new EmptyLogs { Fail = true };
-            using var services = new ServiceCollection().AddScoped(fixture.CreateDb)
+            await using var services = new ServiceCollection().AddScoped(fixture.CreateDb)
                 .AddSingleton<IDeploymentLogQuery>(logs).AddSingleton<IDeploymentMetricQuery>(new EmptyMetrics())
                 .BuildServiceProvider();
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
@@ -626,7 +626,7 @@ public sealed class SaaSTelemetryTests
         }
 
         /// <summary>Creates an independently owned context against the fixture's database.</summary>
-        public AutoMateDbContext NewDb()
+        private AutoMateDbContext NewDb()
         {
             return new OrderedSqliteContext(
                 new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(_connection).Options, _protector);

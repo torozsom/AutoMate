@@ -12,7 +12,7 @@ namespace Domain.Entities.Deployments;
 public class Deployment : BaseEntity
 {
     /// <summary>Last owner-saved assessment choices; never credentials or diagnostics.</summary>
-    public string? AiAssessmentPreferencesJson { get; set; }
+    public string? AiAssessmentPreferencesJson { get; init; }
 
     /// <summary>Serialized immutable non-secret configuration; null for legacy deployments.</summary>
     public string? ConfigurationSnapshotJson { get; set; }
@@ -27,7 +27,7 @@ public class Deployment : BaseEntity
     public int? ResolvedHostPort { get; set; }
 
     /// <summary>The unique identifier of the project associated with this deployment.</summary>
-    public Guid CsProjectId { get; set; }
+    public Guid CsProjectId { get; init; }
 
     /// <summary>A reference to the project associated with this deployment.</summary>
     public CsProject? CsProject { get; set; }
@@ -59,20 +59,20 @@ public class Deployment : BaseEntity
     public string? CloudContainerAppName { get; set; }
 
     /// <summary>Fencing identity of the current cloud runtime collector, if claimed.</summary>
-    public Guid? RuntimeCollectorLeaseOwner { get; set; }
+    public Guid? RuntimeCollectorLeaseOwner { get; init; }
 
     /// <summary>UTC expiry after which another collector may recover the lease.</summary>
-    public DateTimeOffset? RuntimeCollectorLeaseUntil { get; set; }
+    public DateTimeOffset? RuntimeCollectorLeaseUntil { get; init; }
 
     /// <summary>Durable non-sensitive checkpoints for GitHub Actions diagnostic streaming.</summary>
-    public ICollection<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints { get; set; } = [];
+    public ICollection<GitHubWorkflowCheckpoint> GitHubWorkflowCheckpoints { get; init; } = [];
 
     /// <summary>Durable non-sensitive cursors for Azure Container Apps runtime log streaming.</summary>
-    public ICollection<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints { get; set; } = [];
+    public ICollection<AzureContainerAppLogCheckpoint> AzureContainerAppLogCheckpoints { get; init; } = [];
 
     /// <summary>Saved analysis requests and results associated with this deployment.</summary>
-    public ICollection<AiDeploymentAnalysis> AiAnalyses { get; set; } = [];
+    public ICollection<AiDeploymentAnalysis> AiAnalyses { get; init; } = [];
 
     /// <summary>Related legacy diagnostic history and retained delivery-buffer records.</summary>
-    public ICollection<DeploymentDiagnosticRecord> DiagnosticRecords { get; set; } = [];
+    public ICollection<DeploymentDiagnosticRecord> DiagnosticRecords { get; init; } = [];
 }

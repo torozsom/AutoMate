@@ -9,17 +9,17 @@ namespace Domain.Entities.Diagnostics;
 public sealed class DeploymentDiagnosticSnapshot : BaseEntity
 {
     /// <summary>Identity of the deployment associated with this legacy snapshot.</summary>
-    public Guid DeploymentId { get; set; }
+    public Guid DeploymentId { get; init; }
 
     /// <summary>Deployment associated with this legacy snapshot.</summary>
-    public Deployment Deployment { get; set; } = null!;
+    public Deployment Deployment { get; init; } = null!;
 
     /// <summary>Retained bounded redacted legacy context, never raw provider credentials.</summary>
-    public string RedactedPayload { get; set; } = string.Empty;
+    public string RedactedPayload { get; init; } = string.Empty;
 
     /// <summary>Optional trace identity associated with the captured context.</summary>
-    public string? TraceId { get; set; }
+    public string? TraceId { get; init; }
 
     /// <summary>Retention deadline for the legacy snapshot.</summary>
-    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; init; }
 }

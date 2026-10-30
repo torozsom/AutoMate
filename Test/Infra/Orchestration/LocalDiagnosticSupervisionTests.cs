@@ -57,7 +57,7 @@ public sealed class LocalDiagnosticSupervisionTests
         await Task.WhenAll(stop, replacement).WaitAsync(TimeSpan.FromSeconds(3));
 
         Assert.True(harness.Manager.IsActive(harness.Target.ProjectId, harness.Target.DeploymentId));
-        Assert.Contains(harness.Source.Subscriptions, s => s.Kind == "daemon" && !s.Stopped.Task.IsCompleted);
+        Assert.Contains(harness.Source.Subscriptions, s => s is { Kind: "daemon", Stopped.Task.IsCompleted: false });
     }
 
     /// <summary>
@@ -397,7 +397,9 @@ public sealed class LocalDiagnosticSupervisionTests
             {
                 CleanupStarted.TrySetResult();
                 if (CleanupGate is not null) await CleanupGate.Task;
-                await Task.Delay(25);
+                // Source cancellation must not skip acknowledgement of owned cleanup.
+                using var cleanupDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await Task.Delay(25, cleanupDeadline.Token);
                 subscription.Stopped.TrySetResult();
             }
         }

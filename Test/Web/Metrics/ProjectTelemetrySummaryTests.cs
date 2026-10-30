@@ -20,7 +20,7 @@ public sealed class ProjectTelemetrySummaryTests
     public async Task Overlapping_analytics_loads_use_and_dispose_independent_scopes()
     {
         var recorder = new ScopeRecorder();
-        using var services = new ServiceCollection().AddSingleton(recorder)
+        await using var services = new ServiceCollection().AddSingleton(recorder)
             .AddScoped<IProjectTelemetryAnalytics, ScopedAnalytics>().BuildServiceProvider();
         var component = new ProjectTelemetrySummary();
         var owner = Guid.NewGuid();

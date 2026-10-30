@@ -613,7 +613,7 @@ internal sealed class AzureContainerAppLiveLogs(
     /// </summary>
     /// <param name="uri">Validated provider endpoint URI.</param>
     /// <returns>Whether the documented trusted endpoint condition holds.</returns>
-    internal static bool TrustedEndpoint(Uri uri)
+    private static bool TrustedEndpoint(Uri uri)
     {
         return uri.Scheme == Uri.UriSchemeHttps
                && uri.Port == 443

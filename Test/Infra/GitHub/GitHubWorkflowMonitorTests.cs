@@ -91,7 +91,7 @@ public sealed class GitHubWorkflowMonitorTests
         var ownedSpans = spans.Where(span => Equals(span.GetTagItem("deployment.id"), deployment.Id)).ToArray();
 
         Assert.Contains(ownedSpans,
-            span => span.OperationName == "github.workflow.query" && span.Status == ActivityStatusCode.Ok);
+            span => span is { OperationName: "github.workflow.query", Status: ActivityStatusCode.Ok });
         Assert.Contains(ownedSpans, span => span.OperationName == "github.jobs.query");
         Assert.Contains(ownedSpans, span => span.OperationName == "github.logs.download");
         Assert.Single(ownedSpans.Select(span => span.TraceId).Distinct());

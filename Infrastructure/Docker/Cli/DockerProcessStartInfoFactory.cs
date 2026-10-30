@@ -48,18 +48,4 @@ internal static class DockerProcessStartInfoFactory
             CreateNoWindow = true
         };
     }
-
-    /// <summary>
-    ///     Creates a human-readable process command for logs.
-    /// </summary>
-    /// <param name="startInfo">Process arguments and stream settings for the owned Docker command.</param>
-    /// <returns>The describe derived from the validated input.</returns>
-    public static string Describe(ProcessStartInfo startInfo)
-    {
-        var arguments = startInfo.ArgumentList.Count > 0
-            ? string.Join(' ', startInfo.ArgumentList)
-            : startInfo.Arguments;
-
-        return $"{startInfo.FileName} {arguments}".Trim();
-    }
 }

@@ -22,9 +22,7 @@ namespace Test.Infra.Ai.Providers;
 ///     Checks Responses parsing using synthetic HTTP fixtures; no provider credentials or calls are
 ///     required.
 /// </summary>
-public sealed class OpenAiAnalysisProviderTests() : ResponsesAnalysisProviderContractTests(false)
-{
-}
+public sealed class OpenAiAnalysisProviderTests() : ResponsesAnalysisProviderContractTests(false);
 
 /// <summary>
 ///     Runs the bounded Responses, redaction, authorization, retry and shutdown contract against
@@ -131,7 +129,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         var services = new ServiceCollection();
 
         services.AddOptions<AiAnalysisOptions>().Bind(configuration.GetSection("AiAnalysis"));
-        using var scope = services.BuildServiceProvider();
+        await using var scope = services.BuildServiceProvider();
         var monitor = scope.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         using var handler = new ShutdownHandler(started, readingBody);

@@ -765,7 +765,7 @@ public sealed class HostingProfileRegistrationTests
         }
 
         /// <summary>Creates an exporter-owned client while this fixture retains transport ownership.</summary>
-        public HttpClient CreateClient()
+        private HttpClient CreateClient()
         {
             return new HttpClient(this, false);
         }

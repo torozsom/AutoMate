@@ -8,40 +8,40 @@ namespace Domain.Entities.Cloud;
 public sealed class CloudDeploymentRun : BaseEntity
 {
     /// <summary>AutoMate account charged for admission.</summary>
-    public Guid UserId { get; set; }
+    public Guid UserId { get; init; }
 
     /// <summary>Authorized application being deployed.</summary>
-    public Guid ProjectId { get; set; }
+    public Guid ProjectId { get; init; }
 
     /// <summary>Deployment row created when launch begins.</summary>
     public Guid? DeploymentId { get; set; }
 
     /// <summary>Stable key supplied by a client for safe request retries.</summary>
-    public string IdempotencyKey { get; set; } = string.Empty;
+    public string IdempotencyKey { get; init; } = string.Empty;
 
     /// <summary>GitHub App installation authorized for the repository.</summary>
-    public long InstallationId { get; set; }
+    public long InstallationId { get; init; }
 
     /// <summary>Numeric GitHub repository identity used for webhook correlation.</summary>
-    public long RepositoryId { get; set; }
+    public long RepositoryId { get; init; }
 
     /// <summary>Repository owner at admission time.</summary>
-    public string RepositoryOwner { get; set; } = string.Empty;
+    public string RepositoryOwner { get; init; } = string.Empty;
 
     /// <summary>Repository name at admission time.</summary>
-    public string RepositoryName { get; set; } = string.Empty;
+    public string RepositoryName { get; init; } = string.Empty;
 
     /// <summary>Managed deployment branch.</summary>
-    public string BranchName { get; set; } = string.Empty;
+    public string BranchName { get; init; } = string.Empty;
 
     /// <summary>Deployment environment used for serialized delivery.</summary>
-    public string EnvironmentName { get; set; } = string.Empty;
+    public string EnvironmentName { get; init; } = string.Empty;
 
     /// <summary>Workflow file used for run matching.</summary>
-    public string WorkflowFileName { get; set; } = string.Empty;
+    public string WorkflowFileName { get; init; } = string.Empty;
 
     /// <summary>Customer ACR login server.</summary>
-    public string RegistryServer { get; set; } = string.Empty;
+    public string RegistryServer { get; init; } = string.Empty;
 
     /// <summary>Protected JSON snapshot of non-token inputs; custom environment values are encrypted.</summary>
     public string? SnapshotJson { get; set; }

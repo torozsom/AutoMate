@@ -52,3 +52,6 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [SDK processors](../../../Web/Observability/README.md)
 - [Shared logger/console policy](../../../Infrastructure/Observability/README.md)
 - [Finite vocabulary](../../../Application/Diagnostics/README.md)
+
+DeploymentTracingTests protects dashboard-facing cloud/storage instrument names, units and observable kinds.
+Cancellation regression waits use a separate verification deadline from the intentionally canceled operation.

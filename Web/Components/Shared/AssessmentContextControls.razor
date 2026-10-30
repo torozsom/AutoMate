@@ -53,7 +53,7 @@
                 {
                     <span class="small text-muted"> — Unsupported for this recorded deployment</span>
                 }
-                else if (!Channels.Any(c => c.Source == source))
+                else if (Channels.All(c => c.Source != source))
                 {
                     <span class="small text-muted"> — No recorded output yet</span>
                 }

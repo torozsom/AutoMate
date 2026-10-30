@@ -25,5 +25,5 @@ public record DatabaseConfigDto
     public string ConnectionStringName { get; set; } = DeploymentDefaults.ConnectionStringName;
 
     /// <summary>The suffix applied to generated database container names.</summary>
-    public string ContainerNameSuffix { get; set; } = DeploymentDefaults.DatabaseContainerNameSuffix;
+    public string ContainerNameSuffix { get; init; } = DeploymentDefaults.DatabaseContainerNameSuffix;
 }
