@@ -53,3 +53,14 @@ a transport.
 - [Actual logging exports](../../Test/Web/Diagnostics/OperationalLoggingTests.cs)
 - [Trace regressions](../../Test/Web/Diagnostics/DeploymentTracingTests.cs)
 - [Metrics and operator interpretation](../../docs/ai-analysis-operations.md)
+
+## Operational measurements and live cadence
+
+OperationalMetrics emits finite source/stage/outcome/status-class counts and millisecond duration histograms without
+SDK dependencies. Invalid labels normalize to Unknown/none. SignalR send measurements include every outcome regardless
+of trace filtering; deployment async wrappers record persistence/provider/subscription durations. Streaming lifetime is
+distinct from HTTP header acquisition. Live observation/coalescing/history-admission counters describe separate paths.
+
+DeploymentDiagnostics:LiveMetricIntervalMilliseconds defaults to 1,000 and is validated to 100–5,000 by Web. Each Docker
+collector retains one latest redacted observation, sends the first immediately and cancels/awaits trailing work on exit.
+Both client callbacks remain compatible. Analysis polling remains two seconds after an empty claim.

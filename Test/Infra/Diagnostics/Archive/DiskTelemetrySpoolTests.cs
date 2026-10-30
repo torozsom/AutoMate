@@ -10,10 +10,12 @@ using Application.Abstractions.Diagnostics.History;
 using Application.Abstractions.Diagnostics.Metrics;
 using Application.Diagnostics;
 using Infrastructure.Diagnostics.Delivery;
+using Infrastructure.Diagnostics.Metrics;
 using Infrastructure.Diagnostics.Policy;
 using Infrastructure.Diagnostics.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Time.Testing;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
 namespace Test.Infra.Diagnostics.Archive;
@@ -25,6 +27,111 @@ namespace Test.Infra.Diagnostics.Archive;
 /// <exception cref="TimeoutException">The bounded fixture wait expires before the expected signal.</exception>
 public sealed class DiskTelemetrySpoolTests
 {
+    /// <summary>
+    ///     Filesystem probe failures preserve the last capacity and expose age; callbacks never perform probes.
+    /// </summary>
+    /// <returns>Completion after controlled-time refresh failure and observer shutdown.</returns>
+    [Fact]
+    public async Task Failed_disk_probe_retains_capacity_and_exposes_staleness()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "automate-stale-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var spool = Create(directory);
+            await spool.StartAsync(CancellationToken.None);
+            var clock = new FakeTimeProvider();
+            var probe = new DiskCapacityProbe();
+            using var observer = new TelemetrySpoolObserver(spool,
+                Options.Create(new DiskSpoolOptions { Directory = directory }), clock,
+                probe.ReadAvailableBytes);
+            var observed = new ConcurrentDictionary<string, double>();
+            using var listener = new MeterListener();
+            listener.InstrumentPublished = (instrument, owner) =>
+            {
+                if (instrument.Name.StartsWith("telemetry.spool.disk.")) owner.EnableMeasurementEvents(instrument);
+            };
+            listener.SetMeasurementEventCallback<double>((instrument, value, _, _) =>
+                observed[instrument.Name] = value);
+            listener.SetMeasurementEventCallback<long>((instrument, value, _, _) => observed[instrument.Name] = value);
+            listener.Start();
+            await observer.StartAsync(CancellationToken.None);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (probe.Count == 0) await Task.Delay(1, deadline.Token);
+            clock.Advance(TimeSpan.FromSeconds(30));
+            while (probe.Count < 2) await Task.Delay(1, deadline.Token);
+            for (var i = 0; i < 100; i++) listener.RecordObservableInstruments();
+            Assert.Equal(2, probe.Count);
+            Assert.Equal(directory, probe.LastDirectory);
+            Assert.Equal(123456, observed["telemetry.spool.disk.available.bytes"]);
+            Assert.Equal(30, observed["telemetry.spool.disk.snapshot.age.seconds"]);
+            await observer.StopAsync(CancellationToken.None);
+            await spool.StopAsync(CancellationToken.None);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    /// <summary>
+    ///     Actual disk receipts drive typed status and memory-only gauges; retirement drains the same state.
+    /// </summary>
+    /// <returns>Completion after a private temporary spool has been drained and stopped.</returns>
+    [Fact]
+    public async Task Typed_status_and_observer_report_actual_spool_without_payloads()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "automate-observer-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var spool = Create(directory);
+            await spool.StartAsync(CancellationToken.None);
+            await spool.AppendAsync(Guid.NewGuid(), Event(), "web", CancellationToken.None);
+            var snapshot = await spool.SnapshotAsync(CancellationToken.None);
+            Assert.Equal(1, snapshot.PendingEvents);
+            Assert.Equal(1, snapshot.Segments);
+            Assert.True(snapshot.BufferedBytes > 0);
+            var json = JsonSerializer.Serialize(await spool.StatusAsync(CancellationToken.None),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            using var document = JsonDocument.Parse(json);
+            Assert.Equal(6, document.RootElement.EnumerateObject().Count());
+            Assert.True(document.RootElement.GetProperty("accepting").GetBoolean());
+            var measurements = new ConcurrentDictionary<string, double>();
+            using var listener = new MeterListener();
+            listener.InstrumentPublished = (instrument, owner) =>
+            {
+                if (instrument.Name.StartsWith("telemetry.spool.")) owner.EnableMeasurementEvents(instrument);
+            };
+            listener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            {
+                Assert.Empty(tags.ToArray());
+                measurements[instrument.Name] = value;
+            });
+            listener.SetMeasurementEventCallback<long>((instrument, value, _, _) =>
+                measurements[instrument.Name] = value);
+            listener.Start();
+            using var observer =
+                new TelemetrySpoolObserver(spool, Options.Create(new DiskSpoolOptions { Directory = directory }));
+            await observer.StartAsync(CancellationToken.None);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (!measurements.ContainsKey("telemetry.spool.pending.events"))
+            {
+                listener.RecordObservableInstruments();
+                await Task.Delay(5, deadline.Token);
+            }
+
+            Assert.Equal(1, measurements["telemetry.spool.pending.events"]);
+            Assert.True(measurements["telemetry.spool.current.bytes"] > 0);
+            await observer.StopAsync(CancellationToken.None);
+            await spool.RemoveAsync(Directory.GetFiles(directory, "*.segment").Single(), [], CancellationToken.None);
+            Assert.Equal(0, (await spool.SnapshotAsync(CancellationToken.None)).PendingEvents);
+            await spool.StopAsync(CancellationToken.None);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
     /// <summary>
     ///     Old checksummed backlog is masked for replay/delivery without altering its acknowledged disk
     ///     bytes.
@@ -388,5 +495,32 @@ public sealed class DiskTelemetrySpoolTests
         return new DeploymentDiagnosticEvent(Guid.NewGuid(), Guid.NewGuid(), DeploymentDiagnosticSource.DockerContainer,
             DeploymentDiagnosticKind.Log, DeploymentDiagnosticSeverity.Information, DateTimeOffset.UtcNow, "hello",
             new DeploymentTerminalChannel(DeploymentTerminalChannelKind.Container, "web"), EventId: Guid.NewGuid());
+    }
+
+    /// <summary>
+    ///     Owns the atomic probe count shared by the observer task and test assertions.
+    /// </summary>
+    private sealed class DiskCapacityProbe
+    {
+        /// <summary>Number of completed probe entries.</summary>
+        private int _count;
+
+        /// <summary>Current count observed safely across threads.</summary>
+        public int Count => Volatile.Read(ref _count);
+
+        /// <summary>Last directory actually supplied by the observer, asserted after probe completion.</summary>
+        public string? LastDirectory { get; private set; }
+
+        /// <summary>
+        ///     Returns one successful capacity observation, then simulates an unavailable filesystem.
+        /// </summary>
+        /// <param name="directory">Directory supplied by the observer and retained for test assertions.</param>
+        /// <returns>The initial capacity observation.</returns>
+        /// <exception cref="IOException">Every probe after the first is unavailable.</exception>
+        public long ReadAvailableBytes(string directory)
+        {
+            LastDirectory = directory;
+            return Interlocked.Increment(ref _count) == 1 ? 123456 : throw new IOException("synthetic unavailable");
+        }
     }
 }

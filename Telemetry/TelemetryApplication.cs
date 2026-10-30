@@ -14,6 +14,7 @@ using Infrastructure.Diagnostics.Policy;
 using Infrastructure.Diagnostics.Redaction;
 using Infrastructure.Diagnostics.Storage;
 using Infrastructure.Observability;
+using Infrastructure.Observability.OpenTelemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -67,6 +68,7 @@ public static class TelemetryApplication
         builder.Services.AddHostedService<DeploymentArchiveBackfillWorker>();
 
         builder.Services.AddHttpClient("DeploymentTelemetry", c => c.Timeout = TimeSpan.FromSeconds(15))
+            .ObserveOperations(ReviewedHttpClient.DeploymentTelemetry)
             .ConfigurePrimaryHttpMessageHandler(sp =>
             {
                 var handler = new SocketsHttpHandler { AllowAutoRedirect = false };
@@ -95,8 +97,10 @@ public static class TelemetryApplication
         builder.Services.AddScoped<IDeploymentErrorCountQuery, LokiDeploymentLogs>();
 
         builder.Services.AddSafePlatformLogging();
+        builder.Services.AddHostedService<TelemetrySpoolObserver>();
 
         configure?.Invoke(builder);
+        builder.AddSafeOpenTelemetry("AutoMate.Telemetry");
 
         var app = builder.Build();
 

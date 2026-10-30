@@ -10,6 +10,17 @@ internal static class TelemetryStorageMetrics
     /// <summary>Meter exported by the existing OpenTelemetry configuration.</summary>
     private static readonly Meter Meter = new("AutoMate.TelemetryStorage");
 
+    /// <summary>Rejected quota admissions, without tenant dimensions.</summary>
+    internal static readonly Counter<long> AdmissionRejections =
+        Meter.CreateCounter<long>("telemetry.admission.rejections");
+
+    /// <summary>Segment delivery attempts by final outcome.</summary>
+    internal static readonly Counter<long> DeliveryAttempts = Meter.CreateCounter<long>("telemetry.delivery.attempts");
+
+    /// <summary>Archive write duration including idempotent lookup.</summary>
+    internal static readonly Histogram<double> ArchiveWriteDuration =
+        Meter.CreateHistogram<double>("telemetry.archive.write.duration", "ms");
+
     /// <summary>Accepted redacted bytes.</summary>
     internal static readonly Counter<long> IngestedBytes = Meter.CreateCounter<long>("telemetry.ingested.bytes");
 

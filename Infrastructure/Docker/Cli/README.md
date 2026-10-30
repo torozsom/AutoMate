@@ -34,3 +34,6 @@ durable-sampling cadence.
 - [Metric delivery](../Diagnostics/README.md)
 - [Output tests](../../../Test/Infra/Diagnostics/Docker/DockerOutputTests.cs)
 - [Sampling tests](../../../Test/Infra/Diagnostics/Docker/DockerMetricDeliveryTests.cs)
+
+The stats collector owns and awaits disposal of its live metric coalescer. It receives the validated Web live interval
+independently from the durable history sample cadence; cancellation prevents pending callbacks after retirement.

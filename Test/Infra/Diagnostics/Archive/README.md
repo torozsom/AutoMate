@@ -47,3 +47,9 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [Archive implementation](../../../../Infrastructure/Diagnostics/Archive/README.md)
 - [Spool/legacy storage](../../../../Infrastructure/Diagnostics/Storage/README.md)
 - [Real backend acceptance](../Delivery/README.md)
+
+DiskTelemetrySpoolTests also verifies typed status compatibility, actual spool gauges and fake-time disk refresh
+failure: old capacity survives, staleness grows, and repeated observable callbacks never invoke filesystem probes.
+
+The disk refresh fixture owns its atomic probe counter and verifies the configured directory, avoiding mutable captured
+locals across observer callbacks.

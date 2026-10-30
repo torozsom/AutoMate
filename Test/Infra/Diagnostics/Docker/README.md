@@ -53,3 +53,6 @@ This command contacts the local daemon only when the smoke attribute's opt-in is
 - [Sources/parsing](../../../../Infrastructure/Docker/Diagnostics/README.md)
 - [Supervisor](../../../../Infrastructure/ApplicationServices/Orchestration/Local/README.md)
 - [Host lifecycle tests](../../Orchestration/LocalDiagnosticSupervisionTests.cs)
+
+Metric delivery tests use FakeTimeProvider for trailing updates and verify latest-value bursts, original timestamps,
+independent typed/legacy failures, unchanged history cadence and no pending callback after disposal.

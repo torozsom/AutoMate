@@ -4,13 +4,13 @@ OpenTelemetry SDK processors, finite metric/resource policy and safe HTTP operat
 
 ## Contents
 
-| File                                                   | Types or asset           | Responsibility                                                                                        |
-|--------------------------------------------------------|--------------------------|-------------------------------------------------------------------------------------------------------|
-| [RequestAuditMiddleware.cs](RequestAuditMiddleware.cs) | `RequestAuditMiddleware` | Audits HTTP operation boundaries without recording URLs, queries, headers, cookies or request bodies. |
-| [SafeLogProcessor.cs](SafeLogProcessor.cs)             | `SafeLogProcessor`       | Rechecks SDK attributes/body before exporters; scopes are snapshotted by SafeLoggerFactory.           |
-| [SafeMetricPolicy.cs](SafeMetricPolicy.cs)             | `SafeMetricPolicy`       | Approves metric identities and removes request/provider-derived dimensions before aggregation.        |
-| [SafeResourceDetector.cs](SafeResourceDetector.cs)     | `SafeResourceDetector`   | Builds only reviewed resource fields; environment detectors cannot import arbitrary attributes.       |
-| [SafeTraceProcessor.cs](SafeTraceProcessor.cs)         | `SafeTraceProcessor`     | Sanitizes before simple/batch exporters; spans with immutable untrusted events/links fail closed.     |
+| File                                                                                                | Types or asset           | Responsibility                                                                                        |
+|-----------------------------------------------------------------------------------------------------|--------------------------|-------------------------------------------------------------------------------------------------------|
+| [RequestAuditMiddleware.cs](RequestAuditMiddleware.cs)                                              | `RequestAuditMiddleware` | Audits HTTP operation boundaries without recording URLs, queries, headers, cookies or request bodies. |
+| [SafeLogProcessor.cs](../../Infrastructure/Observability/OpenTelemetry/SafeLogProcessor.cs)         | `SafeLogProcessor`       | Rechecks SDK attributes/body before exporters; scopes are snapshotted by SafeLoggerFactory.           |
+| [SafeMetricPolicy.cs](../../Infrastructure/Observability/OpenTelemetry/SafeMetricPolicy.cs)         | `SafeMetricPolicy`       | Approves metric identities and removes request/provider-derived dimensions before aggregation.        |
+| [SafeResourceDetector.cs](../../Infrastructure/Observability/OpenTelemetry/SafeResourceDetector.cs) | `SafeResourceDetector`   | Builds only reviewed resource fields; environment detectors cannot import arbitrary attributes.       |
+| [SafeTraceProcessor.cs](../../Infrastructure/Observability/OpenTelemetry/SafeTraceProcessor.cs)     | `SafeTraceProcessor`     | Sanitizes before simple/batch exporters; spans with immutable untrusted events/links fail closed.     |
 
 ## Usage and integration
 
@@ -30,7 +30,7 @@ review. Request audit observes operation boundaries, not successful user authori
 ## Operator logging
 
 Infrastructure owns SafeLoggerFactory, literal catalogs and typed field policy; preserve that boundary before all
-ordinary providers. Web SDK processors add a second export check, not a replacement.
+ordinary providers. Shared SDK processors add a second export check in both hosts.
 
 ## Redacted console exception snapshots
 
@@ -47,3 +47,9 @@ See [console diagnostics](../../Infrastructure/Observability/README.md#console-e
 - [Export tests](../../Test/Web/Hosting/PlatformTelemetrySafetyTests.cs)
 - [Metric/resource tests](../../Test/Web/Hosting/MetricResourceSafetyTests.cs)
 - [HTTP audit tests](../../Test/Web/Diagnostics/RequestAuditTests.cs)
+
+## Shared SDK ownership
+
+SDK processors, resource policy and views now live
+in [Infrastructure SDK integration](../../Infrastructure/Observability/OpenTelemetry/README.md).
+This module retains RequestAuditMiddleware. Web adds UI/security sources to the shared safe registration.

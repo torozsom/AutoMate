@@ -1,8 +1,8 @@
-using Infrastructure.Observability;
+using Microsoft.Extensions.Logging;
 using OpenTelemetry;
 using OpenTelemetry.Logs;
 
-namespace Web.Observability;
+namespace Infrastructure.Observability.OpenTelemetry;
 
 /// <summary>
 ///     Rechecks SDK attributes/body before exporters; scopes are snapshotted by SafeLoggerFactory.

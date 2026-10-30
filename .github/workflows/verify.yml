@@ -2,7 +2,7 @@ name: CI - Build and test
 
 on:
   pull_request:
-    branches: [main]
+    branches: [ main ]
   workflow_dispatch:
 
 concurrency:
@@ -146,7 +146,7 @@ jobs:
   required:
     name: 'CI: Required checks'
     if: ${{ always() }}
-    needs: [dotnet, javascript, browser, hygiene]
+    needs: [ dotnet, javascript, browser, hygiene ]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -150,8 +150,35 @@ public sealed class LocalDeploymentLogStreamManager(
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (_targets.TryGetValue(projectId, out var state) && state.Target.DeploymentId == deploymentId)
+        {
             state.Operation = active;
+            if (!active) state.RuntimePaused = false;
+        }
+
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    ///     Awaits runtime cancellation before Compose removes containers, retaining lifecycle observations.
+    /// </summary>
+    /// <param name="projectId">Project owning the supervised sources.</param>
+    /// <param name="deploymentId">Exact deployment identity to quiesce.</param>
+    /// <param name="cancellationToken">Cancels waiting for runtime shutdown.</param>
+    /// <returns>Completes once owned runtime callbacks can no longer publish.</returns>
+    public async Task StopRuntimeAsync(Guid projectId, Guid deploymentId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_targets.TryGetValue(projectId, out var state) || state.Target.DeploymentId != deploymentId) return;
+        await state.RuntimeGate.WaitAsync(cancellationToken);
+        try
+        {
+            state.RuntimePaused = true;
+            await CancelRuntimeAsync(state);
+        }
+        finally
+        {
+            state.RuntimeGate.Release();
+        }
     }
 
     /// <summary>
@@ -256,8 +283,6 @@ public sealed class LocalDeploymentLogStreamManager(
         await using var scope = scopes.CreateAsyncScope();
         CancellationTokenSource? daemonCancellation = null;
         Task? daemon = null;
-        CancellationTokenSource? runtimeCancellation = null;
-        var runtime = new Dictionary<string, Task>();
         try
         {
             var source = scope.ServiceProvider.GetRequiredService<IDockerDiagnosticSource>();
@@ -300,31 +325,38 @@ public sealed class LocalDeploymentLogStreamManager(
                         break;
                 }
 
-                if (policy.Runtime)
+                await state.RuntimeGate.WaitAsync(token);
+                try
                 {
-                    runtimeCancellation ??= CancellationTokenSource.CreateLinkedTokenSource(token);
-                    foreach (var container in state.Target.Containers)
+                    if (policy.Runtime && !state.RuntimePaused)
                     {
-                        var logKey = container.Channel + "/logs";
-                        if (!runtime.TryGetValue(logKey, out var logs) || logs.IsCompleted)
+                        state.RuntimeCancellation ??= CancellationTokenSource.CreateLinkedTokenSource(token);
+                        foreach (var container in state.Target.Containers)
                         {
-                            if (logs is not null) await ObserveTaskAsync(logs);
-                            runtime[logKey] =
-                                source.MonitorContainerAsync(state.Target, container, runtimeCancellation.Token);
-                        }
+                            var logKey = container.Channel + "/logs";
+                            if (!state.Runtime.TryGetValue(logKey, out var logs) || logs.IsCompleted)
+                            {
+                                if (logs is not null) await ObserveTaskAsync(logs);
+                                state.Runtime[logKey] =
+                                    source.MonitorContainerAsync(state.Target, container,
+                                        state.RuntimeCancellation.Token);
+                            }
 
-                        var key = container.Channel + "/metrics";
-                        if (runtime.TryGetValue(key, out var metrics) && !metrics.IsCompleted) continue;
-                        if (metrics is not null) await ObserveTaskAsync(metrics);
-                        runtime[key] =
-                            source.MonitorMetricsAsync(state.Target, container, runtimeCancellation.Token);
+                            var key = container.Channel + "/metrics";
+                            if (state.Runtime.TryGetValue(key, out var metrics) && !metrics.IsCompleted) continue;
+                            if (metrics is not null) await ObserveTaskAsync(metrics);
+                            state.Runtime[key] =
+                                source.MonitorMetricsAsync(state.Target, container, state.RuntimeCancellation.Token);
+                        }
+                    }
+                    else if (state.RuntimeCancellation is not null)
+                    {
+                        await CancelRuntimeAsync(state);
                     }
                 }
-                else if (runtimeCancellation is not null)
+                finally
                 {
-                    await CancelTasksAsync(runtimeCancellation, runtime.Values);
-                    runtime.Clear();
-                    runtimeCancellation = null;
+                    state.RuntimeGate.Release();
                 }
             } while (await timer.WaitForNextTickAsync(token));
         }
@@ -340,10 +372,32 @@ public sealed class LocalDeploymentLogStreamManager(
         finally
         {
             state.Ready.TrySetResult();
-            if (runtimeCancellation is not null) await CancelTasksAsync(runtimeCancellation, runtime.Values);
+            await state.RuntimeGate.WaitAsync(CancellationToken.None);
+            try
+            {
+                await CancelRuntimeAsync(state);
+            }
+            finally
+            {
+                state.RuntimeGate.Release();
+            }
+
             if (daemonCancellation is not null)
                 await CancelTasksAsync(daemonCancellation, daemon is null ? [] : [daemon]);
         }
+    }
+
+    /// <summary>
+    ///     Cancels a runtime group under its per-target gate without affecting daemon collection.
+    /// </summary>
+    /// <param name="state">Target whose runtime group is exclusively owned by the caller.</param>
+    /// <returns>Completes after every runtime source has acknowledged cancellation.</returns>
+    private async Task CancelRuntimeAsync(TargetState state)
+    {
+        if (state.RuntimeCancellation is null) return;
+        await CancelTasksAsync(state.RuntimeCancellation, state.Runtime.Values);
+        state.Runtime.Clear();
+        state.RuntimeCancellation = null;
     }
 
     /// <summary>
@@ -434,6 +488,18 @@ public sealed class LocalDeploymentLogStreamManager(
     {
         /// <summary>Whether a Compose operation requires automatic lifecycle diagnostics.</summary>
         public volatile bool Operation = operation;
+
+        /// <summary>Prevents the supervisor from restarting sources during intentional removal.</summary>
+        public volatile bool RuntimePaused;
+
+        /// <summary>Serializes runtime admission and quiescence independently for each deployment.</summary>
+        public SemaphoreSlim RuntimeGate { get; } = new(1);
+
+        /// <summary>Owned runtime subscriptions, accessed only under RuntimeGate.</summary>
+        public Dictionary<string, Task> Runtime { get; } = [];
+
+        /// <summary>Runtime cancellation owner, accessed only under RuntimeGate.</summary>
+        public CancellationTokenSource? RuntimeCancellation { get; set; }
 
         /// <summary>Immutable, non-secret inventory.</summary>
         public DockerDeploymentTarget Target { get; } = target;

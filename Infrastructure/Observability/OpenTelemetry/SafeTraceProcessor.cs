@@ -1,10 +1,9 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using Application.Diagnostics;
-using Infrastructure.Observability;
 using OpenTelemetry;
 
-namespace Web.Observability;
+namespace Infrastructure.Observability.OpenTelemetry;
 
 /// <summary>
 ///     Sanitizes before simple/batch exporters; spans with immutable untrusted events/links fail

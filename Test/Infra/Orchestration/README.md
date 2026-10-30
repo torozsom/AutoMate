@@ -44,3 +44,6 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [Workflows](../../../Infrastructure/ApplicationServices/Orchestration/README.md)
 - [Supervision](../../../Infrastructure/ApplicationServices/Orchestration/Local/README.md)
 - [Durable runs](../../../Infrastructure/ApplicationServices/Orchestration/CloudRuns/README.md)
+
+Warning regressions cover runtime quiescence while daemon collection survives, failed-stop resumption, stale identity
+requests and startup reconciliation without historical resurrection. SQLite uses UTC ticks for chronological tests.

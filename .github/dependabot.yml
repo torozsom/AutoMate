@@ -20,16 +20,16 @@ updates:
     groups:
       nuget-security:
         applies-to: security-updates
-        patterns: ['*']
+        patterns: [ '*' ]
       entity-framework-maintenance:
-        patterns: ['Microsoft.EntityFrameworkCore*', 'EFCore.NamingConventions']
-        update-types: [minor, patch]
+        patterns: [ 'Microsoft.EntityFrameworkCore*', 'EFCore.NamingConventions' ]
+        update-types: [ minor, patch ]
       opentelemetry-maintenance:
-        patterns: ['OpenTelemetry*']
-        update-types: [minor, patch]
+        patterns: [ 'OpenTelemetry*' ]
+        update-types: [ minor, patch ]
       nuget-maintenance:
-        patterns: ['*']
-        update-types: [minor, patch]
+        patterns: [ '*' ]
+        update-types: [ minor, patch ]
 
   - package-ecosystem: npm
     directory: /Test/Web/Browser
@@ -42,10 +42,10 @@ updates:
     groups:
       npm-security:
         applies-to: security-updates
-        patterns: ['*']
+        patterns: [ '*' ]
       npm-maintenance:
-        patterns: ['*']
-        update-types: [minor, patch]
+        patterns: [ '*' ]
+        update-types: [ minor, patch ]
 
   - package-ecosystem: github-actions
     directory: /
@@ -57,8 +57,8 @@ updates:
     open-pull-requests-limit: 5
     groups:
       actions-maintenance:
-        patterns: ['*']
-        update-types: [minor, patch]
+        patterns: [ '*' ]
+        update-types: [ minor, patch ]
 
   - package-ecosystem: docker
     # The repository-root Dockerfile is currently local-only; monitor the tracked host image.
@@ -71,8 +71,8 @@ updates:
     open-pull-requests-limit: 3
     groups:
       dotnet-image-maintenance:
-        patterns: ['mcr.microsoft.com/dotnet/*']
-        update-types: [minor, patch]
+        patterns: [ 'mcr.microsoft.com/dotnet/*' ]
+        update-types: [ minor, patch ]
 
   - package-ecosystem: docker-compose
     directories:
@@ -87,8 +87,8 @@ updates:
     open-pull-requests-limit: 5
     groups:
       compose-maintenance:
-        patterns: ['*']
-        update-types: [minor, patch]
+        patterns: [ '*' ]
+        update-types: [ minor, patch ]
 
   - package-ecosystem: dotnet-sdk
     directory: /
@@ -101,4 +101,4 @@ updates:
     # Advancing the target runtime is a separate project change; maintain the .NET 10 SDK.
     ignore:
       - dependency-name: '*'
-        update-types: [version-update:semver-major]
+        update-types: [ version-update:semver-major ]
