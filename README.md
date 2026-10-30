@@ -425,6 +425,10 @@ The [Qodana workflow](.github/workflows/qodana_code_quality.yml) runs manually, 
 on internal pull requests targeting `main`. Fork pull requests are skipped because they cannot access the Cloud
 project token. Every scan analyzes the full solution; changed-file-only mode and automatic fixes are disabled.
 
+The Qodana Action is pinned to a full upstream commit SHA, with its release version recorded in a comment.
+When updating it, verify the commit in `JetBrains/qodana-action` and update both the SHA and version comment.
+This prevents a moved branch or tag from silently changing the workflow's third-party executable code.
+
 Set the repository secret `QODANA_TOKEN_245602675` to the existing Qodana Cloud project token. The workflow supplies it
 as `QODANA_TOKEN` and publishes to `https://qodana.cloud`. It checks that the secret is present without logging its value.
 Results appear in Qodana Cloud, GitHub check annotations, internal PR summary comments, the `qodana-report` workflow
