@@ -1,0 +1,31 @@
+/* Keep action text readable at narrow widths and with enlarged text. */
+.analysis-panel .btn {
+    min-height: 44px;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* Match the application's approved primary palette in both themes. */
+.analysis-panel .btn-outline-primary {
+    color: var(--am-primary);
+    border-color: var(--am-primary);
+}
+
+.analysis-panel .btn-outline-primary:hover,
+.analysis-panel .btn-outline-primary:focus-visible {
+    color: var(--am-primary);
+    background: var(--am-primary-soft);
+    border-color: var(--am-primary);
+}
+
+/* Use the existing readable foreground for an identifiable secondary-button boundary. */
+.analysis-panel .btn-outline-secondary {
+    border-color: currentColor;
+}
+
+.analysis-panel .btn:focus,
+.analysis-panel .btn:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+}

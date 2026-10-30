@@ -1,0 +1,54 @@
+@*
+    Coordinates owned analysis choices, consent, requests, cancellation and bounded result polling.
+*@
+@namespace Web.Components.Shared
+@using Application.Ai.Context
+@using Application.Ai.Policy
+@using Domain.Enums.Deployments
+@using Microsoft.Extensions.Options
+@implements IAsyncDisposable
+@inject IServiceScopeFactory Scopes
+@inject IOptionsMonitor<AiAnalysisOptions> Options
+@inject ILogger<DeploymentAnalysisSection> Logger
+
+<AssessmentContextControls Selection="_selectionDraft" Status="@(_preferences?.Status ?? DeploymentStatus.Starting)"
+                           Channels="@(_preferences?.Channels ?? [])"
+                           MetricContainers="@(_preferences?.MetricContainers ?? [])"
+                           UnsupportedSources="@(_preferences?.UnsupportedSources ?? AssessmentSources.None)"
+                           Disabled="ControlsFrozen" OnChange="SelectionChanged"/>
+
+<button class="btn btn-outline-secondary mb-3" disabled="@ControlsFrozen" @onclick="SavePreferencesAsync">Save context
+    choices
+</button>
+@if (_preferences?.Availability is { } availability)
+{
+    <p role="status">@availability</p>
+}
+
+<DeploymentAnalysisPanel DeploymentId="DeploymentId" Result="@_latest" Enabled="@Options.CurrentValue.Enabled"
+                         Consented="@_consented" AllowAnyStatus="true" CanEditConsent="@(CsProjectId != Guid.Empty)"
+                         Busy="@_busy" Message="@_message" OnRequest="RequestAsync" OnRefresh="RefreshAsync"
+                         OnConsentChange="ConsentAsync" OnCancel="CancelAsync"/>
+@if (_runs.Count > 0)
+{
+    <div class="analysis-history">
+        <h3>Saved analysis runs</h3>
+        @foreach (var run in _runs.Take(20))
+        {
+            <details @key="run.Id">
+                <summary>@run.CreatedAt.ToString("u") · @run.Status · @run.Trigger</summary>
+                <DeploymentAnalysisPanel DeploymentId="DeploymentId" Result="run" ReadOnly="true" Busy="true"
+                                         Consented="_consented"/>
+            </details>
+        }
+        <div class="history-pagination">
+            <button class="btn btn-sm btn-outline-secondary" disabled="@(_busy || _offset == 0)"
+                    @onclick="PreviousAsync">Newer runs
+            </button>
+            <span>Page @(_offset / 20 + 1)</span>
+            <button class="btn btn-sm btn-outline-secondary" disabled="@(_busy || _runs.Count <= 20)"
+                    @onclick="NextAsync">Older runs
+            </button>
+        </div>
+    </div>
+}

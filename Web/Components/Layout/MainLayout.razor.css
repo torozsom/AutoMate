@@ -1,0 +1,191 @@
+.skip-link {
+    background: var(--am-primary);
+    border-radius: var(--am-radius);
+    color: var(--am-on-primary);
+    font-weight: 800;
+    left: 1rem;
+    padding: 0.75rem 1rem;
+    position: fixed;
+    top: 1rem;
+    transform: translateY(-160%);
+    transition: transform 0.12s ease;
+    z-index: 1100;
+}
+
+.skip-link:focus {
+    color: var(--am-on-primary);
+    transform: translateY(0);
+}
+
+.page {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    background: #0c0e16;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e5edf8;
+    flex: 0 0 16rem;
+}
+
+.top-row {
+    align-items: center;
+    background: color-mix(in srgb, var(--am-surface) 92%, transparent);
+    border-bottom: 1px solid var(--am-border);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    min-height: 4rem;
+    padding: 0.75rem clamp(1rem, 2vw, 2rem);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+@supports (backdrop-filter: blur(12px)) {
+    .top-row {
+        backdrop-filter: blur(12px);
+    }
+}
+
+.top-row-status,
+.top-row-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.content {
+    flex: 1;
+    width: 100%;
+    max-width: 1600px;
+    margin-inline: auto;
+    padding: clamp(1rem, 2vw, 2rem);
+}
+
+.top-row ::deep a,
+.top-row ::deep .btn-link {
+    white-space: nowrap;
+}
+
+#blazor-error-ui {
+    background: var(--am-danger);
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    bottom: 0;
+    box-shadow: var(--am-shadow);
+    box-sizing: border-box;
+    color: white;
+    display: none;
+    left: 0;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+.error-ui-inner {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+}
+
+#blazor-error-ui .reload {
+    color: white;
+    font-weight: 800;
+    margin-right: 1rem;
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.25rem;
+}
+
+.docker-status-pill {
+    align-items: center;
+    border: 1px solid;
+    border-radius: var(--am-radius-sm);
+    display: inline-flex;
+    font-size: 0.75rem;
+    font-family: var(--am-font-mono);
+    font-weight: 500;
+    gap: 0.35rem;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.8rem;
+    white-space: nowrap;
+}
+
+.docker-status-checking {
+    background: var(--am-surface-muted);
+    border-color: var(--am-border);
+    color: var(--am-text-muted);
+}
+
+.docker-status-online {
+    background: var(--am-success-soft);
+    border-color: color-mix(in srgb, var(--am-success) 38%, var(--am-border));
+    color: var(--am-success);
+}
+
+.docker-status-offline {
+    background: var(--am-danger-soft);
+    border-color: color-mix(in srgb, var(--am-danger) 38%, var(--am-border));
+    color: var(--am-danger);
+}
+
+.blob.green,
+.blob.red {
+    border-radius: 50%;
+    height: 0.625rem;
+    width: 0.625rem;
+}
+
+.blob.green {
+    background: var(--am-success);
+}
+
+.blob.red {
+    background: var(--am-danger);
+}
+
+@media (max-width: 767.98px) {
+    .page {
+        display: block;
+    }
+
+    .sidebar {
+        border-right: 0;
+        position: relative;
+        z-index: 20;
+    }
+
+    .top-row {
+        align-items: stretch;
+        flex-direction: column;
+        position: static;
+    }
+
+    .top-row-actions ::deep .btn {
+        width: 100%;
+    }
+
+    .docker-status-pill {
+        width: 100%;
+    }
+}
+
+@media (min-width: 768px) {
+    .sidebar {
+        height: 100vh;
+        position: sticky;
+        top: 0;
+    }
+}

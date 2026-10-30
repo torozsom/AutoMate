@@ -1,0 +1,96 @@
+@*
+    Renders the application shell and hosts navigation, content and connection recovery.
+*@
+@namespace Web.Components.Layout
+@using Web.Components.Layout.Shell
+@using Web.Components.Shared.Console
+@inherits LayoutComponentBase
+
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<AuthorizeView Context="layoutAuth">
+    <Authorized>
+        <div class="page">
+            <aside class="sidebar" aria-label="Primary navigation">
+                <NavMenu/>
+            </aside>
+
+            <MainContent CssClass="app-main">
+                <header class="top-row">
+                    <AuthorizeView Context="_">
+                        <Authorized>
+                            <div class="top-row-status" role="status">
+                                @if (DeploymentCapabilities.LocalDeploymentsEnabled)
+                                {
+                                    @switch (_isDockerRunning)
+                                    {
+                                        case null:
+                                            <div class="docker-status-pill docker-status-checking"
+                                                 title="Checking Docker status...">
+                                                <span class="spinner-border spinner-border-sm me-2"
+                                                      role="status"></span>
+                                                <span>Connecting to Docker...</span>
+                                            </div>
+                                            break;
+                                        case true:
+                                            <div class="docker-status-pill docker-status-online"
+                                                 title="Docker Engine Online">
+                                                <div class="blob green" aria-hidden="true"></div>
+                                                <i class="bi bi-docker me-1" aria-hidden="true"></i>
+                                                <span>Docker Engine Online</span>
+                                            </div>
+                                            break;
+                                        case false:
+                                            <div class="docker-status-pill docker-status-offline"
+                                                 title="Docker Engine Offline">
+                                                <div class="blob red" aria-hidden="true"></div>
+                                                <i class="bi bi-exclamation-triangle-fill me-1" aria-hidden="true"></i>
+                                                <span>Docker Engine Offline</span>
+                                            </div>
+                                            break;
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="console-meta">Azure deployment workspace</span>
+                                }
+                            </div>
+
+                            <div class="top-row-actions">
+                                <a href="/swagger" target="_blank" rel="noopener noreferrer"
+                                   class="btn btn-sm btn-outline-secondary">
+                                    <i class="bi bi-braces" aria-hidden="true"></i>
+                                    <span>OpenAPI</span>
+                                </a>
+                            </div>
+                        </Authorized>
+                    </AuthorizeView>
+                </header>
+
+                <article class="content">
+                    @Body
+                </article>
+            </MainContent>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <header class="public-header"><a class="public-brand" href="/">AutoMate</a>
+            <nav class="console-row-actions" aria-label="Public navigation">
+                <ThemeToggle/>
+                <a class="btn btn-outline-secondary" href="/login">Sign in</a><a class="btn btn-primary"
+                                                                                 href="/register">Get started</a></nav>
+        </header>
+        <MainContent CssClass="public-main">@Body</MainContent>
+    </NotAuthorized>
+</AuthorizeView>
+
+<div id="blazor-error-ui" data-nosnippet>
+    <div class="error-ui-inner">
+        <span><i class="bi bi-exclamation-octagon-fill me-2"
+                 aria-hidden="true"></i> An unhandled error has occurred.</span>
+        <div>
+            <a href="." class="reload">Reload</a>
+            <span class="dismiss" role="button" tabindex="0" aria-label="Dismiss">&times;</span>
+        </div>
+    </div>
+</div>
