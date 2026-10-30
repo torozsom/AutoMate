@@ -2,6 +2,9 @@
 
 Filesystem failure distinguished from a valid empty configuration scan.
 
+`ProjectMetadataContractTests.cs` protects discovery JSON fields, mutable provider package lists and
+case-insensitive dependency package/path aggregation.
+
 ## Contents
 
 | File                                                       | Test or fixture types      | Responsibility                                                                                     |

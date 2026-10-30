@@ -18,9 +18,10 @@ public sealed class AzureContainerAppClientTests
     {
         const string environment = "/subscriptions/sub/providers/Microsoft.App/managedEnvironments/env";
 
+        var requestedPaths = new List<string>();
         var client = new AzureContainerAppClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(request =>
         {
-            Assert.Contains(environment, request.RequestUri!.AbsolutePath);
+            requestedPaths.Add(request.RequestUri!.AbsolutePath);
 
             return DelegateHttpMessageHandler.Json("""
                                                    {"properties":{"defaultDomain":"verified-env.region.azurecontainerapps.io","appLogsConfiguration":{"logAnalyticsConfiguration":{"customerId":"11111111-1111-1111-1111-111111111111","sharedKey":"private-key"}}}}
@@ -29,6 +30,7 @@ public sealed class AzureContainerAppClientTests
 
         var scope = await client.GetEnvironmentLogScopeAsync(environment, "token", CancellationToken.None);
 
+        Assert.Contains(environment, Assert.Single(requestedPaths));
         Assert.Equal("/workspaces/11111111-1111-1111-1111-111111111111", scope!.ResourceId);
         Assert.Equal("verified-env", scope.EnvironmentName);
         Assert.Equal("env", scope.ResourceName);

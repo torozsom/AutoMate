@@ -36,6 +36,9 @@ public sealed class DeploymentArchiveBackfillWorker(
     ILogger<DeploymentArchiveBackfillWorker> logger,
     DiskTelemetrySpool? pending = null) : BackgroundService
 {
+    /// <summary>Retained policy dependency, evaluated at each operation boundary.</summary>
+    private readonly IOptions<TelemetryStorageOptions> _settings = settings;
+
     /// <summary>Discovery position; a restart safely revisits completed durable checkpoints.</summary>
     private int _offset;
 
@@ -73,7 +76,7 @@ public sealed class DeploymentArchiveBackfillWorker(
     /// <exception cref="InvalidOperationException">Managed telemetry processing is not approved.</exception>
     public async Task ImportBatchAsync(CancellationToken token)
     {
-        if (settings.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
+        if (_settings.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
 
         await using var scope = scopes.CreateAsyncScope();

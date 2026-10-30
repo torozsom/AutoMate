@@ -2,6 +2,9 @@
 
 Application shell/navigation and document-level circuit recovery.
 
+`MainLayout.razor`, its code-behind and scoped CSS live here to match the preserved
+`Web.Components.Layout.MainLayout` type. Shell contains navigation and the shared MainContent landmark.
+
 ## Contents
 
 | Module                             | Responsibility                                           |

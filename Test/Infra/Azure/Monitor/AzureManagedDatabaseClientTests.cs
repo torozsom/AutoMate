@@ -199,11 +199,10 @@ public sealed class AzureManagedDatabaseClientTests
     [Fact]
     public async Task Redis_uses_supported_maximum_aggregation_and_preserves_bytes()
     {
+        var queries = new List<string>();
         var client = new AzureManagedDatabaseClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(request =>
         {
-            Assert.Contains("aggregation=Maximum", request.RequestUri!.Query);
-            Assert.DoesNotContain("%2B", request.RequestUri.Query, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("Z%2F", request.RequestUri.Query);
+            queries.Add(request.RequestUri!.Query);
 
             return DelegateHttpMessageHandler.Json("""
                                                    {"value":[{"name":{"value":"percentProcessorTime"},"timeseries":[{"data":[{"timeStamp":"2026-10-10T10:01:00Z","maximum":25}]}]},
@@ -216,6 +215,10 @@ public sealed class AzureManagedDatabaseClientTests
                 "percentProcessorTime,usedmemory"),
             "token", CancellationToken.None);
 
+        var query = Assert.Single(queries);
+        Assert.Contains("aggregation=Maximum", query);
+        Assert.DoesNotContain("%2B", query, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Z%2F", query);
         Assert.Equal(25,
             Assert.Single(samples, s => s is { Name: "automate_cpu_usage_percent", Unit: "percent" }).Value,
             6);

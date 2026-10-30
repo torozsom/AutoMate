@@ -66,14 +66,14 @@ public sealed class HostingProfileRegistrationTests
         });
         builder.AddApplicationServices();
         using var capture = new OtlpCaptureHandler();
-        builder.Services.PostConfigureAll<OtlpExporterOptions>(options =>
-            options.HttpClientFactory = () => new HttpClient(capture, false));
+        builder.Services.PostConfigureAll<OtlpExporterOptions>(capture.Configure);
         using var services = builder.Services.BuildServiceProvider();
         var traces = services.GetRequiredService<TracerProvider>();
         var metrics = services.GetRequiredService<MeterProvider>();
         var logs = services.GetRequiredService<LoggerProvider>();
 
-        using (AutoMateTelemetry.Deployments.StartActivity("deployment.local.execute"))
+        using (AutoMateTelemetry.Deployments.StartActivity("deployment.local.execute", ActivityKind.Internal,
+                   parentContext: default))
         {
         }
 
@@ -417,7 +417,7 @@ public sealed class HostingProfileRegistrationTests
                     ["SaaS:DataProtectionCertificatePassword"] = "test-only"
                 });
             builder.AddApplicationServices();
-            using var exporter = new SnapshotExporter();
+            var exporter = new SnapshotExporter();
 
             builder.Logging.AddOpenTelemetry(logging =>
                 logging.AddProcessor(new SimpleLogRecordExportProcessor(exporter)));
@@ -482,7 +482,8 @@ public sealed class HostingProfileRegistrationTests
             Assert.NotNull(services.GetRequiredService<TracerProvider>());
 
             using var signalR = new ActivitySource("Microsoft.AspNetCore.SignalR.Server");
-            using var invocation = signalR.StartActivity("fixture.invocation");
+            using var invocation =
+                signalR.StartActivity("fixture.invocation", ActivityKind.Internal, parentContext: default);
 
             Assert.NotNull(invocation);
         }
@@ -756,6 +757,18 @@ public sealed class HostingProfileRegistrationTests
     {
         /// <summary>Serialized signal requests and their resolved collector endpoints.</summary>
         public ConcurrentQueue<(Uri Endpoint, string Body)> Requests { get; } = new();
+
+        /// <summary>Configures each signal's exporter to use the fixture-owned transport.</summary>
+        public void Configure(OtlpExporterOptions options)
+        {
+            options.HttpClientFactory = CreateClient;
+        }
+
+        /// <summary>Creates an exporter-owned client while this fixture retains transport ownership.</summary>
+        public HttpClient CreateClient()
+        {
+            return new HttpClient(this, false);
+        }
 
         /// <summary>Handles the metric exporter's synchronous HTTP transport in the test fixture.</summary>
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)

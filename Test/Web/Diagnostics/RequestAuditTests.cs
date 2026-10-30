@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Infrastructure.Observability;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Web.Observability;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
@@ -34,8 +35,9 @@ public sealed class RequestAuditTests
     [InlineData("<script>private</script>", "OTHER")]
     public async Task Request_methods_are_safe_without_a_sanitizing_logger(string method, string expected)
     {
-        using var capture = new Capture();
-        using var factory = LoggerFactory.Create(logging => logging.AddProvider(capture));
+        var capture = new Capture();
+        using var factory =
+            LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         var context = new DefaultHttpContext();
         context.Request.Method = method;
         var middleware = new RequestAuditMiddleware(http =>
@@ -47,14 +49,14 @@ public sealed class RequestAuditTests
         await middleware.InvokeAsync(context);
 
         Assert.Equal(2, capture.Messages.Count);
-        Assert.All(capture.Messages, text =>
+        foreach (var text in capture.Messages)
         {
             Assert.Contains($"method {expected},", text);
             Assert.DoesNotContain('\r', text);
             Assert.DoesNotContain('\n', text);
             Assert.DoesNotContain("private", text);
             Assert.DoesNotContain("forged-entry", text);
-        });
+        }
     }
 
     /// <summary>
@@ -71,8 +73,8 @@ public sealed class RequestAuditTests
     [InlineData(500)]
     public async Task Request_audit_records_response_and_correlation_without_credentials(int status)
     {
-        using var capture = new Capture();
-        using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
+        var capture = new Capture();
+        using var inner = LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
         var actor = Guid.NewGuid();
         var context = new DefaultHttpContext
@@ -116,8 +118,8 @@ public sealed class RequestAuditTests
     [Fact]
     public async Task Request_audit_rethrows_failure_without_logging_provider_body()
     {
-        using var capture = new Capture();
-        using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
+        var capture = new Capture();
+        using var inner = LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
         var failure = new IOException("private-provider-body");
         var middleware = new RequestAuditMiddleware(_ => Task.FromException(failure),

@@ -75,12 +75,12 @@ public sealed class AnalysisReadinessTests
         await db.Database.EnsureCreatedAsync();
 
         var monitor = new SettingsMonitor { CurrentValue = Settings(true, true, true) };
-        var credentials = true;
-        var service = new DeploymentAnalysisReadinessService(db, monitor, Catalog(() => credentials));
+        var credentials = new CredentialState();
+        var service = new DeploymentAnalysisReadinessService(db, monitor, Catalog(credentials.IsAvailable));
 
         Assert.Equal(AnalysisConfigurationState.Ready, (await service.CheckAsync()).Configuration);
 
-        credentials = false;
+        credentials.Available = false;
 
         Assert.Equal(AnalysisConfigurationState.Unavailable, (await service.CheckAsync()).Configuration);
 
@@ -247,9 +247,20 @@ public sealed class AnalysisReadinessTests
         }
     }
 
-    /// <summary>
-    ///     Mutable monitor simulates policy reload and safe translation of validation failures.
-    /// </summary>
+    /// <summary>Mutable credential-presence state rechecked by the real readiness service.</summary>
+    private sealed class CredentialState
+    {
+        /// <summary>Current presence of synthetic provider credentials.</summary>
+        public bool Available { get; set; } = true;
+
+        /// <summary>Returns the current credential state for each readiness probe.</summary>
+        public bool IsAvailable()
+        {
+            return Available;
+        }
+    }
+
+    /// <summary>Reloadable analysis policy and injected validation failures.</summary>
     private sealed class SettingsMonitor : IOptionsMonitor<AiAnalysisOptions>
     {
         /// <summary>Current synthetic settings.</summary>

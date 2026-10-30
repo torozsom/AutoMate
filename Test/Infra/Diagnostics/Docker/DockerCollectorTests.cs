@@ -511,8 +511,9 @@ public sealed class DockerCollectorTests
                       """, deadline.Token);
             }
 
+            var composeToken = deadline.Token;
             var started = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
-                project.Name, project.Project, project.Deployment, deadline.Token, "up", "-d")));
+                project.Name, project.Project, project.Deployment, composeToken, "up", "-d")));
 
             Assert.All(started, Assert.True);
 
@@ -525,17 +526,18 @@ public sealed class DockerCollectorTests
             }
 
             var stopped = await Task.WhenAll(projects.Select(project => cli.RunComposeAsync(project.Directory,
-                project.Name, project.Project, project.Deployment, deadline.Token, "down")));
+                project.Name, project.Project, project.Deployment, composeToken, "down")));
 
             Assert.All(stopped, Assert.True);
         }
         finally
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            var cleanupToken = cleanup.Token;
             var cleaned = await Task.WhenAll(projects
                 .Where(project => File.Exists(Path.Combine(project.Directory, "docker-compose.yml")))
                 .Select(project => cli.RunComposeAsync(project.Directory, project.Name, project.Project,
-                    project.Deployment, cleanup.Token, "down")));
+                    project.Deployment, cleanupToken, "down")));
 
             Assert.All(cleaned, Assert.True);
 

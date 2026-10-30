@@ -51,7 +51,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public async Task Email_attempt_does_not_log_message_content()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;
@@ -83,7 +83,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public void Audit_export_captures_scopes_trace_and_finite_event_properties()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeScopes = true;
@@ -130,7 +130,7 @@ public sealed class OperationalLoggingTests
     [InlineData("success", 200, null)]
     public async Task Authorization_audit_preserves_framework_results(string result, int status, string? outcome)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var authentication = DispatchProxy.Create<IAuthenticationService, PortProxy>();
 
         Assert.IsAssignableFrom<PortProxy>(authentication).Call = (method, args) =>
@@ -188,7 +188,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public async Task Diagnostic_failure_export_omits_raw_exception_and_payload()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
 
         Assert.IsAssignableFrom<PortProxy>(store).Call = (_, _) =>
@@ -248,7 +248,7 @@ public sealed class OperationalLoggingTests
     [InlineData("PostgresOutbox")]
     public async Task Diagnostic_success_export_omits_payload_in_every_delivery_mode(string deliveryMode)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var persisted =
             new TaskCompletionSource<DeploymentDiagnosticEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var delivered =
@@ -329,7 +329,7 @@ public sealed class OperationalLoggingTests
     [InlineData(false)]
     public async Task Local_login_audit_preserves_response_without_credential_properties(bool accepted)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var auth = DispatchProxy.Create<IAuthService, PortProxy>();
         var loginCalls = new List<(string? Method, object?[]? Arguments)>();
 
@@ -400,7 +400,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public void Status_subscriber_failure_retains_delivery_without_exception_payload()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;
@@ -438,7 +438,7 @@ public sealed class OperationalLoggingTests
     [InlineData(true, true)]
     public async Task Repository_cache_failure_exports_safe_properties(bool write, bool canceled)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;
@@ -493,7 +493,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public async Task Repository_network_failure_does_not_export_exception_payload()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;

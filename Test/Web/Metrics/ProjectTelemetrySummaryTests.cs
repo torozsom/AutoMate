@@ -37,11 +37,12 @@ public sealed class ProjectTelemetrySummaryTests
 
         Assert.Equal(2, recorder.Calls.Count);
         Assert.Equal(2, recorder.Calls.Select(call => call.Scope).Distinct().Count());
-        Assert.All(recorder.Calls, call =>
+        foreach (var call in recorder.Calls)
         {
             Assert.Equal(owner, call.Owner);
             Assert.Equal(project, call.Project);
-        });
+        }
+
         Assert.Equal(2, recorder.Disposed.Count);
 
         component.Dispose();

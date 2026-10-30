@@ -649,7 +649,8 @@ public static class ServiceConfiguration
                         ? "authenticated"
                         : "anonymous";
 
-                    using var activity = AutoMateTelemetry.Security.StartActivity("security.rate_limit.rejected");
+                    using var activity = AutoMateTelemetry.Security.StartActivity("security.rate_limit.rejected",
+                        ActivityKind.Internal, parentContext: default);
                     activity?.SetTag("security.authentication_state", authenticationState);
 
                     var tags = new TagList { { "security.authentication_state", authenticationState } };

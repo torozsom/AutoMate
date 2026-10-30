@@ -2,6 +2,9 @@
 
 Portable Application-owned policies and cloud admission use cases, independent of Web renderer fixtures.
 
+`ProjectionContractTests.cs` protects JSON cost/provenance, history continuation, metric paging,
+inventory timestamps and resource units, including null legacy metadata.
+
 ## Contents
 
 | Module                                   | Coverage                                                |

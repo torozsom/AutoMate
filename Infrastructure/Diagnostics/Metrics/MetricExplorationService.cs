@@ -32,6 +32,9 @@ public sealed class MetricExplorationService(
     IDiagnosticRedactor? redactor = null,
     ILogger<MetricExplorationService>? logger = null) : IMetricExploration
 {
+    /// <summary>Retained policy dependency, evaluated at each operation boundary.</summary>
+    private readonly IOptions<TelemetryStorageOptions> _options = options;
+
     /// <summary>Current masking applies to numeric metadata from legacy database rows too.</summary>
     private readonly IDiagnosticRedactor _redactor = redactor ?? new DiagnosticRedactor();
 
@@ -39,7 +42,7 @@ public sealed class MetricExplorationService(
     ///     Authorizes scope, aggregates selected evidence, and pages statistics independently of
     ///     charts.
     /// </summary>
-    /// <param name="query">The frozen resource scope, selection and bounded read options.</param>
+    /// <param name="query">The frozen resource scope, selection and bounded read _options.</param>
     /// <param name="token">Cancels the operation when supported by the underlying work.</param>
     /// <returns>
     ///     A task returning bounded chart observations, statistics, numeric pagination and
@@ -51,7 +54,7 @@ public sealed class MetricExplorationService(
     public async Task<MetricExplorationResult> ReadAsync(MetricExplorationQuery query,
         CancellationToken token = default)
     {
-        if (options.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
+        if (_options.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
 
         query.Range.Validate(clock.GetUtcNow());

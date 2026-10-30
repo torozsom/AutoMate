@@ -27,8 +27,8 @@ public sealed class ConsoleExceptionDiagnosticsTests
         var key = "plain-azure-key-123456789";
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(
             new Dictionary<string, string?> { ["AiAnalysis:AzureOpenAi:ApiKey"] = key }).Build();
-        using var capture = new CaptureProvider();
-        using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
+        var capture = new CaptureProvider();
+        using var inner = LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         var policy = new PlatformTelemetryPolicy(new DiagnosticRedactor());
         using var factory = new SafeLoggerFactory(inner, policy,
             new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), configuration, writer));
@@ -139,13 +139,15 @@ public sealed class ConsoleExceptionDiagnosticsTests
     public void Console_filter_disables_diagnostics_while_ordinary_metadata_is_still_logged()
     {
         using var writer = new StringWriter();
-        using var capture = new CaptureProvider();
+        var capture = new CaptureProvider();
         var services = new ServiceCollection();
 
-        services.AddLogging(logging => logging.AddProvider(capture));
+        services.AddLogging(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         services.Configure<LoggerFilterOptions>(settings =>
             settings.Rules.Add(new LoggerFilterRule("Console", null, LogLevel.None, null)));
-        services.AddSingleton(provider => new ConsoleExceptionDiagnostics(new DiagnosticRedactor(), writer: writer,
+        services.AddSingleton<TextWriter>(writer);
+        services.AddSingleton(provider => new ConsoleExceptionDiagnostics(new DiagnosticRedactor(),
+            writer: provider.GetRequiredService<TextWriter>(),
             filters: provider.GetRequiredService<IOptionsMonitor<LoggerFilterOptions>>()));
         services.AddSafePlatformLogging();
         using var provider = services.BuildServiceProvider();

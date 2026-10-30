@@ -31,11 +31,10 @@ public sealed class AzureContainerAppLiveLogsTests
         var received = new TaskCompletionSource<AzureLiveLogRecord>(TaskCreationOptions.RunContinuationsAsynchronously);
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        var requests = new List<(string? Token, string Query)>();
         var collector = Create(request =>
         {
-            Assert.Equal("aca-token", request.Headers.Authorization!.Parameter);
-            Assert.Contains("follow=true", request.RequestUri!.Query);
-            Assert.Contains("tailLines=100", request.RequestUri.Query);
+            requests.Add((request.Headers.Authorization!.Parameter, request.RequestUri!.Query));
 
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(pipe.Reader.AsStream()) };
         });
@@ -54,6 +53,10 @@ public sealed class AzureContainerAppLiveLogsTests
         }, cancellation.Token);
 
         await connected.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var request = Assert.Single(requests);
+        Assert.Equal("aca-token", request.Token);
+        Assert.Contains("follow=true", request.Query);
+        Assert.Contains("tailLines=100", request.Query);
         // Force split JSON/UTF-8 boundaries and include an invalid line before a valid stderr envelope.
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("bad json\n{\"TimeStamp\":\"2026-10-11T12:00:00Z\","));
         await pipe.Writer.WriteAsync(Encoding.UTF8.GetBytes("\"Log\":\"árvíz\",\"Stream\":\"stderr\"}\n"));

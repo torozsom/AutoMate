@@ -76,6 +76,12 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
         };
     }
 
+    /// <summary>Reports whether a collection exceeds its supported item limit.</summary>
+    private static bool ExceedsItemLimit(IReadOnlyCollection<string> values, int maximum)
+    {
+        return values.Count > maximum;
+    }
+
     /// <summary>
     ///     Rejects oversized/null collections and redacts each element separately before JSON
     ///     serialization.
@@ -90,7 +96,8 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     private string[] Items(IReadOnlyList<string> values, int count, int length)
     {
         if (values is null) throw new InvalidAnalysisResultException();
-        if (values.Count > count) throw new InvalidAnalysisResultException(AnalysisResultRejection.FieldLimits);
+        if (ExceedsItemLimit(values, count))
+            throw new InvalidAnalysisResultException(AnalysisResultRejection.FieldLimits);
         var safe = new string[values.Count];
         for (var index = 0; index < safe.Length; index++) safe[index] = Text(values[index], length);
         return safe;

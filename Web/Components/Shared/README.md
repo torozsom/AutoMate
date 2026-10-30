@@ -2,6 +2,9 @@
 
 Analysis, deployment settings, terminal/dialog, metrics and workspace/project presentation components.
 
+AssessmentContextControls, DeploymentAnalysisPanel and DeploymentAnalysisSection keep their paired files here,
+matching their existing `Web.Components.Shared` public types. The Analysis guide documents their contracts.
+
 ## Contents
 
 | Module                                   | Responsibility                                                            |

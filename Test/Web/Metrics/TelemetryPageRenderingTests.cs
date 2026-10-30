@@ -135,10 +135,12 @@ public sealed class TelemetryPageRenderingTests
         File.Copy(css, Path.Combine(directory, "Web.styles.css"), true);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
             Path.Combine(directory, "bootstrap.css"), true);
+        var detailsBody = details;
         details = await Render<ConsoleRenderingTests.PreviewRoot>(renderer,
-            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, details)) });
+            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, detailsBody)) });
+        var historyBody = history;
         history = await Render<ConsoleRenderingTests.PreviewRoot>(renderer,
-            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, history)) });
+            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, historyBody)) });
         foreach (var page in new[]
                  {
                      (Name: "project", Html: project), (Name: "history", Html: history),

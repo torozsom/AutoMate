@@ -514,8 +514,9 @@ public sealed class TelemetryIntegrationTests(ITestOutputHelper output)
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AutoMateDbContext>();
+        var projectId = diagnostic.ProjectId;
         var tenant = await db.Applications
-            .Where(item => item.Id == diagnostic.ProjectId)
+            .Where(item => item.Id == projectId)
             .Select(item => item.UserId)
             .SingleAsync();
         var now = DateTimeOffset.UtcNow;

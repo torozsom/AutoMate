@@ -70,6 +70,9 @@ public sealed class CloudDeploymentOrchestrator(
     AzureArmCredentialsProvider azureCredentials)
     : ICloudDeploymentOrchestrator
 {
+    /// <summary>Retained policy dependency, evaluated at each operation boundary.</summary>
+    private readonly IDeploymentCapabilities _capabilities = capabilities;
+
     /// <summary>Resolves or creates the C# project associated with cloud deployments.</summary>
     private readonly CloudCsProjectResolver _csProjectResolver = new(dbContext);
 
@@ -94,7 +97,7 @@ public sealed class CloudDeploymentOrchestrator(
     public async Task<Deployment> DeployCloudProjectAsync(CloudDeploymentRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        if (!capabilities.CloudDeploymentsEnabled)
+        if (!_capabilities.CloudDeploymentsEnabled)
             throw new InvalidOperationException("Cloud deployments are disabled for this AutoMate instance.");
 
         CloudDeploymentRequestValidator.Validate(request);

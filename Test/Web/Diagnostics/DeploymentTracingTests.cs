@@ -87,16 +87,13 @@ public sealed class DeploymentTracingTests
         root.ActivityTraceFlags = ActivityTraceFlags.Recorded;
         using var canceled = new CancellationTokenSource();
         var failure = new InvalidOperationException("password=private-provider-body");
+        if (scenario == "canceled") await canceled.CancelAsync();
+        var cancellationToken = canceled.Token;
         var action = DeploymentTracing.RunAsync(DeploymentOperation.AzureLogs, project, deployment, canceled.Token,
             () =>
             {
                 if (scenario == "failure") return Task.FromException<string>(failure);
-                if (scenario == "canceled")
-                {
-                    canceled.Cancel();
-
-                    return Task.FromCanceled<string>(canceled.Token);
-                }
+                if (scenario == "canceled") return Task.FromCanceled<string>(cancellationToken);
 
                 return Task.FromResult("private-result-body");
             }, _ => scenario != "returned-failure");

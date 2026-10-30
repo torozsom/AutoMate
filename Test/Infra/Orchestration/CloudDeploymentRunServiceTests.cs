@@ -76,13 +76,14 @@ public sealed class CloudDeploymentRunServiceTests
 
         await fixture.Service().StartAsync(fixture.Start("first"));
         var second = fixture.Start("second");
-        var action = async () => await fixture.Service().StartAsync(second);
+        var service = fixture.Service();
+        var action = async () => await service.StartAsync(second);
 
         await action.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*queue is full*");
 
         var foreign = fixture.Start("foreign") with { UserId = Guid.NewGuid() };
-        var denied = async () => await fixture.Service().StartAsync(foreign);
+        var denied = async () => await service.StartAsync(foreign);
 
         await denied.Should().ThrowAsync<UnauthorizedAccessException>();
     }

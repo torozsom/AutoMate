@@ -30,6 +30,9 @@ public sealed class ProjectTelemetryAnalyticsService(
     IOptions<TelemetryStorageOptions>? storage = null,
     ILogger<ProjectTelemetryAnalyticsService>? logger = null) : IProjectTelemetryAnalytics
 {
+    /// <summary>Retained policy dependency, evaluated at each operation boundary.</summary>
+    private readonly IOptions<TelemetryStorageOptions>? _storage = storage;
+
     /// <summary>
     ///     Reads owned project outcomes and daily observations for an absolute UTC window.
     /// </summary>
@@ -47,7 +50,7 @@ public sealed class ProjectTelemetryAnalyticsService(
     public async Task<ProjectTelemetryAnalytics> ReadAsync(Guid user, Guid project, DateTimeOffset start,
         DateTimeOffset end, CancellationToken token = default)
     {
-        if (storage?.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
+        if (_storage?.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
 
         var range = new MetricTimeRange(start, end);

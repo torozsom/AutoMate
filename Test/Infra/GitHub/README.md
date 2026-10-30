@@ -2,6 +2,9 @@
 
 Signed ingress, secure completed-log downloads, bounded normalization/checkpoints and marked-commit recovery.
 
+`GitHubContractTests.cs` protects secret/dispatch wire names, workflow timing/commit metadata,
+private-repository projections, federation issuer and numeric GitHub App configuration binding.
+
 ## Contents
 
 | File                                                                           | Test or fixture types                                                                                      | Responsibility                                                                      |

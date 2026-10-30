@@ -2,6 +2,11 @@
 
 Actual SDK audit/trace export, final SignalR masking/deadlines and hub disconnect semantics.
 
+Capturing providers use DI factory registrations so their service container owns disposal; SDK export processors own
+their exporters.
+Tests inspect detached captures within those owners' lifetimes without disposing the same resource twice.
+SignalR cancellation tests wait for send entry before canceling from the awaiting test.
+
 ## Contents
 
 | File                                                                       | Test or fixture types                                                                                                | Responsibility                                                                                       |

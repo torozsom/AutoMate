@@ -19,6 +19,9 @@ public sealed class ArchiveMetricBatchReader(
     IDeploymentArchive archive,
     IOptions<TelemetryStorageOptions> options)
 {
+    /// <summary>Retained policy dependency, evaluated at each operation boundary.</summary>
+    private readonly IOptions<TelemetryStorageOptions> _options = options;
+
     /// <summary>
     ///     Internal day-boundary fragments may be shorter than the public five-minute window.
     /// </summary>
@@ -45,7 +48,7 @@ public sealed class ArchiveMetricBatchReader(
     /// <exception cref="UnauthorizedAccessException">Metric access denied.</exception>
     public async Task<ArchiveMetricBatch> ReadAsync(ArchiveMetricBatchRequest request, CancellationToken token)
     {
-        if (options.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
+        if (_options.Value is { ManagedService: true, ManagedDataProcessingApproved: false })
             throw new InvalidOperationException("Managed telemetry processing is not approved.");
 
         ValidateArchiveWindow(request.Range);
