@@ -81,9 +81,12 @@ public partial class DeploymentAnalysisPanel
     /// <summary>Textual status conveys meaning without depending on color.</summary>
     private string StatusLabel => CurrentResult?.Status switch
     {
-        AiAnalysisStatus.Queued => "Queued", AiAnalysisStatus.Running => "Processing",
-        AiAnalysisStatus.Completed => "Completed", AiAnalysisStatus.Cancelled => "Canceled",
-        AiAnalysisStatus.Skipped => "Skipped", AiAnalysisStatus.Failed => "Analysis failed",
+        AiAnalysisStatus.Queued => "Queued",
+        AiAnalysisStatus.Running => "Processing",
+        AiAnalysisStatus.Completed => "Completed",
+        AiAnalysisStatus.Cancelled => "Canceled",
+        AiAnalysisStatus.Skipped => "Skipped",
+        AiAnalysisStatus.Failed => "Analysis failed",
         _ => "No analysis yet"
     };
 

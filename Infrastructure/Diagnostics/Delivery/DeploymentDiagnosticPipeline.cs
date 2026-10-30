@@ -73,7 +73,8 @@ public sealed class DeploymentDiagnosticPublisher(
         Validate(diagnosticEvent);
 
         using var rootActivity = EnsureTraceContext();
-        using var ingestActivity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest");
+        using var ingestActivity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest",
+            ActivityKind.Internal, parentContext: default);
 
         var safeEvent = PrepareEvent(diagnosticEvent);
         var tags = TelemetryTags.Create(safeEvent);
@@ -112,7 +113,8 @@ public sealed class DeploymentDiagnosticPublisher(
         cancellationToken.ThrowIfCancellationRequested();
         Validate(diagnosticEvent);
         using var rootActivity = EnsureTraceContext();
-        using var ingestActivity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest");
+        using var ingestActivity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest",
+            ActivityKind.Internal, parentContext: default);
         var safe = PrepareEvent(diagnosticEvent) with { EventId = diagnosticEvent.EventId ?? Guid.NewGuid() };
         using var correlation = OperationalLog.BeginCorrelation(logger, safe.DeploymentId, projectId: safe.ProjectId);
         await using var scope = scopes!.CreateAsyncScope();
@@ -256,7 +258,8 @@ public sealed class DeploymentDiagnosticPublisher(
     {
         if (Activity.Current is not null) return null;
 
-        return AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest")
+        return AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.ingest", ActivityKind.Internal,
+                   parentContext: default)
                ?? new Activity("deployment.diagnostic.ingest").Start();
     }
 

@@ -101,14 +101,15 @@ public sealed class LogHubCancellationTests
         var replay = Assert.Single(spans, span => span.Name == "deployment.signalr.replay");
         Assert.Equal(join.TraceId, replay.TraceId);
         Assert.Equal(join.SpanId, replay.ParentSpanId);
-        Assert.All(spans, span =>
+        foreach (var span in spans)
         {
             Assert.Equal(status, span.Status);
             Assert.Equal(outcome, span.Tags["deployment.outcome"]);
             Assert.Equal(deployment, span.Tags["deployment.id"]);
             Assert.Null(span.Description);
             Assert.Equal(0, span.EventCount);
-        });
+        }
+
         Assert.DoesNotContain(token, JsonSerializer.Serialize(spans));
     }
 

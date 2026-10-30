@@ -2,16 +2,20 @@
 
 Responsive shared layout, navigation, authenticated actions and persisted theme.
 
+MainLayout's paired files live in the parent Layout directory, matching its public namespace.
+`MainContent.razor` and its scoped CSS define the single `main-content` landmark template used by
+the mutually exclusive public and authenticated shells; routed child content retains its parent's scope.
+
 ## Contents
 
-| File                                         | Types or asset    | Responsibility                                                                                         |
-|----------------------------------------------|-------------------|--------------------------------------------------------------------------------------------------------|
-| [MainLayout.razor](MainLayout.razor)         | `MainLayout`      | Renders the application shell and hosts navigation, content and connection recovery.                   |
-| [MainLayout.razor.cs](MainLayout.razor.cs)   | `MainLayout`      | Renders the shared application shell and checks local Docker availability after interactive rendering. |
-| [MainLayout.razor.css](MainLayout.razor.css) | Scoped stylesheet | Scoped styling for MainLayout.                                                                         |
-| [NavMenu.razor](NavMenu.razor)               | `NavMenu`         | Presents responsive navigation, authentication actions and persisted theme selection.                  |
-| [NavMenu.razor.cs](NavMenu.razor.cs)         | `NavMenu`         | Renders responsive navigation and persists the selected browser theme.                                 |
-| [NavMenu.razor.css](NavMenu.razor.css)       | Scoped stylesheet | Scoped styling for NavMenu.                                                                            |
+| File                                            | Types or asset    | Responsibility                                                                                         |
+|-------------------------------------------------|-------------------|--------------------------------------------------------------------------------------------------------|
+| [MainLayout.razor](../MainLayout.razor)         | `MainLayout`      | Renders the application shell and hosts navigation, content and connection recovery.                   |
+| [MainLayout.razor.cs](../MainLayout.razor.cs)   | `MainLayout`      | Renders the shared application shell and checks local Docker availability after interactive rendering. |
+| [MainLayout.razor.css](../MainLayout.razor.css) | Scoped stylesheet | Scoped styling for MainLayout.                                                                         |
+| [NavMenu.razor](NavMenu.razor)                  | `NavMenu`         | Presents responsive navigation, authentication actions and persisted theme selection.                  |
+| [NavMenu.razor.cs](NavMenu.razor.cs)            | `NavMenu`         | Renders responsive navigation and persists the selected browser theme.                                 |
+| [NavMenu.razor.css](NavMenu.razor.css)          | Scoped stylesheet | Scoped styling for NavMenu.                                                                            |
 
 ## Usage and integration
 

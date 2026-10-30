@@ -8,7 +8,7 @@ namespace Infrastructure.Diagnostics.Metrics;
 internal static class TelemetryStorageMetrics
 {
     /// <summary>Meter exported by the existing OpenTelemetry configuration.</summary>
-    internal static readonly Meter Meter = new("AutoMate.TelemetryStorage");
+    private static readonly Meter Meter = new("AutoMate.TelemetryStorage");
 
     /// <summary>Accepted redacted bytes.</summary>
     internal static readonly Counter<long> IngestedBytes = Meter.CreateCounter<long>("telemetry.ingested.bytes");

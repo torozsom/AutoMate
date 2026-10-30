@@ -34,12 +34,7 @@ public sealed class AnalysisQueueLeaseTests
     public async Task Independent_workers_claim_one_job_only_once()
     {
         await using var fixture = await Fixture.CreateAsync();
-        var claims = await Task.WhenAll(Enumerable.Range(0, 8)
-            .Select(_ => Task.Run(async () =>
-            {
-                await using var db = fixture.NewDb();
-                return await fixture.Queue(db).ClaimNextAsync();
-            })));
+        var claims = await fixture.ClaimConcurrentlyAsync(8);
 
         var owner = Assert.Single(claims, work => work is not null)!;
         Assert.Equal(fixture.DeploymentId, owner.DeploymentId);
@@ -154,12 +149,7 @@ public sealed class AnalysisQueueLeaseTests
         }
 
         fixture.Clock.Now = fixture.Clock.Now.AddMinutes(1);
-        var claims = await Task.WhenAll(Enumerable.Range(0, 8)
-            .Select(_ => Task.Run(async () =>
-            {
-                await using var db = fixture.NewDb();
-                return await fixture.Queue(db).ClaimNextAsync();
-            })));
+        var claims = await fixture.ClaimConcurrentlyAsync(8);
 
         var claim = Assert.Single(claims, item => item is not null)!;
         Assert.Equal(2, claim.ProviderRetryCount);
@@ -184,15 +174,7 @@ public sealed class AnalysisQueueLeaseTests
             analysis = await db.AiDeploymentAnalyses.Select(item => item.Id).SingleAsync();
         }
 
-        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(async () =>
-        {
-            await using var db = fixture.NewDb();
-            var service = new DeploymentAnalysisService(db, fixture.Options, AnalysisResultTests.Validator(),
-                fixture.Clock,
-                new AnalysisEgressPolicyTests.Authorizer(), NullLogger<DeploymentAnalysisService>.Instance);
-
-            return await service.CancelAsync(owner, deploymentForCallbacks, analysis);
-        })));
+        var results = await fixture.CancelConcurrentlyAsync(owner, deploymentForCallbacks, analysis, 8);
 
         Assert.All(results, result => Assert.Equal(DeploymentAnalysisCancellationResult.Cancelled, result));
 
@@ -229,6 +211,29 @@ public sealed class AnalysisQueueLeaseTests
             File.Delete(path + "-shm");
 
             return ValueTask.CompletedTask;
+        }
+
+        /// <summary>Completes all parallel claims and context disposal within the fixture lifetime.</summary>
+        public Task<DeploymentAnalysisWorkItem?[]> ClaimConcurrentlyAsync(int count)
+        {
+            return Task.WhenAll(Enumerable.Range(0, count).Select(_ => Task.Run(async () =>
+            {
+                await using var db = NewDb();
+                return await Queue(db).ClaimNextAsync();
+            })));
+        }
+
+        /// <summary>Joins competing owner cancellations and their independent metadata contexts.</summary>
+        public Task<DeploymentAnalysisCancellationResult[]> CancelConcurrentlyAsync(
+            Guid owner, Guid deployment, Guid analysis, int count)
+        {
+            return Task.WhenAll(Enumerable.Range(0, count).Select(_ => Task.Run(async () =>
+            {
+                await using var db = NewDb();
+                var service = new DeploymentAnalysisService(db, Options, AnalysisResultTests.Validator(), Clock,
+                    new AnalysisEgressPolicyTests.Authorizer(), NullLogger<DeploymentAnalysisService>.Instance);
+                return await service.CancelAsync(owner, deployment, analysis);
+            })));
         }
 
         /// <summary>

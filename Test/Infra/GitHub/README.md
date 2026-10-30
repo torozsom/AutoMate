@@ -2,6 +2,9 @@
 
 Signed ingress, secure completed-log downloads, bounded normalization/checkpoints and marked-commit recovery.
 
+`GitHubContractTests.cs` protects secret/dispatch wire names, workflow timing/commit metadata,
+private-repository projections, federation issuer and numeric GitHub App configuration binding.
+
 ## Contents
 
 | File                                                                           | Test or fixture types                                                                                      | Responsibility                                                                      |
@@ -42,3 +45,6 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [Integration map](../../../Infrastructure/GitHub/README.md)
 - [Workflow consumer](../../../Infrastructure/ApplicationServices/Orchestration/Lifecycle/README.md)
 - [Projection contracts](../../../Domain/DTO/GitHub/README.md)
+
+GitHubContractTests also verifies job/step wire projections, preferred workflow selection and branch dispatch through
+the Application port using a synthetic HTTP transport; it sends no provider requests.

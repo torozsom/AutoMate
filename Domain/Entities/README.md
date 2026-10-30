@@ -34,3 +34,10 @@ provider behavior outside Domain.
 - [Persistence guide](../../Infrastructure/Data/README.md)
 - [Workflow DTOs](../DTO/README.md)
 - [Shared enums](../Enums/README.md)
+
+## Construction and persistence
+
+Properties assigned only when constructing metadata use `init` where existing consumers permit it. EF still
+materializes records, performs relationship fixup and applies database-side updates through mapped accessors;
+this does not make persisted lifecycle state immutable. Properties changed directly by workflows retain setters.
+The PostgreSQL migration model remains unchanged.

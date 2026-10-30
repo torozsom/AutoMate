@@ -2,6 +2,9 @@
 
 Workspace/project/deployment views, repository imports, authentication feedback and safe errors.
 
+DeploymentHistory's markup, code-behind and scoped CSS live in this directory to preserve its
+`Web.Components.Pages.DeploymentHistory` public type. The Projects guide documents its behavior.
+
 ## Contents
 
 | Module                                     | Responsibility                                             |

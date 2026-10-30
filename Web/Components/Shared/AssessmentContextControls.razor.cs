@@ -58,7 +58,8 @@ public partial class AssessmentContextControls
             AssessmentKind.Startup => "Startup assessment",
             AssessmentKind.FailureDiagnosis => "Failure diagnosis",
             AssessmentKind.RuntimeOverview => "Runtime overview",
-            AssessmentKind.HistoricalReview => "Historical review", _ => "Automatic"
+            AssessmentKind.HistoricalReview => "Historical review",
+            _ => "Automatic"
         };
     }
 
@@ -72,9 +73,11 @@ public partial class AssessmentContextControls
         return source switch
         {
             AssessmentSources.Build => "Container build",
-            AssessmentSources.Web => "Web server", AssessmentSources.Database => "Database server",
+            AssessmentSources.Web => "Web server",
+            AssessmentSources.Database => "Database server",
             AssessmentSources.GitHub => "GitHub Actions",
-            AssessmentSources.Azure => "Azure platform/system", AssessmentSources.Deployment => "Deployment events",
+            AssessmentSources.Azure => "Azure platform/system",
+            AssessmentSources.Deployment => "Deployment events",
             _ => "Other / unknown"
         };
     }
@@ -113,7 +116,8 @@ public partial class AssessmentContextControls
         var range = (AssessmentRange)int.Parse(e.Value!.ToString()!);
         return Emit(Selection with
         {
-            Range = range, Start = range == AssessmentRange.Custom ? DateTimeOffset.UtcNow.AddHours(-1) : null,
+            Range = range,
+            Start = range == AssessmentRange.Custom ? DateTimeOffset.UtcNow.AddHours(-1) : null,
             End = range == AssessmentRange.Custom ? DateTimeOffset.UtcNow : null
         });
     }

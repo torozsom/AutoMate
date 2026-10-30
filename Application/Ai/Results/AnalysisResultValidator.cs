@@ -17,19 +17,19 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     public const int SchemaVersion = 2;
 
     /// <summary>Maximum summary size, compatible with the central redactor's terminal-text limit.</summary>
-    public const int MaximumSummaryCharacters = 4096;
+    private const int MaximumSummaryCharacters = 4096;
 
     /// <summary>Maximum number of remediation suggestions.</summary>
-    public const int MaximumSteps = 10;
+    private const int MaximumSteps = 10;
 
     /// <summary>Maximum size of one suggestion.</summary>
-    public const int MaximumStepCharacters = 2048;
+    private const int MaximumStepCharacters = 2048;
 
     /// <summary>Maximum number of source references.</summary>
-    public const int MaximumEvidenceReferences = 20;
+    private const int MaximumEvidenceReferences = 20;
 
     /// <summary>Maximum size of one evidence reference.</summary>
-    public const int MaximumEvidenceCharacters = 512;
+    private const int MaximumEvidenceCharacters = 512;
 
     /// <summary>
     ///     Validates the complete result contract and redacts every provider-authored text field.
@@ -76,6 +76,12 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
         };
     }
 
+    /// <summary>Reports whether a collection exceeds its supported item limit.</summary>
+    private static bool ExceedsItemLimit(IReadOnlyCollection<string> values, int maximum)
+    {
+        return values.Count > maximum;
+    }
+
     /// <summary>
     ///     Rejects oversized/null collections and redacts each element separately before JSON
     ///     serialization.
@@ -90,7 +96,8 @@ public sealed partial class AnalysisResultValidator(IDiagnosticRedactor redactor
     private string[] Items(IReadOnlyList<string> values, int count, int length)
     {
         if (values is null) throw new InvalidAnalysisResultException();
-        if (values.Count > count) throw new InvalidAnalysisResultException(AnalysisResultRejection.FieldLimits);
+        if (ExceedsItemLimit(values, count))
+            throw new InvalidAnalysisResultException(AnalysisResultRejection.FieldLimits);
         var safe = new string[values.Count];
         for (var index = 0; index < safe.Length; index++) safe[index] = Text(values[index], length);
         return safe;

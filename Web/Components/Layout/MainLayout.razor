@@ -15,7 +15,7 @@
                 <NavMenu/>
             </aside>
 
-            <main class="app-main" id="main-content" tabindex="-1">
+            <MainContent CssClass="app-main">
                 <header class="top-row">
                     <AuthorizeView Context="_">
                         <Authorized>
@@ -70,7 +70,7 @@
                 <article class="content">
                     @Body
                 </article>
-            </main>
+            </MainContent>
         </div>
     </Authorized>
     <NotAuthorized>
@@ -80,7 +80,7 @@
                 <a class="btn btn-outline-secondary" href="/login">Sign in</a><a class="btn btn-primary"
                                                                                  href="/register">Get started</a></nav>
         </header>
-        <main id="main-content" class="public-main" tabindex="-1">@Body</main>
+        <MainContent CssClass="public-main">@Body</MainContent>
     </NotAuthorized>
 </AuthorizeView>
 

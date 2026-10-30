@@ -1,4 +1,3 @@
-using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using System.Data.Common;
 using Application.Ai.Policy;
 using Domain.Entities.Ai;
@@ -17,6 +16,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Infra.Ai.ContextAndResults;
+using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 using Work = Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem;
 
@@ -144,11 +144,7 @@ public sealed class AnalysisBudgetTests
             AnalysisEgressPolicyTests.Approved(fixture.Owner, dailyBudget: 1, attemptCost: 1);
 
         var work = await fixture.WorkAsync(0, 1, 2, 3);
-        var results = await Task.WhenAll(work.Select(item => Task.Run(async () =>
-        {
-            await using var db = fixture.Db();
-            return await new AnalysisBudgetGuard(db, fixture.Settings, fixture.Clock).ReserveAttemptAsync(item);
-        })));
+        var results = await fixture.ReserveConcurrentlyAsync(work);
 
         Assert.Single(results, item => item is null);
         Assert.Equal(3, results.Count(item => item == AnalysisSkipReason.BudgetExceeded));
@@ -333,7 +329,8 @@ public sealed class AnalysisBudgetTests
         await using var fixture = await Fixture.CreateAsync();
         var ownerForCallbacks = fixture.Owner;
         var work = (await fixture.WorkAsync(0))[0];
-        var reload = new ReloadDuringSum(() => fixture.Settings.CurrentValue =
+        var settings = fixture.Settings;
+        var reload = new ReloadDuringSum(() => settings.CurrentValue =
             AnalysisEgressPolicyTests.Approved(ownerForCallbacks));
         await using var db = fixture.Db(reload);
 
@@ -402,6 +399,16 @@ public sealed class AnalysisBudgetTests
             File.Delete(path);
 
             return ValueTask.CompletedTask;
+        }
+
+        /// <summary>Joins concurrent reservations and context cleanup while the fixture owns its database.</summary>
+        public Task<AnalysisSkipReason?[]> ReserveConcurrentlyAsync(IEnumerable<Work> work)
+        {
+            return Task.WhenAll(work.Select(item => Task.Run(async () =>
+            {
+                await using var db = Db();
+                return await new AnalysisBudgetGuard(db, Settings, Clock).ReserveAttemptAsync(item);
+            })));
         }
 
         /// <summary>

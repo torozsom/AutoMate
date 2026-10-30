@@ -13,7 +13,7 @@ internal static partial class GitHubWorkflowLogNormalizer
     public const int MaximumLineLength = 16 * 1024;
 
     /// <summary>Maximum UTF-8 payload published from one job-log download segment.</summary>
-    public const int MaximumChunkBytes = 512 * 1024;
+    private const int MaximumChunkBytes = 512 * 1024;
 
     /// <summary>
     ///     Reads normalized lines from a checkpoint, stopping at the per-segment byte limit.

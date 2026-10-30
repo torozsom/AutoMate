@@ -61,6 +61,9 @@ public sealed class LocalDeploymentOrchestrator(
     ILocalDeploymentDiagnostics localDiagnostics)
     : ILocalDeploymentOrchestrator
 {
+    /// <summary>Retained policy dependency, evaluated at each operation boundary.</summary>
+    private readonly IDeploymentCapabilities _capabilities = capabilities;
+
     /// <summary>Handles deployment status persistence and UI notifications.</summary>
     private readonly DeploymentStatusUpdater _statusUpdater =
         new(dbContext, statusNotifier, logger, nameof(LocalDeploymentOrchestrator));
@@ -265,7 +268,7 @@ public sealed class LocalDeploymentOrchestrator(
     /// </exception>
     private void EnsureLocalDeploymentEnabled()
     {
-        if (!capabilities.LocalDeploymentsEnabled)
+        if (!_capabilities.LocalDeploymentsEnabled)
             throw new InvalidOperationException("Local Docker deployments are disabled for this AutoMate instance.");
     }
 

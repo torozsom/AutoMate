@@ -49,3 +49,6 @@ repository/resource access or replace provider validation.
 - [Routing tests](../../../Test/App/Orchestration/CloudDeploymentAdmissionTests.cs)
 - [Form validation tests](../../../Test/App/Orchestration/CloudRuntimeConfigurationValidationTests.cs)
 - [SaaS operations](../../../docs/saas-cloud-deployments.md)
+
+CloudSaas construction-only limits use init accessors. Configuration binding continues to populate all limits;
+ConfigurationBindingContractTests covers non-default values. The admission/receipt contracts are unchanged.

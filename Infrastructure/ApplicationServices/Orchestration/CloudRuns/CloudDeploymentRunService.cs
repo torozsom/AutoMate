@@ -262,6 +262,14 @@ public sealed partial class CloudDeploymentRunService(
         return new CloudDeploymentReceipt(run.Id, run.Phase, run.CreatedAt, run.FailureReason);
     }
 
+    /// <summary>Compares the project and case-insensitive repository identity of a replay request.</summary>
+    private static bool IsSameRequest(CloudDeploymentRun run, CloudDeploymentStart start)
+    {
+        return run.ProjectId == start.ProjectId &&
+               string.Equals(run.RepositoryOwner, start.RepositoryOwner, StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(run.RepositoryName, start.RepositoryName, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     ///     Prevents one idempotency key from silently representing a different target.
     /// </summary>
@@ -274,9 +282,7 @@ public sealed partial class CloudDeploymentRunService(
     private static CloudDeploymentReceipt ReceiptForSameRequest(CloudDeploymentRun run,
         CloudDeploymentStart start)
     {
-        if (run.ProjectId != start.ProjectId ||
-            !string.Equals(run.RepositoryOwner, start.RepositoryOwner, StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(run.RepositoryName, start.RepositoryName, StringComparison.OrdinalIgnoreCase))
+        if (!IsSameRequest(run, start))
             throw new InvalidOperationException("The idempotency key belongs to a different deployment request.");
         return Receipt(run);
     }

@@ -35,7 +35,7 @@ public sealed class DeploymentAnalysisSectionTests
             new TaskCompletionSource<DeploymentAnalysisView?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         port.Read = pending.Task;
-        using var services = new ServiceCollection().AddSingleton(service).BuildServiceProvider();
+        await using var services = new ServiceCollection().AddSingleton(service).BuildServiceProvider();
         var component = new DeploymentAnalysisSection();
 
         Set(component, "OwnerId", owner);

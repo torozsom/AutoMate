@@ -37,3 +37,6 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [Generation map](../../../Infrastructure/Templating/README.md)
 - [Runtime assets](../../../Infrastructure/Templating/Templates/README.md)
 - [Ownership/export consumers](../../../Infrastructure/Azure/Databases/README.md)
+
+TemplateManifestContractTests verifies JSON output destinations plus disabled/local/cloud artifact selection,
+including whitespace-normalized target values.

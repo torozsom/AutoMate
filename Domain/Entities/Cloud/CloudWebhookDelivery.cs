@@ -6,34 +6,34 @@ namespace Domain.Entities.Cloud;
 public sealed class CloudWebhookDelivery : BaseEntity
 {
     /// <summary>GitHub delivery identifier, stable across redeliveries.</summary>
-    public string DeliveryId { get; set; } = string.Empty;
+    public string DeliveryId { get; init; } = string.Empty;
 
     /// <summary>GitHub App installation identifier.</summary>
-    public long InstallationId { get; set; }
+    public long InstallationId { get; init; }
 
     /// <summary>Numeric repository identifier.</summary>
-    public long RepositoryId { get; set; }
+    public long RepositoryId { get; init; }
 
     /// <summary>Workflow run identifier.</summary>
-    public long WorkflowRunId { get; set; }
+    public long WorkflowRunId { get; init; }
 
     /// <summary>Workflow attempt identifier.</summary>
-    public int WorkflowAttempt { get; set; }
+    public int WorkflowAttempt { get; init; }
 
     /// <summary>Head commit SHA.</summary>
-    public string HeadSha { get; set; } = string.Empty;
+    public string HeadSha { get; init; } = string.Empty;
 
     /// <summary>Branch reported for this workflow run.</summary>
-    public string HeadBranch { get; set; } = string.Empty;
+    public string HeadBranch { get; init; } = string.Empty;
 
     /// <summary>Workflow path used to reject unrelated Actions runs.</summary>
-    public string WorkflowPath { get; set; } = string.Empty;
+    public string WorkflowPath { get; init; } = string.Empty;
 
     /// <summary>Normalized GitHub run status.</summary>
-    public string Status { get; set; } = string.Empty;
+    public string Status { get; init; } = string.Empty;
 
     /// <summary>Normalized GitHub conclusion, when complete.</summary>
-    public string? Conclusion { get; set; }
+    public string? Conclusion { get; init; }
 
     /// <summary>Time the receipt was applied to a run.</summary>
     public DateTimeOffset? ProcessedAt { get; set; }

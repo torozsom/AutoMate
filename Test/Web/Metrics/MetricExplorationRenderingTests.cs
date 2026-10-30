@@ -24,7 +24,7 @@ public sealed class MetricExplorationRenderingTests
     [Fact]
     public async Task Picker_and_statistics_render_all_ranges_and_paginate_without_limiting_charts()
     {
-        using var services = new ServiceCollection().AddLogging()
+        await using var services = new ServiceCollection().AddLogging()
             .AddSingleton(DispatchProxy.Create<IJSRuntime, ConsoleRenderingTests.EmptyPort>())
             .BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());

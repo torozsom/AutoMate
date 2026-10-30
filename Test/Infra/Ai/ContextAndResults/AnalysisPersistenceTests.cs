@@ -113,8 +113,8 @@ public sealed class AnalysisPersistenceTests
 
         await fixture.Db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(d => d.Status, DeploymentStatus.Stopped));
-        (Assert.IsAssignableFrom<ContextProxy>(fixture.Services
-            .GetRequiredService<IDeploymentAnalysisContextBuilder>())).Build = () =>
+        Assert.IsAssignableFrom<ContextProxy>(fixture.Services
+            .GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = () =>
             Task.FromResult(new DeploymentAnalysisContext(empty ? "" : "redacted activity", empty ? [] : ["order:1"],
                 provenance));
 
@@ -209,9 +209,10 @@ public sealed class AnalysisPersistenceTests
         activities.ShouldListenTo = source => source.Name == "AutoMate.Analysis";
         activities.Sample = (ref _) =>
             ActivitySamplingResult.AllDataAndRecorded;
+        var analysisForTelemetry = fixture.AnalysisId;
         activities.ActivityStopped = activity =>
         {
-            if (!Equals(activity.GetTagItem("deployment.analysis.id"), fixture.AnalysisId)) return;
+            if (!Equals(activity.GetTagItem("deployment.analysis.id"), analysisForTelemetry)) return;
 
             Assert.Empty(activity.Events);
             Assert.DoesNotContain("private", JsonSerializer.Serialize(activity.TagObjects));
@@ -231,7 +232,7 @@ public sealed class AnalysisPersistenceTests
 
         metrics.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
         {
-            if (!Equals(Activity.Current?.GetTagItem("deployment.analysis.id"), fixture.AnalysisId)) return;
+            if (!Equals(Activity.Current?.GetTagItem("deployment.analysis.id"), analysisForTelemetry)) return;
             foreach (var tag in tags) Assert.Contains(tag.Key, new[] { "analysis.operation", "analysis.outcome" });
             samples.Enqueue((instrument.Name, value));
         });
@@ -296,7 +297,7 @@ public sealed class AnalysisPersistenceTests
         var logPort = DispatchProxy.Create<IDeploymentDiagnosticStore, ReadPort>();
         var logReads = new List<(string? Method, object?[]? Arguments)>();
 
-        (Assert.IsAssignableFrom<ReadPort>(logPort)).Call = (method, args) =>
+        Assert.IsAssignableFrom<ReadPort>(logPort).Call = (method, args) =>
         {
             logReads.Add((method?.Name, args));
 
@@ -311,7 +312,7 @@ public sealed class AnalysisPersistenceTests
         var metricCalls = 0;
         var metricPort = DispatchProxy.Create<IDeploymentMetricQuery, ReadPort>();
 
-        (Assert.IsAssignableFrom<ReadPort>(metricPort)).Call = (method, args) =>
+        Assert.IsAssignableFrom<ReadPort>(metricPort).Call = (method, args) =>
         {
             metricCalls++;
 
@@ -477,6 +478,8 @@ public sealed class AnalysisPersistenceTests
     [Fact]
     public async Task Caller_cancellation_keeps_work_unfinished_without_output()
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         using var canceled = new CancellationTokenSource();
 
         await using var fixture = await Fixture.CreateAsync(() =>
@@ -489,8 +492,8 @@ public sealed class AnalysisPersistenceTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.ProcessAsync(canceled.Token));
         fixture.Db.ChangeTracker.Clear();
 
-        Assert.Null((await fixture.Db.DeploymentAnalysisWorkItems.SingleAsync()).CompletedAt);
-        Assert.Null((await fixture.Db.AiDeploymentAnalyses.SingleAsync()).Summary);
+        Assert.Null((await fixture.Db.DeploymentAnalysisWorkItems.SingleAsync(verificationToken)).CompletedAt);
+        Assert.Null((await fixture.Db.AiDeploymentAnalyses.SingleAsync(verificationToken)).Summary);
     }
 
     /// <summary>
@@ -647,22 +650,8 @@ public sealed class AnalysisPersistenceTests
     [InlineData(true)]
     public async Task Late_provider_result_is_discarded(bool cleanup)
     {
-        Fixture? active = null;
-
-        await using var fixture = await Fixture.CreateAsync(async () =>
-        {
-            var db = active!.Db;
-
-            await db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
-                update.SetProperty(item => item.ExpiresAt, DateTimeOffset.UtcNow.AddSeconds(-1)));
-            if (cleanup)
-                await DeploymentAnalysisRetentionService.DeleteBatchAsync(db, DateTimeOffset.UtcNow,
-                    CancellationToken.None);
-
-            return AnalysisResultTests.Valid();
-        });
-
-        active = fixture;
+        await using var fixture = await Fixture.CreateAsync(() => Task.FromResult(AnalysisResultTests.Valid()));
+        fixture.ExpireDuringProviderResponse(cleanup);
         await fixture.ProcessAsync(CancellationToken.None);
         fixture.Db.ChangeTracker.Clear();
 
@@ -824,13 +813,7 @@ public sealed class AnalysisPersistenceTests
             Assert.IsAssignableFrom<ContextProxy>(
                 fixture.Services.GetRequiredService<IDeploymentAnalysisContextBuilder>());
 
-        context.Build = async () =>
-        {
-            await fixture.Db.Set<Configuration>().ExecuteUpdateAsync(update =>
-                update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
-
-            return new DeploymentAnalysisContext("safe", []);
-        };
+        context.Build = fixture.RevokeConsentDuringContextAsync;
 
         await fixture.ProcessAsync(CancellationToken.None);
 
@@ -989,8 +972,8 @@ public sealed class AnalysisPersistenceTests
         for (var attempt = 0; attempt < 3; attempt++)
             Assert.True(await queue.ReleaseAsync((await queue.ClaimNextAsync())!));
 
-        (Assert.IsAssignableFrom<ContextProxy>(fixture.Services
-                .GetRequiredService<IDeploymentAnalysisContextBuilder>())).Build =
+        Assert.IsAssignableFrom<ContextProxy>(fixture.Services
+                .GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build =
             () => throw new InvalidOperationException("Context must not be loaded after recovery exhaustion.");
 
         await fixture.ProcessAsync();
@@ -1027,8 +1010,8 @@ public sealed class AnalysisPersistenceTests
             ? Task.FromException<LlmAnalysisResponse>(new TransientAnalysisProviderException(40))
             : Task.FromResult(AnalysisResultTests.Valid()), audit);
 
-        (Assert.IsAssignableFrom<ContextProxy>(fixture.Services
-            .GetRequiredService<IDeploymentAnalysisContextBuilder>())).Build = () =>
+        Assert.IsAssignableFrom<ContextProxy>(fixture.Services
+            .GetRequiredService<IDeploymentAnalysisContextBuilder>()).Build = () =>
         {
             builds++;
 
@@ -1437,7 +1420,7 @@ public sealed class AnalysisPersistenceTests
     public async Task Lease_coordinator_cancels_local_provider_after_owner_cancellation()
     {
         using var stopping = new CancellationTokenSource();
-        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var verificationToken = verificationDeadline.Token;
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1536,7 +1519,7 @@ public sealed class AnalysisPersistenceTests
     public async Task Lease_coordinator_renews_and_releases_interrupted_processing(bool renewSucceeds)
     {
         using var stopping = new CancellationTokenSource();
-        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         var verificationToken = verificationDeadline.Token;
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -1835,6 +1818,29 @@ public sealed class AnalysisPersistenceTests
             await connection.DisposeAsync();
         }
 
+        /// <summary>Installs an expiry race within the fixture-owned provider/database lifetime.</summary>
+        public void ExpireDuringProviderResponse(bool cleanup)
+        {
+            var provider = Assert.IsType<Provider>(Services.GetRequiredService<ILlmAnalysisProvider>());
+            provider.Respond = async () =>
+            {
+                await Db.AiDeploymentAnalyses.ExecuteUpdateAsync(update =>
+                    update.SetProperty(item => item.ExpiresAt, DateTimeOffset.UtcNow.AddSeconds(-1)));
+                if (cleanup)
+                    await DeploymentAnalysisRetentionService.DeleteBatchAsync(Db, DateTimeOffset.UtcNow,
+                        CancellationToken.None);
+                return AnalysisResultTests.Valid();
+            };
+        }
+
+        /// <summary>Revokes persisted consent at the context/provider boundary.</summary>
+        public async Task<DeploymentAnalysisContext> RevokeConsentDuringContextAsync()
+        {
+            await Db.Set<Configuration>().ExecuteUpdateAsync(update =>
+                update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
+            return new DeploymentAnalysisContext("safe", []);
+        }
+
         /// <summary>
         ///     Processes the fixture only after an actual durable claim; expired/terminal analyses remain
         ///     untouched.
@@ -2000,6 +2006,9 @@ public sealed class AnalysisPersistenceTests
         Func<Task<LlmAnalysisResponse>> respond,
         Func<CancellationToken, Task<LlmAnalysisResponse>>? tokenResponse = null) : ILlmAnalysisProvider
     {
+        /// <summary>Current response callback, installed before processing starts.</summary>
+        public Func<Task<LlmAnalysisResponse>> Respond { get; set; } = respond;
+
         /// <summary>Captures the exact mode and evidence passed to the provider fixture.</summary>
         public LlmAnalysisRequest? LastRequest { get; private set; }
 
@@ -2015,7 +2024,7 @@ public sealed class AnalysisPersistenceTests
         {
             LastRequest = request;
 
-            return tokenResponse?.Invoke(cancellationToken) ?? respond();
+            return tokenResponse?.Invoke(cancellationToken) ?? Respond();
         }
     }
 

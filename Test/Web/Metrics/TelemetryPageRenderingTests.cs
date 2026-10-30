@@ -61,17 +61,17 @@ public sealed class TelemetryPageRenderingTests
 
         foreach (var componentType in new[] { typeof(ProjectDetails), typeof(MainLayout), typeof(NavMenu) })
         foreach (var property in componentType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
-                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType.IsInterface &&
-                                 !p.PropertyType.IsGenericType))
-            if (!registrations.Any(r => r.ServiceType == property.PropertyType))
+                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType is
+                         { IsInterface: true, IsGenericType: false }))
+            if (registrations.All(r => r.ServiceType != property.PropertyType))
                 registrations.AddSingleton(property.PropertyType,
                     DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
-        if (!registrations.Any(registration => registration.ServiceType == typeof(IUserService)))
+        if (registrations.All(registration => registration.ServiceType != typeof(IUserService)))
             registrations.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
-        if (!registrations.Any(registration => registration.ServiceType == typeof(IApplicationService)))
+        if (registrations.All(registration => registration.ServiceType != typeof(IApplicationService)))
             registrations.AddSingleton(DispatchProxy.Create<IApplicationService, EmptyPort>());
         registrations.AddScoped<ScopedApplicationOperations>().AddScoped<ConnectedCloudDeploymentAdmission>();
-        using var services = registrations.BuildServiceProvider();
+        await using var services = registrations.BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
         var project = await Render<ProjectTelemetrySummary>(renderer,
             new Dictionary<string, object?> { ["ProjectId"] = Guid.NewGuid(), ["UserId"] = Guid.NewGuid() });
@@ -135,10 +135,12 @@ public sealed class TelemetryPageRenderingTests
         File.Copy(css, Path.Combine(directory, "Web.styles.css"), true);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
             Path.Combine(directory, "bootstrap.css"), true);
+        var detailsBody = details;
         details = await Render<ConsoleRenderingTests.PreviewRoot>(renderer,
-            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, details)) });
+            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, detailsBody)) });
+        var historyBody = history;
         history = await Render<ConsoleRenderingTests.PreviewRoot>(renderer,
-            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, history)) });
+            new Dictionary<string, object?> { ["Body"] = (RenderFragment)(b => b.AddMarkupContent(0, historyBody)) });
         foreach (var page in new[]
                  {
                      (Name: "project", Html: project), (Name: "history", Html: history),

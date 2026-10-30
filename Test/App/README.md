@@ -2,6 +2,9 @@
 
 Portable Application-owned policies and cloud admission use cases, independent of Web renderer fixtures.
 
+`ProjectionContractTests.cs` protects JSON cost/provenance, history continuation, metric paging,
+inventory timestamps and resource units, including null legacy metadata.
+
 ## Contents
 
 | Module                                   | Coverage                                                |
@@ -37,3 +40,6 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [AI policy](../../Application/Ai/README.md)
 - [Workflow contracts](../../Application/Orchestration/README.md)
 - [Persistence/provider tests](../Infra/README.md)
+
+LegacyContractTests protects persisted enum ordinals, repository identity and retained legacy snapshot JSON linkage,
+trace and expiry metadata. Retaining a legacy model does not authorize new diagnostic snapshot persistence.

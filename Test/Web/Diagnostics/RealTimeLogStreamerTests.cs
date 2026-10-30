@@ -192,23 +192,27 @@ public sealed class RealTimeLogStreamerTests
     public async Task Send_spans_distinguish_caller_cancellation_from_deadline(bool cancel, string outcome,
         ActivityStatusCode status)
     {
+        using var verificationDeadline = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var verificationToken = verificationDeadline.Token;
         using var exporter = new TraceSnapshotExporter();
         using var provider = Sdk.CreateTracerProviderBuilder().AddSource(AutoMateTelemetry.Deployments.Name)
             .AddProcessor(new SimpleActivityExportProcessor(exporter)).Build();
         var project = Guid.NewGuid();
         using var canceled = new CancellationTokenSource();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var streamer = Create(project, async (_, _, token) =>
         {
-            if (cancel) await canceled.CancelAsync();
+            entered.SetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
         });
+        var send = streamer.StreamTerminalNoticeAsync(project, "private-message", canceled.Token);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), verificationToken);
+        if (cancel) await canceled.CancelAsync();
 
         if (cancel)
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                streamer.StreamTerminalNoticeAsync(project, "private-message", canceled.Token));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send);
         else
-            await Assert.ThrowsAsync<TimeoutException>(() =>
-                streamer.StreamTerminalNoticeAsync(project, "private-message", canceled.Token));
+            await Assert.ThrowsAsync<TimeoutException>(() => send);
 
         var span = Assert.Single(exporter.Spans,
             span => Equals(span.Tags.GetValueOrDefault("deployment.project.id"), project));
@@ -232,10 +236,11 @@ public sealed class RealTimeLogStreamerTests
 
         var clients = Stub<IHubClients>((method, args) =>
         {
-            Assert.Equal("Group", method!.Name);
-            Assert.Equal($"project-{project}", args![0]);
-
-            return proxy;
+            return (method?.Name, args?[0]) switch
+            {
+                ("Group", string group) when group == $"project-{project}" => proxy,
+                _ => throw new InvalidOperationException("Unexpected SignalR group selection.")
+            };
         });
 
         var context = Stub<IHubContext<LogHub>>((_, _) => clients);

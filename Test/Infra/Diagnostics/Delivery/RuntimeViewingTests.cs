@@ -35,7 +35,7 @@ public sealed class RuntimeViewingTests
     public void Viewer_leases_are_deployment_scoped_and_expire()
     {
         var clock = new TestClock();
-        var viewers = new DeploymentRuntimeViewers(clock);
+        IDeploymentRuntimeViewers viewers = new DeploymentRuntimeViewers(clock);
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
 
@@ -110,7 +110,7 @@ public sealed class RuntimeViewingTests
         db.Applications.Add(app);
         await db.SaveChangesAsync();
         var viewers = new DeploymentRuntimeViewers(TimeProvider.System);
-        using var services = new ServiceCollection().AddSingleton(db).BuildServiceProvider();
+        await using var services = new ServiceCollection().AddSingleton(db).BuildServiceProvider();
         using var policies = new TelemetryProjectPolicyCache(services.GetRequiredService<IServiceScopeFactory>());
         var gateway = new RecordingGateway();
         var settings = Options.Create(new TelemetryStorageOptions

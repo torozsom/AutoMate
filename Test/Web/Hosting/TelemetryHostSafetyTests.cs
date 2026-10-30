@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Application.Abstractions.Diagnostics.Delivery;
 using Infrastructure.Observability;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -71,7 +72,12 @@ public sealed class TelemetryHostSafetyTests
         Assert.Equal(HttpStatusCode.OK, capabilityResponse.StatusCode);
 
         var capabilityJson = await capabilityResponse.Content.ReadAsStringAsync();
+        var capabilities = JsonSerializer.Deserialize<TelemetryCapabilities>(capabilityJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
+        Assert.NotNull(capabilities);
+        Assert.Equal(TelemetryCapabilities.CurrentVersion, capabilities.Version);
+        Assert.Equal(TelemetryCapabilities.RequiredArchiveOperations, capabilities.ArchiveOperations);
         Assert.Contains("assessment-metrics", capabilityJson);
         Assert.Contains("metric-batch", capabilityJson);
         Assert.DoesNotContain(token, capabilityJson);

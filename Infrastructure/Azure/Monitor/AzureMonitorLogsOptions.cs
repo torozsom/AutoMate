@@ -21,20 +21,20 @@ public sealed class AzureMonitorLogsOptions
     public string Scope { get; set; } = "https://api.loganalytics.io/.default";
 
     /// <summary>Maximum number of records returned for one source poll.</summary>
-    public int BatchSize { get; set; } = 500;
+    public int BatchSize { get; init; } = 500;
 
     /// <summary>Bounded ARM/query page count permitted during one collection poll.</summary>
-    public int MaximumPagesPerPoll { get; set; } = 32;
+    public int MaximumPagesPerPoll { get; init; } = 32;
 
     /// <summary>Overlap used to account for delayed log ingestion.</summary>
-    public TimeSpan OverlapWindow { get; set; } = TimeSpan.FromMinutes(2);
+    public TimeSpan OverlapWindow { get; init; } = TimeSpan.FromMinutes(2);
 
     /// <summary>Initial lookback when a checkpoint does not yet exist.</summary>
-    public TimeSpan InitialLookback { get; set; } = TimeSpan.FromMinutes(10);
+    public TimeSpan InitialLookback { get; init; } = TimeSpan.FromMinutes(10);
 
     /// <summary>Quiet managed databases can emit startup events long before the web deployment becomes ready.</summary>
-    public TimeSpan DatabaseInitialLookback { get; set; } = TimeSpan.FromHours(24);
+    public TimeSpan DatabaseInitialLookback { get; init; } = TimeSpan.FromHours(24);
 
     /// <summary>Age after which a delivered record is reported as delayed ingestion.</summary>
-    public TimeSpan FreshnessWarningAge { get; set; } = TimeSpan.FromMinutes(5);
+    public TimeSpan FreshnessWarningAge { get; init; } = TimeSpan.FromMinutes(5);
 }

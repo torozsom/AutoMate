@@ -26,21 +26,21 @@ public sealed class DeploymentAnalysisActionTests
     public async Task Consent_updates_exact_project_in_fresh_scope()
     {
         using var fixture = new Fixture();
-        var ownerForCallbacks = fixture.Owner;
-
+        var observed = new List<(string? Method, object?[] Args)>();
         fixture.Apps.Call = (method, args) =>
         {
-            Assert.Equal("SetAiDiagnosticEgressConsentAsync", method?.Name);
-            Assert.Equal(5, args!.Length);
-            Assert.Equal(fixture.App.Id, args[0]);
-            Assert.Equal(ownerForCallbacks, args[1]);
-            Assert.Equal(fixture.Selected.Id, args[2]);
-            Assert.Equal(true, args[3]);
-            Assert.True(((CancellationToken)args[4]!).CanBeCanceled);
-
+            observed.Add((method?.Name, args ?? []));
             return Task.FromResult(true);
         };
         await fixture.Invoke("ConsentAsync", true);
+        var call = Assert.Single(observed);
+        Assert.Equal("SetAiDiagnosticEgressConsentAsync", call.Method);
+        Assert.Equal(5, call.Args.Length);
+        Assert.Equal(fixture.App.Id, call.Args[0]);
+        Assert.Equal(fixture.Owner, call.Args[1]);
+        Assert.Equal(fixture.Selected.Id, call.Args[2]);
+        Assert.Equal(true, call.Args[3]);
+        Assert.True(((CancellationToken)call.Args[4]!).CanBeCanceled);
 
         Assert.Equal(true, fixture.Get("_consented"));
         Assert.False(fixture.Other.Configuration!.AiDiagnosticEgressConsented);
@@ -127,21 +127,23 @@ public sealed class DeploymentAnalysisActionTests
         var active = fixture.View(AiAnalysisStatus.Queued);
 
         fixture.Set("_latest", active);
-        var calls = 0;
+        var calls = new List<(string? Method, object? Analysis)>();
 
         fixture.Analyses.Call = (method, args) =>
         {
-            Assert.Equal("CancelAsync", method?.Name);
-            Assert.Equal(active.Id, args![2]);
-
-            calls++;
-
+            calls.Add((method?.Name, args![2]));
             return Task.FromException<DeploymentAnalysisCancellationResult>(new Exception("private-secret"));
         };
         await fixture.Invoke("CancelAsync");
         await fixture.Invoke("CancelAsync");
 
-        Assert.Equal(2, calls);
+        Assert.Equal(2, calls.Count);
+        foreach (var call in calls)
+        {
+            Assert.Equal("CancelAsync", call.Method);
+            Assert.Equal(active.Id, call.Analysis);
+        }
+
         Assert.Same(active, fixture.Get("_latest"));
         Assert.Contains("could not be updated", fixture.Message);
         Assert.DoesNotContain("private", fixture.Message);

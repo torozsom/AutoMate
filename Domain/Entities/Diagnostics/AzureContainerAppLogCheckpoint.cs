@@ -8,16 +8,16 @@ namespace Domain.Entities.Diagnostics;
 public sealed class AzureContainerAppLogCheckpoint : BaseEntity
 {
     /// <summary>Deployment whose runtime logs are being tailed.</summary>
-    public Guid DeploymentId { get; set; }
+    public Guid DeploymentId { get; init; }
 
     /// <summary>Owning deployment.</summary>
-    public Deployment Deployment { get; set; } = null!;
+    public Deployment Deployment { get; init; } = null!;
 
     /// <summary>
     ///     Logical source name: <c>console</c>, <c>system</c>, or a bounded <c>db-</c> resource
     ///     hash.
     /// </summary>
-    public string Source { get; set; } = string.Empty;
+    public string Source { get; init; } = string.Empty;
 
     /// <summary>Timestamp of the last delivered record.</summary>
     public DateTimeOffset? LastTimestamp { get; set; }

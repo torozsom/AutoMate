@@ -44,3 +44,7 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [Scope boundary](../../../Web/Services/ScopedApplicationOperations.cs)
 - [Shared policy](../../../Infrastructure/Observability/README.md)
 - [Private host](../../../Telemetry/Program.cs)
+
+ConfigurationBindingContractTests covers non-default CloudSaas, scheduling, Azure Logs, telemetry/spool, Docker,
+email and GitHub App settings, including the binder's array-append behavior. EndpointDiscoveryTests protects the
+complete ordered endpoint registry, idempotent registration and independent transient instances.

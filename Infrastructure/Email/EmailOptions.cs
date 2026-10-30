@@ -9,17 +9,17 @@ public class EmailOptions
     public const string SectionName = "Email";
 
     /// <summary>Email address used as the SMTP sender and authentication username.</summary>
-    public string SenderEmail { get; set; } = string.Empty;
+    public string SenderEmail { get; init; } = string.Empty;
 
     /// <summary>SMTP app password or provider-specific credential used for authentication.</summary>
-    public string AppPassword { get; set; } = string.Empty;
+    public string AppPassword { get; init; } = string.Empty;
 
     /// <summary>Display name shown as the sender in outgoing email.</summary>
-    public string SenderName { get; set; } = "AutoMate";
+    public string SenderName { get; init; } = "AutoMate";
 
     /// <summary>SMTP host used by the configured mail provider.</summary>
-    public string SmtpHost { get; set; } = "smtp.gmail.com";
+    public string SmtpHost { get; init; } = "smtp.gmail.com";
 
     /// <summary>SMTP port used for StartTLS delivery.</summary>
-    public int SmtpPort { get; set; } = 587;
+    public int SmtpPort { get; init; } = 587;
 }

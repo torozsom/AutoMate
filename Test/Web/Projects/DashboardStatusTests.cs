@@ -11,8 +11,8 @@ using Domain.Entities.Deployments;
 using Domain.Entities.Projects;
 using Domain.Enums.Deployments;
 using Domain.Enums.Projects;
-using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test.Web.Diagnostics;
@@ -35,7 +35,7 @@ public sealed class DashboardStatusTests
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
         LocalDeploymentJob? submitted = null;
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (method, args) =>
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue).Call = (method, args) =>
         {
             Assert.Equal(nameof(IDeploymentJobQueue.EnqueueAsync), method!.Name);
 
@@ -100,7 +100,7 @@ public sealed class DashboardStatusTests
         };
         var query = DispatchProxy.Create<IApplicationService, OperationalLoggingTests.PortProxy>();
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(query)).Call = (method, args) =>
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(query).Call = (method, args) =>
         {
             Assert.Equal(nameof(IApplicationService.GetAppByIdAsync), method!.Name);
             Assert.Equal(id, args![0]);
@@ -110,11 +110,11 @@ public sealed class DashboardStatusTests
         };
         var capabilities = DispatchProxy.Create<IDeploymentCapabilities, OperationalLoggingTests.PortProxy>();
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(capabilities)).Call = (_, _) => localEnabled;
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(capabilities).Call = (_, _) => localEnabled;
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
         StopLocalDeploymentJob? submitted = null;
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (method, args) =>
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue).Call = (method, args) =>
         {
             if (method!.Name == nameof(IDeploymentJobQueue.GetProjectState))
                 return new DeploymentQueueState(0, 0, 0, 0);
@@ -127,7 +127,7 @@ public sealed class DashboardStatusTests
 
             return null;
         };
-        using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
+        await using var services = new ServiceCollection().AddSingleton(query).BuildServiceProvider();
         var component = new FixtureDashboard();
 
         typeof(Dashboard).GetField("_currentUserId", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(
@@ -192,7 +192,7 @@ public sealed class DashboardStatusTests
         states[app.Id] = true;
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (_, _) => null;
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue).Call = (_, _) => null;
         context.Services.AddSingleton(queue);
         context.ComponentFactories.Add(component);
         var rendered = context.Render<FixtureDashboard>();
@@ -253,7 +253,7 @@ public sealed class DashboardStatusTests
         var query = DispatchProxy.Create<IWorkspaceQuery, OperationalLoggingTests.PortProxy>();
         var reads = 0;
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(query)).Call = (method, args) =>
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(query).Call = (method, args) =>
         {
             Assert.Equal(nameof(IWorkspaceQuery.ProjectsAsync), method!.Name);
             Assert.Equal(owner, args![0]);
@@ -270,7 +270,7 @@ public sealed class DashboardStatusTests
         Set("_currentUserId", owner);
         var queue = DispatchProxy.Create<IDeploymentJobQueue, OperationalLoggingTests.PortProxy>();
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue)).Call = (_, _) => null;
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(queue).Call = (_, _) => null;
         context.Services.AddSingleton(queue);
         context.ComponentFactories.Add(component);
         context.Render<FixtureDashboard>();

@@ -384,7 +384,7 @@ public sealed class SaaSTelemetryTests
         try
         {
             var logs = new EmptyLogs { Fail = true };
-            using var services = new ServiceCollection().AddScoped<AutoMateDbContext>(_ => fixture.NewDb())
+            await using var services = new ServiceCollection().AddScoped(fixture.CreateDb)
                 .AddSingleton<IDeploymentLogQuery>(logs).AddSingleton<IDeploymentMetricQuery>(new EmptyMetrics())
                 .BuildServiceProvider();
             using var archive = new DiskDeploymentArchive(Options.Create(new DiskSpoolOptions { Directory = path }),
@@ -477,6 +477,11 @@ public sealed class SaaSTelemetryTests
             new DiagnosticRedactor(), NullLogger<DeploymentTelemetryStore>.Instance,
             new DeploymentRuntimeViewers(TimeProvider.System), gateway, policies);
         var e = fixture.Event();
+        var policy =
+            Assert.IsType<TelemetryProjectPolicy>(await policies.GetAsync(fixture.Project, CancellationToken.None));
+        Assert.Equal(fixture.User, policy.UserId);
+        Assert.True(policy.RuntimeDiagnosticsEnabled);
+        Assert.True(policy.ManagedTelemetryConsent);
 
         Assert.True(await store.PersistAsync(e, "web") > 0);
         Assert.Equal("password=[REDACTED]", gateway.Events.Single().Message);
@@ -546,7 +551,7 @@ public sealed class SaaSTelemetryTests
         var daily = new DailyQuery();
 
         await fixture.Services.DisposeAsync();
-        fixture.Services = new ServiceCollection().AddScoped<AutoMateDbContext>(_ => fixture.NewDb())
+        fixture.Services = new ServiceCollection().AddScoped(fixture.CreateDb)
             .AddSingleton<IDailyDeploymentMetricQuery>(daily).AddSingleton<IDeploymentErrorCountQuery>(daily)
             .BuildServiceProvider();
         var worker = new TelemetryDailyAggregationWorker(fixture.Services.GetRequiredService<IServiceScopeFactory>(),
@@ -614,11 +619,14 @@ public sealed class SaaSTelemetryTests
             await _connection.DisposeAsync();
         }
 
-        /// <summary>
-        ///     Creates an independent metadata context over the fixture database.
-        /// </summary>
-        /// <returns>An independent metadata context owned by the caller.</returns>
-        public AutoMateDbContext NewDb()
+        /// <summary>Creates a DI-owned context against the fixture's database.</summary>
+        public AutoMateDbContext CreateDb(IServiceProvider _)
+        {
+            return NewDb();
+        }
+
+        /// <summary>Creates an independently owned context against the fixture's database.</summary>
+        private AutoMateDbContext NewDb()
         {
             return new OrderedSqliteContext(
                 new DbContextOptionsBuilder<AutoMateDbContext>().UseSqlite(_connection).Options, _protector);

@@ -1,7 +1,7 @@
 using Application.Abstractions.Diagnostics.Metrics;
 using Bunit;
-using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Web.Components.Shared.Metrics;

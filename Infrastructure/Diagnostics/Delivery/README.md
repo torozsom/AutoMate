@@ -44,3 +44,6 @@ silently ignored.
 - [Isolation tests](../../../Test/Infra/Diagnostics/Delivery/DiagnosticDeliveryTests.cs)
 - [Compatibility tests](../../../Test/Infra/Diagnostics/Delivery/TelemetryGatewayCompatibilityTests.cs)
 - [Delivery tests](../../../Test/Infra/Diagnostics/Delivery/TelemetryIntegrationTests.cs)
+
+Capability probes deserialize into a nullable private wire model before validating the non-null host contract.
+Missing/null archive operations remain incompatible-host failures, without leaking malformed provider content.

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -95,7 +96,8 @@ internal sealed class GitHubWorkflowMonitor(
     public async Task<GitHubWorkflowRunDto?> PollWorkflowRunAsync(CloudDeploymentRequestDto request,
         Deployment deployment, string commitSha, CancellationToken cancellationToken)
     {
-        using var activity = AutoMateTelemetry.Deployments.StartActivity("github.workflow.poll");
+        using var activity = AutoMateTelemetry.Deployments.StartActivity("github.workflow.poll", ActivityKind.Internal,
+            parentContext: default);
 
         activity?.SetTag("deployment.project.id", request.Config.ProjectId);
         activity?.SetTag("deployment.id", deployment.Id);

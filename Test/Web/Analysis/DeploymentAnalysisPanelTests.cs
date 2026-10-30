@@ -79,7 +79,7 @@ public sealed class DeploymentAnalysisPanelTests
         await File.WriteAllTextAsync(Path.Combine(preview, status + ".html"),
             "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><link rel='stylesheet' href='/bootstrap.css'><link rel='stylesheet' href='/app.css'><link rel='stylesheet' href='/analysis.css'></head><body><main style='max-width:1000px;margin:auto;padding:16px'><p>UI verification: synthetic analysis data</p>" +
             html + "</main></body></html>");
-        File.Copy(Path.Combine(root, "Web", "Components", "Shared", "Analysis", "DeploymentAnalysisPanel.razor.css"),
+        File.Copy(Path.Combine(root, "Web", "Components", "Shared", "DeploymentAnalysisPanel.razor.css"),
             Path.Combine(preview, "analysis.css"), true);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "app.css"), Path.Combine(preview, "app.css"), true);
         File.Copy(Path.Combine(root, "Web", "wwwroot", "lib", "bootstrap", "dist", "css", "bootstrap.min.css"),
@@ -219,7 +219,7 @@ public sealed class DeploymentAnalysisPanelTests
         bool consent = true,
         bool failed = true, Guid? deploymentId = null)
     {
-        using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
+        await using var services = new ServiceCollection().AddLogging().BuildServiceProvider();
         await using var renderer = new HtmlRenderer(services, services.GetRequiredService<ILoggerFactory>());
 
         return await renderer.Dispatcher.InvokeAsync(async () =>

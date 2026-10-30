@@ -10,13 +10,13 @@ namespace Domain.DTO.Deployment;
 public class DeploymentConfigDto
 {
     /// <summary>Identity of the application being deployed.</summary>
-    public Guid ProjectId { get; set; }
+    public Guid ProjectId { get; init; }
 
     /// <summary>Identity of the selected C# project within the application.</summary>
     public Guid CsProjectId { get; set; }
 
     /// <summary>Display and artifact name used for the deployment.</summary>
-    public string ProjectName { get; set; } = string.Empty;
+    public string ProjectName { get; init; } = string.Empty;
 
     /// <summary>Runtime environment name used by generated deployment assets.</summary>
     public string EnvironmentName { get; set; } = DeploymentDefaults.DevelopmentEnvironmentName;

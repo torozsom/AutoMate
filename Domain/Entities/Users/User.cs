@@ -14,5 +14,5 @@ public abstract class User : BaseEntity
     public required string Email { get; set; }
 
     /// <summary>The collection of applications owned by the user.</summary>
-    public ICollection<Application> Applications { get; set; } = [];
+    public ICollection<Application> Applications { get; init; } = [];
 }

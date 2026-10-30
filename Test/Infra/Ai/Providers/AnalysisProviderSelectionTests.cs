@@ -39,7 +39,7 @@ public sealed class AnalysisProviderSelectionTests
         var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: name, egressEnabled: enabled,
             endpoint: endpoint);
         var resolutions = 0;
-        using var services = new ServiceCollection().AddTransient<Stub>(_ =>
+        await using var services = new ServiceCollection().AddTransient<Stub>(_ =>
         {
             resolutions++;
 
@@ -65,7 +65,7 @@ public sealed class AnalysisProviderSelectionTests
         var owner = Guid.NewGuid();
         var monitor =
             new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(owner, provider: "synthetic"));
-        using var services = new ServiceCollection().AddTransient<Stub>(_ => new Stub("synthetic"))
+        await using var services = new ServiceCollection().AddTransient<Stub>(_ => new Stub("synthetic"))
             .BuildServiceProvider();
         var catalog = new AnalysisProviderCatalog([Registration("openai"), Registration("synthetic")]);
         var router = new ConfiguredAnalysisProvider(services, catalog, monitor);
@@ -87,7 +87,7 @@ public sealed class AnalysisProviderSelectionTests
         var owner = Guid.NewGuid();
         var monitor = new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(owner));
         var stub = new Stub("openai");
-        using var services = new ServiceCollection().AddTransient<Stub>(_ =>
+        await using var services = new ServiceCollection().AddTransient<Stub>(_ =>
         {
             monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(owner, egressEnabled: false);
 
@@ -110,7 +110,7 @@ public sealed class AnalysisProviderSelectionTests
     public async Task Mismatched_provider_provenance_is_rejected()
     {
         var monitor = new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(Guid.NewGuid()));
-        using var services = new ServiceCollection().AddTransient<Stub>(_ => new Stub("different"))
+        await using var services = new ServiceCollection().AddTransient<Stub>(_ => new Stub("different"))
             .BuildServiceProvider();
         var router =
             new ConfiguredAnalysisProvider(services, new AnalysisProviderCatalog([Registration("openai")]), monitor);

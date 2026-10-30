@@ -8,16 +8,16 @@ namespace Domain.Entities.Diagnostics;
 public sealed class GitHubWorkflowCheckpoint : BaseEntity
 {
     /// <summary>Deployment that owns this workflow run.</summary>
-    public Guid DeploymentId { get; set; }
+    public Guid DeploymentId { get; init; }
 
     /// <summary>Related deployment entity.</summary>
-    public Deployment Deployment { get; set; } = null!;
+    public Deployment Deployment { get; init; } = null!;
 
     /// <summary>GitHub workflow run identifier.</summary>
-    public long WorkflowRunId { get; set; }
+    public long WorkflowRunId { get; init; }
 
     /// <summary>Attempt number for a rerun of the workflow.</summary>
-    public int WorkflowAttempt { get; set; }
+    public int WorkflowAttempt { get; init; }
 
     /// <summary>Digest of the last published workflow state.</summary>
     public string? LastWorkflowStateFingerprint { get; set; }
@@ -26,5 +26,5 @@ public sealed class GitHubWorkflowCheckpoint : BaseEntity
     public DateTimeOffset? FinalReconciledAt { get; set; }
 
     /// <summary>Per-job output cursors for this workflow attempt.</summary>
-    public ICollection<GitHubWorkflowJobCheckpoint> JobCheckpoints { get; set; } = [];
+    public ICollection<GitHubWorkflowJobCheckpoint> JobCheckpoints { get; init; } = [];
 }

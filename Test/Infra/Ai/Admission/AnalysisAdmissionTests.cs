@@ -39,6 +39,22 @@ namespace Test.Infra.Ai.Admission;
 /// </summary>
 public sealed class AnalysisAdmissionTests
 {
+    /// <summary>Automatic admission returns the durable receipt and trigger that callers can read back.</summary>
+    [Fact]
+    public async Task Automatic_admission_returns_the_persisted_outcome()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+        await using var db = fixture.NewDb();
+        await db.Deployments.ExecuteUpdateAsync(update =>
+            update.SetProperty(item => item.Status, DeploymentStatus.Failed));
+        var result = await fixture.Service(db).RequestAutomaticAsync(fixture.Deployments[0]);
+        Assert.True(result.Accepted);
+        Assert.NotNull(result.Analysis);
+        Assert.Equal(AiAnalysisTrigger.DeploymentFailed, result.Analysis.Trigger);
+        Assert.Equal(result.Analysis.Id, (await db.AiDeploymentAnalyses.SingleAsync()).Id);
+    }
+
     /// <summary>An owner missing from the approved cohort receives an actionable skip without work or quota charges.</summary>
     [Fact]
     public async Task Unapproved_current_account_has_an_explicit_safe_skip_reason()
@@ -188,11 +204,11 @@ public sealed class AnalysisAdmissionTests
         var responses = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
             Enumerable.Range(0, 6).Select(_ => (firstDeploymentForCallbacks, (Guid?)request)));
 
-        Assert.All(responses, item =>
+        foreach (var item in responses)
         {
             Assert.False(item.Accepted);
             Assert.Equal(AiAnalysisStatus.Skipped, item.Analysis!.Status);
-        });
+        }
 
         Assert.Single(responses.Select(item => item.Analysis!.Id).Distinct());
 
@@ -316,13 +332,7 @@ public sealed class AnalysisAdmissionTests
             Assert.Equal(1, await db.FailedDeploymentAnalysisEvents.CountAsync(item => item.CompletedAt == null));
         }
 
-        await Task.WhenAll(Enumerable.Range(0, 6).Select(_ => Task.Run(async () =>
-        {
-            await using var db = fixture.NewDb();
-
-            await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, fixture.Service(db), fixture.Clock,
-                firstDeploymentForCallbacks);
-        })));
+        await fixture.DispatchConcurrentlyAsync(firstDeploymentForCallbacks, 6);
 
         await using var check = fixture.NewDb();
 
@@ -1032,6 +1042,16 @@ public sealed class AnalysisAdmissionTests
             File.Delete(path + "-shm");
 
             return ValueTask.CompletedTask;
+        }
+
+        /// <summary>Joins every dispatcher and its independent context before fixture disposal.</summary>
+        public Task DispatchConcurrentlyAsync(Guid deployment, int count)
+        {
+            return Task.WhenAll(Enumerable.Range(0, count).Select(_ => Task.Run(async () =>
+            {
+                await using var db = NewDb();
+                await FailedDeploymentAnalysisDispatcher.DispatchAsync(db, Service(db), Clock, deployment);
+            })));
         }
 
         /// <summary>

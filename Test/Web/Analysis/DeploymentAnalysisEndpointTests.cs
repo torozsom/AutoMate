@@ -126,7 +126,7 @@ public sealed class DeploymentAnalysisEndpointTests
         var users = DispatchProxy.Create<IUserService, PortProxy>();
         var userLookups = new List<object?[]?>();
 
-        (Assert.IsAssignableFrom<PortProxy>(users)).Call = (_, args) =>
+        Assert.IsAssignableFrom<PortProxy>(users).Call = (_, args) =>
         {
             userLookups.Add(args);
 
@@ -134,7 +134,7 @@ public sealed class DeploymentAnalysisEndpointTests
         };
         var analyses = DispatchProxy.Create<IDeploymentAnalysisService, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(analyses)).Call = (method, args) =>
+        Assert.IsAssignableFrom<PortProxy>(analyses).Call = (method, args) =>
         {
             Assert.Equal(methodName, method!.Name);
             Assert.Equal(owner, args![0]);

@@ -72,6 +72,7 @@ public sealed class MetricResourceSafetyTests
             return Results.Bytes([], "application/x-protobuf");
         });
         await app.StartAsync();
+        var collectorEndpoint = new Uri(app.Urls.Single());
         var builder = Sdk.CreateMeterProviderBuilder()
             .AddMeter("System.Net.Http", "AutoMate.Deployments", "AutoMate.Analysis")
             .SetExemplarFilter(ExemplarFilterType.AlwaysOn);
@@ -79,7 +80,7 @@ public sealed class MetricResourceSafetyTests
         SafeMetricPolicy.Configure(builder);
         using var provider = builder.AddOtlpExporter((exporter, reader) =>
         {
-            exporter.Endpoint = new Uri(app.Urls.Single());
+            exporter.Endpoint = collectorEndpoint;
             exporter.Protocol = OtlpExportProtocol.HttpProtobuf;
             reader.PeriodicExportingMetricReaderOptions.ExportIntervalMilliseconds = 60000;
         }).Build();

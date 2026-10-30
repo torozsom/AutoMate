@@ -141,7 +141,7 @@ public sealed class WorkspaceQueryTests
         Assert.Equal(.9, cpu.Maximum);
         Assert.True(cpu.Incomplete);
         Assert.Contains("incomplete", result.ResourceNotice);
-        Assert.Contains(result.Attention, item => item.State == "Queued" && item.DeploymentId == null);
+        Assert.Contains(result.Attention, item => item is { State: "Queued", DeploymentId: null });
         Assert.Contains(result.Attention, item => item.State == "Starting");
         var unknown = Assert.Single(result.Recent, r => r.Project == "No duration");
         Assert.Null(unknown.DurationSeconds);

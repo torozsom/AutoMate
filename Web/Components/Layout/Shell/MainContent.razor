@@ -1,0 +1,16 @@
+@*
+    Defines the shared skip-link destination used by either authentication branch of the shell.
+*@
+<main id="main-content" class="@CssClass" tabindex="-1">@ChildContent</main>
+
+@code {
+
+    /// <summary>Existing public or authenticated shell styling.</summary>
+    [Parameter]
+    public string CssClass { get; set; } = string.Empty;
+
+    /// <summary>Shell header and routed content, retaining the parent's rendering context.</summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+}

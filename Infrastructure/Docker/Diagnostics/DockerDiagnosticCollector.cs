@@ -101,7 +101,19 @@ internal sealed class DockerDiagnosticCollector(
                 var subscriptionToken = subscription.Token;
                 var pending = Channel.CreateBounded<DeploymentDiagnosticEvent>(new BoundedChannelOptions(256)
                     { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
-                var omitted = 0;
+                var progress = new DaemonProgress(message =>
+                {
+                    try
+                    {
+                        return DockerDiagnosticNormalizer.Daemon(target, message) is not { } e ||
+                               pending.Writer.TryWrite(redactor.Redact(e).Event);
+                    }
+                    catch (Exception exception)
+                    {
+                        Failed(DeploymentDiagnosticSource.DockerDaemon, exception);
+                        return true;
+                    }
+                });
                 var receiver = ReceiveAsync(lastSecond);
                 if (!ready)
                 {
@@ -113,15 +125,19 @@ internal sealed class DockerDiagnosticCollector(
                 {
                     await foreach (var e in pending.Reader.ReadAllAsync(token))
                     {
-                        if (Interlocked.Exchange(ref omitted, 0) > 0)
+                        if (progress.TakeOmitted() > 0)
                             await NoticeAsync(target, null, DeploymentDiagnosticSource.DockerDaemon,
                                 "Docker lifecycle admission exceeded its bounded window; some events may be missing.",
                                 token);
-                        await EmitAsync(e);
+                        if (await EmitAsync(e))
+                        {
+                            if (attempt > 0) Recovered(DeploymentDiagnosticSource.DockerDaemon);
+                            attempt = 0;
+                        }
                     }
 
                     await receiver;
-                    if (Interlocked.Exchange(ref omitted, 0) > 0)
+                    if (progress.TakeOmitted() > 0)
                         await NoticeAsync(target, null, DeploymentDiagnosticSource.DockerDaemon,
                             "Docker lifecycle admission exceeded its bounded window; some events may be missing.",
                             token);
@@ -164,19 +180,7 @@ internal sealed class DockerDiagnosticCollector(
                                     [$"io.automate.project={target.ProjectId:N}"] = true
                                 }
                             }
-                        }, new DaemonProgress(message =>
-                        {
-                            try
-                            {
-                                if (DockerDiagnosticNormalizer.Daemon(target, message) is { } e &&
-                                    !pending.Writer.TryWrite(redactor.Redact(e).Event))
-                                    Interlocked.Increment(ref omitted);
-                            }
-                            catch (Exception exception)
-                            {
-                                Failed(DeploymentDiagnosticSource.DockerDaemon, exception);
-                            }
-                        }), subscriptionToken);
+                        }, progress, subscriptionToken);
                         pending.Writer.TryComplete();
                     }
                     catch (Exception exception)
@@ -217,14 +221,14 @@ internal sealed class DockerDiagnosticCollector(
             //     Confirms owned lifecycle ingestion before advancing the overlap checkpoint.
             // </summary>
             // <param name="e">Normalized diagnostic to redact before persistence or presentation.</param>
-            // <returns>A task representing completion of the asynchronous operation.</returns>
+            // <returns>True for a newly confirmed event; false for a duplicate.</returns>
             // <exception cref="IOException">Diagnostic admission was not confirmed.</exception>
-            async Task EmitAsync(DeploymentDiagnosticEvent e)
+            async Task<bool> EmitAsync(DeploymentDiagnosticEvent e)
             {
                 if (delivered.Contains(e.EventId!.Value))
                 {
                     Duplicate(e.Source);
-                    return;
+                    return false;
                 }
 
                 if (!await ConfirmAsync(e, token)) throw new IOException("Diagnostic admission was not confirmed.");
@@ -240,11 +244,10 @@ internal sealed class DockerDiagnosticCollector(
                     }
                 }
 
-                if (attempt > 0) Recovered(DeploymentDiagnosticSource.DockerDaemon);
-                attempt = 0;
                 delivered.Add(e.EventId.Value);
                 order.Enqueue(e.EventId.Value);
                 lastSecond = Math.Max(lastSecond, e.TimestampUtc.ToUnixTimeSeconds() - 1);
+                return true;
             }
         }
     }
@@ -600,16 +603,25 @@ internal sealed class DockerDiagnosticCollector(
     /// <summary>
     ///     Runs Docker event callbacks synchronously so parsing and admission remain ordered.
     /// </summary>
-    /// <param name="report">Callback handling normalized Docker build progress.</param>
-    private sealed class DaemonProgress(Action<Message> report) : IProgress<Message>
+    /// <param name="report">Synchronous admission callback; false records bounded queue overflow.</param>
+    private sealed class DaemonProgress(Func<Message, bool> report) : IProgress<Message>
     {
+        /// <summary>Overflow since the reader last acknowledged a gap.</summary>
+        private int _omitted;
+
         /// <summary>
         ///     Normalizes and publishes the bounded Docker daemon progress observation.
         /// </summary>
         /// <param name="value">The value to normalize, redact or validate.</param>
         public void Report(Message value)
         {
-            report(value);
+            if (!report(value)) Interlocked.Increment(ref _omitted);
+        }
+
+        /// <summary>Atomically acknowledges and returns subscription overflow.</summary>
+        public int TakeOmitted()
+        {
+            return Interlocked.Exchange(ref _omitted, 0);
         }
     }
 }

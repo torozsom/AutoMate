@@ -26,11 +26,11 @@ public sealed class DeploymentFailurePrivacyTests
         var component = new Dashboard();
         var scanner = DispatchProxy.Create<IProjectScannerService, OperationalLoggingTests.PortProxy>();
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(scanner)).Call = (_, _) =>
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(scanner).Call = (_, _) =>
             Task.FromException<DeploymentConfigDto>(new IOException("private-path-password"));
         var capabilities = DispatchProxy.Create<IDeploymentCapabilities, OperationalLoggingTests.PortProxy>();
 
-        (Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(capabilities)).Call = (_, _) => true;
+        Assert.IsAssignableFrom<OperationalLoggingTests.PortProxy>(capabilities).Call = (_, _) => true;
         var type = typeof(Dashboard);
 
         type.GetProperty("ProjectScanner", BindingFlags.NonPublic | BindingFlags.Instance)!

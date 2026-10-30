@@ -22,13 +22,6 @@
     min-height: 100vh;
 }
 
-.app-main {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-width: 0;
-}
-
 .sidebar {
     background: #0c0e16;
     border-right: 1px solid rgba(255, 255, 255, 0.08);

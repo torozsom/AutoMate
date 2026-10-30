@@ -44,3 +44,6 @@ reads remain bounded, not new AI snapshots. Backend query ports require already-
 - [Spool durability tests](../../../Test/Infra/Diagnostics/Archive/DiskTelemetrySpoolTests.cs)
 - [Storage tests](../../../Test/Infra/Diagnostics/PolicyAndMetrics/TelemetryStorageTests.cs)
 - [Replay tests](../../../Test/Infra/Diagnostics/Archive/DeploymentDiagnosticReplayTests.cs)
+
+Spool startup reads clock, loss and series metadata asynchronously with the startup token. Recovery ordering and
+durable segment/receipt semantics remain unchanged. Construction-only spool options retain configuration binding.

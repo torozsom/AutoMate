@@ -51,7 +51,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public async Task Email_attempt_does_not_log_message_content()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;
@@ -65,7 +65,7 @@ public sealed class OperationalLoggingTests
             SmtpPort = 1
         }), factory.CreateLogger<GmailSenderService>());
         using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
+        await cancellation.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sender.SendEmailAsync(
             "private-recipient@example.test", "private-subject", "private-body", cancellation.Token));
@@ -83,7 +83,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public void Audit_export_captures_scopes_trace_and_finite_event_properties()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeScopes = true;
@@ -130,10 +130,10 @@ public sealed class OperationalLoggingTests
     [InlineData("success", 200, null)]
     public async Task Authorization_audit_preserves_framework_results(string result, int status, string? outcome)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var authentication = DispatchProxy.Create<IAuthenticationService, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(authentication)).Call = (method, args) =>
+        Assert.IsAssignableFrom<PortProxy>(authentication).Call = (method, args) =>
         {
             ((HttpContext)args![0]!).Response.StatusCode = method!.Name == "ChallengeAsync" ? 401 : 403;
 
@@ -142,10 +142,15 @@ public sealed class OperationalLoggingTests
         await using var services = new ServiceCollection().AddSingleton(authentication)
             .AddLogging(logging => logging.AddOpenTelemetry(options =>
                 options.AddProcessor(new SimpleLogRecordExportProcessor(exporter)))).BuildServiceProvider();
-        var context = new DefaultHttpContext { RequestServices = services };
-
-        context.Request.QueryString = new QueryString("?token=private-query");
-        context.Request.Headers.Authorization = "Bearer private-credential";
+        var context = new DefaultHttpContext
+        {
+            RequestServices = services,
+            Request =
+            {
+                QueryString = new QueryString("?token=private-query"),
+                Headers = { Authorization = "Bearer private-credential" }
+            }
+        };
         var handler =
             new SecurityAuditResultHandler(services.GetRequiredService<ILogger<SecurityAuditResultHandler>>());
         var nextCalled = false;
@@ -188,14 +193,14 @@ public sealed class OperationalLoggingTests
     [Fact]
     public async Task Diagnostic_failure_export_omits_raw_exception_and_payload()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(store)).Call = (_, _) =>
+        Assert.IsAssignableFrom<PortProxy>(store).Call = (_, _) =>
             Task.FromException<long>(new InvalidOperationException("password=private-storage-body"));
         var live = DispatchProxy.Create<ILogStreamer, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(live)).Call = (_, _) => Task.CompletedTask;
+        Assert.IsAssignableFrom<PortProxy>(live).Call = (_, _) => Task.CompletedTask;
         await using var services = new ServiceCollection().AddSingleton(store).AddSingleton(live)
             .AddSingleton(Options.Create(new TelemetryStorageOptions
                 { Backend = "LokiMimir", DeliveryMode = "DiskGateway" }))
@@ -248,14 +253,14 @@ public sealed class OperationalLoggingTests
     [InlineData("PostgresOutbox")]
     public async Task Diagnostic_success_export_omits_payload_in_every_delivery_mode(string deliveryMode)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var persisted =
             new TaskCompletionSource<DeploymentDiagnosticEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
         var delivered =
             new TaskCompletionSource<DeploymentTerminalLog>(TaskCreationOptions.RunContinuationsAsynchronously);
         var store = DispatchProxy.Create<IDeploymentDiagnosticStore, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(store)).Call = (_, args) =>
+        Assert.IsAssignableFrom<PortProxy>(store).Call = (_, args) =>
         {
             persisted.TrySetResult((DeploymentDiagnosticEvent)args![0]!);
 
@@ -263,7 +268,7 @@ public sealed class OperationalLoggingTests
         };
         var live = DispatchProxy.Create<ILogStreamer, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(live)).Call = (_, args) =>
+        Assert.IsAssignableFrom<PortProxy>(live).Call = (_, args) =>
         {
             delivered.TrySetResult((DeploymentTerminalLog)args![0]!);
 
@@ -329,11 +334,11 @@ public sealed class OperationalLoggingTests
     [InlineData(false)]
     public async Task Local_login_audit_preserves_response_without_credential_properties(bool accepted)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         var auth = DispatchProxy.Create<IAuthService, PortProxy>();
         var loginCalls = new List<(string? Method, object?[]? Arguments)>();
 
-        (Assert.IsAssignableFrom<PortProxy>(auth)).Call = (method, args) =>
+        Assert.IsAssignableFrom<PortProxy>(auth).Call = (method, args) =>
         {
             loginCalls.Add((method?.Name, args));
 
@@ -400,7 +405,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public void Status_subscriber_failure_retains_delivery_without_exception_payload()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;
@@ -438,7 +443,7 @@ public sealed class OperationalLoggingTests
     [InlineData(true, true)]
     public async Task Repository_cache_failure_exports_safe_properties(bool write, bool canceled)
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;
@@ -449,7 +454,7 @@ public sealed class OperationalLoggingTests
             : new IOException("private-cache-password", new Exception("private-inner-token"));
         var cache = DispatchProxy.Create<IDistributedCache, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(cache)).Call = (method, _) =>
+        Assert.IsAssignableFrom<PortProxy>(cache).Call = (method, _) =>
         {
             if (method!.Name == (write ? "SetAsync" : "GetAsync")) throw failure;
 
@@ -493,7 +498,7 @@ public sealed class OperationalLoggingTests
     [Fact]
     public async Task Repository_network_failure_does_not_export_exception_payload()
     {
-        using var exporter = new SnapshotExporter();
+        var exporter = new SnapshotExporter();
         using var factory = LoggerFactory.Create(logging => logging.AddOpenTelemetry(options =>
         {
             options.IncludeFormattedMessage = true;
@@ -501,7 +506,7 @@ public sealed class OperationalLoggingTests
         }));
         var cache = DispatchProxy.Create<IDistributedCache, PortProxy>();
 
-        (Assert.IsAssignableFrom<PortProxy>(cache)).Call = (_, _) => Task.FromResult<byte[]?>(null);
+        Assert.IsAssignableFrom<PortProxy>(cache).Call = (_, _) => Task.FromResult<byte[]?>(null);
         using var handler = new RepositoryHandler
         {
             Failure = new HttpRequestException("private-url-token", new Exception("private-inner-token"))

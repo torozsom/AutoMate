@@ -1,4 +1,3 @@
-using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using Application.Ai.Policy;
 using Domain.Entities.Ai;
 using Domain.Entities.Deployments;
@@ -17,6 +16,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Test.Infra.Ai.ContextAndResults;
 using Test.Infra.Ai.Processing;
+using DeploymentAnalysisRequestResult = Application.Abstractions.Ai.Execution.DeploymentAnalysisRequestResult;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 using Work = Application.Abstractions.Ai.Execution.DeploymentAnalysisWorkItem;
 

@@ -156,13 +156,14 @@ public sealed class TelemetryGatewayCompatibility(
 
             if (count > 8192) return TelemetryCompatibilityFailure.IncompatibleHost;
 
-            var capabilities = JsonSerializer.Deserialize<TelemetryCapabilities>(
+            var capabilities = JsonSerializer.Deserialize<ProbeCapabilities>(
                 bytes.AsSpan(0, count),
                 SReadOptions);
 
-            return capabilities is { Version: >= TelemetryCapabilities.CurrentVersion, ArchiveOperations: not null } &&
+            return capabilities is
+                       { Version: >= TelemetryCapabilities.CurrentVersion, ArchiveOperations: { } operations } &&
                    TelemetryCapabilities.RequiredArchiveOperations.All(operation =>
-                       capabilities.ArchiveOperations.Contains(operation, StringComparer.Ordinal))
+                       operations.Contains(operation, StringComparer.Ordinal))
                 ? null
                 : TelemetryCompatibilityFailure.IncompatibleHost;
         }
@@ -183,4 +184,7 @@ public sealed class TelemetryGatewayCompatibility(
             return TelemetryCompatibilityFailure.IncompatibleHost;
         }
     }
+
+    /// <summary>Untrusted wire metadata; remote JSON can omit or null operations despite the non-null host contract.</summary>
+    private sealed record ProbeCapabilities(int Version, IReadOnlyList<string>? ArchiveOperations);
 }

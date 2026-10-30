@@ -8,19 +8,19 @@ namespace Domain.Entities.Projects;
 public class CsProject : BaseEntity
 {
     /// <summary>The unique identifier of the project associated with this C# project.</summary>
-    public Guid AppId { get; set; }
+    public Guid AppId { get; init; }
 
     /// <summary>The reference to the project associated with this C# project.</summary>
     public Application Application { get; set; } = null!;
 
     /// <summary>The name of the C# application.</summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>The path to the C# project.</summary>
-    public string Path { get; set; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
 
     /// <summary>Whether the C# application is a web project.</summary>
-    public bool IsWebProject { get; set; }
+    public bool IsWebProject { get; init; }
 
     /// <summary>The reference to the project configuration associated with this C# project.</summary>
     public Configuration? Configuration { get; set; }

@@ -33,10 +33,10 @@ public sealed class PlatformTelemetrySafetyTests
     [Fact]
     public async Task Real_http_client_logging_preserves_framework_summaries_without_request_urls()
     {
-        using var capture = new CaptureProvider();
+        var capture = new CaptureProvider();
         var services = new ServiceCollection();
 
-        services.AddLogging(logging => logging.AddProvider(capture));
+        services.AddLogging(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         services.AddSafePlatformLogging();
         services.AddHttpClient("Default").ConfigurePrimaryHttpMessageHandler(() => new SafeHttpFixture());
         await using var provider = services.BuildServiceProvider();
@@ -61,8 +61,8 @@ public sealed class PlatformTelemetrySafetyTests
     [Fact]
     public void Framework_requests_and_authentication_keep_detailed_safe_operation_metadata()
     {
-        using var capture = new CaptureProvider();
-        using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
+        var capture = new CaptureProvider();
+        using var inner = LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
         var client = factory.CreateLogger("System.Net.Http.HttpClient.IGitHubService.ClientHandler");
 
@@ -91,8 +91,8 @@ public sealed class PlatformTelemetrySafetyTests
     [Fact]
     public void Lifecycle_and_compose_summaries_remain_searchable_without_unmasking_sensitive_values()
     {
-        using var capture = new CaptureProvider();
-        using var inner = LoggerFactory.Create(logging => logging.AddProvider(capture));
+        var capture = new CaptureProvider();
+        using var inner = LoggerFactory.Create(logging => logging.Services.AddSingleton<ILoggerProvider>(_ => capture));
         using var factory = new SafeLoggerFactory(inner, new PlatformTelemetryPolicy(new DiagnosticRedactor()));
         var logger = factory.CreateLogger("Microsoft.Hosting.Lifetime");
 
@@ -124,12 +124,12 @@ public sealed class PlatformTelemetrySafetyTests
     public void Log_providers_never_receive_payloads_exception_objects_or_unapproved_scope_values()
     {
         var policy = new PlatformTelemetryPolicy(new DiagnosticRedactor());
-        using var exporter = new SnapshotExporter();
-        using var capture = new CaptureProvider();
+        var exporter = new SnapshotExporter();
+        var capture = new CaptureProvider();
         using var inner = LoggerFactory.Create(logging =>
         {
             logging.SetMinimumLevel(LogLevel.Trace);
-            logging.AddProvider(capture);
+            logging.Services.AddSingleton<ILoggerProvider>(_ => capture);
             logging.AddOpenTelemetry(options =>
             {
                 options.IncludeScopes = true;
@@ -247,11 +247,12 @@ public sealed class PlatformTelemetrySafetyTests
             return Results.Bytes([], "application/x-protobuf");
         });
         await app.StartAsync();
+        var collectorEndpoint = new Uri(app.Urls.Single());
         using var provider = Sdk.CreateTracerProviderBuilder().AddSource("privacy.wire")
             .AddProcessor(new SafeTraceProcessor(new PlatformTelemetryPolicy(new DiagnosticRedactor())))
             .AddOtlpExporter(options =>
             {
-                options.Endpoint = new Uri(app.Urls.Single());
+                options.Endpoint = collectorEndpoint;
                 options.Protocol = OtlpExportProtocol.HttpProtobuf;
                 options.ExportProcessorType = ExportProcessorType.Simple;
             }).Build();
@@ -259,7 +260,7 @@ public sealed class PlatformTelemetrySafetyTests
         var project = Guid.NewGuid();
         ActivityTraceId traceId;
 
-        using (var activity = source.StartActivity("private-span-name", ActivityKind.Server))
+        using (var activity = source.StartActivity("private-span-name", ActivityKind.Server, parentContext: default))
         {
             Assert.NotNull(activity);
 

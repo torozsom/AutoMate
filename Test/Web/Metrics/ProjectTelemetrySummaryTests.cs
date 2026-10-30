@@ -20,7 +20,7 @@ public sealed class ProjectTelemetrySummaryTests
     public async Task Overlapping_analytics_loads_use_and_dispose_independent_scopes()
     {
         var recorder = new ScopeRecorder();
-        using var services = new ServiceCollection().AddSingleton(recorder)
+        await using var services = new ServiceCollection().AddSingleton(recorder)
             .AddScoped<IProjectTelemetryAnalytics, ScopedAnalytics>().BuildServiceProvider();
         var component = new ProjectTelemetrySummary();
         var owner = Guid.NewGuid();
@@ -37,11 +37,12 @@ public sealed class ProjectTelemetrySummaryTests
 
         Assert.Equal(2, recorder.Calls.Count);
         Assert.Equal(2, recorder.Calls.Select(call => call.Scope).Distinct().Count());
-        Assert.All(recorder.Calls, call =>
+        foreach (var call in recorder.Calls)
         {
             Assert.Equal(owner, call.Owner);
             Assert.Equal(project, call.Project);
-        });
+        }
+
         Assert.Equal(2, recorder.Disposed.Count);
 
         component.Dispose();

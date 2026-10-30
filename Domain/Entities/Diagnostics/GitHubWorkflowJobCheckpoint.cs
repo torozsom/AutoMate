@@ -8,16 +8,16 @@ namespace Domain.Entities.Diagnostics;
 public sealed class GitHubWorkflowJobCheckpoint : BaseEntity
 {
     /// <summary>Owning workflow checkpoint identifier.</summary>
-    public Guid GitHubWorkflowCheckpointId { get; set; }
+    public Guid GitHubWorkflowCheckpointId { get; init; }
 
     /// <summary>Related workflow checkpoint entity.</summary>
-    public GitHubWorkflowCheckpoint WorkflowCheckpoint { get; set; } = null!;
+    public GitHubWorkflowCheckpoint WorkflowCheckpoint { get; init; } = null!;
 
     /// <summary>GitHub job identifier.</summary>
-    public long JobId { get; set; }
+    public long JobId { get; init; }
 
     /// <summary>Job name used to match final archive entries.</summary>
-    public string JobName { get; set; } = string.Empty;
+    public string JobName { get; init; } = string.Empty;
 
     /// <summary>Digest of the last published job and step state snapshot.</summary>
     public string? LastStateFingerprint { get; set; }
