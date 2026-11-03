@@ -36,3 +36,6 @@ ownership belongs to host supervision, not a page-scoped service or detached Tas
 - [Sources](../Diagnostics/README.md)
 - [Host composition](../../../Test/Web/Hosting/HostingProfileRegistrationTests.cs)
 - [Source tests](../../../Test/Infra/Diagnostics/Docker/DockerCollectorTests.cs)
+
+DockerService passes DeploymentDiagnosticOptions live cadence to each CLI collector; callers omitting the optional
+options parameter retain the 1,000 ms default. Existing runtime/history/ownership contracts remain unchanged.

@@ -59,6 +59,7 @@ using Infrastructure.GitHub.Api;
 using Infrastructure.GitHub.Authentication;
 using Infrastructure.GitHub.Webhooks;
 using Infrastructure.Observability;
+using Infrastructure.Observability.OpenTelemetry;
 using Infrastructure.Scanner.Filesystem;
 using Infrastructure.Scanner.Projects;
 using Infrastructure.Templating.Rendering;
@@ -70,12 +71,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using OpenTelemetry.Logs;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Trace;
 using Web.Configs.Observability;
 using Web.Extensions;
-using Web.Observability;
 using Web.Services;
 
 namespace Web.Configs.Hosting;
@@ -158,7 +155,8 @@ public static class ServiceConfiguration
                 .Bind(builder.Configuration.GetSection(DeploymentDiagnosticOptions.SectionName))
                 .Validate(options => options.BufferCapacity is >= 16 and <= 16_384 &&
                                      options.PersistenceTimeoutSeconds is >= 1 and <= 60 &&
-                                     options.DeliveryTimeoutSeconds is >= 1 and <= 30,
+                                     options.DeliveryTimeoutSeconds is >= 1 and <= 30 &&
+                                     options.LiveMetricIntervalMilliseconds is >= 100 and <= 5_000,
                     "DeploymentDiagnostics buffer capacity or sink deadlines are outside their supported ranges.")
                 .ValidateOnStart();
 
@@ -187,12 +185,6 @@ public static class ServiceConfiguration
 
             builder.Services.AddOptions<GitHubAppOptions>()
                 .Bind(builder.Configuration.GetSection(GitHubAppOptions.SectionName));
-
-            builder.Services.AddSingleton<IValidateOptions<OpenTelemetryOptions>, OpenTelemetryOptionsValidator>();
-
-            builder.Services.AddOptions<OpenTelemetryOptions>()
-                .Bind(builder.Configuration.GetSection(OpenTelemetryOptions.SectionName))
-                .ValidateOnStart();
 
             builder.Services.AddOptions<AiAnalysisOptions>()
                 .Bind(builder.Configuration.GetSection(AiAnalysisOptions.SectionName))
@@ -271,78 +263,7 @@ public static class ServiceConfiguration
         /// </summary>
         private void AddObservability()
         {
-            var options = builder.Configuration.GetSection(OpenTelemetryOptions.SectionName)
-                .Get<OpenTelemetryOptions>() ?? new OpenTelemetryOptions();
-
-            var exportConsole = options.ExportConsole;
-            var hasOtlpEndpoint =
-                OpenTelemetryOptionsValidator.TryGetCollectorEndpoint(options.OtlpEndpoint, out var otlpEndpoint);
-            // Rider supplies the standard endpoint at launch; let the SDK read its transport and credentials.
-            var exportOtlp = hasOtlpEndpoint ||
-                             !string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]);
-
-            var serviceVersion = typeof(ServiceConfiguration).Assembly.GetName().Version?.ToString() ?? "unknown";
-
-            builder.Services.AddSafePlatformLogging();
-
-            builder.Logging.AddOpenTelemetry(logging =>
-            {
-                logging.IncludeFormattedMessage = true;
-                logging.IncludeScopes = true;
-                logging.AddProcessor(services =>
-                    new SafeLogProcessor(services.GetRequiredService<PlatformTelemetryPolicy>()));
-
-                if (exportConsole) logging.AddConsoleExporter();
-                if (exportOtlp)
-                    logging.AddOtlpExporter(exporter =>
-                    {
-                        if (hasOtlpEndpoint) exporter.Endpoint = otlpEndpoint!;
-                    });
-            });
-
-            builder.Services.AddOpenTelemetry()
-                .ConfigureResource(resource => resource.Clear().AddDetector(services => new SafeResourceDetector(
-                    services.GetRequiredService<IDiagnosticRedactor>(), options.ServiceName,
-                    options.Environment ?? builder.Environment.EnvironmentName, serviceVersion,
-                    string.Equals(builder.Configuration["HostingProfile:Mode"]?.Trim(), "SaaS",
-                        StringComparison.OrdinalIgnoreCase)
-                        ? "SaaS"
-                        : "SelfHosted")))
-                .WithTracing(tracing =>
-                {
-                    tracing.AddProcessor(services =>
-                        new SafeTraceProcessor(services.GetRequiredService<PlatformTelemetryPolicy>()));
-                    tracing.AddAspNetCoreInstrumentation();
-                    tracing.AddHttpClientInstrumentation();
-                    tracing.AddEntityFrameworkCoreInstrumentation();
-                    tracing.AddSource(AutoMateTelemetry.Deployments.Name);
-                    tracing.AddSource(AutoMateTelemetry.Security.Name);
-                    tracing.AddSource(AnalysisTelemetry.Source.Name);
-                    tracing.AddSource("Microsoft.AspNetCore.SignalR.Server");
-                    if (exportConsole) tracing.AddConsoleExporter();
-                    if (exportOtlp)
-                        tracing.AddOtlpExporter(exporter =>
-                        {
-                            if (hasOtlpEndpoint) exporter.Endpoint = otlpEndpoint!;
-                        });
-                })
-                .WithMetrics(metrics =>
-                {
-                    SafeMetricPolicy.Configure(metrics);
-                    metrics.AddAspNetCoreInstrumentation();
-                    metrics.AddHttpClientInstrumentation();
-                    metrics.AddRuntimeInstrumentation();
-                    metrics.AddMeter(AutoMateTelemetry.DeploymentMeter.Name);
-                    metrics.AddMeter(AutoMateTelemetry.SecurityMeter.Name);
-                    metrics.AddMeter(AnalysisTelemetry.Meter.Name);
-                    metrics.AddMeter("AutoMate.TelemetryStorage");
-                    if (exportConsole) metrics.AddConsoleExporter();
-                    if (exportOtlp)
-                        metrics.AddOtlpExporter(exporter =>
-                        {
-                            if (hasOtlpEndpoint) exporter.Endpoint = otlpEndpoint!;
-                        });
-                });
+            builder.AddSafeOpenTelemetry("AutoMate", true);
         }
 
 
@@ -368,17 +289,21 @@ public static class ServiceConfiguration
 
             // External API Clients with Resilience
             services.AddHttpClient("AzureRuntime", client => client.Timeout = TimeSpan.FromSeconds(15))
+                .ObserveOperations(ReviewedHttpClient.AzureRuntime)
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
             // ResponseHeadersRead bounds connection establishment without timing out a quiet ACA response body.
             services.AddHttpClient("AzureLiveLogs", client => client.Timeout = TimeSpan.FromSeconds(15))
+                .ObserveOperations(ReviewedHttpClient.AzureLiveLogs)
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
             services.AddHttpClient<IGitHubService, GitHubService>()
+                .ObserveOperations(ReviewedHttpClient.GitHub)
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false })
                 .AddStandardResilienceHandler();
 
             services.AddHttpClient<IGitHubAppCredentials, GitHubAppCredentials>()
+                .ObserveOperations(ReviewedHttpClient.GitHub)
                 .AddStandardResilienceHandler();
 
             services.AddSingleton(new AnalysisProviderRegistration("openai", typeof(OpenAiAnalysisProvider),
@@ -394,9 +319,11 @@ public static class ServiceConfiguration
             services.AddScoped<ILlmAnalysisProvider, ConfiguredAnalysisProvider>();
 
             services.AddHttpClient<OpenAiAnalysisProvider>()
+                .ObserveOperations(ReviewedHttpClient.Analysis)
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
             services.AddHttpClient<AzureOpenAiAnalysisProvider>()
+                .ObserveOperations(ReviewedHttpClient.Analysis)
                 .RemoveAllLoggers()
                 .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
@@ -414,6 +341,7 @@ public static class ServiceConfiguration
                 .ValidateOnStart();
 
             services.AddHttpClient("DeploymentTelemetry", client => client.Timeout = TimeSpan.FromSeconds(15))
+                .ObserveOperations(ReviewedHttpClient.DeploymentTelemetry)
                 .ConfigurePrimaryHttpMessageHandler(sp =>
                 {
                     var handler = new SocketsHttpHandler { AllowAutoRedirect = false };

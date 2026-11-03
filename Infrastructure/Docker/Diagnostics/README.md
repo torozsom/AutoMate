@@ -44,3 +44,11 @@ rather than detached task failures.
 - [Collector tests](../../../Test/Infra/Diagnostics/Docker/DockerCollectorTests.cs)
 - [Decoder/replay tests](../../../Test/Infra/Diagnostics/Docker/DockerOutputTests.cs)
 - [Metrics tests](../../../Test/Infra/Diagnostics/Docker/DockerMetricDeliveryTests.cs)
+
+## Bounded live metric delivery
+
+DockerMetricDelivery is IAsyncDisposable and owned by one Docker CLI collector. It keeps a single replaceable pending
+redacted observation. The first pair is immediate; subsequent latest-value pairs wait the configured interval after
+the previous pair. Both typed and legacy callbacks are attempted independently. Original provider timestamps survive
+coalescing, durable history sampling remains separate, and viewer leases do not gate collection or delivery.
+Retirement cancels and awaits its worker, dropping pending UI state. Do not share an instance across containers.

@@ -23,6 +23,17 @@ public static class PlatformLoggingConfiguration
     {
         if (services.Any(service => service.ServiceType == typeof(RegistrationMarker))) return services;
         services.AddLogging();
+        services.TryAddSingleton<OperationalWarningLimiter>();
+        services.Configure<LoggerFilterOptions>(filters =>
+        {
+            foreach (var category in new[]
+                     {
+                         "System.Net.Http.HttpClient", "Microsoft.AspNetCore.Hosting.Diagnostics",
+                         "Microsoft.AspNetCore.Routing.EndpointMiddleware"
+                     })
+                if (filters.Rules.All(rule => rule.CategoryName != category))
+                    filters.Rules.Insert(0, new LoggerFilterRule(null, category, LogLevel.Warning, null));
+        });
         services.TryAddSingleton<IDiagnosticRedactor, DiagnosticRedactor>();
         services.TryAddSingleton<PlatformTelemetryPolicy>();
         services.TryAddSingleton(provider => new ConsoleExceptionDiagnostics(

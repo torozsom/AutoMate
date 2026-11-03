@@ -1,7 +1,7 @@
 using System.Diagnostics.Metrics;
 using OpenTelemetry.Metrics;
 
-namespace Web.Observability;
+namespace Infrastructure.Observability.OpenTelemetry;
 
 /// <summary>
 ///     Approves metric identities and removes request/provider-derived dimensions before aggregation.
@@ -54,6 +54,7 @@ public static class SafeMetricPolicy
         "automate.deployment.jobs.queued",
         "automate.deployment.jobs.started",
         "automate.platform.spans.omitted",
+        "automate.platform.spans.filtered",
         "automate.security.rate_limit.rejections",
         "telemetry.cleanup.overdue.seconds",
         "telemetry.delivery.retries",
@@ -98,14 +99,24 @@ public static class SafeMetricPolicy
     /// <returns>A reviewed metric view, or the SDK drop configuration for an unfamiliar instrument.</returns>
     private static MetricStreamConfiguration View(Instrument instrument)
     {
+        if ((instrument.Meter.Name == "AutoMate.Operations" && instrument.Name is
+                "automate.operation.count" or "automate.operation.duration" or "automate.live.observations" or
+                "automate.live.coalesced" or "automate.live.history.admissions") ||
+            (instrument.Meter.Name == "AutoMate.TelemetryStorage" && instrument.Name is
+                "telemetry.spool.pending.events" or "telemetry.spool.current.bytes"
+                or "telemetry.spool.pending.segments" or
+                "telemetry.spool.oldest_pending.seconds" or "telemetry.spool.accepting"
+                or "telemetry.spool.snapshot.age.seconds" or
+                "telemetry.spool.disk.available.bytes" or "telemetry.spool.disk.snapshot.age.seconds" or
+                "telemetry.admission.rejections" or "telemetry.delivery.attempts"
+                or "telemetry.archive.write.duration"))
+            return Configuration(instrument, instrument.Meter.Name == "AutoMate.Operations"
+                ? ["source", "stage", "outcome", "status_class"]
+                : ["outcome"]);
         if (instrument.Meter.Name is "AutoMate.Deployments" or "AutoMate.Security" or "AutoMate.TelemetryStorage"
                 or "AutoMate.Analysis" &&
             ApplicationNames.Contains(instrument.Name))
-            return new MetricStreamConfiguration
-            {
-                TagKeys = Dimensions(instrument.Name),
-                CardinalityLimit = 4096
-            };
+            return Configuration(instrument, Dimensions(instrument.Name));
         if (instrument.Meter.Name is "System.Runtime" or "System.Net.Http" or "Microsoft.AspNetCore.Hosting" &&
             FrameworkNames.Contains(instrument.Name))
             return new MetricStreamConfiguration
@@ -114,6 +125,23 @@ public static class SafeMetricPolicy
                 CardinalityLimit = 16
             };
         return MetricStreamConfiguration.Drop;
+    }
+
+    /// <summary>
+    ///     Uses explicit millisecond buckets for operational latency; other instruments retain their type.
+    /// </summary>
+    /// <param name="instrument">Reviewed instrument.</param>
+    /// <param name="tags">Finite emitter-owned labels.</param>
+    /// <returns>A bounded stream configuration.</returns>
+    private static MetricStreamConfiguration Configuration(Instrument instrument, string[] tags)
+    {
+        return instrument.Unit == "ms" && instrument is Histogram<double>
+            ? new ExplicitBucketHistogramConfiguration
+            {
+                TagKeys = tags, CardinalityLimit = 4096,
+                Boundaries = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
+            }
+            : new MetricStreamConfiguration { TagKeys = tags, CardinalityLimit = 4096 };
     }
 
     /// <summary>
@@ -129,6 +157,7 @@ public static class SafeMetricPolicy
             "automate.analysis.operations" or "automate.analysis.duration" =>
                 ["analysis.operation", "analysis.outcome"],
             "automate.platform.spans.omitted" => ["reason"],
+            "automate.platform.spans.filtered" => ["operation", "reason"],
             "automate.security.rate_limit.rejections" => ["security.authentication_state"],
             "telemetry.request.seconds" => ["operation"],
             "automate.deployment.diagnostics.sink.duration" =>

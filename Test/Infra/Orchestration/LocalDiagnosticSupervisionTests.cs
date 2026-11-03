@@ -24,6 +24,41 @@ namespace Test.Infra.Orchestration;
 public sealed class LocalDiagnosticSupervisionTests
 {
     /// <summary>
+    ///     Intentional stop awaits container cleanup without terminating daemon lifecycle collection.
+    /// </summary>
+    /// <returns>Completes after quiescence, stale identity and resume assertions.</returns>
+    [Fact]
+    public async Task Runtime_quiescence_preserves_daemon_and_can_resume_after_failed_stop()
+    {
+        await using var harness = await Harness.CreateAsync(false);
+        await harness.Manager.RegisterAsync(harness.Target, true);
+        await harness.Source.RuntimeStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        await harness.Manager.StopRuntimeAsync(harness.Target.ProjectId, Guid.NewGuid());
+        Assert.All(harness.Source.Subscriptions, s => Assert.False(s.Stopped.Task.IsCompleted));
+
+        harness.Source.CleanupGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopping = harness.Manager.StopRuntimeAsync(harness.Target.ProjectId, harness.Target.DeploymentId);
+        try
+        {
+            await harness.Source.CleanupStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.False(stopping.IsCompleted);
+            Assert.False(Assert.Single(harness.Source.Subscriptions, s => s.Kind == "daemon").Stopped.Task.IsCompleted);
+        }
+        finally
+        {
+            harness.Source.CleanupGate.TrySetResult();
+        }
+
+        await stopping.WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.All(harness.Source.Subscriptions.Where(s => s.Kind != "daemon"),
+            s => Assert.True(s.Stopped.Task.IsCompletedSuccessfully));
+        await harness.Manager.SetOperationAsync(harness.Target.ProjectId, harness.Target.DeploymentId, false);
+        await harness.Source.LogRestarted.Task.WaitAsync(TimeSpan.FromSeconds(8));
+        Assert.False(Assert.Single(harness.Source.Subscriptions, s => s.Kind == "daemon").Stopped.Task.IsCompleted);
+        Assert.Contains(harness.Source.Subscriptions, s => s is { Kind: "metrics", Stopped.Task.IsCompleted: false });
+    }
+
+    /// <summary>
     ///     Slow source cleanup retains same-project ownership without holding the shared registry gate.
     /// </summary>
     /// <returns>A task completing when the scenario and its assertions finish.</returns>

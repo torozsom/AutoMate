@@ -47,3 +47,7 @@ silently ignored.
 
 Capability probes deserialize into a nullable private wire model before validating the non-null host contract.
 Missing/null archive operations remain incompatible-host failures, without leaking malformed provider content.
+
+Dispatch timing now records finite source/stage/outcome measurements, including isolated persistence and transport
+failures. Segment delivery attempts count completed/pending/failed/canceled outcomes once per owning call. Successful
+query visibility records age from durable acceptance. Retry scheduling and checkpoint/receipt semantics are unchanged.

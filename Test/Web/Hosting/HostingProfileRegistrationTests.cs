@@ -17,6 +17,7 @@ using Infrastructure.Ai.Processing;
 using Infrastructure.Ai.Providers;
 using Infrastructure.Diagnostics.Policy;
 using Infrastructure.Observability;
+using Infrastructure.Observability.OpenTelemetry;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authorization;
@@ -463,7 +464,8 @@ public sealed class HostingProfileRegistrationTests
             Assert.Equal("Testing", exporter.ResourceAttributes["deployment.environment"]);
             Assert.Equal(profile, exporter.ResourceAttributes["automate.hosting_profile"]);
             Assert.True(exporter.ResourceAttributes.ContainsKey("service.version"));
-            Assert.Equal(4, exporter.ResourceAttributes.Count);
+            Assert.Equal(5, exporter.ResourceAttributes.Count);
+            Assert.True(Guid.TryParse(exporter.ResourceAttributes["service.instance.id"].ToString(), out _));
             Assert.Equal(exporter.ResourceAttributes.OrderBy(pair => pair.Key),
                 services.GetRequiredService<TracerProvider>().GetResource().Attributes.OrderBy(pair => pair.Key));
             Assert.Equal(exporter.ResourceAttributes.OrderBy(pair => pair.Key),

@@ -121,8 +121,10 @@ is not zero-filled and pre-collection history is not invented.
 
 Ownership caches are bounded and expire after five seconds. Collection and persistence are automatic; legacy project
 preference flags do not gate ingestion, delivery or archive access. Database ownership checks and managed-provider
-operator approval still apply. The host installs safe platform logging before ordinary providers; it registers no
-OpenTelemetry SDK exporter. Future exporters require equivalent processor, view and resource-policy review.
+operator approval still apply. The host installs shared safe logging, trace processors, metric views and bounded
+optional OTLP export.
+Its default service identity is AutoMate.Telemetry; configure its collector independently from deployment history
+storage.
 
 Monitor rising loss counts, persistent delivery failures, restarts and oldest pending age approaching the configured
 buffer limit. See [storage operations](../docs/deployment-telemetry.md) and the
@@ -158,3 +160,15 @@ dotnet test Test/Test.csproj --filter FullyQualifiedName~Test.Web.Hosting.Teleme
 
 Handwritten types/members use multiline XML documentation; top-level startup statements and anonymous route handlers
 use ordinary comments. Keep host details here and storage/provider behavior in the linked implementation guides.
+
+## Private-host platform metrics
+
+TelemetrySpoolObserver refreshes authoritative typed spool snapshots every five seconds and filesystem capacity every
+30 seconds. Observable callbacks read immutable cached state only. Pending events, bytes, segments, oldest age,
+accepting state and snapshot age are separate gauges. Failed disk probes retain the last value/timestamp; no successful
+probe means absent capacity, not zero. The authenticated /status contract retains its existing six fields.
+
+Archive write latency, quota rejection, delivery attempt outcome and query visibility are recorded in the private host.
+Existing storage histogram names remain compatible. Do not infer its backlog from a Web-process legacy drain metric.
+See [platform operation](../docs/platform-observability.md)
+and [shared SDK policy](../Infrastructure/Observability/OpenTelemetry/README.md).

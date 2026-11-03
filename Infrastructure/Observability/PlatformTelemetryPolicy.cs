@@ -116,6 +116,22 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
             };
         }
 
+        if (key == "ClientFamily")
+            return value is "Unknown" or "AzureRuntime" or "AzureLiveLogs" or "GitHub" or "Analysis"
+                or "DeploymentTelemetry"
+                ? value
+                : null;
+        if (key == "HttpOutcome")
+            return value is "completed" or "slow" or "unsuccessful" or "transport_failure" or "canceled" ? value : null;
+        if (key == "StatusClass")
+            return value is "none" or "1xx" or "2xx" or "3xx" or "4xx" or "5xx" or "other" ? value : null;
+        if (key == "CollectorOperation")
+            return value is "discovery" or "connection" or "reading" or "publication" ? value : null;
+        if (key == "CollectorOutcome")
+            return value is "completed" or "shutdown" or "ownership_refresh" or "timeout" or "remote_eof"
+                or "transport_failure" or "recovered" or "provider_conflict" or "provider_rejected"
+                ? value
+                : null;
         if (key == "BudgetReason") return EnumValue<AnalysisSkipReason>(value);
         if (key == "Operation") return EnumValue<AuditOperation>(value);
         if (key == "Outcome") return EnumValue<AuditOutcome>(value);

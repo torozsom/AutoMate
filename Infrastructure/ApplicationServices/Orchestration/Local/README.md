@@ -38,3 +38,7 @@ cancellation handling. Logs use GUIDs and fixed guidance, not paths/configuratio
 - [Supervision tests](../../../../Test/Infra/Orchestration/LocalDiagnosticSupervisionTests.cs)
 - [Conflict tests](../../../../Test/Infra/Orchestration/LocalHostPortAvailabilityTests.cs)
 - [Queue tests](../../../../Test/Infra/Orchestration/DeploymentJobWorkerTests.cs)
+
+Before Compose down, StopRuntimeAsync quiesces and awaits container logs/metrics under a per-target gate. Daemon
+subscriptions remain active for final die/destroy events. Failed, exceptional or canceled stops resume runtime
+admission; source cleanup completes before its cancellation owner is released.

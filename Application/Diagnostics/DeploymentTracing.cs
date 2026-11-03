@@ -227,25 +227,45 @@ public static class DeploymentTracing
     public static async Task<T> RunAsync<T>(DeploymentOperation operation, Guid? projectId, Guid? deploymentId,
         CancellationToken cancellationToken, Func<Task<T>> action, Func<T, bool>? succeeded = null)
     {
+        var started = Stopwatch.GetTimestamp();
+        var outcome = DeploymentTraceOutcome.Completed;
         using var activity = Start(operation, projectId, deploymentId);
         try
         {
             var result = await action();
-            Finish(activity,
-                succeeded is null || succeeded(result)
-                    ? DeploymentTraceOutcome.Completed
-                    : DeploymentTraceOutcome.Failed);
+            outcome = succeeded is null || succeeded(result)
+                ? DeploymentTraceOutcome.Completed
+                : DeploymentTraceOutcome.Failed;
+            Finish(activity, outcome);
             return result;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Finish(activity, DeploymentTraceOutcome.Canceled);
+            outcome = DeploymentTraceOutcome.Canceled;
+            Finish(activity, outcome);
             throw;
         }
         catch (Exception)
         {
-            Finish(activity, DeploymentTraceOutcome.Failed);
+            outcome = DeploymentTraceOutcome.Failed;
+            Finish(activity, outcome);
             throw;
+        }
+        finally
+        {
+            var source = operation switch
+            {
+                DeploymentOperation.Persistence or DeploymentOperation.Delivery => "AutoMate",
+                DeploymentOperation.AzurePoll or DeploymentOperation.AzureLogs or DeploymentOperation.AzureMetrics =>
+                    "AzureContainerApps",
+                DeploymentOperation.DockerLogs or DeploymentOperation.DockerMetrics or DeploymentOperation.DockerEvents
+                    => "DockerContainer",
+                DeploymentOperation.GitHubPoll or DeploymentOperation.GitHubObserve or DeploymentOperation.GitHubJobs
+                    or DeploymentOperation.GitHubLogs => "GitHub",
+                _ => "AutoMate"
+            };
+            OperationalMetrics.Record(source, Enum.IsDefined(operation) ? operation.ToString() : "Unknown",
+                outcome.ToString().ToLowerInvariant(), started);
         }
     }
 

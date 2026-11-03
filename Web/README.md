@@ -60,3 +60,10 @@ listener/observer disposal. Preserve generated/vendor files and licenses.
 - [Solution map](../navigation.md)
 - [Web tests](../Test/Web/README.md)
 - [Local IDE workflow](../deploy/README.md#preferred-workflow-web-in-the-ide)
+
+Web consumes the shared Infrastructure.Observability.OpenTelemetry registration. Request audits and authorization
+remain Web concerns; SDK processors/options/views are shared with Telemetry. Live metric callbacks retain compatibility
+with existing tabs while Docker delivery is coalesced to its configured per-container interval.
+
+The development telemetry gateway uses http://127.0.0.1:9450 to match the IPv4-only published Docker listener. This
+avoids the reproducible Windows localhost connection fallback delay; production/operator URLs remain configurable.

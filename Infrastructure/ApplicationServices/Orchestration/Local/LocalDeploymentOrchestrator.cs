@@ -224,6 +224,8 @@ public sealed class LocalDeploymentOrchestrator(
                         latestDeployment.CsProject.Name,
                         latestDeployment.Id), true, cancellationToken);
                 }
+
+                await localDiagnostics.StopRuntimeAsync(projectId, latestDeployment.Id, cancellationToken);
             }
             catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
             {
@@ -231,8 +233,19 @@ public sealed class LocalDeploymentOrchestrator(
                     exception.GetType().Name);
             }
 
-        var isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName,
-            projectId, latestDeployment?.Id, cancellationToken);
+        bool isStopped;
+        try
+        {
+            isStopped = await dockerService.RunDockerComposeDownAsync(automateDir, projectName,
+                projectId, latestDeployment?.Id, cancellationToken);
+        }
+        catch
+        {
+            // A failed or canceled stop must not leave a still-running deployment's readers paused.
+            if (latestDeployment is not null)
+                await localDiagnostics.SetOperationAsync(projectId, latestDeployment.Id, false, CancellationToken.None);
+            throw;
+        }
 
         if (isStopped)
         {

@@ -5,6 +5,7 @@ using FluentAssertions;
 using Infrastructure.Diagnostics.Runtime;
 using Infrastructure.Docker.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
 namespace Test.Infra.Diagnostics.Docker;
@@ -22,13 +23,13 @@ public sealed class DockerMetricDeliveryTests
     [Fact]
     public async Task Live_updates_are_frequent_and_history_stays_sampled()
     {
-        var clock = new TestClock();
+        var clock = new FakeTimeProvider();
         var viewers = new DeploymentRuntimeViewers(clock);
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
         var live = new RecordingLive();
         var history = new RecordingPublisher();
-        var delivery = new DockerMetricDelivery(history, live, new DiagnosticRedactor(), viewers, clock, 60,
+        await using var delivery = new DockerMetricDelivery(history, live, new DiagnosticRedactor(), viewers, clock, 60,
             NullLogger.Instance);
 
         for (var second = 0; second <= 60; second++)
@@ -36,7 +37,8 @@ public sealed class DockerMetricDeliveryTests
             viewers.Renew("owner", project, deployment);
             await delivery.ObserveAsync(project, deployment, "web",
                 new DockerMetricsLine($"{second}%", "100MiB / 200MiB"), CancellationToken.None);
-            clock.Now += TimeSpan.FromSeconds(1);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            if (second > 0) await WaitAsync(() => live.Values.Count == second + 1);
         }
 
         live.Values.Should().HaveCount(61);
@@ -45,7 +47,7 @@ public sealed class DockerMetricDeliveryTests
         live.Snapshots.Should().OnlyContain(snapshot => snapshot.ProjectId == project &&
                                                         snapshot.DeploymentId == deployment &&
                                                         snapshot.ResourceName == "web");
-        live.Snapshots.Last().Timestamp.Should().Be(clock.Now.AddSeconds(-1));
+        live.Snapshots.Last().Timestamp.Should().Be(clock.GetUtcNow().AddSeconds(-1));
         live.Snapshots.Last().Samples.Single(p => p.Unit == "cores").Value.Should().Be(0.6);
         live.Snapshots.Last().Samples.Single(p => p.Name == "automate_memory_used_bytes").Value.Should().Be(104857600);
         history.Events.Should().HaveCount(2);
@@ -55,7 +57,8 @@ public sealed class DockerMetricDeliveryTests
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("80%", "100MiB / 200MiB"),
             CancellationToken.None);
 
-        live.Values.Should().HaveCount(62);
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await WaitAsync(() => live.Values.Count == 62);
         live.Snapshots.Should().HaveCount(62);
         history.Events.Should().HaveCount(2);
     }
@@ -67,7 +70,7 @@ public sealed class DockerMetricDeliveryTests
     [Fact]
     public async Task Live_delivery_recovers_and_redacts_before_transport()
     {
-        var clock = new TestClock();
+        var clock = new FakeTimeProvider();
         var viewers = new DeploymentRuntimeViewers(clock);
         var project = Guid.NewGuid();
         var deployment = Guid.NewGuid();
@@ -75,7 +78,7 @@ public sealed class DockerMetricDeliveryTests
         viewers.Renew("owner", project, deployment);
         var live = new RecordingLive { FailNext = true };
         var history = new RecordingPublisher();
-        var delivery = new DockerMetricDelivery(history, live, new DiagnosticRedactor(), viewers, clock, 60,
+        await using var delivery = new DockerMetricDelivery(history, live, new DiagnosticRedactor(), viewers, clock, 60,
             NullLogger.Instance);
 
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("1%", "100MiB"),
@@ -83,6 +86,8 @@ public sealed class DockerMetricDeliveryTests
         await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("2%", "password=private-value"),
             CancellationToken.None);
 
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await WaitAsync(() => live.Values.Count == 1);
         live.Values.Should().ContainSingle();
         live.Values.Single().Cpu.Should().Be("2%");
         live.Values.Single().Memory.Should().NotContain("private-value");
@@ -92,21 +97,51 @@ public sealed class DockerMetricDeliveryTests
     }
 
     /// <summary>
-    ///     Deterministic history sampling clock.
+    ///     A burst retains its newest timestamp, both callbacks survive one partner failing, and retirement drops pending UI
+    ///     state.
     /// </summary>
-    private sealed class TestClock : TimeProvider
+    /// <returns>The completed fake-time delivery scenario.</returns>
+    [Fact]
+    public async Task Burst_is_coalesced_and_disposal_cancels_pending_callbacks()
     {
-        /// <summary>Controlled UTC clock value.</summary>
-        public DateTimeOffset Now { get; set; } = DateTimeOffset.UtcNow;
-
-        /// <summary>
-        ///     Returns the controlled UTC clock value.
-        /// </summary>
-        /// <returns>The fixture-controlled UTC time.</returns>
-        public override DateTimeOffset GetUtcNow()
+        var clock = new FakeTimeProvider();
+        var project = Guid.NewGuid();
+        var deployment = Guid.NewGuid();
+        var live = new RecordingLive { FailTypedNext = true };
+        var history = new RecordingPublisher();
+        var delivery = new DockerMetricDelivery(history, live, new DiagnosticRedactor(),
+            new DeploymentRuntimeViewers(clock), clock, 60, NullLogger.Instance);
+        await using (delivery)
         {
-            return Now;
+            await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("1%", "100MiB"),
+                CancellationToken.None);
+            Assert.Single(live.Values); // Typed callback failure does not suppress the legacy partner.
+            for (var i = 2; i <= 100; i++)
+                await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine($"{i}%", "100MiB"),
+                    CancellationToken.None);
+            Assert.Single(live.Values);
+            Assert.Single(history.Events);
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await WaitAsync(() => live.Values.Count == 2);
+            Assert.Equal("100%", live.Values.Last().Cpu);
+            Assert.Equal(clock.GetUtcNow().AddSeconds(-1), live.Snapshots.Last().Timestamp);
+            await delivery.ObserveAsync(project, deployment, "web", new DockerMetricsLine("101%", "100MiB"),
+                CancellationToken.None);
         }
+
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, live.Values.Count);
+    }
+
+    /// <summary>
+    ///     Waits for an async fake-time continuation; wall time is only a deadlock guard.
+    /// </summary>
+    /// <param name="condition">Observable transport completion.</param>
+    /// <returns>Completion after the expected callback.</returns>
+    private static async Task WaitAsync(Func<bool> condition)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!condition()) await Task.Delay(1, deadline.Token);
     }
 
     /// <summary>
@@ -139,6 +174,9 @@ public sealed class DockerMetricDeliveryTests
         /// <summary>Whether to fail the next operation only.</summary>
         public bool FailNext { get; set; }
 
+        /// <summary>Injects a typed-callback failure without failing its legacy partner.</summary>
+        public bool FailTypedNext { get; set; }
+
         /// <summary>Captured compatibility CPU/memory values.</summary>
         public List<(string Cpu, string Memory)> Values { get; } = [];
 
@@ -153,6 +191,12 @@ public sealed class DockerMetricDeliveryTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (FailTypedNext)
+            {
+                FailTypedNext = false;
+                throw new InvalidOperationException("typed disconnected");
+            }
+
             Snapshots.Add(snapshot);
 
             return Task.CompletedTask;

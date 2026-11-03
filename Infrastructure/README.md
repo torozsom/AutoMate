@@ -62,3 +62,6 @@ documentation-warning suppression.
 - [Web composition](../Web/Configs/Hosting/ServiceConfiguration.cs)
 - [Private host composition](../Telemetry/Program.cs)
 - [Solution map](../navigation.md)
+
+Shared safe OTel SDK integration resides in Observability/OpenTelemetry and is consumed by both hosts. Infrastructure
+owns the SDK dependency; Application retains SDK-independent operation sources/meters. See the submodule README.

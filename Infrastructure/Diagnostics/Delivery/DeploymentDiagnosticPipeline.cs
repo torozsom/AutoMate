@@ -364,86 +364,109 @@ public sealed class DeploymentDiagnosticDispatcher(
     /// <returns>A task representing completion of the asynchronous operation.</returns>
     private async Task ProcessAsync(DeploymentDiagnosticEvent diagnosticEvent, CancellationToken stoppingToken)
     {
-        var channel = diagnosticEvent.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
-            ? null
-            : GetTerminalChannel(diagnosticEvent);
-
-        ActivityContext.TryParse($"00-{diagnosticEvent.TraceId}-{diagnosticEvent.SpanId}-01",
-            null, out var parent);
-        using var activity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.dispatch",
-            ActivityKind.Internal, parent);
-
-        using var correlation = OperationalLog.BeginCorrelation(logger, diagnosticEvent.DeploymentId,
-            projectId: diagnosticEvent.ProjectId);
-
-        long orderId;
-        var startedAt = Stopwatch.GetTimestamp();
-
+        var dispatchStarted = Stopwatch.GetTimestamp();
+        var dispatchOutcome = "completed";
         try
         {
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-            deadline.CancelAfter(publisher.PersistenceTimeout);
-            await using var scope = scopeFactory.CreateAsyncScope();
-            try
-            {
-                orderId = await DeploymentTracing.RunAsync(DeploymentOperation.Persistence, diagnosticEvent.ProjectId,
-                    diagnosticEvent.DeploymentId, stoppingToken, () => scope.ServiceProvider
-                        .GetRequiredService<IDeploymentDiagnosticStore>()
-                        .PersistAsync(diagnosticEvent, channel, deadline.Token));
-            }
-            finally
-            {
-                DeploymentDiagnosticPublisher.RecordSinkDuration(diagnosticEvent, "persistence", startedAt);
-            }
+            var channel = diagnosticEvent.TerminalChannel.Kind == DeploymentTerminalChannelKind.Metrics
+                ? null
+                : GetTerminalChannel(diagnosticEvent);
 
-            if (orderId == 0) return;
-            if (orderId > 0)
-                AutoMateTelemetry.EventsPersisted.Add(1, TelemetryTags.Create(diagnosticEvent));
-            // Diagnostic payloads belong only in tenant storage and presentation, including legacy delivery modes.
-        }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-        {
-            AutoMateTelemetry.PersistenceFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
-            logger.LogWarning(
-                "Failed to persist deployment diagnostic. Source {Source} kind {Kind} failure {FailureType}.",
-                diagnosticEvent.Source, diagnosticEvent.Kind, exception.GetType().Name);
-            await TryNotifyAsync(diagnosticEvent.ProjectId,
-                "Diagnostic storage is temporarily unavailable; some output may be missing.", stoppingToken);
-            return;
-        }
+            ActivityContext.TryParse($"00-{diagnosticEvent.TraceId}-{diagnosticEvent.SpanId}-01",
+                null, out var parent);
+            using var activity = AutoMateTelemetry.Deployments.StartActivity("deployment.diagnostic.dispatch",
+                ActivityKind.Internal, parent);
 
-        // Docker already delivers every observation directly. Do not overwrite a newer live value with a delayed
-        // durable sample. Azure metrics retain their provider-polling delivery path.
-        if (diagnosticEvent is
-            { Source: DeploymentDiagnosticSource.DockerContainer, Kind: DeploymentDiagnosticKind.Metric })
-            return;
-        startedAt = Stopwatch.GetTimestamp();
-        try
-        {
-            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-            deadline.CancelAfter(publisher.DeliveryTimeout);
+            using var correlation = OperationalLog.BeginCorrelation(logger, diagnosticEvent.DeploymentId,
+                projectId: diagnosticEvent.ProjectId);
+
+            long orderId;
+            var startedAt = Stopwatch.GetTimestamp();
 
             try
             {
-                await DeploymentTracing.RunAsync(DeploymentOperation.Delivery, diagnosticEvent.ProjectId,
-                    diagnosticEvent.DeploymentId, stoppingToken,
-                    () => DeliverToTerminalAsync(diagnosticEvent, channel, orderId, deadline.Token));
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                deadline.CancelAfter(publisher.PersistenceTimeout);
+                await using var scope = scopeFactory.CreateAsyncScope();
+                try
+                {
+                    orderId = await DeploymentTracing.RunAsync(DeploymentOperation.Persistence,
+                        diagnosticEvent.ProjectId,
+                        diagnosticEvent.DeploymentId, stoppingToken, () => scope.ServiceProvider
+                            .GetRequiredService<IDeploymentDiagnosticStore>()
+                            .PersistAsync(diagnosticEvent, channel, deadline.Token));
+                }
+                finally
+                {
+                    DeploymentDiagnosticPublisher.RecordSinkDuration(diagnosticEvent, "persistence", startedAt);
+                }
+
+                if (orderId == 0) return;
+                if (orderId > 0)
+                    AutoMateTelemetry.EventsPersisted.Add(1, TelemetryTags.Create(diagnosticEvent));
+                // Diagnostic payloads belong only in tenant storage and presentation, including legacy delivery modes.
             }
-            finally
+            catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
             {
-                DeploymentDiagnosticPublisher.RecordSinkDuration(diagnosticEvent, "delivery", startedAt);
+                dispatchOutcome = "failed";
+                AutoMateTelemetry.PersistenceFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
+                logger.LogWarning(
+                    "Failed to persist deployment diagnostic. Source {Source} kind {Kind} failure {FailureType}.",
+                    diagnosticEvent.Source, diagnosticEvent.Kind, exception.GetType().Name);
+                await TryNotifyAsync(diagnosticEvent.ProjectId,
+                    "Diagnostic storage is temporarily unavailable; some output may be missing.", stoppingToken);
+                return;
             }
 
-            AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(diagnosticEvent));
+            // Docker already delivers every observation directly. Do not overwrite a newer live value with a delayed
+            // durable sample. Azure metrics retain their provider-polling delivery path.
+            if (diagnosticEvent is
+                { Source: DeploymentDiagnosticSource.DockerContainer, Kind: DeploymentDiagnosticKind.Metric })
+                return;
+            startedAt = Stopwatch.GetTimestamp();
+            try
+            {
+                using var deadline = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                deadline.CancelAfter(publisher.DeliveryTimeout);
+
+                try
+                {
+                    await DeploymentTracing.RunAsync(DeploymentOperation.Delivery, diagnosticEvent.ProjectId,
+                        diagnosticEvent.DeploymentId, stoppingToken,
+                        () => DeliverToTerminalAsync(diagnosticEvent, channel, orderId, deadline.Token));
+                }
+                finally
+                {
+                    DeploymentDiagnosticPublisher.RecordSinkDuration(diagnosticEvent, "delivery", startedAt);
+                }
+
+                AutoMateTelemetry.EventsDelivered.Add(1, TelemetryTags.Create(diagnosticEvent));
+            }
+            catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+            {
+                dispatchOutcome = "failed";
+                AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
+                logger.LogWarning(
+                    "Failed to deliver deployment diagnostic. Source {Source} kind {Kind} failure {FailureType}.",
+                    diagnosticEvent.Source, diagnosticEvent.Kind, exception.GetType().Name);
+                await TryNotifyAsync(diagnosticEvent.ProjectId,
+                    "Live diagnostic delivery is temporarily unavailable; reload to recover saved output.",
+                    stoppingToken);
+            }
         }
-        catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            AutoMateTelemetry.DeliveryFailures.Add(1, TelemetryTags.Create(diagnosticEvent));
-            logger.LogWarning(
-                "Failed to deliver deployment diagnostic. Source {Source} kind {Kind} failure {FailureType}.",
-                diagnosticEvent.Source, diagnosticEvent.Kind, exception.GetType().Name);
-            await TryNotifyAsync(diagnosticEvent.ProjectId,
-                "Live diagnostic delivery is temporarily unavailable; reload to recover saved output.", stoppingToken);
+            dispatchOutcome = "canceled";
+            throw;
+        }
+        catch (Exception)
+        {
+            dispatchOutcome = "failed";
+            throw;
+        }
+        finally
+        {
+            OperationalMetrics.Record(diagnosticEvent.Source.ToString(), "dispatch", dispatchOutcome, dispatchStarted);
         }
     }
 

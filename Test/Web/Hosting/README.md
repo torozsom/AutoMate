@@ -48,3 +48,11 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 ConfigurationBindingContractTests covers non-default CloudSaas, scheduling, Azure Logs, telemetry/spool, Docker,
 email and GitHub App settings, including the binder's array-append behavior. EndpointDiscoveryTests protects the
 complete ordered endpoint registry, idempotent registration and independent transient instances.
+
+OperationalTelemetryTests runs in a nonparallel collection because it applies pressure to process-wide activity sources.
+It verifies volume filtering with both exporter processor types, actual three-signal loopback resources, HTTP warning
+redaction/rate limits and stalled exporter isolation from temporary durable spool receipts.
+
+Configuration binding coverage includes nondefault live cadence, export activation and sampling thresholds. The
+stalled-export fixture owns its client factory and transport through host shutdown; callbacks do not capture outer
+disposable locals.

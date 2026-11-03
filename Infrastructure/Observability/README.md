@@ -16,8 +16,8 @@ SDK-independent pre-provider log sanitization and separate bounded operator-cons
 
 PlatformLoggingConfiguration installs SafeLoggerFactory once in Web and private Telemetry. PlatformLogCatalog holds
 reviewed categories/templates; PlatformTelemetryPolicy creates detached approved state/scopes.
-ConsoleExceptionDiagnostics receives exceptions separately for bounded redacted stderr snapshots. Web/Observability
-retains SDK-specific exporter processors/views.
+ConsoleExceptionDiagnostics receives exceptions separately for bounded redacted stderr snapshots.
+the [SDK submodule](OpenTelemetry/README.md) owns shared exporter processors/views for both hosts.
 
 ## Contracts and lifecycle
 
@@ -26,8 +26,8 @@ arbitrary formatter output, SQL/URLs/provider prose or raw exception objects. Pr
 event IDs; adding a template/category requires policy review. Do not replace the registered factory or introduce a raw
 bypass.
 
-Terminal payloads use the separate diagnostic redaction/storage path. The private host does not currently register OTel
-exporters; future exporters need equivalent checks. These boundaries do not claim masking can identify all arbitrary
+Terminal payloads use the separate diagnostic redaction/storage path. Both hosts use the shared SDK policy before any
+configured OTLP exporter. These boundaries do not claim masking can identify all arbitrary
 sensitive prose.
 
 ## Console exception diagnostics
@@ -45,3 +45,18 @@ distinct from ordinary metadata-only platform exports; console failures are isol
 - [Shared export tests](../../Test/Web/Hosting/PlatformTelemetrySafetyTests.cs)
 - [Private-host tests](../../Test/Web/Hosting/TelemetryHostSafetyTests.cs)
 - [Console regressions](../../Test/Web/Diagnostics/ConsoleExceptionDiagnosticsTests.cs)
+
+## Operational HTTP observations
+
+OperationalHttpHandler measures request headers for explicitly reviewed Azure, GitHub, analysis and telemetry clients.
+Counts/latency use finite source/stage/outcome/status-class labels. Unsuccessful responses, transport failures and
+header acquisitions at least 1,000 ms warn at most once per family/outcome per 30 seconds; all occurrences are counted.
+Streaming body lifetime belongs to collector metrics. No handler reads URLs, headers or payload content for telemetry.
+
+Routine HTTP framework logging defaults to Warning. Override Logging:LogLevel:System.Net.Http.HttpClient, or a specific
+approved category, to Information for a bounded investigation. Unknown category names still fail closed; this is not
+permission for prefix-based category approval. Security/application audits keep their configured Information level.
+
+HTTP warnings also retain numeric StatusCode, distinguishing conflicts/authorization failures from status-class
+aggregates. The exact EF Core Query category is reviewed: unknown query templates retain category and numeric
+EventCode through the safe module fallback, never SQL, parameters or provider prose.

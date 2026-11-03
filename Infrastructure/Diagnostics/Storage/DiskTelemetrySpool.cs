@@ -281,6 +281,7 @@ public sealed class DiskTelemetrySpool : BackgroundService
                 {
                     RecordLoss(item.Tenant, 1);
                     TelemetryStorageMetrics.Dropped.Add(1);
+                    TelemetryStorageMetrics.AdmissionRejections.Add(1);
                     item.Completion.TrySetException(new TelemetryProviderException(429, TimeSpan.FromSeconds(2)));
                     continue;
                 }
@@ -428,20 +429,32 @@ public sealed class DiskTelemetrySpool : BackgroundService
     /// </returns>
     public async Task<object> StatusAsync(CancellationToken token)
     {
+        var snapshot = await SnapshotAsync(token);
+        return new
+        {
+            pendingEvents = snapshot.PendingEvents,
+            bufferedBytes = snapshot.BufferedBytes,
+            segments = snapshot.Segments,
+            oldestPendingSeconds = snapshot.OldestPendingSeconds,
+            droppedEvents = snapshot.DroppedEvents,
+            accepting = snapshot.Accepting
+        };
+    }
+
+    /// <summary>
+    ///     Copies authoritative indexes under the spool gate without reading payload files.
+    /// </summary>
+    /// <param name="token">Cancels waiting for the index gate.</param>
+    /// <returns>The current immutable spool state.</returns>
+    public async Task<TelemetrySpoolSnapshot> SnapshotAsync(CancellationToken token)
+    {
         await _gate.WaitAsync(token);
         try
         {
-            return new
-            {
-                pendingEvents = _pending.Count,
-                bufferedBytes = _bytes,
-                segments = _segments.Count,
-                oldestPendingSeconds = _pending.Count == 0
-                    ? 0
-                    : Math.Max(0, (DateTimeOffset.UtcNow - _pending.Values.Min(e => e.StoredAt)).TotalSeconds),
-                droppedEvents = _drops.Values.Sum(),
-                accepting = !_queue.Reader.Completion.IsCompleted
-            };
+            var now = DateTimeOffset.UtcNow;
+            return new TelemetrySpoolSnapshot(_pending.Count, _bytes, _segments.Count,
+                _pending.Count == 0 ? 0 : Math.Max(0, (now - _pending.Values.Min(e => e.StoredAt)).TotalSeconds),
+                _drops.Values.Sum(), !_queue.Reader.Completion.IsCompleted, now);
         }
         finally
         {

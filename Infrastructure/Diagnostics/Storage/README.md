@@ -47,3 +47,10 @@ reads remain bounded, not new AI snapshots. Backend query ports require already-
 
 Spool startup reads clock, loss and series metadata asynchronously with the startup token. Recovery ordering and
 durable segment/receipt semantics remain unchanged. Construction-only spool options retain configuration binding.
+
+TelemetrySpoolSnapshot provides typed state under the existing index gate. SnapshotAsync exposes the observation time
+to the background observer; StatusAsync preserves the six-field private JSON shape and omits the internal timestamp.
+No per-tenant/project labels or payload file reads are needed for the snapshot.
+
+StatusAsync projects the typed snapshot explicitly onto the six existing wire fields, keeping loss totals visible
+without relying on reflection-only positional-property usage.

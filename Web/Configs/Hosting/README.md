@@ -58,3 +58,7 @@ gating.
 - [Registration tests](../../../Test/Web/Hosting/HostingProfileRegistrationTests.cs)
 - [HTTP probe tests](../../../Test/Web/Analysis/AnalysisReadinessTests.cs)
 - [Deployment configuration](../../../deploy/README.md)
+
+Observability registration delegates to the shared Infrastructure SDK module. Reviewed application HTTP clients attach
+OperationalHttpHandler; exporter HTTP clients never do. DeploymentDiagnostics validates the live interval separately
+from history sampling and sink deadlines.

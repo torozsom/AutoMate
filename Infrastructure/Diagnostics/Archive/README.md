@@ -42,3 +42,6 @@ history. Chart/metric batch reads preserve frozen scopes and sufficient statisti
 - [Archive tests](../../../Test/Infra/Diagnostics/Archive/DiskDeploymentArchiveTests.cs)
 - [Replay tests](../../../Test/Infra/Diagnostics/Archive/DeploymentDiagnosticReplayTests.cs)
 - [Retention and rollout](../../../docs/adr/0004-permanent-deployment-history.md)
+
+Archive AppendAsync records millisecond write latency, including idempotent lookup, without path or tenant labels.
+Instrumentation does not alter checksums, locking, write-through behavior or acknowledgement ordering.

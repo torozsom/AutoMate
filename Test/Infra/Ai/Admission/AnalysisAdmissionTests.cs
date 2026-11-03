@@ -967,6 +967,19 @@ public sealed class AnalysisAdmissionTests
         }
 
         /// <summary>
+        ///     Completes without starting runtime sources in this admission fixture.
+        /// </summary>
+        /// <param name="projectId">Unused synthetic project identity.</param>
+        /// <param name="deploymentId">Unused synthetic deployment identity.</param>
+        /// <param name="cancellationToken">Unused fixture cancellation.</param>
+        /// <returns>An already completed task.</returns>
+        public Task StopRuntimeAsync(Guid projectId, Guid deploymentId,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
         ///     Completes immediately without executing live stop project work.
         /// </summary>
         /// <param name="projectId">Synthetic project identity; ignored by this fixture.</param>

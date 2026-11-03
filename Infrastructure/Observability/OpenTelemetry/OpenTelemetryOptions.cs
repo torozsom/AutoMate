@@ -1,4 +1,4 @@
-namespace Web.Configs.Observability;
+namespace Infrastructure.Observability.OpenTelemetry;
 
 /// <summary>
 ///     Controls OpenTelemetry export without placing credentials in application settings.
@@ -9,7 +9,7 @@ public sealed class OpenTelemetryOptions
     public const string SectionName = "OpenTelemetry";
 
     /// <summary>Logical service name exported with telemetry.</summary>
-    public string ServiceName { get; init; } = "AutoMate";
+    public string ServiceName { get; set; } = "AutoMate";
 
     /// <summary>Deployment environment label. When omitted, the host environment name is used.</summary>
     public string? Environment { get; init; }
@@ -22,4 +22,16 @@ public sealed class OpenTelemetryOptions
     ///     authentication belongs in protected exporter configuration.
     /// </summary>
     public string? OtlpEndpoint { get; init; }
+
+    /// <summary>Retained fraction of fast successful SignalR sends.</summary>
+    public double SignalRSuccessSampleRate { get; init; } = 0.01;
+
+    /// <summary>Retained fraction of fast empty analysis claims.</summary>
+    public double EmptyClaimSampleRate { get; init; } = 0.01;
+
+    /// <summary>SignalR sends at or above this duration are always retained.</summary>
+    public int SignalRSlowMilliseconds { get; init; } = 100;
+
+    /// <summary>Analysis claims at or above this duration are always retained.</summary>
+    public int ClaimSlowMilliseconds { get; init; } = 250;
 }

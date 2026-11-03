@@ -4,9 +4,9 @@ using System.Text.Json;
 using Application.Diagnostics;
 using Infrastructure.Diagnostics.Metrics;
 using Infrastructure.Observability;
+using Infrastructure.Observability.OpenTelemetry;
 using OpenTelemetry;
 using OpenTelemetry.Trace;
-using Web.Observability;
 using DiagnosticRedactor = Infrastructure.Diagnostics.Redaction.DiagnosticRedactor;
 
 namespace Test.Web.Diagnostics;

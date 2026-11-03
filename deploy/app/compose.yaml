@@ -30,6 +30,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
+      # Optional external platform collector, separate from deployment-history storage.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${AUTOMATE_PLATFORM_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${AUTOMATE_PLATFORM_OTLP_PROTOCOL:-grpc}
+      OTEL_EXPORTER_OTLP_HEADERS: ${AUTOMATE_PLATFORM_OTLP_HEADERS:-}
       HostingProfile__Mode: SelfHosted
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=automate;Username=automate;Password=${POSTGRES_PASSWORD:?Set the infrastructure PostgreSQL password}
       ConnectionStrings__Redis: redis:6379,password=${REDIS_PASSWORD:?Set the infrastructure Redis password}
@@ -84,6 +88,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
+      # Independent private-host platform export; no receiver is provisioned here.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${TELEMETRY_PLATFORM_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${TELEMETRY_PLATFORM_OTLP_PROTOCOL:-grpc}
+      OTEL_EXPORTER_OTLP_HEADERS: ${TELEMETRY_PLATFORM_OTLP_HEADERS:-}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=automate;Username=automate;Password=${POSTGRES_PASSWORD:?}
       DiskSpool__Directory: /var/telemetry
       TelemetryStorage__Backend: LokiMimir

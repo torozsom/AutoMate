@@ -20,7 +20,7 @@ internal sealed class DeploymentReconciliation(
     ILogger<DeploymentCleanupHostedService> logger)
 {
     /// <summary>
-    ///     Applies the existing startup status transitions and Docker name comparison rules.
+    ///     Reconciles the latest local launch only; Compose names cannot identify historical launches.
     /// </summary>
     /// <param name="cancellationToken">The existing startup operation token.</param>
     /// <returns>Completes when reconciliation is persisted; the host translates failures and cancellation.</returns>
@@ -44,6 +44,9 @@ internal sealed class DeploymentReconciliation(
         var runningDeployments = await dbContext.Deployments
             .Include(d => d.CsProject)
             .ThenInclude(csp => csp!.Application)
+            .Where(d => !dbContext.Deployments.Any(newer => newer.CsProject!.AppId == d.CsProject!.AppId
+                                                            && (newer.CreatedAt > d.CreatedAt ||
+                                                                (newer.CreatedAt == d.CreatedAt && newer.Id != d.Id))))
             .Where(d => (d.Status == DeploymentStatus.Running
                          || d.Status == DeploymentStatus.Stopped)
                         && d.CsProject!.Application.SourceType == SourceType.Local

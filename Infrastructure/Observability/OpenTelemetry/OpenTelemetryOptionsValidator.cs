@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 
-namespace Web.Configs.Observability;
+namespace Infrastructure.Observability.OpenTelemetry;
 
 /// <summary>
 ///     Validates optional exporter configuration without exposing endpoint or resource-label values.
@@ -27,6 +27,11 @@ public sealed class OpenTelemetryOptionsValidator : IValidateOptions<OpenTelemet
         if (!string.IsNullOrWhiteSpace(options.OtlpEndpoint) && !TryGetCollectorEndpoint(options.OtlpEndpoint, out _))
             failures.Add(
                 "OpenTelemetry:OtlpEndpoint must be an absolute HTTP(S) collector URL without credentials, query or fragment.");
+
+        if (!double.IsFinite(options.SignalRSuccessSampleRate) || options.SignalRSuccessSampleRate is < 0 or > 1 ||
+            !double.IsFinite(options.EmptyClaimSampleRate) || options.EmptyClaimSampleRate is < 0 or > 1 ||
+            options.SignalRSlowMilliseconds <= 0 || options.ClaimSlowMilliseconds <= 0)
+            failures.Add("OpenTelemetry sampling rates or slow-operation thresholds are outside supported ranges.");
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }

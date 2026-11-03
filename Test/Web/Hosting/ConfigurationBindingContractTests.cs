@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Application.Diagnostics;
 using Application.Orchestration.Cloud;
 using Application.Orchestration.Jobs;
 using Infrastructure.Azure.Monitor;
@@ -7,6 +8,7 @@ using Infrastructure.Diagnostics.Storage;
 using Infrastructure.Docker.Runtime;
 using Infrastructure.Email;
 using Infrastructure.GitHub.Authentication;
+using Infrastructure.Observability.OpenTelemetry;
 using Microsoft.Extensions.Configuration;
 
 namespace Test.Web.Hosting;
@@ -14,6 +16,40 @@ namespace Test.Web.Hosting;
 /// <summary>Protects non-default configuration values across construction and runtime configuration binding.</summary>
 public sealed class ConfigurationBindingContractTests
 {
+    /// <summary>
+    ///     Export activation and sampling thresholds remain configurable through the real host binder.
+    /// </summary>
+    [Fact]
+    public void OpenTelemetryOptions_preserves_configured_values()
+    {
+        AssertBinding("OpenTelemetry", new OpenTelemetryOptions
+        {
+            ServiceName = "AutoMate.Fixture",
+            Environment = "Testing",
+            ExportConsole = true,
+            OtlpEndpoint = "https://collector.example.test",
+            SignalRSuccessSampleRate = 0.5,
+            EmptyClaimSampleRate = 0.2,
+            SignalRSlowMilliseconds = 200,
+            ClaimSlowMilliseconds = 500
+        });
+    }
+
+    /// <summary>
+    ///     Live cadence and sink limits retain nondefault operator configuration.
+    /// </summary>
+    [Fact]
+    public void DeploymentDiagnosticOptions_preserves_configured_values()
+    {
+        AssertBinding("DeploymentDiagnostics", new DeploymentDiagnosticOptions
+        {
+            BufferCapacity = 128,
+            PersistenceTimeoutSeconds = 20,
+            DeliveryTimeoutSeconds = 4,
+            LiveMetricIntervalMilliseconds = 1500
+        });
+    }
+
     /// <summary>All configured CloudSaas values survive binding instead of reverting to defaults.</summary>
     [Fact]
     public void CloudSaasOptions_preserves_configured_values()

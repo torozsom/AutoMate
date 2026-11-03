@@ -4,11 +4,11 @@ Validated exporter/resource options and authorization-result audit integration.
 
 ## Contents
 
-| File                                                                 | Types or asset                  | Responsibility                                                                                      |
-|----------------------------------------------------------------------|---------------------------------|-----------------------------------------------------------------------------------------------------|
-| [OpenTelemetryOptions.cs](OpenTelemetryOptions.cs)                   | `OpenTelemetryOptions`          | Controls OpenTelemetry export without placing credentials in application settings.                  |
-| [OpenTelemetryOptionsValidator.cs](OpenTelemetryOptionsValidator.cs) | `OpenTelemetryOptionsValidator` | Validates optional exporter configuration without exposing endpoint or resource-label values.       |
-| [SecurityAuditResultHandler.cs](SecurityAuditResultHandler.cs)       | `SecurityAuditResultHandler`    | Audits authorization challenges/denials while preserving the framework's challenge/forbid behavior. |
+| File                                                                                                                     | Types or asset                  | Responsibility                                                                                      |
+|--------------------------------------------------------------------------------------------------------------------------|---------------------------------|-----------------------------------------------------------------------------------------------------|
+| [OpenTelemetryOptions.cs](../../../Infrastructure/Observability/OpenTelemetry/OpenTelemetryOptions.cs)                   | `OpenTelemetryOptions`          | Controls OpenTelemetry export without placing credentials in application settings.                  |
+| [OpenTelemetryOptionsValidator.cs](../../../Infrastructure/Observability/OpenTelemetry/OpenTelemetryOptionsValidator.cs) | `OpenTelemetryOptionsValidator` | Validates optional exporter configuration without exposing endpoint or resource-label values.       |
+| [SecurityAuditResultHandler.cs](SecurityAuditResultHandler.cs)                                                           | `SecurityAuditResultHandler`    | Audits authorization challenges/denials while preserving the framework's challenge/forbid behavior. |
 
 ## Usage and integration
 
@@ -40,3 +40,10 @@ configuration, not authorization to emit arbitrary state.
 - [Registration](../Hosting/ServiceConfiguration.cs)
 - [Option validation](../../../Test/Web/Hosting/HostingProfileRegistrationTests.cs)
 - [Resource tests](../../../Test/Web/Hosting/MetricResourceSafetyTests.cs)
+
+## Shared options
+
+OpenTelemetryOptions and its validator moved to Infrastructure.Observability.OpenTelemetry, shared with the private
+host.
+See [shared SDK settings](../../../Infrastructure/Observability/OpenTelemetry/README.md) for sampling, batch limits and
+protocol-aware collector routes. Existing OpenTelemetry configuration keys retain their meaning.

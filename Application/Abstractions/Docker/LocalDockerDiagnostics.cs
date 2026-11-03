@@ -66,6 +66,15 @@ public interface ILocalDeploymentDiagnostics
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    ///     Quiesces container logs and metrics before removal while preserving daemon lifecycle collection.
+    /// </summary>
+    /// <param name="projectId">Project whose owned runtime sources must stop.</param>
+    /// <param name="deploymentId">Exact deployment identity; stale requests have no effect.</param>
+    /// <param name="cancellationToken">Cancels waiting for source shutdown.</param>
+    /// <returns>Completes after runtime sources acknowledge cancellation.</returns>
+    Task StopRuntimeAsync(Guid projectId, Guid deploymentId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Cancels and awaits all collectors for a project.
     /// </summary>
     /// <param name="projectId">The project identity used for authorization or correlation.</param>

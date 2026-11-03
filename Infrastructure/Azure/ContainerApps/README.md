@@ -48,3 +48,17 @@ monitor another revision.
 - [Coordinator tests](../../../Test/Infra/Azure/ContainerApps/AzureContainerAppRuntimeStreamerTests.cs)
 - [Live stream tests](../../../Test/Infra/Azure/ContainerApps/AzureContainerAppLiveLogsTests.cs)
 - [Checkpoint tests](../../../Test/Infra/Azure/ContainerApps/AzureContainerAppLogCheckpointStoreTests.cs)
+
+## Live collector outcome telemetry
+
+ACA discovery, connection, reading and publication use finite operation/termination fields. Shutdown/ownership-refresh
+events are Debug, unexpected timeout/transport failures Warning and recovery Information once after failure. Endpoint
+inventory removal clears recovery state. No endpoint/replica/provider text becomes an operational metric dimension;
+GUID correlation remains in approved logs. Existing reconnect, lease and checkpoint rules remain unchanged.
+
+The connection attempt owns callback operation-stage state, so publication failures retain their originating stage when
+an awaited stream callback propagates an exception.
+
+Collector outcomes distinguish provider_conflict (HTTP 409) and provider_rejected (other HTTP response failures)
+from transport_failure. They remain warnings, mark the session for a single recovery event and keep existing retry
+timing. Provider response text is never inspected for classification.

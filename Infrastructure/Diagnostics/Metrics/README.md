@@ -40,3 +40,10 @@ cleanup note.
 - [Range/paging tests](../../../Test/Infra/Diagnostics/PolicyAndMetrics/MetricExplorationTests.cs)
 - [Aggregation tests](../../../Test/Infra/Diagnostics/Archive/SaaSTelemetryTests.cs)
 - [Design](../../../docs/metric-exploration.md)
+
+## Private-host state observation
+
+TelemetrySpoolObserver owns disposable observable instruments and a background refresh. Index snapshots are obtained
+under the spool gate every five seconds; disk capacity probes run every 30 seconds. Export callbacks perform no I/O or
+locking. Current state and staleness have separate gauges; disk probe failures preserve prior successful observations.
+TelemetryStorageMetrics also records quota rejections, segment attempt outcomes, visibility age and archive latency.
