@@ -20,7 +20,7 @@ public sealed class MigrationDiscoveryTests
     [Fact]
     public void Historical_migration_chain_preserves_ids_types_and_operations()
     {
-        (string Id, Microsoft.EntityFrameworkCore.Migrations.Migration Migration)[] expected =
+        (string Id, Migration Migration)[] expected =
         [
             ("20260522134720_Initial", new Initial()),
             ("20260524171414_RefactorRemoteUser", new RefactorRemoteUser()),
