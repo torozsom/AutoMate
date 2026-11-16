@@ -29,7 +29,7 @@
         <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.14"/>
         <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14"/>
         <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.14"/>
-        <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.14"/>
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="11.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14"/>
         <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="10.0.14"/>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3"/>
