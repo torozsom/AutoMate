@@ -48,7 +48,7 @@ public sealed class GmailSenderService(
 
         var mimeMessage = CreateMessage(toEmail, subject, message);
 
-        using var smtpClient = new SmtpClient();
+        await using var smtpClient = new SmtpClient();
 
         try
         {
