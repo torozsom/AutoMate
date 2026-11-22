@@ -17,6 +17,21 @@ updates:
       time: '07:00'
       timezone: Europe/Budapest
     open-pull-requests-limit: 5
+    # .NET/EF major upgrades require a coordinated application migration.
+    # Minor and patch servicing updates remain eligible for the maintenance groups.
+    ignore:
+      - dependency-name: 'Microsoft.Extensions.*'
+        update-types: [ version-update:semver-major ]
+      - dependency-name: 'Microsoft.AspNetCore.*'
+        update-types: [ version-update:semver-major ]
+      - dependency-name: 'Microsoft.EntityFrameworkCore*'
+        update-types: [ version-update:semver-major ]
+      - dependency-name: 'System.Security.Cryptography.*'
+        update-types: [ version-update:semver-major ]
+      - dependency-name: 'Npgsql.EntityFrameworkCore.PostgreSQL'
+        update-types: [ version-update:semver-major ]
+      - dependency-name: 'EFCore.NamingConventions'
+        update-types: [ version-update:semver-major ]
     groups:
       nuget-security:
         applies-to: security-updates
