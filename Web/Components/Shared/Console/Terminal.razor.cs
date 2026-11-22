@@ -76,18 +76,18 @@ public partial class Terminal
     {
         if (firstRender)
         {
-            await JsRuntime.InvokeVoidAsync("xtermWrapper.init", Id);
+            await InvokeTerminalAsync("xtermWrapper.init", Id);
 
             while (_pendingWrites.TryDequeue(out var pending))
             {
                 _pendingCharacters -= pending.Length;
-                await JsRuntime.InvokeVoidAsync("xtermWrapper.write", Id, pending);
+                await InvokeTerminalAsync("xtermWrapper.write", Id, pending);
             }
 
             _isReady = true;
             if (_pendingOverflow)
             {
-                await JsRuntime.InvokeVoidAsync("xtermWrapper.write", Id,
+                await InvokeTerminalAsync("xtermWrapper.write", Id,
                     "\r\n[Some output was omitted while the terminal initialized. Reload to recover available history.]\r\n");
                 _pendingOverflow = false;
             }
@@ -124,7 +124,7 @@ public partial class Terminal
             return;
         }
 
-        await JsRuntime.InvokeVoidAsync("xtermWrapper.write", Id, text);
+        await InvokeTerminalAsync("xtermWrapper.write", Id, text);
     }
 
     /// <summary>
@@ -141,7 +141,27 @@ public partial class Terminal
         _pendingCharacters = 0;
         _pendingOverflow = false;
         if (!_isReady) return Task.CompletedTask;
-        return JsRuntime.InvokeVoidAsync("xtermWrapper.clear", Id).AsTask();
+        return InvokeTerminalAsync("xtermWrapper.clear", Id);
+    }
+
+    /// <summary>
+    ///     Records browser-call failures while preserving failure propagation to replay and cursor owners.
+    /// </summary>
+    /// <param name="identifier">Terminal browser operation to invoke.</param>
+    /// <param name="arguments">Terminal identity and optional output text.</param>
+    /// <returns>A task completing when the browser operation succeeds.</returns>
+    /// <exception cref="JSException">The browser operation failed or its circuit disconnected.</exception>
+    private async Task InvokeTerminalAsync(string identifier, params object?[] arguments)
+    {
+        try
+        {
+            await JsRuntime.InvokeVoidAsync(identifier, arguments);
+        }
+        catch (JSException)
+        {
+            Logger.LogDebug("Terminal browser operation {Operation} failed for {TerminalId}.", identifier, Id);
+            throw;
+        }
     }
 
 

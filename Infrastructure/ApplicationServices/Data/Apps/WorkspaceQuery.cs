@@ -70,7 +70,7 @@ public sealed class WorkspaceQuery(
 
         if (!string.IsNullOrEmpty(search))
         {
-            search = search[..Math.Min(search.Length, 200)].ToLower();
+            search = search[..Math.Min(search.Length, 200)].ToLowerInvariant();
             rows = rows.Where(a => a.Name.ToLower().Contains(search) || a.Source.ToLower().Contains(search));
         }
 
@@ -168,8 +168,13 @@ public sealed class WorkspaceQuery(
             })
             .Select(g => new
             {
-                g.Key.Year, g.Key.Month, g.Key.Day,
-                g.Key.Hour, g.Key.Minute, g.Key.Outcome, Count = g.Count()
+                g.Key.Year,
+                g.Key.Month,
+                g.Key.Day,
+                g.Key.Hour,
+                g.Key.Minute,
+                g.Key.Outcome,
+                Count = g.Count()
             })
             .ToListAsync(token);
 

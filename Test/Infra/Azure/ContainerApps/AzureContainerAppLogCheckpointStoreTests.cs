@@ -1,3 +1,4 @@
+using System.Globalization;
 using Domain.Entities.Deployments;
 using Domain.Entities.Diagnostics;
 using Domain.Entities.Projects;
@@ -56,7 +57,7 @@ public sealed class AzureContainerAppLogCheckpointStoreTests
             {
                 DeploymentId = deploymentId,
                 Source = "console",
-                LastTimestamp = DateTimeOffset.Parse("2026-09-28T10:00:00Z"),
+                LastTimestamp = DateTimeOffset.Parse("2026-09-28T10:00:00Z", CultureInfo.InvariantCulture),
                 LastTieBreaker = "abc"
             });
             await dbContext.SaveChangesAsync();

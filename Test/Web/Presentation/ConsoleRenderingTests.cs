@@ -65,13 +65,13 @@ public sealed class ConsoleRenderingTests
                      typeof(Dashboard), typeof(GitHubRepos), typeof(LocalGitRepos), typeof(MainLayout), typeof(NavMenu),
                      typeof(ConfigurationForm), typeof(RegistryForm), typeof(WorkspaceOverviewPanel)
                  })
-        foreach (var property in type
-                     .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType is
+            foreach (var property in type
+                         .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                         .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType is
                          { IsInterface: true, IsGenericType: false }))
-            if (services.All(s => s.ServiceType != property.PropertyType))
-                services.AddSingleton(property.PropertyType,
-                    DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
+                if (services.All(s => s.ServiceType != property.PropertyType))
+                    services.AddSingleton(property.PropertyType,
+                        DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
         if (services.All(registration => registration.ServiceType != typeof(IUserService)))
             services.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
         if (services.All(registration => registration.ServiceType != typeof(IApplicationService)))
@@ -108,7 +108,7 @@ public sealed class ConsoleRenderingTests
             var html = await renderer.Dispatcher.InvokeAsync(async () =>
                 (await renderer.RenderComponentAsync<PreviewRoot>(
                     ParameterView.FromDictionary(new Dictionary<string, object?>
-                        { [nameof(PreviewRoot.Page)] = type }))).ToHtmlString());
+                    { [nameof(PreviewRoot.Page)] = type }))).ToHtmlString());
 
             if (name == "overview")
             {
@@ -350,18 +350,13 @@ public sealed class ConsoleRenderingTests
         [Parameter]
         public RenderFragment? Body { get; set; }
 
-        /// <summary>Fixture identity.</summary>
-        [Inject]
-        public AuthenticationStateProvider Authentication { get; set; } = null!;
-
         /// <summary>
         ///     Builds the synthetic component tree used by the rendering fixture.
         /// </summary>
         /// <param name="b">Blazor builder receiving the fixture component tree.</param>
         protected override void BuildRenderTree(RenderTreeBuilder b)
         {
-            b.OpenComponent<CascadingValue<Task<AuthenticationState>>>(0);
-            b.AddAttribute(1, "Value", Authentication.GetAuthenticationStateAsync());
+            b.OpenComponent<CascadingAuthenticationState>(0);
             b.AddAttribute(2, "ChildContent", (RenderFragment)(child =>
             {
                 child.OpenComponent<MainLayout>(0);

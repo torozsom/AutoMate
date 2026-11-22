@@ -246,7 +246,7 @@ public sealed class CloudRunMonitor(
     {
         AutoMateTelemetry.CloudProviderThrottles.Add(1);
         await dbContext.Database
-            .ExecuteSqlInterpolatedAsync($"""
+            .ExecuteSqlAsync($"""
                                           INSERT INTO cloud_installation_budgets
                                           (installation_id, paused_until, updated_at, throttle_count)
                                           VALUES ({installationId}, {retryAt}, {_clock.GetUtcNow()}, 1)

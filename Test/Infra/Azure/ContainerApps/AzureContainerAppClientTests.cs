@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Infrastructure.Azure.ContainerApps;
 using Test.Infra.TestSupport;
@@ -52,7 +53,7 @@ public sealed class AzureContainerAppClientTests
                 .Single(value => value.StartsWith("timespan=", StringComparison.Ordinal))["timespan=".Length..]);
 
             Assert.All(timespan.Split('/'),
-                value => Assert.Equal(0, DateTimeOffset.Parse(value).Ticks % TimeSpan.TicksPerMinute));
+                value => Assert.Equal(0, DateTimeOffset.Parse(value, CultureInfo.InvariantCulture).Ticks % TimeSpan.TicksPerMinute));
 
             return DelegateHttpMessageHandler.Json("""
                                                    { "value": [

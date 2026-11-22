@@ -60,12 +60,12 @@ public sealed class TelemetryPageRenderingTests
             .AddSingleton<NavigationManager, FixtureNavigation>();
 
         foreach (var componentType in new[] { typeof(ProjectDetails), typeof(MainLayout), typeof(NavMenu) })
-        foreach (var property in componentType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
-                     .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType is
+            foreach (var property in componentType.GetProperties(BindingFlags.Instance | BindingFlags.NonPublic)
+                         .Where(p => p.GetCustomAttribute<InjectAttribute>() is not null && p.PropertyType is
                          { IsInterface: true, IsGenericType: false }))
-            if (registrations.All(r => r.ServiceType != property.PropertyType))
-                registrations.AddSingleton(property.PropertyType,
-                    DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
+                if (registrations.All(r => r.ServiceType != property.PropertyType))
+                    registrations.AddSingleton(property.PropertyType,
+                        DispatchProxy.Create(property.PropertyType, typeof(EmptyPort)));
         if (registrations.All(registration => registration.ServiceType != typeof(IUserService)))
             registrations.AddSingleton(DispatchProxy.Create<IUserService, EmptyPort>());
         if (registrations.All(registration => registration.ServiceType != typeof(IApplicationService)))
@@ -209,7 +209,7 @@ public sealed class TelemetryPageRenderingTests
         protected override Task OnInitializedAsync()
         {
             var project = new CsProject
-                { Name = "Web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } };
+            { Name = "Web", IsWebProject = true, Configuration = new Configuration { DotNetVersion = "10.0" } };
             var app = new Domain.Entities.Projects.Application
             {
                 Name = "History demo",
@@ -465,7 +465,7 @@ public sealed class TelemetryPageRenderingTests
         }
 
         /// <summary>
-        ///     Delegates to the fixture interop overload using the same identifier and arguments.
+        ///     Rejects browser interop because this fixture renders static HTML.
         /// </summary>
         /// <param name="identifier">Provider or user identity to resolve.</param>
         /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
@@ -474,7 +474,7 @@ public sealed class TelemetryPageRenderingTests
         /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<T> InvokeAsync<T>(string identifier, CancellationToken token, object?[]? args)
         {
-            return InvokeAsync<T>(identifier, args);
+            throw new InvalidOperationException("Unexpected interop");
         }
     }
 

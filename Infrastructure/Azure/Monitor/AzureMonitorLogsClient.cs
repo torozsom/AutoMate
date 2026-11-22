@@ -140,7 +140,7 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
 
         var indexes = columns.EnumerateArray()
             .Select((column, index) => new
-                { Name = column.GetProperty("name").GetString(), Index = index })
+            { Name = column.GetProperty("name").GetString(), Index = index })
             .Where(item => !string.IsNullOrWhiteSpace(item.Name))
             .ToDictionary(item => item.Name!, item => item.Index, StringComparer.OrdinalIgnoreCase);
 
@@ -149,13 +149,14 @@ internal sealed class AzureMonitorLogsClient(IHttpClientFactory httpClientFactor
         {
             var values = row.EnumerateArray().ToArray();
             var timestampText = GetValue(values, indexes, "TimeGenerated");
-            if (!DateTimeOffset.TryParse(timestampText, out var timestamp)) continue;
+            if (!DateTimeOffset.TryParse(timestampText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var timestamp)) continue;
 
             records.Add(new AzureMonitorLogRecord(timestamp.ToUniversalTime(), GetValue(values, indexes, "Message"),
                 GetValue(values, indexes, "ContainerName"), GetValue(values, indexes, "RevisionName"),
                 GetValue(values, indexes, "Stream"), GetValue(values, indexes, "SourceTable"),
                 GetValue(values, indexes, "CursorHash") is { Length: > 0 } hash ? hash : null,
-                DateTimeOffset.TryParse(GetValue(values, indexes, "IngestedAt"), out var ingested)
+                DateTimeOffset.TryParse(GetValue(values, indexes, "IngestedAt"), CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out var ingested)
                     ? ingested.ToUniversalTime()
                     : null, GetValue(values, indexes, "ReplicaName")));
         }

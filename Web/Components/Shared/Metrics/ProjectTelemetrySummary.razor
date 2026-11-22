@@ -36,7 +36,7 @@
             <span>Observed log errors: <strong>@(summary.CompleteDayLogErrors?.ToString() ?? (summary.Daily.Any(d => d.Metric == "observed_log_errors") ? summary.Daily.Where(d => d.Metric == "observed_log_errors").Sum(d => d.ObservedErrors).ToString() : "—"))</strong> · approximate, complete UTC days</span>
             @if (summary.AverageDeploymentSeconds is { } seconds)
             {
-                <span>Average completed deployment: @TimeSpan.FromSeconds(seconds).ToString("g")</span>
+                <span>Average completed deployment: @TimeSpan.FromSeconds(seconds).ToString("g", CultureInfo.CurrentCulture)</span>
             }
             @if (summary.Daily.Count > 0)
             {

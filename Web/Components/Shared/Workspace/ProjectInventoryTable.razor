@@ -35,7 +35,7 @@
                             · @(project.SourceType == SourceType.Remote ? "GitHub / Azure" : "Local / Docker")</small>
                     </div>
                 </td>
-                <td data-label="Latest deployment">@(project.LatestAt?.ToString("MMM d, yyyy HH:mm") ?? "No deployments")</td>
+                <td data-label="Latest deployment">@(project.LatestAt?.ToString("MMM d, yyyy HH:mm", CultureInfo.CurrentCulture) ?? "No deployments")</td>
                 <td data-label="Status">
                     <DeploymentBadge Status="project.Status"/>
                 </td>

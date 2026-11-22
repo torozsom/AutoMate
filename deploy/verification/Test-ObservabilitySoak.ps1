@@ -34,7 +34,7 @@ try
     # Snapshot the test output so ordinary builds cannot replace assemblies during this long-running verification.
     $runtimeDirectory = Join-Path $artifactDirectory ('runtime-' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
     New-Item -ItemType Directory -Path $runtimeDirectory | Out-Null
-    Copy-Item -Path (Join-Path $repositoryRoot 'Test/bin/Release/net10.0/*') -Destination $runtimeDirectory -Recurse
+    Copy-Item -Path (Join-Path $repositoryRoot 'Test/bin/Release/net11.0/*') -Destination $runtimeDirectory -Recurse
     $filter = 'FullyQualifiedName~OperationalTelemetryTests|FullyQualifiedName~DockerMetricDeliveryTests|FullyQualifiedName~DiskTelemetrySpoolTests|FullyQualifiedName~AzureContainerAppLiveLogsTests|FullyQualifiedName~AnalysisWorkerConcurrencyTests'
     $started = [DateTimeOffset]::UtcNow
     $watch = [Diagnostics.Stopwatch]::StartNew()

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.IO.Pipelines;
 using System.Net;
@@ -164,7 +165,7 @@ public sealed class AzureContainerAppLiveLogsTests
             requests++;
 
             return DelegateHttpMessageHandler.Json(JsonSerializer.Serialize(new
-                { properties = new { eventStreamEndpoint = endpoint } }));
+            { properties = new { eventStreamEndpoint = endpoint } }));
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -273,7 +274,7 @@ public sealed class AzureContainerAppLiveLogsTests
         var verificationToken = verificationDeadline.Token;
         var publisher = new RecordingPublisher();
         var collector = Create(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
-            { Content = new StringContent("private-provider-secret") }, publisher);
+        { Content = new StringContent("private-provider-secret") }, publisher);
         using var lifetime = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         collector.Update(Target(), lifetime.Token);
@@ -334,7 +335,7 @@ public sealed class AzureContainerAppLiveLogsTests
 
         collector.Update(target, lifetime.Token);
         await secondConsole.Task.WaitAsync(TimeSpan.FromSeconds(3), verificationToken);
-        var history = new AzureMonitorLogRecord(DateTimeOffset.Parse("2026-10-11T12:00:01Z"), "live",
+        var history = new AzureMonitorLogRecord(DateTimeOffset.Parse("2026-10-11T12:00:01Z", CultureInfo.InvariantCulture), "live",
             "web", "rev-1", "stderr", "ContainerAppConsoleLogs", ReplicaName: "pod-1");
 
         Assert.True(collector.WasConfirmedLive(target.DeploymentId, history));

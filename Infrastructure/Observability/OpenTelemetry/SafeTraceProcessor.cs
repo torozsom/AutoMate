@@ -17,15 +17,16 @@ public sealed class SafeTraceProcessor(PlatformTelemetryPolicy policy) : BasePro
         "automate.platform.spans.omitted");
 
     /// <summary>Fixed deployment operation names approved for export.</summary>
-    private static readonly HashSet<string> DeploymentNames = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> DeploymentNames =
+    [
+        with(StringComparer.Ordinal),
         "deployment.diagnostic.ingest", "deployment.diagnostic.dispatch", "deployment.diagnostic.redact",
         "deployment.diagnostic.persist", "deployment.diagnostic.deliver", "deployment.signalr.join",
         "deployment.signalr.leave", "deployment.signalr.replay", "deployment.signalr.send", "deployment.local.execute",
         "docker.compose.execute", "docker.image.build", "docker.daemon.events", "docker.container.logs",
         "docker.metrics.stream", "github.workflow.query", "github.workflow.observe", "github.jobs.query",
         "github.logs.download", "azure.runtime.poll", "azure.logs.query", "azure.metrics.query"
-    };
+    ];
 
     /// <summary>
     ///     Sanitizes span metadata and omits spans with untrusted immutable events or links.

@@ -1,6 +1,6 @@
 # Tests
 
-Unit tests for isolated application policies, adapter helpers and presentation state, using .NET 10 / C# 14,
+Unit tests for isolated application policies, adapter helpers and presentation state, using .NET 11 / C# 15,
 xUnit and built-in assertions. The project contains 78 test methods and 162 discovered cases, including independently
 reported theory rows.
 The original Docker, Templating and Scanning modules retain ten test files each.

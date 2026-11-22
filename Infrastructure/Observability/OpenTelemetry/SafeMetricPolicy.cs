@@ -9,8 +9,9 @@ namespace Infrastructure.Observability.OpenTelemetry;
 public static class SafeMetricPolicy
 {
     /// <summary>Fixed instruments owned by AutoMate; their remaining dimensions are emitted by reviewed finite sources.</summary>
-    private static readonly HashSet<string> ApplicationNames = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> ApplicationNames =
+    [
+        with(StringComparer.Ordinal),
         "automate.analysis.operations",
         "automate.analysis.duration",
         "automate.analysis.active",
@@ -64,11 +65,12 @@ public static class SafeMetricPolicy
         "telemetry.request.seconds",
         "telemetry.spool.bytes",
         "telemetry.visibility.seconds"
-    };
+    ];
 
     /// <summary>Known framework instruments; all external labels are omitted, retaining aggregate measurements.</summary>
-    private static readonly HashSet<string> FrameworkNames = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> FrameworkNames =
+    [
+        with(StringComparer.Ordinal),
         "http.server.request.duration", "http.client.request.duration", "http.client.active_requests",
         "http.client.open_connections", "http.client.connection.duration", "http.client.request.time_in_queue",
         "http.client.request.body.size", "http.client.response.body.size",
@@ -78,7 +80,7 @@ public static class SafeMetricPolicy
         "dotnet.jit.compilation.time", "dotnet.monitor.lock_contentions", "dotnet.thread_pool.thread.count",
         "dotnet.thread_pool.work_item.count", "dotnet.thread_pool.queue.length", "dotnet.timer.count",
         "dotnet.assembly.count", "dotnet.exceptions", "dotnet.process.memory.working_set", "dotnet.process.cpu.time"
-    };
+    ];
 
     /// <summary>
     ///     Configures views before exporters and explicitly disables exemplars, which otherwise retain
@@ -138,7 +140,8 @@ public static class SafeMetricPolicy
         return instrument.Unit == "ms" && instrument is Histogram<double>
             ? new ExplicitBucketHistogramConfiguration
             {
-                TagKeys = tags, CardinalityLimit = 4096,
+                TagKeys = tags,
+                CardinalityLimit = 4096,
                 Boundaries = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
             }
             : new MetricStreamConfiguration { TagKeys = tags, CardinalityLimit = 4096 };

@@ -257,7 +257,7 @@ public sealed partial class DiskDeploymentArchive
     private static async Task WriteMetricReferenceAsync(string partition, string source, DateTimeOffset time,
         CancellationToken token)
     {
-        var directory = Path.Combine(partition, "metric-index", time.UtcDateTime.ToString("yyyyMMdd"));
+        var directory = Path.Combine(partition, "metric-index", time.UtcDateTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, source + ".ref");
         var segment = new Segment(1, source, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source))));

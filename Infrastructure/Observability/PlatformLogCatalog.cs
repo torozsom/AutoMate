@@ -7,8 +7,9 @@ namespace Infrastructure.Observability;
 internal static class PlatformLogCatalog
 {
     /// <summary>Fixed application messages; interpolated and unknown provider templates are excluded.</summary>
-    internal static readonly HashSet<string> Templates = new(StringComparer.Ordinal)
-    {
+    internal static readonly HashSet<string> Templates =
+    [
+        with(StringComparer.Ordinal),
         "HTTP operation {ClientFamily} outcome {HttpOutcome}, status {StatusCode}, status class {StatusClass}, duration {ElapsedMilliseconds} ms.",
         "Collector operation {CollectorOperation} outcome {CollectorOutcome} for deployment {DeploymentId}.",
         "ACA live discovery failed for deployment {DeploymentId}. Failure {FailureType}.",
@@ -298,11 +299,12 @@ internal static class PlatformLogCatalog
         "[TemplateService] The template file '{TemplateFile}' does not exist!",
         "[TemplateService] Unexpected error occurred while generating template: {TemplateFile}",
         "[{LogSource}] Failed to update deployment status {Status} for Deployment ID {Id}. Failure {FailureType}."
-    };
+    ];
 
     /// <summary>Known application and framework logger categories; unknown names use a fixed fallback.</summary>
-    internal static readonly HashSet<string> Categories = new(StringComparer.Ordinal)
-    {
+    internal static readonly HashSet<string> Categories =
+    [
+        with(StringComparer.Ordinal),
         "Infrastructure.Diagnostics.DeploymentArchiveCleanupWorker",
         "Infrastructure.Diagnostics.DeploymentArchiveBackfillWorker",
         "Web.Components.Shared.DeploymentAnalysisSection",
@@ -497,5 +499,5 @@ internal static class PlatformLogCatalog
         "Web.Configs.AppConfiguration",
         "Web.Configs.ServiceConfiguration",
         "Web.Hubs.LogHub"
-    };
+    ];
 }

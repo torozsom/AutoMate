@@ -22,7 +22,7 @@ public sealed class LoginEndpoint : IEndpoint
     /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/auth/login", async (
+        app.MapPost(ApplicationRoutes.LoginAction, async (
                 HttpContext context,
                 [FromServices] IAuthService authService,
                 ILogger<LoginEndpoint> logger,

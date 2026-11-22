@@ -29,7 +29,7 @@ jobs:
       - name: Set up .NET SDK
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
       - name: Restore solution
         run: dotnet restore AutoMate.slnx
       - name: Build Release with warnings as errors

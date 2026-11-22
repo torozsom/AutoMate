@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -20,7 +21,7 @@ public sealed class AzureMonitorLogsClientTests
     [Fact]
     public async Task Query_preserves_delayed_event_time_and_equal_ingestion_hash_cursor()
     {
-        var ingestion = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+        var ingestion = DateTimeOffset.Parse("2026-10-10T11:00:00Z", CultureInfo.InvariantCulture);
 
         var client = new AzureMonitorLogsClient(new StubHttpClientFactory(new DelegateHttpMessageHandler(request =>
         {
@@ -78,12 +79,12 @@ public sealed class AzureMonitorLogsClientTests
 
         var result = await client.QueryAsync(
             "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/containerApps/app", "monitor-token",
-            AzureContainerAppLogSource.Console, "app", DateTimeOffset.Parse("2026-09-28T09:00:00Z"), 10,
+            AzureContainerAppLogSource.Console, "app", DateTimeOffset.Parse("2026-09-28T09:00:00Z", CultureInfo.InvariantCulture), 10,
             CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Records.Should().ContainSingle().Which.Should().BeEquivalentTo(new AzureMonitorLogRecord(
-            DateTimeOffset.Parse("2026-09-28T10:00:00Z"), "hello", "web", "rev-1", "stdout",
+            DateTimeOffset.Parse("2026-09-28T10:00:00Z", CultureInfo.InvariantCulture), "hello", "web", "rev-1", "stdout",
             "ContainerAppConsoleLogs"));
         sentRequest!.RequestUri!.AbsoluteUri.Should().Be(
             "https://api.loganalytics.azure.com/v1/subscriptions/sub/resourceGroups/rg/providers/Microsoft.App/containerApps/app/query");

@@ -16,7 +16,8 @@ Production DI/options/profile validation, independent operation scopes and share
 
 HostingProfileRegistrationTests resolves real composition and validates AI/budgets/retries/OTLP/telemetry configuration
 in both profiles. ScopedApplicationOperationsTests verifies overlapping/failing/canceled calls dispose independent
-dependencies. PlatformTelemetrySafetyTests/MetricResourceSafetyTests inspect actual provider and OTLP serialization.
+dependencies. Startup validation uses `IAsyncStartupValidator` and awaits validation failures on .NET 11.
+PlatformTelemetrySafetyTests/MetricResourceSafetyTests inspect actual provider and OTLP serialization.
 TelemetryHostSafetyTests hosts the production private-host authentication surface over loopback.
 
 ## Fixtures and boundaries

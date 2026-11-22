@@ -158,7 +158,7 @@ public sealed class ProjectScannerService(ILogger<ProjectScannerService> logger)
         return new DatabaseConfigDto
         {
             DbType = rule.DbType,
-            ContainerNameSuffix = rule.DbType.ToLower(),
+            ContainerNameSuffix = rule.DbType.ToLowerInvariant(),
             ConnectionStringName = $"{rule.DbType}Connection"
         };
     }

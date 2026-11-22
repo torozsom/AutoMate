@@ -149,8 +149,6 @@ public partial class LocalGitRepos : ComponentBase, IDisposable
             _isScanning = false;
             _hasScanned = !wasCancelled;
 
-            if (!_componentCancellation.IsCancellationRequested)
-                StateHasChanged();
         }
     }
 

@@ -1,5 +1,6 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
+COPY global.json Directory.Build.props ./
 COPY Domain/Domain.csproj Domain/
 COPY Application/Application.csproj Application/
 COPY Infrastructure/Infrastructure.csproj Infrastructure/
@@ -11,7 +12,7 @@ COPY Infrastructure/ Infrastructure/
 COPY Telemetry/ Telemetry/
 RUN dotnet publish Telemetry/Telemetry.csproj -c Release -o /publish /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:11.0
 WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:8080
 COPY --from=build /publish .

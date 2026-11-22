@@ -1,7 +1,7 @@
 # Domain
 
 Shared business data and contracts for AutoMate: project ownership, deployment history, cloud execution, diagnostics and
-AI analysis. This .NET 10/C# 14 project enables nullable reference types and implicit usings, with no project or package
+AI analysis. This .NET 11/C# 15 project enables nullable reference types and implicit usings, with no project or package
 references.
 
 ## Contents

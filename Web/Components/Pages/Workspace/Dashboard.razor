@@ -16,9 +16,9 @@
             <p class="page-description">Your source projects, deployment state and next actions.</p></div>
         <div class="console-row-actions">@if (DeploymentCapabilities.LocalDeploymentsEnabled)
             {
-                <a href="/local-repos" class="btn btn-outline-secondary">Local sources</a>
+                <a href="@ApplicationRoutes.LocalRepositories" class="btn btn-outline-secondary">Local sources</a>
             }
-            <a href="/github-repos" class="btn btn-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i> Import
+            <a href="@ApplicationRoutes.GitHubRepositories" class="btn btn-primary"><i class="bi bi-plus-lg" aria-hidden="true"></i> Import
                 repository</a></div>
     </header>
     <AuthorizeView>
@@ -123,7 +123,7 @@
                     <div class="console-dialog-body"><p class="page-description">Choose the account type used by your
                             Azure subscription.</p>
                         <section class="azure-account-option"><h3>Work or school account</h3>
-                            <p>Sign in through your organization.</p><a href="/api/auth/azure-login"
+                            <p>Sign in through your organization.</p><a href="@ApplicationRoutes.AzureLogin"
                                                                         class="btn btn-primary">Continue with
                                 Microsoft</a></section>
                         <section class="azure-account-option"><h3>Personal account</h3><label for="azure-tenant-id">Azure
@@ -164,7 +164,7 @@
             }
         </Authorized>
         <NotAuthorized>
-            <div class="console-empty"><h2>Sign in to view your projects</h2><a href="/login" class="btn btn-primary">Sign
+            <div class="console-empty"><h2>Sign in to view your projects</h2><a href="@ApplicationRoutes.Login" class="btn btn-primary">Sign
                     in</a></div>
         </NotAuthorized>
     </AuthorizeView>

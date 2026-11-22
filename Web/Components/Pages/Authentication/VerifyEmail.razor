@@ -24,7 +24,7 @@
                         Please check your inbox and click the link to activate your account.
                     </div>
                     <p class="text-muted mt-3">Didn't receive the email? Check your spam folder.</p>
-                    <a href="/login" class="btn btn-outline-primary mt-2">Back to login</a>
+                    <a href="@ApplicationRoutes.Login" class="btn btn-outline-primary mt-2">Back to login</a>
                 </div>
             }
             else
@@ -39,7 +39,7 @@
                         <div class="alert alert-danger shadow-sm">
                             @ErrorMessage
                         </div>
-                        <a href="/login" class="btn btn-primary-custom text-white mt-3 w-100">
+                        <a href="@ApplicationRoutes.Login" class="btn btn-primary-custom text-white mt-3 w-100">
                             Return to Login
                         </a>
                     }

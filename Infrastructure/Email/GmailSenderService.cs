@@ -1,4 +1,5 @@
 using Application.Abstractions.Email;
+using MailKit;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Logging;
@@ -47,7 +48,7 @@ public sealed class GmailSenderService(
 
         var mimeMessage = CreateMessage(toEmail, subject, message);
 
-        using var smtpClient = new SmtpClient();
+        await using var smtpClient = new SmtpClient();
 
         try
         {

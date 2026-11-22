@@ -40,7 +40,7 @@ public sealed class AzureLoginEndpoint : IEndpoint
     /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/auth/azure-login",
+        app.MapGet(ApplicationRoutes.AzureLogin,
             async (HttpContext context, IConfiguration configuration, IDistributedCache cache,
                 string? tenantId = null) =>
             {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using Application.Abstractions.Diagnostics.Metrics;
 using Domain.Entities.Deployments;
@@ -24,7 +25,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         var page = new ProjectDetails();
         var apply = typeof(ProjectDetails).GetMethod("ApplyTypedMetrics",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var restored = DateTimeOffset.Parse("2026-10-12T10:00:00Z");
+        var restored = DateTimeOffset.Parse("2026-10-12T10:00:00Z", CultureInfo.InvariantCulture);
         var state = (Dictionary<string, Dictionary<string, DeploymentMetricPoint>>)typeof(ProjectDetails)
             .GetField("_typedMetrics", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(page)!;
 
@@ -67,7 +68,7 @@ public sealed class ProjectDetailsMetricRecoveryTests
         var page = new ProjectDetails();
         var apply = typeof(ProjectDetails).GetMethod("ApplyTypedMetrics",
             BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var now = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+        var now = DateTimeOffset.Parse("2026-10-10T11:00:00Z", CultureInfo.InvariantCulture);
 
         apply.Invoke(page,
         [

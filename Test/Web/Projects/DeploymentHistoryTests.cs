@@ -260,7 +260,7 @@ public sealed class DeploymentHistoryTests
         public string Output { get; private set; } = "";
 
         /// <summary>
-        ///     Delegates to the fixture interop overload using the same identifier and arguments.
+        ///     Records terminal reset/write interactions and returns the default interop result.
         /// </summary>
         /// <param name="identifier">Provider or user identity to resolve.</param>
         /// <param name="args">Arguments for the selected fixture port or reflected component member.</param>
@@ -268,7 +268,10 @@ public sealed class DeploymentHistoryTests
         /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args)
         {
-            return InvokeAsync<TValue>(identifier, CancellationToken.None, args);
+            if (identifier == "xtermWrapper.clear") Output = "";
+            if (identifier == "xtermWrapper.write") Output += (string)args![1]!;
+
+            return ValueTask.FromResult(default(TValue)!);
         }
 
         /// <summary>

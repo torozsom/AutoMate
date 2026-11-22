@@ -199,7 +199,7 @@ public partial class AssessmentContextControls
     /// <returns>UTC datetime-control text, or an empty string when the value is absent.</returns>
     private static string UtcValue(DateTimeOffset? value)
     {
-        return value?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm") ?? "";
+        return value?.UtcDateTime.ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture) ?? "";
     }
 
     /// <summary>

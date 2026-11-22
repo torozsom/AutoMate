@@ -3,6 +3,9 @@ version: "1.0"
 linter: qodana-cdnet
 withinDocker: true
 
+# Provision the solution SDK because the Community image still bundles older SDKs.
+bootstrap: curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --jsonfile /data/project/global.json -i /usr/share/dotnet
+
 dotnet:
   solution: AutoMate.slnx
   configuration: Release
@@ -28,6 +31,8 @@ exclude:
       - Telemetry/obj
       - Test/bin
       - Test/obj
+      - Tests/bin
+      - Tests/obj
       - Test/Web/Browser/node_modules
       - Web/wwwroot/lib
 
