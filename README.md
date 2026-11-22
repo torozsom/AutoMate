@@ -404,7 +404,10 @@ activated by these changes.
 manifest, Actions references, the tracked Telemetry Dockerfile, deployment Compose files, and the root .NET SDK
 configuration on staggered Monday schedules in `Europe/Budapest`. NuGet EF Core and OpenTelemetry maintenance updates
 are grouped to keep related packages coordinated; other minor/patch updates are grouped per ecosystem and major
-updates receive separate PRs. .NET SDK major updates are excluded so a runtime upgrade remains a deliberate change.
+updates receive separate PRs. Major updates to the .NET SDK, Microsoft hosting/options/caching/DataProtection and
+cryptography packages, EF Core, its PostgreSQL provider and naming conventions are deferred until a coordinated
+application migration. Minor/patch servicing updates remain eligible; unrelated library major updates still receive
+separate PRs.
 NuGet/npm security updates have separate groups and remain vulnerability-triggered, independent of weekly version
 update schedules. PR limits bound routine update volume. Add the root Dockerfile to monitoring when it is versioned.
 
