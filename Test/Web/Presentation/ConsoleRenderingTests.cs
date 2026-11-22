@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.Versioning;
 using System.Security.Claims;
 using Application.Abstractions.Hosting;
 using Application.Data.Apps;
@@ -90,7 +91,11 @@ public sealed class ConsoleRenderingTests
                             ?? throw new InvalidOperationException(
                                 "The test assembly must declare its build configuration.");
 
-        File.Copy(Path.Combine(root, "Web", "obj", configuration, "net10.0", "scopedcss", "bundle", "Web.styles.css"),
+        var framework = typeof(Home).Assembly.GetCustomAttribute<TargetFrameworkAttribute>()?.FrameworkName
+                        ?? throw new InvalidOperationException("The Web assembly must declare its target framework.");
+        var targetFramework = "net" + new FrameworkName(framework).Version.ToString(2);
+
+        File.Copy(Path.Combine(root, "Web", "obj", configuration, targetFramework, "scopedcss", "bundle", "Web.styles.css"),
             Path.Combine(directory, "Web.styles.css"), true);
         foreach (var (name, type, authenticated) in new[]
                  {

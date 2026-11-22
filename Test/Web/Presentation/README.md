@@ -20,8 +20,9 @@ database rows and suppression of mixed utilization summaries.
 
 Fixtures are metadata snapshots, not live deployments/authentication. Some fake ports intentionally reject calls so
 static rendering cannot unexpectedly perform external work. Use the build configuration's scoped CSS rather than depend
-on Debug output from a Release run. Text formatting must not rewrite saved event/cursor identity or invent missing
-timestamps; browser colors/layout are independently verified.
+on Debug output from a Release run. The CSS path uses Web's target-framework assembly metadata so framework upgrades
+cannot silently reuse an older framework's build artifacts. Text formatting must not rewrite saved event/cursor
+identity or invent missing timestamps; browser colors/layout are independently verified.
 
 ## Running
 
