@@ -1,5 +1,8 @@
 # GitHub adapter tests
 
+The pure log-normalizer suite now lives in Tests/GitHub/Workflows. Provider, checkpoint and workflow integration suites
+remain here.
+
 Signed ingress, secure completed-log downloads, bounded normalization/checkpoints and marked-commit recovery.
 
 `GitHubContractTests.cs` protects secret/dispatch wire names, workflow timing/commit metadata,
@@ -7,14 +10,14 @@ private-repository projections, federation issuer and numeric GitHub App configu
 
 ## Contents
 
-| File                                                                           | Test or fixture types                                                                                      | Responsibility                                                                      |
-|--------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
-| [GitHubSaasCommitRecoveryTests.cs](GitHubSaasCommitRecoveryTests.cs)           | `GitHubSaasCommitRecoveryTests`                                                                            | Checks safe remote-commit recovery and provider cooldown detection.                 |
-| [GitHubServiceWorkflowLogTests.cs](GitHubServiceWorkflowLogTests.cs)           | `GitHubServiceWorkflowLogTests`, `NoOpDistributedCache`                                                    | Checks secure GitHub Actions job-log download and decoding behavior.                |
-| [GitHubWebhookReceiverTests.cs](GitHubWebhookReceiverTests.cs)                 | `GitHubWebhookReceiverTests`                                                                               | Checks signed delivery acceptance, deduplication, and bounded metadata persistence. |
-| [GitHubWorkflowCheckpointStoreTests.cs](GitHubWorkflowCheckpointStoreTests.cs) | `GitHubWorkflowCheckpointStoreTests`                                                                       | Verifies durable GitHub Actions workflow and job checkpoints.                       |
-| [GitHubWorkflowLogNormalizerTests.cs](GitHubWorkflowLogNormalizerTests.cs)     | `GitHubWorkflowLogNormalizerTests`                                                                         | Verifies safe normalization and bounded paging of GitHub Actions log text.          |
-| [GitHubWorkflowMonitorTests.cs](GitHubWorkflowMonitorTests.cs)                 | `GitHubWorkflowMonitorTests`, `RecordingPublisher`, `PassThroughRedactor`, `WorkflowSequenceGitHubService` | Verifies that workflow progress precedes completed-run log output.                  |
+| File                                                                                                       | Test or fixture types                                                                                      | Responsibility                                                                      |
+|------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| [GitHubSaasCommitRecoveryTests.cs](GitHubSaasCommitRecoveryTests.cs)                                       | `GitHubSaasCommitRecoveryTests`                                                                            | Checks safe remote-commit recovery and provider cooldown detection.                 |
+| [GitHubServiceWorkflowLogTests.cs](GitHubServiceWorkflowLogTests.cs)                                       | `GitHubServiceWorkflowLogTests`, `NoOpDistributedCache`                                                    | Checks secure GitHub Actions job-log download and decoding behavior.                |
+| [GitHubWebhookReceiverTests.cs](GitHubWebhookReceiverTests.cs)                                             | `GitHubWebhookReceiverTests`                                                                               | Checks signed delivery acceptance, deduplication, and bounded metadata persistence. |
+| [GitHubWorkflowCheckpointStoreTests.cs](GitHubWorkflowCheckpointStoreTests.cs)                             | `GitHubWorkflowCheckpointStoreTests`                                                                       | Verifies durable GitHub Actions workflow and job checkpoints.                       |
+| [GitHubWorkflowLogNormalizerTests.cs](../../../Tests/GitHub/Workflows/GitHubWorkflowLogNormalizerTests.cs) | `GitHubWorkflowLogNormalizerTests`                                                                         | Verifies safe normalization and bounded paging of GitHub Actions log text.          |
+| [GitHubWorkflowMonitorTests.cs](GitHubWorkflowMonitorTests.cs)                                             | `GitHubWorkflowMonitorTests`, `RecordingPublisher`, `PassThroughRedactor`, `WorkflowSequenceGitHubService` | Verifies that workflow progress precedes completed-run log output.                  |
 
 ## Coverage and navigation
 

@@ -24,6 +24,8 @@ dimensions.
 
 ## Related documentation
 
+- [Isolated unit tests](../../../Tests/Scanning/Filesystem/README.md)
+
 - [Parent module](../README.md)
 - [Discovery port](../../../Application/Abstractions/Scanning/README.md)
 - [Project parsing](../Projects/README.md)

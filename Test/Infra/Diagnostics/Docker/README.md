@@ -1,5 +1,8 @@
 # Docker diagnostic tests
 
+UTF-8, independent-stream and oversized-line decoder assertions moved into the existing Tests/Docker/Diagnostics suites.
+Ownership, replay and collector scenarios remain here.
+
 Synthetic framing/ownership/replay/live metrics with separately gated real daemon/Compose smoke cases.
 
 ## Contents
@@ -12,8 +15,9 @@ Synthetic framing/ownership/replay/live metrics with separately gated real daemo
 
 ## Coverage and navigation
 
-DockerOutputTests exercises UTF-8/partial streams, oversize omission, Compose text/progress, strict ownership and
-confirmed overlap. DockerMetricDeliveryTests separates frequent live updates from sampled durable history and transport
+DockerOutputTests exercises Compose text/progress, strict ownership and confirmed overlap. Decoder-only byte
+boundaries and overflow scenarios are owned by Tests/Docker/Diagnostics. DockerMetricDeliveryTests separates frequent
+live updates from sampled durable history and transport
 recovery. DockerCollectorTests uses SDK-shaped fakes for startup races/cancellation and real smoke cases for owned
 lifecycle/subscription/Compose behavior.
 

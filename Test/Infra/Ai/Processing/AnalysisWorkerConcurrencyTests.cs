@@ -362,11 +362,11 @@ public sealed class AnalysisWorkerConcurrencyTests
                 });
             await db.SaveChangesAsync();
             fixture.Gate = new Gate(failFirst);
-            var settings = AnalysisEgressPolicyTests.Approved(owner.Id, concurrency: concurrency);
+            var settings = AnalysisPolicyTestSupport.Approved(owner.Id, concurrency: concurrency);
 
             fixture.Services = new ServiceCollection().AddLogging().AddSingleton(TimeProvider.System)
                 .AddSingleton(fixture.Gate).AddSingleton(Options.Create(settings))
-                .AddSingleton<IOptionsMonitor<AiAnalysisOptions>>(new AnalysisEgressPolicyTests.Monitor(settings))
+                .AddSingleton<IOptionsMonitor<AiAnalysisOptions>>(new AnalysisPolicyTestSupport.Monitor(settings))
                 .AddScoped<AutoMateDbContext>(_ => fixture.NewDb())
                 .AddSingleton<IDiagnosticRedactor, DiagnosticRedactor>()
                 .AddSingleton<IAnalysisResultValidator>(AnalysisResultTests.Validator())

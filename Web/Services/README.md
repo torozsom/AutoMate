@@ -38,5 +38,5 @@ lifetimes.
 - [Admission policy](../../Application/Orchestration/Cloud/README.md)
 - [Transport tests](../../Test/Web/Diagnostics/RealTimeLogStreamerTests.cs)
 - [Scope tests](../../Test/Web/Hosting/ScopedApplicationOperationsTests.cs)
-- [State tests](../../Test/Web/Projects/ProjectTerminalReplayStateTests.cs)
+- [State tests](../../Tests/Presentation/Projects/ProjectTerminalReplayStateTests.cs)
 - [Connection tests](../../Test/Web/Projects/ConnectedCloudDeploymentAdmissionTests.cs)

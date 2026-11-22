@@ -44,7 +44,7 @@ public sealed class AnalysisAdmissionTests
     public async Task Automatic_admission_returns_the_persisted_outcome()
     {
         await using var fixture = await Fixture.CreateAsync();
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId, automatic: true);
         await using var db = fixture.NewDb();
         await db.Deployments.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.Status, DeploymentStatus.Failed));
@@ -61,7 +61,7 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync();
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(Guid.NewGuid());
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(Guid.NewGuid());
         await using var db = fixture.NewDb();
 
         var service = fixture.Service(db);
@@ -196,7 +196,7 @@ public sealed class AnalysisAdmissionTests
         var ownerForCallbacks = fixture.OwnerId;
         var firstDeploymentForCallbacks = fixture.Deployments[0];
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(ownerForCallbacks,
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(ownerForCallbacks,
             dailyLimit: reason == "quota" ? 0 : 5, egressEnabled: reason != "egress",
             provider: reason == "missing" ? null : reason == "unknown" ? "unknown" : "openai");
 
@@ -234,7 +234,7 @@ public sealed class AnalysisAdmissionTests
 
         Assert.Equal(DeploymentAnalysisDeletionResult.Deleted, deleted);
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(ownerForCallbacks);
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(ownerForCallbacks);
 
         Assert.Null((await fixture.Service(check)
                 .RequestManualAsync(ownerForCallbacks, firstDeploymentForCallbacks, request))
@@ -288,7 +288,7 @@ public sealed class AnalysisAdmissionTests
         await using var fixture = await Fixture.CreateAsync(2, 1);
 
         fixture.Options.CurrentValue =
-            AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true, dailyLimit: 1);
+            AnalysisPolicyTestSupport.Approved(fixture.OwnerId, automatic: true, dailyLimit: 1);
         await using var db = fixture.NewDb();
 
         var manual = await fixture.Service(db).RequestManualAsync(fixture.OwnerId, fixture.Deployments[0]);
@@ -322,7 +322,7 @@ public sealed class AnalysisAdmissionTests
         await using var fixture = await Fixture.CreateAsync();
         var firstDeploymentForCallbacks = fixture.Deployments[0];
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId, automatic: true);
 
         await using (var db = fixture.NewDb())
         {
@@ -370,7 +370,7 @@ public sealed class AnalysisAdmissionTests
     {
         await using var fixture = await Fixture.CreateAsync(limit: reason == "quota" ? 0 : 5);
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId,
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId,
             dailyLimit: reason == "quota" ? 0 : 5, automatic: reason != "disabled", egressEnabled: reason != "egress");
 
         await using var db = fixture.NewDb();
@@ -398,7 +398,7 @@ public sealed class AnalysisAdmissionTests
         Assert.Equal(0, await db.AiAnalysisRequests.CountAsync(item => item.ConsumesQuota));
         Assert.NotNull((await db.FailedDeploymentAnalysisEvents.SingleAsync()).CompletedAt);
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId, automatic: true);
 
         await db.AppConfigs.ExecuteUpdateAsync(update =>
             update.SetProperty(item => item.AiDiagnosticEgressConsented, true));
@@ -460,7 +460,7 @@ public sealed class AnalysisAdmissionTests
         await using var fixture = await Fixture.CreateAsync();
         var firstDeploymentForCallbacks = fixture.Deployments[0];
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, automatic: true);
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId, automatic: true);
         var failure = new WorkInsertFailure();
 
         await using var db = fixture.NewDb(failure);
@@ -808,7 +808,7 @@ public sealed class AnalysisAdmissionTests
         Assert.False((await service.RequestManualAsync(fixture.OwnerId, fixture.Deployments[0], Guid.NewGuid()))
             .Accepted);
 
-        fixture.Options.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId);
+        fixture.Options.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId);
 
         await db.Set<Configuration>()
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
@@ -1033,7 +1033,7 @@ public sealed class AnalysisAdmissionTests
         public TestClock Clock { get; } = new();
 
         /// <summary>Reloadable operator policy.</summary>
-        public AnalysisEgressPolicyTests.Monitor Options { get; private set; } = null!;
+        public AnalysisPolicyTestSupport.Monitor Options { get; private set; } = null!;
 
         /// <summary>Owner account scope.</summary>
         public Guid OwnerId { get; private set; }
@@ -1166,8 +1166,8 @@ public sealed class AnalysisAdmissionTests
             fixture.ProjectId = project.Id;
             fixture.Deployments = [.. deployments.Select(item => item.Id)];
             fixture.Options =
-                new AnalysisEgressPolicyTests.Monitor(
-                    AnalysisEgressPolicyTests.Approved(owner.Id, dailyLimit: limit, retentionDays: 1));
+                new AnalysisPolicyTestSupport.Monitor(
+                    AnalysisPolicyTestSupport.Approved(owner.Id, dailyLimit: limit, retentionDays: 1));
 
             return fixture;
         }

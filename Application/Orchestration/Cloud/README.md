@@ -46,8 +46,8 @@ repository/resource access or replace provider validation.
 - [Durable admission](../../../Infrastructure/ApplicationServices/Orchestration/CloudRuns/CloudDeploymentRunService.cs)
 - [Connected-account consumer](../../../Web/Services/ConnectedCloudDeploymentAdmission.cs)
 - [Self-hosted queue](../Jobs/README.md)
-- [Routing tests](../../../Test/App/Orchestration/CloudDeploymentAdmissionTests.cs)
-- [Form validation tests](../../../Test/App/Orchestration/CloudRuntimeConfigurationValidationTests.cs)
+- [Routing tests](../../../Tests/Orchestration/Cloud/CloudDeploymentAdmissionTests.cs)
+- [Form validation tests](../../../Tests/Orchestration/Cloud/CloudRuntimeConfigurationValidationTests.cs)
 - [SaaS operations](../../../docs/saas-cloud-deployments.md)
 
 CloudSaas construction-only limits use init accessors. Configuration binding continues to populate all limits;

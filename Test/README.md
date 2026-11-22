@@ -1,6 +1,9 @@
 # Test
 
-The solution's single .NET 10 xUnit project, with Node-only JavaScript and Playwright browser suites alongside it.
+The solution's broad .NET 10 xUnit regression project, with Node-only JavaScript and Playwright browser suites alongside
+it.
+The separate [Tests project](../Tests/README.md) contains isolated helpers, application policies, fake-port
+orchestration and presentation-state unit tests.
 Test.csproj references Application, Domain, Infrastructure, Web and Telemetry.
 
 Microsoft.Extensions.TimeProvider.Testing supplies test-only controllable clocks for lease-heartbeat scenarios;
@@ -20,14 +23,15 @@ render-tree frames/event-handler IDs; these implementation APIs trigger BL0006 a
 
 | Module                   | Coverage                                                                  |
 |--------------------------|---------------------------------------------------------------------------|
-| [App](App/README.md)     | Application policy and cloud-admission tests.                             |
+| [App](App/README.md)     | Application contract regression tests; unit policies moved to Tests.      |
 | [Infra](Infra/README.md) | Adapters, relational persistence, durability and provider protocol tests. |
 | [Web](Web/README.md)     | Host, route, component, browser and JavaScript tests.                     |
 
 ## Coverage and navigation
 
-Choose App for portable policy/use-case tests, Infra for adapters/persistence, and Web for host/HTTP/component/browser
-behavior. Folder-aligned Test.App/Test.Infra/Test.Web namespaces provide the filters in each guide. GlobalUsings shares
+Choose App for contract regressions, Infra for adapters/persistence, and Web for host/HTTP/component/browser
+behavior. Portable policy, helper and state unit suites now live in Tests. Folder-aligned Test.App/Test.Infra/Test.Web
+namespaces provide the filters in each guide. GlobalUsings shares
 xUnit attributes/assertions; production assemblies expose selected internals to this test assembly.
 
 ## Fixtures and boundaries
@@ -37,7 +41,8 @@ integration gates unset, it does not invoke live Docker/cloud/LLM services. Expl
 operations only against isolated test resources. A skipped integration case is not evidence of external-system
 correctness.
 
-Keep tests in the matching business submodule rather than add another test project. Preserve assertions, fixture
+Keep broad regression tests in the matching business submodule; place isolated module tests in Tests. Preserve
+assertions, fixture
 ownership, public constructors and opt-in behavior. Build outputs, TestResults, node_modules and ignored preview
 artifacts are generated, not source modules.
 

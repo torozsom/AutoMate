@@ -1,7 +1,8 @@
 using Application.Abstractions.Diagnostics.Metrics;
 using Web.Components.Shared.Metrics;
+using Xunit;
 
-namespace Test.Web.Metrics;
+namespace Tests.Presentation.Metrics;
 
 /// <summary>
 ///     Resource display must retain small values and actual sample weighting.
@@ -58,7 +59,7 @@ public sealed class TelemetryPresentationTests
     /// <summary>
     ///     Zero, constant and isolated observations receive valid axes without forcing one core.
     /// </summary>
-    /// <param name="value">Synthetic numeric observation.</param>
+    /// <param name="value">Synthetic CPU observation used to calculate the chart scale.</param>
     [Theory]
     [InlineData(0)]
     [InlineData(.006)]

@@ -28,6 +28,8 @@ to reload; do not assume per-request file watching.
 
 ## Related documentation
 
+- [Isolated unit tests](../../../Tests/Templating/Catalog/README.md)
+
 - [Parent module](../README.md)
 - [Rule DTOs](../../../Domain/DTO/Templating/README.md)
 - [Consumer](../Rendering/README.md)

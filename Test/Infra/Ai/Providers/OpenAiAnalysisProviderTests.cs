@@ -172,7 +172,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         using var client = new HttpClient(handler);
         var settings = ApprovedWithLimits(60, limit);
 
-        await Provider(client, monitor: new AnalysisEgressPolicyTests.Monitor(settings))
+        await Provider(client, monitor: new AnalysisPolicyTestSupport.Monitor(settings))
             .AnalyzeAsync(Request("Build failed."));
     }
 
@@ -199,7 +199,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         using var client = new HttpClient(handler);
 
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() => Provider(client,
-                monitor: new AnalysisEgressPolicyTests.Monitor(ApprovedWithLimits(timeout, output)))
+                monitor: new AnalysisPolicyTestSupport.Monitor(ApprovedWithLimits(timeout, output)))
             .AnalyzeAsync(Request("Build failed.")));
 
         Assert.Equal(0, calls);
@@ -676,9 +676,9 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
             throw new InvalidOperationException();
         });
         using var client = new HttpClient(handler);
-        var monitor = new AnalysisEgressPolicyTests.Monitor(Approved(Guid.NewGuid()));
+        var monitor = new AnalysisPolicyTestSupport.Monitor(Approved(Guid.NewGuid()));
         var authorizer =
-            new AnalysisEgressPolicyTests.Authorizer(onCheck: () => monitor.CurrentValue = new AiAnalysisOptions());
+            new AnalysisPolicyTestSupport.Authorizer(onCheck: () => monitor.CurrentValue = new AiAnalysisOptions());
 
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             Provider(client, monitor: monitor, authorizer: authorizer).AnalyzeAsync(Request("safe")));
@@ -702,7 +702,7 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
         });
         using var client = new HttpClient(handler);
         var monitor =
-            new AnalysisEgressPolicyTests.Monitor(
+            new AnalysisPolicyTestSupport.Monitor(
                 Approved(Guid.NewGuid(), model: "ghp_" + new string('a', 36)));
 
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
@@ -730,8 +730,8 @@ public abstract class ResponsesAnalysisProviderContractTests(bool azure)
             ["AiAnalysis:AzureOpenAi:ResourceName"] = "automate-test"
         }).Build();
 
-        monitor ??= new AnalysisEgressPolicyTests.Monitor(Approved(Guid.NewGuid(), enabled));
-        authorizer ??= new AnalysisEgressPolicyTests.Authorizer(allowed);
+        monitor ??= new AnalysisPolicyTestSupport.Monitor(Approved(Guid.NewGuid(), enabled));
+        authorizer ??= new AnalysisPolicyTestSupport.Authorizer(allowed);
 
         return azure
             ? new AzureOpenAiAnalysisProvider(client, configuration, monitor, AnalysisResultTests.Validator(),

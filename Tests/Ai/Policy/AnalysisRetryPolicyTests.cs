@@ -1,6 +1,7 @@
 using Application.Ai.Policy;
+using Xunit;
 
-namespace Test.App.Ai.Policy;
+namespace Tests.Ai.Policy;
 
 /// <summary>
 ///     Verifies retry timing bounds independently of network/database scheduling.

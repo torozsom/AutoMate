@@ -1,5 +1,8 @@
 # Diagnostic policy and metric tests
 
+Standalone text masking and size-bound assertions moved to Tests/Diagnostics/Redaction. Event redaction and publisher
+cooperation remain here.
+
 Masking/queue bounds, trusted write/transport configuration, numeric units and durable metric lookup.
 
 ## Contents
@@ -40,3 +43,5 @@ Explicit integration gates still apply; skipped cases do not verify the correspo
 - [Limits/options](../../../../Infrastructure/Diagnostics/Policy/README.md)
 - [Metric semantics](../../../../Infrastructure/Diagnostics/Metrics/README.md)
 - [Opt-in backend tests](../Delivery/README.md)
+
+- [Standalone redaction units](../../../../Tests/Diagnostics/Redaction/README.md)

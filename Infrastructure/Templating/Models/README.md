@@ -34,3 +34,4 @@ build evaluation or proof of provider availability.
 - [Inputs](../../../Domain/DTO/Deployment/README.md)
 - [Model/template regressions](../../../Test/Infra/Templating/CloudRegistryTemplateTests.cs)
 - [Ownership regressions](../../../Test/Infra/Templating/LocalOwnershipTemplateTests.cs)
+- [Isolated naming tests](../../../Tests/Templating/Models/README.md)

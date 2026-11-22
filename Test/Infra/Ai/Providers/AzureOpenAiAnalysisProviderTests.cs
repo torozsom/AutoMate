@@ -45,7 +45,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
             };
         });
         using var client = new HttpClient(handler);
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
 
         var error = await Assert.ThrowsAsync<AnalysisProviderAccessDeniedException>(() =>
@@ -107,7 +107,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var handler = new DelegateHttpMessageHandler(_ => DelegateHttpMessageHandler.Json(
             kind == "envelope" ? "{\"private-value\":true}" : envelope));
         using var client = new HttpClient(handler);
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
 
         var error = await Assert.ThrowsAsync<InvalidAnalysisResultException>(() =>
@@ -162,7 +162,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         });
 
         using var client = new HttpClient(handler);
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
         var result = await CreateProvider(client, Configuration(), settings)
             .AnalyzeAsync(Request() with { Kind = AssessmentKind.RuntimeOverview });
@@ -210,7 +210,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         });
 
         using var client = new HttpClient(handler);
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/", model: "analysis-deployment");
         var result = await CreateProvider(client, Configuration(), settings).AnalyzeAsync(Request());
 
@@ -256,7 +256,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var handler = new ShutdownHandler(started, readingBody);
         using var client = new HttpClient(handler);
         var provider = new AzureOpenAiAnalysisProvider(client, configuration, monitor, AnalysisResultTests.Validator(),
-            new DiagnosticRedactor(), new AnalysisEgressPolicyTests.Authorizer());
+            new DiagnosticRedactor(), new AnalysisPolicyTestSupport.Authorizer());
         var active = provider.AnalyzeAsync(Request());
 
         await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -290,7 +290,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
     {
         using var handler = new DelegateHttpMessageHandler(_ => throw new InvalidOperationException("Must not send."));
         using var client = new HttpClient(handler);
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai", endpoint: endpoint);
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: "azure-openai", endpoint: endpoint);
         var provider = CreateProvider(client, Configuration(), settings);
 
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() => provider.AnalyzeAsync(Request()));
@@ -316,7 +316,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
         using var handler = new DelegateHttpMessageHandler(_ => throw new InvalidOperationException("Must not send."));
         using var client = new HttpClient(handler);
         var configuration = Configuration(key, resource);
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
 
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
@@ -357,7 +357,7 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
             return response;
         });
         using var client = new HttpClient(handler);
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: "azure-openai",
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: "azure-openai",
             endpoint: "https://automate-test.openai.azure.com/openai/v1/");
         var error = await Record.ExceptionAsync(() =>
             CreateProvider(client, Configuration(), settings).AnalyzeAsync(Request()));
@@ -396,8 +396,8 @@ public sealed class AzureOpenAiAnalysisProviderTests() : ResponsesAnalysisProvid
     private static AzureOpenAiAnalysisProvider CreateProvider(HttpClient client, IConfiguration configuration,
         AiAnalysisOptions settings)
     {
-        return new AzureOpenAiAnalysisProvider(client, configuration, new AnalysisEgressPolicyTests.Monitor(settings),
-            AnalysisResultTests.Validator(), new DiagnosticRedactor(), new AnalysisEgressPolicyTests.Authorizer());
+        return new AzureOpenAiAnalysisProvider(client, configuration, new AnalysisPolicyTestSupport.Monitor(settings),
+            AnalysisResultTests.Validator(), new DiagnosticRedactor(), new AnalysisPolicyTestSupport.Authorizer());
     }
 
     /// <summary>
