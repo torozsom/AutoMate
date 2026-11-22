@@ -5,6 +5,8 @@
         <LangVersion>15</LangVersion>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
+        <!-- Isolate Razor generation from stale state in the shared compiler process. -->
+        <UseSharedCompilation>false</UseSharedCompilation>
         <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
         <UserSecretsId>automate-web-local-development</UserSecretsId>
     </PropertyGroup>
