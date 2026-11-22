@@ -43,11 +43,11 @@
                     </div>
                     <div>
                         <dt>Started UTC</dt>
-                        <dd>@_deployment.CreatedAt.ToString("u")</dd>
+                        <dd>@_deployment.CreatedAt.ToString("u", CultureInfo.CurrentCulture)</dd>
                     </div>
                     <div>
                         <dt>Finished UTC</dt>
-                        <dd>@(_deployment.FinishedAt?.ToString("u") ?? "Not recorded")</dd>
+                        <dd>@(_deployment.FinishedAt?.ToString("u", CultureInfo.CurrentCulture) ?? "Not recorded")</dd>
                     </div>
                     <div>
                         <dt>Outcome</dt>

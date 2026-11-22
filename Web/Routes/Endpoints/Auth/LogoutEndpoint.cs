@@ -15,7 +15,7 @@ public sealed class LogoutEndpoint : IEndpoint
     /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/auth/logout", async (HttpContext context, ILogger<LogoutEndpoint> logger) =>
+        app.MapPost(ApplicationRoutes.LogoutAction, async (HttpContext context, ILogger<LogoutEndpoint> logger) =>
             {
                 var userId = Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
                     ? id

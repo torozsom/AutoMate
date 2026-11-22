@@ -22,24 +22,27 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
     public const string UnknownMessage = "Platform event; unapproved details omitted.";
 
     /// <summary>GUID fields permitted for correlation; owner/user identifiers are excluded.</summary>
-    private static readonly HashSet<string> GuidFields = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> GuidFields =
+    [
+        with(StringComparer.Ordinal),
         "ProjectId", "DeploymentId", "AnalysisId", "RunId", "Id", "AppId", "UserId", "RequestId",
         "deployment.project.id", "deployment.id", "deployment.analysis.id"
-    };
+    ];
 
     /// <summary>Numeric operational fields, never arbitrary external attributes.</summary>
-    private static readonly HashSet<string> NumericFields = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> NumericFields =
+    [
+        with(StringComparer.Ordinal),
         "Count", "FileCount", "Attempt", "AttemptCount", "RedactedValueCount", "WaitMs", "DelaySeconds",
         "HostPort", "ContainerPort", "Port", "JobId", "Code", "StatusCode", "http.response.status_code",
         "http.status_code", "network.protocol.version", "ElapsedMilliseconds", "DurationMs", "EventCode",
         "DailyBudgetUnits", "ReservedCostUnits", "AttemptCostUnits"
-    };
+    ];
 
     /// <summary>Known failure classes; unknown exception/type names cannot become exported payloads.</summary>
-    private static readonly HashSet<string> FailureTypes = new(StringComparer.Ordinal)
-    {
+    private static readonly HashSet<string> FailureTypes =
+    [
+        with(StringComparer.Ordinal),
         "Exception", "IOException", "InvalidOperationException", "ArgumentException", "ArgumentNullException",
         "OperationCanceledException", "TaskCanceledException", "TimeoutException", "HttpRequestException",
         "UnauthorizedAccessException", "JsonException", "DbUpdateException", "DbUpdateConcurrencyException",
@@ -48,7 +51,7 @@ public sealed partial class PlatformTelemetryPolicy(IDiagnosticRedactor redactor
         "InvalidAnalysisResultException",
         "AnalysisProviderUnavailableException", "AnalysisProviderAccessDeniedException",
         "TelemetryCompatibilityException", "TelemetryProviderException", "ObjectDisposedException"
-    };
+    ];
 
     /// <summary>
     ///     Allows source categories from reviewed code only, retaining existing filters for known

@@ -1,6 +1,6 @@
 # Infrastructure
 
-EF Core persistence, external-system adapters and concrete implementations of Application ports. This .NET 10/C# 14
+EF Core persistence, external-system adapters and concrete implementations of Application ports. This .NET 11/C# 15
 project references Application and Domain; provider SDKs and runtime assets belong here.
 
 ## Contents

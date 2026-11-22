@@ -149,7 +149,7 @@ public sealed class TelemetryChartRenderingTests
         }
 
         /// <summary>
-        ///     Delegates to the fixture interop overload using the same identifier and arguments.
+        ///     Rejects browser interop because this fixture renders static HTML.
         /// </summary>
         /// <param name="identifier">Provider or user identity to resolve.</param>
         /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
@@ -158,7 +158,7 @@ public sealed class TelemetryChartRenderingTests
         /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<T> InvokeAsync<T>(string identifier, CancellationToken token, object?[]? args)
         {
-            return InvokeAsync<T>(identifier, args);
+            throw new InvalidOperationException("Unexpected prerender interop");
         }
     }
 }

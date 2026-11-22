@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Infrastructure.Azure.Monitor;
 
@@ -21,7 +22,7 @@ public sealed class AzureMetricObservationsTests
                                             """);
 
         var sample = Assert.Single(AzureMetricObservations.Parse(json.RootElement, "Average", true));
-        Assert.Equal(DateTimeOffset.Parse("2026-10-10T10:00:00Z"), sample.Timestamp);
+        Assert.Equal(DateTimeOffset.Parse("2026-10-10T10:00:00Z", CultureInfo.InvariantCulture), sample.Timestamp);
         Assert.Equal(1.5, Assert.Single(sample.Samples).Value);
     }
 

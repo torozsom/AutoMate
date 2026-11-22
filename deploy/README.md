@@ -116,6 +116,6 @@ and `telemetry`, with no prefix or replica-number suffix. Registry
 images use current-release tags and `pull_policy: always`; each normal startup checks for updated images. PostgreSQL
 tracks the current 18.x release line so a future major release cannot open an incompatible database directory.
 Both ASP.NET images are built locally; rebuild with `docker compose up -d --build` after source updates. Builds pull
-the current .NET 10 SDK/runtime bases. PostgreSQL 16 data was backed up and restored into the PostgreSQL 18 volume;
+the current .NET 11 SDK/runtime bases. PostgreSQL 16 data was backed up and restored into the PostgreSQL 18 volume;
 the original database/Redis volumes remain available for recovery. Private database backups live in
 `.telemetry/backups`.

@@ -22,7 +22,7 @@
     private static string RouteKey(RouteData data)
     {
         return data.PageType.FullName + ":" +
-               string.Join(":", data.RouteValues.OrderBy(value => value.Key).Select(value => value.Value));
+               string.Join(":", data.RouteValues.OrderBy(value => value.Key, StringComparer.Ordinal).Select(value => value.Value));
     }
 
 }

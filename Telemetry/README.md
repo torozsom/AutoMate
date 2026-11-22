@@ -10,7 +10,7 @@ Web replicas call this process over authenticated HTTP and do not mount its tele
 |----------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
 | [Program.cs](Program.cs)                           | Builds the host through `TelemetryApplication.Build(args)` and runs it.                                             |
 | [TelemetryApplication.cs](TelemetryApplication.cs) | `TelemetryApplication`: service composition, safe logging, bearer authentication and private routes.                |
-| [Telemetry.csproj](Telemetry.csproj)               | .NET 10 Web SDK project; references Infrastructure and EF Core snake-case naming support.                           |
+| [Telemetry.csproj](Telemetry.csproj)               | .NET 11 Web SDK project; references Infrastructure and EF Core snake-case naming support.                           |
 | [Dockerfile](Dockerfile)                           | Builds from the solution root; publishes the host and runs the ASP.NET runtime image as UID/GID 10001 on port 8080. |
 | [Dockerfile.dockerignore](Dockerfile.dockerignore) | Limits the Docker context to the four required projects, excluding generated outputs and environment files.         |
 

@@ -40,7 +40,7 @@
                 }
             </div>
             <div class="chart-period">
-                <span>@data.Start.ToString("yyyy-MM-dd HH:mm") UTC</span><span>@data.End.ToString("yyyy-MM-dd HH:mm") UTC</span>
+                <span>@data.Start.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture) UTC</span><span>@data.End.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture) UTC</span>
             </div>
             <details class="console-details">
                 <summary>View outcome counts</summary>
@@ -58,7 +58,7 @@
                         <tbody>@foreach (var day in data.Activity.Skip((_activityPage - 1) * _activitySize).Take(_activitySize))
                         {
                             <tr>
-                                <th scope="row">@day.Day.ToString("yyyy-MM-dd HH:mm")</th>
+                                <th scope="row">@day.Day.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture)</th>
                                 <td>@day.Succeeded</td>
                                 <td>@day.Failed</td>
                                 <td>@day.Unknown</td>
@@ -96,7 +96,7 @@
                     }
                 </ul>
             }
-            <a class="console-text-link" href="/dashboard">Manage projects →</a>
+            <a class="console-text-link" href="@ApplicationRoutes.Dashboard">Manage projects →</a>
         </section>
     </div>
     <section class="console-panel" aria-labelledby="resources-heading">
@@ -145,7 +145,7 @@
                         <tbody>@foreach (var row in data.Resources.Skip((_resourcePage - 1) * _resourceSize).Take(_resourceSize))
                         {
                             <tr>
-                                <th scope="row">@row.Day.ToString("yyyy-MM-dd HH:mm")</th>
+                                <th scope="row">@row.Day.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture)</th>
                                 <td>@TelemetryPresentation.Label(row.Metric)</td>
                                 <td>@TelemetryPresentation.Format(row.Average, row.Metric)</td>
                                 <td>@TelemetryPresentation.Format(row.Minimum, row.Metric)</td>
@@ -168,11 +168,11 @@
         <div class="console-section-heading">
             <div><h2 id="recent-heading">Latest deployment runs</h2>
                 <p>Your ten most recent deployments across all dates</p></div>
-            <a href="/dashboard">View projects →</a></div>
+            <a href="@ApplicationRoutes.Dashboard">View projects →</a></div>
         @if (data.Recent.Count == 0)
         {
             <div class="console-empty"><strong>Your deployment activity will appear here</strong>
-                <p>Import a project to start your first deployment.</p><a href="/github-repos" class="btn btn-primary">Import
+                <p>Import a project to start your first deployment.</p><a href="@ApplicationRoutes.GitHubRepositories" class="btn btn-primary">Import
                     repository</a></div>
         }
         else
@@ -196,7 +196,7 @@
                         <td data-label="Project"><a href="@($"/project/{run.ProjectId}")">@run.Project</a><small
                                 class="console-subtext">@run.DeploymentId.ToString("N")[..8]</small></td>
                         <td data-label="Provider">@run.Provider</td>
-                        <td data-label="Started UTC">@run.StartedAt.ToString("MMM d, HH:mm")</td>
+                        <td data-label="Started UTC">@run.StartedAt.ToString("MMM d, HH:mm", CultureInfo.CurrentCulture)</td>
                         <td data-label="Outcome">@run.Outcome</td>
                         <td data-label="Runtime">
                             <DeploymentBadge Status="run.Status"/>

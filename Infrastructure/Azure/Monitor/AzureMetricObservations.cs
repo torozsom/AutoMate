@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Application.Abstractions.Diagnostics.Metrics;
 
@@ -65,7 +66,7 @@ internal static class AzureMetricObservations
                 if (!dimension.TryGetProperty("data", out var data)) continue;
                 foreach (var point in data.EnumerateArray())
                     if (point.TryGetProperty("timeStamp", out var timestamp)
-                        && DateTimeOffset.TryParse(timestamp.GetString(), out var time)
+                        && DateTimeOffset.TryParse(timestamp.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var time)
                         && point.TryGetProperty(aggregation.ToLowerInvariant(), out var number)
                         && number.TryGetDouble(out var value)
                         && double.IsFinite(value) && value >= 0)

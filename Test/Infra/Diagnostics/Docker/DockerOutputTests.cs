@@ -1,3 +1,4 @@
+using System.Globalization;
 using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Docker.DotNet.Models;
@@ -70,7 +71,7 @@ public sealed class DockerOutputTests
     {
         var target = Target();
         var labels = new Dictionary<string, string>
-            { ["com.docker.compose.project"] = target.ComposeProject, ["com.docker.compose.service"] = "web" };
+        { ["com.docker.compose.project"] = target.ComposeProject, ["com.docker.compose.service"] = "web" };
 
         Assert.True(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels, true));
         Assert.False(DockerDiagnosticNormalizer.IsOwned(target, target.Containers[0], labels));
@@ -126,7 +127,7 @@ public sealed class DockerOutputTests
     {
         var replay = new DockerLogReplayWindow();
         const string stamp = "2026-10-04T08:00:00.123456789Z";
-        var time = DateTimeOffset.Parse(stamp);
+        var time = DateTimeOffset.Parse(stamp, CultureInfo.InvariantCulture);
         var first = replay.Observe(stamp, DeploymentDiagnosticStream.StandardOutput, "same")!.Value;
 
         Assert.Null(replay.LastTimestamp);
@@ -161,7 +162,7 @@ public sealed class DockerOutputTests
 
         replay.Restore([
             new DeploymentTerminalLog(1, target.ProjectId, target.DeploymentId, "web", "safe",
-                Stream: DeploymentDiagnosticStream.StandardOutput, TimestampUtc: DateTimeOffset.Parse(stamp),
+                Stream: DeploymentDiagnosticStream.StandardOutput, TimestampUtc: DateTimeOffset.Parse(stamp, CultureInfo.InvariantCulture),
                 SourceInstanceId: "container-id", SourceCursor: stamp + "/2")
         ], "container-id");
 

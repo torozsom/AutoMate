@@ -203,6 +203,7 @@ public sealed class HostingProfileRegistrationTests
     /// </summary>
     /// <param name="setting">Option key overridden by the scenario.</param>
     /// <param name="value">Synthetic input text.</param>
+    /// <returns>A task completing after startup validation and its assertions.</returns>
     [Theory]
     [InlineData("DailyTenantLimit", "-1")]
     [InlineData("DailyTenantLimit", "100001")]
@@ -214,18 +215,18 @@ public sealed class HostingProfileRegistrationTests
     [InlineData("MaximumProviderAttemptCost", "0.000000001")]
     [InlineData("BudgetCurrency", "usd")]
     [InlineData("BudgetCurrency", "private-secret")]
-    public void Startup_rejects_invalid_shared_budget_limits(string setting, string value)
+    public async Task Startup_rejects_invalid_shared_budget_limits(string setting, string value)
     {
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { ["AiAnalysis:" + setting] = value });
+        { ["AiAnalysis:" + setting] = value });
         builder.AddApplicationServices();
-        using var services = builder.Services.BuildServiceProvider();
+        await using var services = builder.Services.BuildServiceProvider();
 
         var failure =
-            Assert.Throws<OptionsValidationException>(() =>
-                services.GetRequiredService<IStartupValidator>().Validate());
+            await Assert.ThrowsAsync<OptionsValidationException>(() =>
+                services.GetRequiredService<IAsyncStartupValidator>().ValidateAsync());
         Assert.DoesNotContain("private-secret", failure.Message);
     }
 
@@ -235,6 +236,7 @@ public sealed class HostingProfileRegistrationTests
     /// </summary>
     /// <param name="setting">Option key overridden by the scenario.</param>
     /// <param name="value">Synthetic input text.</param>
+    /// <returns>A task completing after startup validation and its assertions.</returns>
     [Theory]
     [InlineData("TimeoutSeconds", "4")]
     [InlineData("TimeoutSeconds", "301")]
@@ -248,26 +250,28 @@ public sealed class HostingProfileRegistrationTests
     [InlineData("MaximumContextTokens", "131073")]
     [InlineData("ResultRetentionDays", "0")]
     [InlineData("ResultRetentionDays", "91")]
-    public void Ai_limits_fail_startup_when_out_of_range(string setting, string value)
+    public async Task Ai_limits_fail_startup_when_out_of_range(string setting, string value)
     {
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { ["AiAnalysis:" + setting] = value });
+        { ["AiAnalysis:" + setting] = value });
         builder.AddApplicationServices();
-        using var services = builder.Services.BuildServiceProvider();
+        await using var services = builder.Services.BuildServiceProvider();
 
-        Assert.Throws<OptionsValidationException>(() => services.GetRequiredService<IStartupValidator>().Validate());
+        await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            services.GetRequiredService<IAsyncStartupValidator>().ValidateAsync());
     }
 
     /// <summary>
     ///     Supported limits remain exact, and staging automatic analysis does not enable AI or egress.
     /// </summary>
     /// <param name="maximum">Configured bound or maximum aggregation variant.</param>
+    /// <returns>A task completing after startup validation and its assertions.</returns>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Ai_limit_boundaries_are_valid_without_egress(bool maximum)
+    public async Task Ai_limit_boundaries_are_valid_without_egress(bool maximum)
     {
         var builder = CreateBuilder("SelfHosted");
 
@@ -282,9 +286,9 @@ public sealed class HostingProfileRegistrationTests
             ["AiAnalysis:AutomaticAnalysisEnabled"] = "true"
         });
         builder.AddApplicationServices();
-        using var services = builder.Services.BuildServiceProvider();
+        await using var services = builder.Services.BuildServiceProvider();
 
-        services.GetRequiredService<IStartupValidator>().Validate();
+        await services.GetRequiredService<IAsyncStartupValidator>().ValidateAsync();
         var options = services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>().CurrentValue;
 
         Assert.Equal(maximum ? 8192 : 1, options.MaximumOutputTokens);
@@ -298,6 +302,7 @@ public sealed class HostingProfileRegistrationTests
     ///     export or exposing credentials.
     /// </summary>
     /// <param name="endpoint">Parsed HTTP(S) collector endpoint, or null when invalid or absent.</param>
+    /// <returns>A task completing after startup validation and its assertions.</returns>
     [Theory]
     [InlineData("not-a-url-private-secret")]
     [InlineData("file:///private-secret")]
@@ -306,18 +311,18 @@ public sealed class HostingProfileRegistrationTests
     [InlineData("https://collector.example.invalid/#private-secret")]
     [InlineData(" https://collector.example.invalid/private-secret ")]
     [InlineData("https://collector.example.invalid/private secret")]
-    public void Otlp_invalid_endpoint_fails_safely(string endpoint)
+    public async Task Otlp_invalid_endpoint_fails_safely(string endpoint)
     {
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { ["OpenTelemetry:OtlpEndpoint"] = endpoint });
+        { ["OpenTelemetry:OtlpEndpoint"] = endpoint });
         builder.AddApplicationServices();
-        using var services = builder.Services.BuildServiceProvider();
+        await using var services = builder.Services.BuildServiceProvider();
 
         var failure =
-            Assert.Throws<OptionsValidationException>(() =>
-                services.GetRequiredService<IStartupValidator>().Validate());
+            await Assert.ThrowsAsync<OptionsValidationException>(() =>
+                services.GetRequiredService<IAsyncStartupValidator>().ValidateAsync());
         Assert.Contains("OtlpEndpoint", failure.Message);
         Assert.DoesNotContain("private-secret", failure.ToString());
     }
@@ -466,10 +471,10 @@ public sealed class HostingProfileRegistrationTests
             Assert.True(exporter.ResourceAttributes.ContainsKey("service.version"));
             Assert.Equal(5, exporter.ResourceAttributes.Count);
             Assert.True(Guid.TryParse(exporter.ResourceAttributes["service.instance.id"].ToString(), out _));
-            Assert.Equal(exporter.ResourceAttributes.OrderBy(pair => pair.Key),
-                services.GetRequiredService<TracerProvider>().GetResource().Attributes.OrderBy(pair => pair.Key));
-            Assert.Equal(exporter.ResourceAttributes.OrderBy(pair => pair.Key),
-                services.GetRequiredService<MeterProvider>().GetResource().Attributes.OrderBy(pair => pair.Key));
+            Assert.Equal(exporter.ResourceAttributes.OrderBy(pair => pair.Key, StringComparer.Ordinal),
+                services.GetRequiredService<TracerProvider>().GetResource().Attributes.OrderBy(pair => pair.Key, StringComparer.Ordinal));
+            Assert.Equal(exporter.ResourceAttributes.OrderBy(pair => pair.Key, StringComparer.Ordinal),
+                services.GetRequiredService<MeterProvider>().GetResource().Attributes.OrderBy(pair => pair.Key, StringComparer.Ordinal));
 
             using (logger.BeginScope(new Dictionary<string, object?> { ["Cookie"] = "private-cookie" }))
             {
@@ -509,7 +514,7 @@ public sealed class HostingProfileRegistrationTests
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { [$"DeploymentDiagnostics:{setting}"] = value });
+        { [$"DeploymentDiagnostics:{setting}"] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
 
@@ -537,7 +542,7 @@ public sealed class HostingProfileRegistrationTests
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { [$"AiAnalysis:{setting}"] = value });
+        { [$"AiAnalysis:{setting}"] = value });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
 
@@ -561,7 +566,7 @@ public sealed class HostingProfileRegistrationTests
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { ["AiAnalysis:DailyProjectLimit"] = limit.ToString() });
+        { ["AiAnalysis:DailyProjectLimit"] = limit.ToString() });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
 
@@ -588,7 +593,7 @@ public sealed class HostingProfileRegistrationTests
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { ["AiAnalysis:MaximumConcurrency"] = concurrency.ToString() });
+        { ["AiAnalysis:MaximumConcurrency"] = concurrency.ToString() });
         builder.AddApplicationServices();
         using var services = builder.Services.BuildServiceProvider();
 
@@ -603,13 +608,14 @@ public sealed class HostingProfileRegistrationTests
     /// <summary>
     ///     Dashboard dependencies resolve on self-hosted installations without SaaS credentials.
     /// </summary>
+    /// <returns>A task completing after startup validation and its assertions.</returns>
     [Fact]
-    public void SelfHosted_resolves_shared_cloud_services_without_GitHub_App_settings()
+    public async Task SelfHosted_resolves_shared_cloud_services_without_GitHub_App_settings()
     {
         var builder = CreateBuilder("SelfHosted");
 
         builder.AddApplicationServices();
-        using var services = builder.Services.BuildServiceProvider();
+        await using var services = builder.Services.BuildServiceProvider();
         using var scope = services.CreateScope();
 
         var storage = services.GetRequiredService<IOptions<TelemetryStorageOptions>>().Value;
@@ -618,7 +624,7 @@ public sealed class HostingProfileRegistrationTests
         Assert.True(storage.DiskGateway);
         Assert.True(storage.Specialized);
 
-        services.GetRequiredService<IStartupValidator>().Validate();
+        await services.GetRequiredService<IAsyncStartupValidator>().ValidateAsync();
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IGitHubAppCredentials>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICloudDeploymentRunService>());
@@ -629,19 +635,20 @@ public sealed class HostingProfileRegistrationTests
     ///     A missing self-hosted gateway fails validation instead of enabling an implicit database
     ///     fallback.
     /// </summary>
+    /// <returns>A task completing after startup validation and its assertions.</returns>
     [Fact]
-    public void SelfHosted_requires_gateway_configuration()
+    public async Task SelfHosted_requires_gateway_configuration()
     {
         var builder = CreateBuilder("SelfHosted");
 
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            { ["TelemetryStorage:GatewayUrl"] = "" });
+        { ["TelemetryStorage:GatewayUrl"] = "" });
         builder.AddApplicationServices();
-        using var services = builder.Services.BuildServiceProvider();
+        await using var services = builder.Services.BuildServiceProvider();
 
         var failure =
-            Assert.Throws<OptionsValidationException>(() =>
-                services.GetRequiredService<IStartupValidator>().Validate());
+            await Assert.ThrowsAsync<OptionsValidationException>(() =>
+                services.GetRequiredService<IAsyncStartupValidator>().ValidateAsync());
         Assert.Contains("GatewayUrl", failure.Message);
     }
 
@@ -673,8 +680,9 @@ public sealed class HostingProfileRegistrationTests
     /// <summary>
     ///     SaaS still rejects missing GitHub App secrets during startup validation.
     /// </summary>
+    /// <returns>A task completing after startup validation and its assertions.</returns>
     [Fact]
-    public void SaaS_startup_requires_GitHub_App_settings()
+    public async Task SaaS_startup_requires_GitHub_App_settings()
     {
         var certificatePath = CreateTestCertificate();
 
@@ -688,10 +696,10 @@ public sealed class HostingProfileRegistrationTests
                 ["SaaS:DataProtectionCertificatePassword"] = "test-only"
             });
             builder.AddApplicationServices();
-            using var services = builder.Services.BuildServiceProvider();
+            await using var services = builder.Services.BuildServiceProvider();
 
-            var failure = Assert.Throws<OptionsValidationException>(() =>
-                services.GetRequiredService<IStartupValidator>().Validate());
+            var failure = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+                services.GetRequiredService<IAsyncStartupValidator>().ValidateAsync());
             Assert.Contains("configured GitHub App", failure.Message);
         }
         finally

@@ -6,10 +6,11 @@ namespace Infrastructure.Scanner.Filesystem;
 internal static class LocalScannerDirectoryRules
 {
     /// <summary>Directory names skipped during recursive local repository scans.</summary>
-    private static readonly HashSet<string> IgnoredDirectories = new(StringComparer.OrdinalIgnoreCase)
-    {
+    private static readonly HashSet<string> IgnoredDirectories =
+    [
+        with(StringComparer.OrdinalIgnoreCase),
         ".git", "bin", "obj", "node_modules", "testresults", ".vs", ".idea"
-    };
+    ];
 
     /// <summary>
     ///     Checks whether a directory should be skipped while scanning.

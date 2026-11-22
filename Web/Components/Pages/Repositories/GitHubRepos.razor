@@ -140,7 +140,7 @@
                                     </span>
                                     <span class="github-fact">
                                         <i class="bi bi-clock-history" aria-hidden="true"></i>
-                                        @repo.UpdatedAt.ToString("yyyy. MM. dd.")
+                                        @repo.UpdatedAt.ToString("yyyy. MM. dd.", CultureInfo.CurrentCulture)
                                     </span>
                                 </div>
 
@@ -220,7 +220,7 @@
                 </div>
                 <h2>Authentication required</h2>
                 <p class="page-description">Please log in to access your remote repositories.</p>
-                <a href="/login" class="btn btn-primary mt-2">Login</a>
+                <a href="@ApplicationRoutes.Login" class="btn btn-primary mt-2">Login</a>
             </div>
         </NotAuthorized>
     </AuthorizeView>

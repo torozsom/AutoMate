@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
@@ -133,7 +134,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
         await SeedDeploymentAsync(options, protector, deployment);
         await using var seeded = new AutoMateDbContext(options, protector);
         var app = await seeded.Applications.SingleAsync();
-        var ingestion = DateTimeOffset.Parse("2026-10-10T11:00:00Z");
+        var ingestion = DateTimeOffset.Parse("2026-10-10T11:00:00Z", CultureInfo.InvariantCulture);
 
         seeded.AzureContainerAppLogCheckpoints.Add(new AzureContainerAppLogCheckpoint
         {
@@ -223,7 +224,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
             var project = await seeded.Applications.SingleAsync();
 
             seeded.Deployments.Add(new Deployment
-                { Id = second, CsProjectId = (await seeded.Deployments.SingleAsync()).CsProjectId });
+            { Id = second, CsProjectId = (await seeded.Deployments.SingleAsync()).CsProjectId });
             await seeded.SaveChangesAsync();
             await using var services = new ServiceCollection()
                 .AddScoped<AutoMateDbContext>(_ => new AutoMateDbContext(dbOptions, protector)).BuildServiceProvider();
@@ -256,7 +257,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                     DeploymentId = target.Id,
                     ExpectedRevision = target.Revision,
                     AzureCredentials = new AzureCloudCredentialsDto
-                        { SubscriptionId = "sub", AccessToken = "arm-token" },
+                    { SubscriptionId = "sub", AccessToken = "arm-token" },
                     Config = new DeploymentConfigDto { CloudResourceGroupName = "rg", CloudContainerAppName = "app" }
                 });
             await streamer.PollOnceAsync(CancellationToken.None);
@@ -423,7 +424,7 @@ public sealed class AzureContainerAppRuntimeStreamerTests
                 var lowerBound = Regex.Match(query,
                     @"IngestedAt >= datetime\(([^)]+)\)").Groups[1].Value;
 
-                Assert.True(DateTimeOffset.Parse(lowerBound) <= DateTimeOffset.UtcNow.AddHours(-23),
+                Assert.True(DateTimeOffset.Parse(lowerBound, CultureInfo.InvariantCulture) <= DateTimeOffset.UtcNow.AddHours(-23),
                     "Initial database collection must recover quiet startup events preceding web readiness.");
 
                 return DelegateHttpMessageHandler.Json(RecordsJson("database line", "system", "AzureDiagnostics"));

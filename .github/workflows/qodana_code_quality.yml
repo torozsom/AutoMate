@@ -54,7 +54,7 @@ jobs:
           QODANA_TOKEN: ${{ github.actor != 'dependabot[bot]' && secrets.QODANA_TOKEN_245602675 || '' }}
           QODANA_ENDPOINT: https://qodana.cloud
         with:
-          args: --image jetbrains/qodana-cdnet:2026.2
+          args: --image jetbrains/qodana-cdnet:2026.3
           results-dir: ${{ runner.temp }}/qodana/results
           pr-mode: false
           use-caches: true

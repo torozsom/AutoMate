@@ -1,3 +1,4 @@
+using System.Globalization;
 using Application.Abstractions.Diagnostics.Events;
 using Web.Components.Shared.Console;
 
@@ -63,7 +64,7 @@ public sealed class DeploymentTerminalPresentationTests
         DeploymentDiagnosticStream stream, string label)
     {
         var log = new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), channel, "first",
-            Stream: stream, TimestampUtc: DateTimeOffset.Parse("2026-10-11T13:08:26.123+02:00"));
+            Stream: stream, TimestampUtc: DateTimeOffset.Parse("2026-10-11T13:08:26.123+02:00", CultureInfo.InvariantCulture));
         var first = DeploymentTerminalPresentation.Format(log);
         var second = DeploymentTerminalPresentation.Format(log with { Message = "second\r\n" });
 
@@ -84,7 +85,7 @@ public sealed class DeploymentTerminalPresentationTests
     {
         var log = new DeploymentTerminalLog(1, Guid.NewGuid(), Guid.NewGuid(), "azure-web",
             $"error{newline}  at Example(){newline}", Stream: DeploymentDiagnosticStream.StandardError,
-            TimestampUtc: DateTimeOffset.Parse("2026-10-11T11:08:26Z"));
+            TimestampUtc: DateTimeOffset.Parse("2026-10-11T11:08:26Z", CultureInfo.InvariantCulture));
 
         Assert.Equal("2026-10-11 11:08:26.000 UTC [STDERR] error\r\n" +
                      "2026-10-11 11:08:26.000 UTC [STDERR]   at Example()\r\n",

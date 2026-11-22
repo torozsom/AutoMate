@@ -501,7 +501,7 @@
                                         <td data-label="Runtime">
                                             <DeploymentBadge Status="@deployment.Status"/>
                                         </td>
-                                        <td data-label="Started UTC">@deployment.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td data-label="Started UTC">@deployment.CreatedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture)</td>
                                         <td data-label="Details"><a
                                                 href="@($"/project/{ProjectId}/deployment/{deployment.Id}")">View
                                                 Details</a></td>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
@@ -38,7 +39,7 @@ public sealed class RealTimeLogStreamerTests
         });
         var snapshot = new DeploymentRuntimeMetricSnapshot(project, Guid.NewGuid(), "cosmos",
             DeploymentDiagnosticComponent.Database,
-            DateTimeOffset.Parse("2026-10-10T11:00:00Z"),
+            DateTimeOffset.Parse("2026-10-10T11:00:00Z", CultureInfo.InvariantCulture),
             [
                 new DeploymentMetricSample("automate_database_ru_usage_percent", 42, "percent"),
                 new DeploymentMetricSample("arbitrary", 1, "percent"),

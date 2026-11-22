@@ -1,5 +1,6 @@
 FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
+COPY global.json Directory.Build.props ./
 COPY Domain/Domain.csproj Domain/
 COPY Application/Application.csproj Application/
 COPY Infrastructure/Infrastructure.csproj Infrastructure/

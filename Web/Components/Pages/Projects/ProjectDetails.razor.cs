@@ -379,20 +379,17 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         if (csProject == null) return;
 
         _isStopping = true;
-        StateHasChanged();
 
         try
         {
             await DeploymentJobQueue.EnqueueAsync(new StopLocalDeploymentJob(ProjectId, _app.Name, csProject.Path));
             _isStopping = false;
-            StateHasChanged();
         }
         catch (Exception ex)
         {
             Logger.LogError("Failed to queue stop deployment for project {ProjectId} Failure {FailureType}.", ProjectId,
                 ex.GetType().Name);
             _isStopping = false;
-            StateHasChanged();
         }
     }
 
@@ -449,7 +446,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         _isDeploying = true;
         _webHostPort = 0;
         _workflowStatusMessage = null;
-        StateHasChanged();
 
         if (finalConfig.IsCloudDeployment)
         {
@@ -470,7 +466,6 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
                 ? "The deployment queue is full. Try again after a job starts."
                 : "AutoMate could not queue this deployment. Try again shortly.";
             _isDeploying = false;
-            StateHasChanged();
         }
     }
 
@@ -669,7 +664,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
         }
 
         if (app is { SourceType: SourceType.Local } && app.CsProjects.FirstOrDefault(csp => csp.IsWebProject) is
-                { } csProject)
+            { } csProject)
         {
             var config = await ProjectScanner.AnalyzeDependenciesAsync(app, csProject, token);
             if (project != ProjectId || generation != _pageGeneration || token.IsCancellationRequested) return;
@@ -1231,121 +1226,121 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
             // OnInitializedAsync may yield while the loading view is rendered. The first render
             // therefore does not guarantee that any Terminal component exists yet.
             case false when _app is not null && !_hubInitializationStarted:
-            {
-                _hubInitializationStarted = true;
-                if (_currentUserId == Guid.Empty)
                 {
-                    Logger.LogWarning(
-                        "Skipping log hub connection for project {ProjectId} because no user ID was resolved.",
-                        ProjectId);
-                    return;
-                }
+                    _hubInitializationStarted = true;
+                    if (_currentUserId == Guid.Empty)
+                    {
+                        Logger.LogWarning(
+                            "Skipping log hub connection for project {ProjectId} because no user ID was resolved.",
+                            ProjectId);
+                        return;
+                    }
 
-                _hubConnection = new HubConnectionBuilder()
-                    .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
-                    .WithAutomaticReconnect()
-                    .Build();
+                    _hubConnection = new HubConnectionBuilder()
+                        .WithUrl(NavigationManager.ToAbsoluteUri("/loghub"))
+                        .WithAutomaticReconnect()
+                        .Build();
 
-                // Report transient disconnects while keeping the current terminal contents intact.
-                _hubConnection.Reconnecting += exception =>
-                {
-                    Logger.LogWarning(
-                        "Log hub connection is reconnecting for project {ProjectId}. Failure {FailureType}.",
-                        ProjectId, exception?.GetType().Name);
-                    return Task.CompletedTask;
-                };
+                    // Report transient disconnects while keeping the current terminal contents intact.
+                    _hubConnection.Reconnecting += exception =>
+                    {
+                        Logger.LogWarning(
+                            "Log hub connection is reconnecting for project {ProjectId}. Failure {FailureType}.",
+                            ProjectId, exception?.GetType().Name);
+                        return Task.CompletedTask;
+                    };
 
-                // SignalR group membership is connection-scoped, so reauthorize after reconnecting.
-                _hubConnection.Reconnected += async _ =>
-                {
+                    // SignalR group membership is connection-scoped, so reauthorize after reconnecting.
+                    _hubConnection.Reconnected += async _ =>
+                    {
+                        try
+                        {
+                            await JoinLogHubGroupAsync();
+                            Logger.LogInformation("Log hub connection rejoined the project group for project {ProjectId}.",
+                                ProjectId);
+                        }
+                        catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
+                        {
+                            // Navigation ended this page's subscription; no UI remains to report a failure to.
+                        }
+                        catch (Exception exception)
+                        {
+                            Logger.LogWarning(
+                                "Log hub connection could not rejoin the project group for project {ProjectId}. Failure {FailureType}.",
+                                ProjectId, exception.GetType().Name);
+                            await InvokeAsync(async () =>
+                            {
+                                _terminalReplayPending = false;
+                                await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
+                            });
+                        }
+                    };
+
+                    _hubConnection.On<DeploymentTerminalLog>("ReceiveTerminalLog", async terminalLog =>
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            if (_analysisDisposed || !CanReplayTerminalHistory() ||
+                                terminalLog.DeploymentId != _terminalDeploymentId) return;
+                            if (_terminalReplayPending)
+                            {
+                                _terminalReplay.Buffer(terminalLog);
+                                return;
+                            }
+
+                            await WriteTerminalLogAsync(terminalLog);
+                        });
+                    });
+
+                    _hubConnection.On<string>("ReceiveTerminalNotice", message =>
+                        InvokeAsync(() => WriteTerminalNoticeAsync(message)));
+
+                    _hubConnection.On<DeploymentRuntimeMetricSnapshot>("ReceiveDeploymentMetrics", snapshot =>
+                        InvokeAsync(() =>
+                        {
+                            if (_analysisDisposed || !CanReplayTerminalHistory() || snapshot.ProjectId != ProjectId ||
+                                snapshot.DeploymentId != _terminalDeploymentId) return;
+                            ApplyTypedMetrics(snapshot.ResourceName, snapshot.Samples.Select(s => new DeploymentMetricPoint(
+                                snapshot.ResourceName, s.Name, s.Unit, snapshot.Timestamp, s.Value, s.Value, s.Value)));
+                            _showSavedMetricNotice = false;
+                            StateHasChanged();
+                        }));
+
+                    _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
+                        (containerName, cpuUsage, memoryUsage) =>
+                        {
+                            return InvokeAsync(() =>
+                            {
+                                if (_analysisDisposed || !CanReplayTerminalHistory() ||
+                                    _typedMetrics.ContainsKey(containerName)) return;
+                                _containerMetrics[containerName] = (cpuUsage, memoryUsage);
+                                _showSavedMetricNotice = false;
+                                if (!_metricContainerNames.Contains(containerName))
+                                    _metricContainerNames.Add(containerName);
+                                StateHasChanged();
+                            });
+                        }
+                    );
+
                     try
                     {
+                        await _hubConnection.StartAsync(_cloudPollCancellation.Token);
                         await JoinLogHubGroupAsync();
-                        Logger.LogInformation("Log hub connection rejoined the project group for project {ProjectId}.",
-                            ProjectId);
                     }
                     catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
                     {
-                        // Navigation ended this page's subscription; no UI remains to report a failure to.
+                        // Reload/navigation cancels initial connection and replay without a failure notice.
                     }
-                    catch (Exception exception)
+                    catch (Exception ex)
                     {
-                        Logger.LogWarning(
-                            "Log hub connection could not rejoin the project group for project {ProjectId}. Failure {FailureType}.",
-                            ProjectId, exception.GetType().Name);
-                        await InvokeAsync(async () =>
-                        {
-                            _terminalReplayPending = false;
-                            await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
-                        });
+                        Logger.LogError("Failed to start SignalR connection for project {ProjectId} Failure {FailureType}.",
+                            ProjectId, ex.GetType().Name);
+                        _terminalReplayPending = false;
+                        await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
                     }
-                };
 
-                _hubConnection.On<DeploymentTerminalLog>("ReceiveTerminalLog", async terminalLog =>
-                {
-                    await InvokeAsync(async () =>
-                    {
-                        if (_analysisDisposed || !CanReplayTerminalHistory() ||
-                            terminalLog.DeploymentId != _terminalDeploymentId) return;
-                        if (_terminalReplayPending)
-                        {
-                            _terminalReplay.Buffer(terminalLog);
-                            return;
-                        }
-
-                        await WriteTerminalLogAsync(terminalLog);
-                    });
-                });
-
-                _hubConnection.On<string>("ReceiveTerminalNotice", message =>
-                    InvokeAsync(() => WriteTerminalNoticeAsync(message)));
-
-                _hubConnection.On<DeploymentRuntimeMetricSnapshot>("ReceiveDeploymentMetrics", snapshot =>
-                    InvokeAsync(() =>
-                    {
-                        if (_analysisDisposed || !CanReplayTerminalHistory() || snapshot.ProjectId != ProjectId ||
-                            snapshot.DeploymentId != _terminalDeploymentId) return;
-                        ApplyTypedMetrics(snapshot.ResourceName, snapshot.Samples.Select(s => new DeploymentMetricPoint(
-                            snapshot.ResourceName, s.Name, s.Unit, snapshot.Timestamp, s.Value, s.Value, s.Value)));
-                        _showSavedMetricNotice = false;
-                        StateHasChanged();
-                    }));
-
-                _hubConnection.On<string, string, string>("ReceiveContainerMetrics",
-                    (containerName, cpuUsage, memoryUsage) =>
-                    {
-                        return InvokeAsync(() =>
-                        {
-                            if (_analysisDisposed || !CanReplayTerminalHistory() ||
-                                _typedMetrics.ContainsKey(containerName)) return;
-                            _containerMetrics[containerName] = (cpuUsage, memoryUsage);
-                            _showSavedMetricNotice = false;
-                            if (!_metricContainerNames.Contains(containerName))
-                                _metricContainerNames.Add(containerName);
-                            StateHasChanged();
-                        });
-                    }
-                );
-
-                try
-                {
-                    await _hubConnection.StartAsync(_cloudPollCancellation.Token);
-                    await JoinLogHubGroupAsync();
+                    break;
                 }
-                catch (OperationCanceledException) when (_cloudPollCancellation.IsCancellationRequested)
-                {
-                    // Reload/navigation cancels initial connection and replay without a failure notice.
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError("Failed to start SignalR connection for project {ProjectId} Failure {FailureType}.",
-                        ProjectId, ex.GetType().Name);
-                    _terminalReplayPending = false;
-                    await WriteTerminalNoticeAsync("Log history is temporarily unavailable. Reload to retry.");
-                }
-
-                break;
-            }
             case false when (_app is not null && _rejoinPending &&
                              _hubConnection?.State == HubConnectionState.Connected):
                 _rejoinPending = false;
@@ -1685,7 +1680,7 @@ public partial class ProjectDetails : ComponentBase, IAsyncDisposable
     /// <returns>The formatted timestamp, or "Never" when absent.</returns>
     private static string FormatTimestamp(DateTimeOffset? timestamp)
     {
-        return timestamp?.ToString("yyyy. MM. dd. HH:mm") ?? "Never";
+        return timestamp?.ToString("yyyy. MM. dd. HH:mm", CultureInfo.CurrentCulture) ?? "Never";
     }
 
     /// <summary>

@@ -92,7 +92,7 @@ public sealed class MetricExplorationInteractionTests
         }
 
         /// <summary>
-        ///     Delegates to the fixture interop overload using the same identifier and arguments.
+        ///     Returns the fixture module reference or the default interop result.
         /// </summary>
         /// <param name="identifier">Provider or user identity to resolve.</param>
         /// <param name="token">Cancellation token for the fixture operation; ignored by this fixture.</param>
@@ -101,7 +101,9 @@ public sealed class MetricExplorationInteractionTests
         /// <returns>A value task returning the configured fixture reference or default requested value.</returns>
         public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken token, object?[]? args)
         {
-            return InvokeAsync<TValue>(identifier, args);
+            return ValueTask.FromResult<TValue>(typeof(TValue) == typeof(IJSObjectReference)
+                ? (TValue)(object)this
+                : default!);
         }
     }
 }

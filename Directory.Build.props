@@ -1,0 +1,7 @@
+<Project>
+    <PropertyGroup>
+        <!-- Keep the framework analyzers enabled without promoting existing style debt across the repository. -->
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>11.0</AnalysisLevel>
+    </PropertyGroup>
+</Project>

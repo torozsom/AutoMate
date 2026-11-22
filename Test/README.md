@@ -1,6 +1,6 @@
 # Test
 
-The solution's broad .NET 10 xUnit regression project, with Node-only JavaScript and Playwright browser suites alongside
+The solution's broad .NET 11 xUnit regression project, with Node-only JavaScript and Playwright browser suites alongside
 it.
 The separate [Tests project](../Tests/README.md) contains isolated helpers, application policies, fake-port
 orchestration and presentation-state unit tests.
@@ -19,7 +19,7 @@ render-tree frames/event-handler IDs; these implementation APIs trigger BL0006 a
 | File                               | Test or fixture types | Responsibility                                                                       |
 |------------------------------------|-----------------------|--------------------------------------------------------------------------------------|
 | [GlobalUsings.cs](GlobalUsings.cs) | Test setup            | Global xUnit imports shared by the .NET test modules.                                |
-| [Test.csproj](Test.csproj)         | Runner configuration  | .NET 10 xUnit test project, solution references and shared test dependency versions. |
+| [Test.csproj](Test.csproj)         | Runner configuration  | .NET 11 xUnit test project, solution references and shared test dependency versions. |
 
 | Module                   | Coverage                                                                  |
 |--------------------------|---------------------------------------------------------------------------|

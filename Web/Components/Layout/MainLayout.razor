@@ -57,7 +57,7 @@
                             </div>
 
                             <div class="top-row-actions">
-                                <a href="/swagger" target="_blank" rel="noopener noreferrer"
+                                <a href="@ApplicationRoutes.ApiDocumentation" target="_blank" rel="noopener noreferrer"
                                    class="btn btn-sm btn-outline-secondary">
                                     <i class="bi bi-braces" aria-hidden="true"></i>
                                     <span>OpenAPI</span>
@@ -77,8 +77,8 @@
         <header class="public-header"><a class="public-brand" href="/">AutoMate</a>
             <nav class="console-row-actions" aria-label="Public navigation">
                 <ThemeToggle/>
-                <a class="btn btn-outline-secondary" href="/login">Sign in</a><a class="btn btn-primary"
-                                                                                 href="/register">Get started</a></nav>
+                <a class="btn btn-outline-secondary" href="@ApplicationRoutes.Login">Sign in</a><a class="btn btn-primary"
+                                                                                 href="@ApplicationRoutes.Register">Get started</a></nav>
         </header>
         <MainContent CssClass="public-main">@Body</MainContent>
     </NotAuthorized>

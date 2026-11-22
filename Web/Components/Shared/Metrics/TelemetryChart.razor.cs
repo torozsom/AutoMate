@@ -97,13 +97,19 @@ public partial class TelemetryChart
     /// <param name="firstRender">Whether this is the first interactive render.</param>
     /// <returns>A task representing completion of this operation, including any awaited callbacks.</returns>
     /// <exception cref="Microsoft.JSInterop.JSException">
-    ///     The browser interaction fails or the interactive circuit is
-    ///     disconnected.
+    ///     The browser interaction fails for a reason other than circuit disconnection.
     /// </exception>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
-        _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/telemetry-chart.js");
-        await _module.InvokeVoidAsync("attach", _root);
+        try
+        {
+            _module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/telemetry-chart.js");
+            await _module.InvokeVoidAsync("attach", _root);
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit closed before chart inspection could be attached.
+        }
     }
 }

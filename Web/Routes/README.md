@@ -7,6 +7,7 @@ Minimal API mapping contract and concrete routes for authentication, history, an
 | File                         | Types or asset | Responsibility                                                                                                                                                          |
 |------------------------------|----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [IEndpoint.cs](IEndpoint.cs) | `IEndpoint`    | An endpoint is a class that defines a set of routes for the application. It is responsible for mapping the routes to the appropriate endpoints in the request pipeline. |
+| [ApplicationRoutes.cs](ApplicationRoutes.cs) | `ApplicationRoutes` | Shared URL paths for component navigation, form actions and authentication endpoint mappings. |
 
 | Module                           | Responsibility                                                         |
 |----------------------------------|------------------------------------------------------------------------|

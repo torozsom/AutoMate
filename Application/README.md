@@ -1,14 +1,14 @@
 # Application
 
 Application-owned use-case contracts, outbound ports, deployment coordination and provider-independent AI policies. The
-project targets .NET 10/C# 14, references Domain only among solution projects, and uses Microsoft.Extensions.Hosting for
+project targets .NET 11/C# 15, references Domain only among solution projects, and uses Microsoft.Extensions.Hosting for
 hosted workers, logging, options and dependency injection.
 
 ## Contents
 
 | File                                     | Responsibility                                                                       |
 |------------------------------------------|--------------------------------------------------------------------------------------|
-| [Application.csproj](Application.csproj) | .NET 10/C# 14; Domain project reference and Microsoft.Extensions.Hosting dependency. |
+| [Application.csproj](Application.csproj) | .NET 11/C# 15; Domain project reference and Microsoft.Extensions.Hosting dependency. |
 
 | Module                                   | Responsibility                                                                       |
 |------------------------------------------|--------------------------------------------------------------------------------------|

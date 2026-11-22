@@ -18,6 +18,8 @@ Bounded terminal hosting, source-aware output formatting, accessible dialogs and
 
 Terminal wraps window.xtermWrapper, queues writes before interactive initialization, emits OnReady and exposes
 write/clear methods. DeploymentTerminalPresentation formats Azure records/stderr consistently for live/history.
+Terminal browser failures are logged without output payloads and propagate to replay owners so failed writes cannot
+confirm a history cursor.
 ConsoleDialog uses console-ui attachDialog for Escape/focus trapping/restoration. ThemeToggle calls the shared theme
 storage functions.
 

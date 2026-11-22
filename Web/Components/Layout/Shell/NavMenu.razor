@@ -38,7 +38,7 @@
         <AuthorizeView>
             <NotAuthorized>
                 <div class="nav-item">
-                    <NavLink class="nav-link" href="/login">
+                    <NavLink class="nav-link" href="@ApplicationRoutes.Login">
                         <span class="bi bi-person-fill-left-nav-menu" aria-hidden="true"></span> Login | Register
                     </NavLink>
                 </div>
@@ -46,7 +46,7 @@
 
             <Authorized>
                 <div class="nav-item">
-                    <NavLink class="nav-link" href="/dashboard" @onclick="CloseMenu">
+                    <NavLink class="nav-link" href="@ApplicationRoutes.Dashboard" @onclick="CloseMenu">
                         <span class="bi bi-grid-3x3-nav-menu" aria-hidden="true"></span> Projects
                     </NavLink>
                 </div>
@@ -54,7 +54,7 @@
                 <div class="nav-section-label">Sources</div>
 
                 <div class="nav-item">
-                    <NavLink class="nav-link" href="/github-repos" @onclick="CloseMenu">
+                    <NavLink class="nav-link" href="@ApplicationRoutes.GitHubRepositories" @onclick="CloseMenu">
                         <span class="bi bi-github-repos-nav-menu" aria-hidden="true"></span> GitHub repositories
                     </NavLink>
                 </div>
@@ -71,7 +71,7 @@
                 <div class="nav-section-label">Session</div>
 
                 <div class="nav-item">
-                    <form action="/api/auth/logout" method="post">
+                    <form action="@ApplicationRoutes.LogoutAction" method="post">
                         <AntiforgeryToken/>
                         <button type="submit" class="nav-link btn btn-link nav-action">
                             <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Logout

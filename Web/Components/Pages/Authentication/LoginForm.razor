@@ -29,7 +29,7 @@
             </div>
         }
 
-        <form action="/api/auth/login" method="post">
+        <form action="@ApplicationRoutes.LoginAction" method="post">
             <AntiforgeryToken/>
 
             <div class="mb-3">
@@ -51,7 +51,7 @@
                     </button>
                 </div>
                 <div class="col-12">
-                    <a href="/api/auth/github-login"
+                    <a href="@ApplicationRoutes.GitHubLogin"
                        class="btn btn-github w-100 h-100 d-flex align-items-center justify-content-center gap-2">
                         <i class="bi bi-github fs-4"></i>
                         Continue with GitHub
@@ -60,7 +60,7 @@
             </div>
 
             <div class="mt-4 text-center">
-                <p class="mb-0">Don't have an account yet? <a href="/register" class="text-decoration-none fw-bold">Register
+                <p class="mb-0">Don't have an account yet? <a href="@ApplicationRoutes.Register" class="text-decoration-none fw-bold">Register
                         here</a></p>
             </div>
         </form>

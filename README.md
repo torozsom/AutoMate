@@ -2,7 +2,7 @@
   <h1>AutoMate</h1>
   <p><b>A self-hosted deployment companion for .NET projects, from source discovery to Docker and Azure Container Apps delivery.</b></p>
 
-  ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+  ![.NET](https://img.shields.io/badge/.NET-11-512BD4?logo=dotnet&logoColor=white)
   ![Blazor](https://img.shields.io/badge/Blazor-Server-512BD4?logo=blazor&logoColor=white)
   ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-EF%20Core-4169E1?logo=postgresql&logoColor=white)
   ![Docker](https://img.shields.io/badge/Docker-Compose%20%2B%20GHCR-2496ED?logo=docker&logoColor=white)
@@ -163,7 +163,7 @@ AutoMate intentionally keeps infrastructure and UI concerns out of the domain mo
 
 | Area | Technology |
 |---|---|
-| Runtime | .NET 10, ASP.NET Core |
+| Runtime | .NET 11, ASP.NET Core |
 | UI | Blazor Server, Bootstrap 5, Bootstrap Icons |
 | Real time | SignalR, xterm.js |
 | Persistence | PostgreSQL, Entity Framework Core |
@@ -182,7 +182,7 @@ AutoMate intentionally keeps infrastructure and UI concerns out of the domain mo
 
 ### Prerequisites
 
-- [.NET SDK 10.0+](https://dotnet.microsoft.com/download)
+- [.NET SDK 11.0.100+](https://dotnet.microsoft.com/download)
 - Docker Desktop or Docker Engine with Docker Compose
 - PostgreSQL and Redis, or the provided Docker Compose infrastructure
 - GitHub OAuth app for GitHub sign-in/repository access
@@ -368,7 +368,7 @@ CodeQL's C# job still compiles the solution to capture generated Blazor code, bu
 Scheduled scans use the default branch and detect findings from updated analysis rules even without source changes.
 
 CodeQL uses the `security-extended` query suite and separate language jobs. Its C# job initializes CodeQL before a
-clean .NET 10 Release build, including source generators. The security gate checks scanner execution; the main
+clean .NET 11 Release build, including source generators. The security gate checks scanner execution; the main
 ruleset's CodeQL finding thresholds enforce vulnerability policy. Qodana findings remain report-only.
 
 ### GitHub activation and merge requirements
@@ -400,7 +400,7 @@ activated by these changes.
 
 ### Dependabot maintenance
 
-[Dependabot configuration](.github/dependabot.yml) checks all six NuGet project directories, the browser-test npm
+[Dependabot configuration](.github/dependabot.yml) checks all seven NuGet project directories, the browser-test npm
 manifest, Actions references, the tracked Telemetry Dockerfile, deployment Compose files, and the root .NET SDK
 configuration on staggered Monday schedules in `Europe/Budapest`. NuGet EF Core and OpenTelemetry maintenance updates
 are grouped to keep related packages coordinated; other minor/patch updates are grouped per ecosystem and major
@@ -417,10 +417,11 @@ or identify vulnerabilities in manually vendored browser assets. No arbitrary li
 
 ## Qodana code quality
 
-[Qodana Community for .NET](https://www.jetbrains.com/help/qodana/dotnet.html) scans all six projects in
+[Qodana Community for .NET](https://www.jetbrains.com/help/qodana/dotnet.html) scans all seven projects in
 `AutoMate.slnx`, including tests, using the Release configuration and `qodana.recommended` profile in
 [`qodana.yaml`](qodana.yaml). Generated build outputs and vendored browser libraries are excluded. Community restores
 and builds the solution inside its container before analysis; a separate host build is unnecessary.
+The bootstrap step installs the SDK selected by `global.json`, because the Community image bundles older SDKs.
 
 ### GitHub Actions
 
@@ -453,7 +454,7 @@ on the first internal PR run. CI - Build and test owns tests and build enforceme
 ### Rider and local scans
 
 1. Install or enable Rider's Qodana integration and start Docker Desktop with Linux containers. Use Qodana Community
-   for .NET version **2026.2** to match CI; allocate at least 6 GB of Docker memory for analysis.
+   for .NET version **2026.3** to match CI; allocate at least 6 GB of Docker memory for analysis.
 2. Open AutoMate in Rider and choose **Tools > Qodana > Try Code Analysis with Qodana** (or **Problems > Qodana >
    Try Locally**, depending on the IDE version). Use the repository-root `qodana.yaml`, Community linter and Docker mode.
 3. Run the scan and inspect findings in the Qodana tool window. Community can run locally without a Cloud token.
@@ -467,7 +468,7 @@ on the first internal PR run. CI - Build and test owns tests and build enforceme
 Alternatively, with the Qodana CLI installed, run this from the repository root to match CI:
 
 ```powershell
-qodana scan --image jetbrains/qodana-cdnet:2026.2 --results-dir .qodana/results
+qodana scan --image jetbrains/qodana-cdnet:2026.3 --results-dir .qodana/results
 qodana show --results-dir .qodana/results
 ```
 
@@ -485,7 +486,7 @@ results can differ because of their available inspections and plugins.
 
 Community provides ReSharper-based .NET analysis with narrower Blazor/Razor and frontend coverage than the Rider-based
 Ultimate linter. It does not provide JavaScript/TypeScript analysis, license audit, coverage reporting, or automatic
-fixes. If an Ultimate license becomes available, switch to `qodana-dotnet`, configure native mode with a .NET 10 SDK and
+fixes. If an Ultimate license becomes available, switch to `qodana-dotnet`, configure native mode with a .NET 11 SDK and
 a pre-analysis restore/build, and reassess those additional features before enabling them. See JetBrains'
 [IDE guide](https://www.jetbrains.com/help/qodana/qodana-ide-plugin.html),
 [configuration reference](https://www.jetbrains.com/help/qodana/configuration-reference.html), and

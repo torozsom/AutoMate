@@ -1,3 +1,4 @@
+using System.Globalization;
 using Application.Abstractions.Ai.Execution;
 using Application.Ai.Policy;
 using Application.Ai.Results;
@@ -98,7 +99,7 @@ public partial class DeploymentAnalysisPanel
         AiAnalysisStatus.Failed when CurrentResult.FailureCode == AnalysisProviderAccessDeniedException.FailureCode =>
             AnalysisProviderAccessDeniedException.Guidance,
         AiAnalysisStatus.Failed when InvalidAnalysisResultException.Guidance(CurrentResult.FailureCode) is
-            { } guidance => guidance,
+        { } guidance => guidance,
         AiAnalysisStatus.Failed => "No complete result is available. You can request another analysis when enabled.",
 
         _ when Busy => "Updating analysis…",
@@ -118,6 +119,6 @@ public partial class DeploymentAnalysisPanel
     /// <returns>The timestamp converted to UTC with an explicit UTC suffix.</returns>
     private static string Timestamp(DateTimeOffset value)
     {
-        return value.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'");
+        return value.UtcDateTime.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture);
     }
 }

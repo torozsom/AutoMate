@@ -13,7 +13,7 @@ public sealed class GitHubLoginEndpoint : IEndpoint
     /// <param name="app">Endpoint route builder receiving these routes.</param>
     public void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/auth/github-login", () =>
+        app.MapGet(ApplicationRoutes.GitHubLogin, () =>
             Results.Challenge(
                 new AuthenticationProperties { RedirectUri = "/" },
                 ["GitHub"])
