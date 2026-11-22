@@ -32,3 +32,5 @@ admission and recheck storage/readback boundaries rather than rely on final UI m
 - [Platform boundary](../../Observability/README.md)
 - [Masking tests](../../../Test/Infra/Diagnostics/PolicyAndMetrics/DiagnosticRedactorTests.cs)
 - [Context tests](../../../Test/Infra/Ai/ContextAndResults/AnalysisContextTests.cs)
+
+- [Standalone text unit tests](../../../Tests/Diagnostics/Redaction/README.md)

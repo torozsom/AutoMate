@@ -1,5 +1,8 @@
 # AI admission and budget tests
 
+Pure egress policy assertions moved to Tests/Ai/Policy. AnalysisPolicyTestSupport retains shared
+approvals/options/authorization fixtures for this project.
+
 Owner/project consent, stable requests, shared quota/spend/capacity and read-only readiness.
 
 ## Contents
@@ -10,15 +13,15 @@ Owner/project consent, stable requests, shared quota/spend/capacity and read-onl
 | [AnalysisBudgetPostgresTests.cs](AnalysisBudgetPostgresTests.cs) | `AnalysisBudgetPostgresTests`, `LegacyBudgetContext`, `Fixture`                                                                         | Executes real ordered migrations and shared admission/reservation locks in disposable PostgreSQL schemas.    |
 | [AnalysisBudgetTests.cs](AnalysisBudgetTests.cs)                 | `AnalysisBudgetTests`, `ReloadDuringSum`, `Fixture`, `TestClock`, `ChargeFailure`, `BudgetContext`                                      | Independent relational connections exercise cross-project quotas, rolling rate and reserved spend/capacity.  |
 | [AnalysisConsentTests.cs](AnalysisConsentTests.cs)               | `AnalysisConsentTests`                                                                                                                  | Verifies exact-project consent persistence and authorization without diagnostic payload storage.             |
-| [AnalysisEgressPolicyTests.cs](AnalysisEgressPolicyTests.cs)     | `AnalysisEgressPolicyTests`, `Monitor`, `Authorizer`                                                                                    | Credential-free approval fixtures and fail-closed geography/category policy coverage.                        |
+| [AnalysisPolicyTestSupport.cs](AnalysisPolicyTestSupport.cs)     | `AnalysisPolicyTestSupport`, `Monitor`, `Authorizer`                                                                                    | Shared synthetic approvals, options and authorization fixtures; policy assertions moved to Tests.            |
 | [AnalysisReadinessTests.cs](AnalysisReadinessTests.cs)           | `AnalysisReadinessTests`, `UnreachableProvider`, `SettingsMonitor`, `ReadOnlyCommands`                                                  | Verifies local policy, credential reload and real read-only queue/schema access without provider resolution. |
 
 ## Coverage and navigation
 
 AnalysisAdmissionTests exercises concurrent admission, receipts/replay/conflicts, automatic wakeups, deletion survival
 and immutable selection/history. AnalysisBudgetTests uses independent SQLite connections for
-account-day/rate/spend/capacity races and rollback/reload behavior. Consent/EgressPolicy/Readiness tests cover exact C#
-project scope, fail-closed approvals and metadata-only probes. AnalysisBudgetPostgresTests executes real
+account-day/rate/spend/capacity races and rollback/reload behavior. Consent/Readiness tests cover exact C# project scope
+and metadata-only probes. Egress policy units now run in Tests. AnalysisBudgetPostgresTests executes real
 migrations/owner/advisory locks and backfill.
 
 ## Fixtures and boundaries

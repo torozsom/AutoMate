@@ -152,8 +152,8 @@ public sealed class AnalysisPersistenceTests
         await using var fixture =
             await Fixture.CreateAsync(() => throw new InvalidOperationException("Provider must not run."), audit);
 
-        ((AnalysisEgressPolicyTests.Monitor)fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>())
-            .CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, dailyBudget: 0);
+        ((AnalysisPolicyTestSupport.Monitor)fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>())
+            .CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId, dailyBudget: 0);
         await fixture.ProcessAsync();
 
         var saved = await fixture.Db.AiDeploymentAnalyses.AsNoTracking().SingleAsync();
@@ -786,7 +786,7 @@ public sealed class AnalysisPersistenceTests
         Assert.False(await egress.AuthorizeAsync(fixture.DeploymentId, AiAnalysisTrigger.DeploymentFailed));
 
         var foreign = new AnalysisEgressAuthorizer(fixture.Db,
-            new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(Guid.NewGuid())),
+            new AnalysisPolicyTestSupport.Monitor(AnalysisPolicyTestSupport.Approved(Guid.NewGuid())),
             new DiagnosticRedactor());
 
         Assert.False(await foreign.AuthorizeAsync(fixture.DeploymentId, AiAnalysisTrigger.Manual));
@@ -837,7 +837,7 @@ public sealed class AnalysisPersistenceTests
         });
 
         var monitor =
-            (AnalysisEgressPolicyTests.Monitor)fixture.Services
+            (AnalysisPolicyTestSupport.Monitor)fixture.Services
                 .GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
 
         monitor.CurrentValue = new AiAnalysisOptions { Enabled = true };
@@ -861,10 +861,10 @@ public sealed class AnalysisPersistenceTests
     {
         await using var fixture = await Fixture.CreateAsync(() => Task.FromResult(AnalysisResultTests.Valid()));
         var monitor =
-            (AnalysisEgressPolicyTests.Monitor)fixture.Services
+            (AnalysisPolicyTestSupport.Monitor)fixture.Services
                 .GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
 
-        monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, model: "ghp_" + new string('a', 36));
+        monitor.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId, model: "ghp_" + new string('a', 36));
 
         var result = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
             .RequestManualAsync(fixture.OwnerId, fixture.DeploymentId);
@@ -893,10 +893,10 @@ public sealed class AnalysisPersistenceTests
         fixture.Db.ChangeTracker.Clear();
 
         var monitor =
-            (AnalysisEgressPolicyTests.Monitor)fixture.Services
+            (AnalysisPolicyTestSupport.Monitor)fixture.Services
                 .GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>();
 
-        monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.OwnerId, retentionDays: 7);
+        monitor.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.OwnerId, retentionDays: 7);
 
         var before = DateTimeOffset.UtcNow;
         var result = await fixture.Services.GetRequiredService<IDeploymentAnalysisService>()
@@ -1049,12 +1049,12 @@ public sealed class AnalysisPersistenceTests
                     update.SetProperty(item => item.AiDiagnosticEgressConsented, false));
                 break;
             case "configuration":
-                ((AnalysisEgressPolicyTests.Monitor)
+                ((AnalysisPolicyTestSupport.Monitor)
                         fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()).CurrentValue =
                     new AiAnalysisOptions();
                 break;
             case "retry-policy":
-                ((AnalysisEgressPolicyTests.Monitor)
+                ((AnalysisPolicyTestSupport.Monitor)
                         fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>()).CurrentValue =
                     new AiAnalysisOptions { MaximumProviderRetries = 0 };
                 break;
@@ -1203,7 +1203,7 @@ public sealed class AnalysisPersistenceTests
                 update.SetProperty(item => item.NextAttemptAt, DateTimeOffset.UtcNow.AddMinutes(5))
                     .SetProperty(item => item.ProviderRetryCount, 1));
 
-        ((AnalysisEgressPolicyTests.Monitor)fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>())
+        ((AnalysisPolicyTestSupport.Monitor)fixture.Services.GetRequiredService<IOptionsMonitor<AiAnalysisOptions>>())
             .CurrentValue = new AiAnalysisOptions();
 
         var service = fixture.Services.GetRequiredService<IDeploymentAnalysisService>();
@@ -1925,9 +1925,9 @@ public sealed class AnalysisPersistenceTests
                 .AddSingleton<IDiagnosticRedactor>(new DiagnosticRedactor())
                 .AddSingleton<IAnalysisResultValidator>(AnalysisResultTests.Validator())
                 .AddSingleton(context).AddSingleton<ILlmAnalysisProvider>(new Provider(respond, tokenResponse))
-                .AddSingleton(Options.Create(AnalysisEgressPolicyTests.Approved(owner)))
+                .AddSingleton(Options.Create(AnalysisPolicyTestSupport.Approved(owner)))
                 .AddSingleton<IOptionsMonitor<AiAnalysisOptions>>(
-                    new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(owner)))
+                    new AnalysisPolicyTestSupport.Monitor(AnalysisPolicyTestSupport.Approved(owner)))
                 .AddScoped<IAnalysisEgressAuthorizer, AnalysisEgressAuthorizer>()
                 .AddScoped<IAnalysisBudgetGuard, AnalysisBudgetGuard>()
                 .AddScoped<IDeploymentAnalysisQueue>(services =>

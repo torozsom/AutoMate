@@ -1,7 +1,8 @@
 using Application.Orchestration.Cloud;
 using Domain.DTO.Deployment;
+using Xunit;
 
-namespace Test.App.Orchestration;
+namespace Tests.Orchestration.Cloud;
 
 /// <summary>
 ///     Characterizes the existing cloud form policy independently of private component members.
@@ -28,8 +29,8 @@ public sealed class CloudRuntimeConfigurationValidationTests
     /// <summary>
     ///     Supported aliases, credentials, duplicate names and generated-key collisions retain their existing policy.
     /// </summary>
-    /// <param name="key">The form environment-variable name.</param>
-    /// <param name="valid">Whether the existing form policy accepts this name.</param>
+    /// <param name="key">Environment-variable name under validation.</param>
+    /// <param name="valid">Whether the name satisfies configuration rules.</param>
     [Theory]
     [InlineData("APP_NAME", true)]
     [InlineData("", true)]

@@ -5,8 +5,9 @@ using Application.Orchestration.Jobs;
 using Domain.DTO.Azure;
 using Domain.DTO.Deployment;
 using Domain.Enums.Deployments;
+using Xunit;
 
-namespace Test.App.Orchestration;
+namespace Tests.Orchestration.Cloud;
 
 /// <summary>
 ///     Verifies cloud admission requests at application ports rather than component implementation details.
@@ -16,8 +17,8 @@ public sealed class CloudDeploymentAdmissionTests
     /// <summary>
     ///     Both profiles retain the same request fields and use exactly their existing admission port.
     /// </summary>
-    /// <param name="localEnabled">Whether the SelfHosted queue is selected.</param>
     /// <returns>Completes after the selected admission port accepts the request.</returns>
+    /// <param name="localEnabled">Whether the local deployment admission profile is enabled.</param>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

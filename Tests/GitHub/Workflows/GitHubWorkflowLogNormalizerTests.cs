@@ -1,7 +1,7 @@
-using FluentAssertions;
+using Xunit;
 using GitHubWorkflowLogNormalizer = Infrastructure.GitHub.Workflows.GitHubWorkflowLogNormalizer;
 
-namespace Test.Infra.GitHub;
+namespace Tests.GitHub.Workflows;
 
 /// <summary>
 ///     Verifies safe normalization and bounded paging of GitHub Actions log text.
@@ -16,7 +16,7 @@ public sealed class GitHubWorkflowLogNormalizerTests
     {
         var result = GitHubWorkflowLogNormalizer.EnumerateLines("first\r\n\u001b[31msecond\u001b[0m\nthird");
 
-        result.Should().Equal("first\r\n", "second\r\n", "third\r\n");
+        Assert.Equal(["first\r\n", "second\r\n", "third\r\n"], result);
     }
 
     /// <summary>
@@ -29,8 +29,10 @@ public sealed class GitHubWorkflowLogNormalizerTests
             GitHubWorkflowLogNormalizer.EnumerateLines(new string('x',
                 GitHubWorkflowLogNormalizer.MaximumLineLength + 1));
 
-        result.Should().ContainSingle().Which.Should().EndWith(" [truncated]\r\n")
-            .And.HaveLength(GitHubWorkflowLogNormalizer.MaximumLineLength + " [truncated]\r\n".Length);
+        var line = Assert.Single(result);
+
+        Assert.EndsWith(" [truncated]\r\n", line);
+        Assert.Equal(GitHubWorkflowLogNormalizer.MaximumLineLength + " [truncated]\r\n".Length, line.Length);
     }
 
     /// <summary>
@@ -45,9 +47,9 @@ public sealed class GitHubWorkflowLogNormalizerTests
         var first = GitHubWorkflowLogNormalizer.ReadChunk(content, 0);
         var second = GitHubWorkflowLogNormalizer.ReadChunk(content, first.Lines.Count);
 
-        first.HasMore.Should().BeTrue();
-        second.Lines.Should().NotBeEmpty();
-        first.Lines.Concat(second.Lines).Should().Equal(GitHubWorkflowLogNormalizer.EnumerateLines(content));
-        second.HasMore.Should().BeFalse();
+        Assert.True(first.HasMore);
+        Assert.NotEmpty(second.Lines);
+        Assert.Equal(GitHubWorkflowLogNormalizer.EnumerateLines(content), first.Lines.Concat(second.Lines));
+        Assert.False(second.HasMore);
     }
 }

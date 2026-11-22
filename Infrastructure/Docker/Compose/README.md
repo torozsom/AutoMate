@@ -29,3 +29,4 @@ health. Keep malformed/empty-output behavior aligned with callers instead of inv
 - [Conflict checks](../../ApplicationServices/Orchestration/Local/README.md)
 - [Conflict tests](../../../Test/Infra/Orchestration/LocalHostPortAvailabilityTests.cs)
 - [Parsing regressions](../../../Test/Infra/Diagnostics/Docker/DockerOutputTests.cs)
+- [Isolated unit tests](../../../Tests/Docker/Compose/README.md)

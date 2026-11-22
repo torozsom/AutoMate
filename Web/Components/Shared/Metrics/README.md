@@ -46,7 +46,7 @@ collection is distinct from explicit AI egress consent.
 - [Parent module](../README.md)
 - [Range/data contracts](../../../../Application/Abstractions/Diagnostics/Metrics/README.md)
 - [Inspection module](../../../wwwroot/js/telemetry-chart.js)
-- [Formatting tests](../../../../Test/Web/Metrics/TelemetryPresentationTests.cs)
+- [Formatting tests](../../../../Tests/Presentation/Metrics/TelemetryPresentationTests.cs)
 - [Range/paging tests](../../../../Test/Web/Metrics/MetricExplorationInteractionTests.cs)
 - [Chart tests](../../../../Test/Web/Metrics/TelemetryChartRenderingTests.cs)
 - [JS disposal tests](../../../../Test/Web/JavaScript/telemetry-chart.test.cjs)

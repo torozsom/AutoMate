@@ -28,6 +28,8 @@ durable-sampling cadence.
 
 ## Related documentation
 
+- [Isolated unit tests](../../../Tests/Docker/Cli/README.md)
+
 - [Parent module](../README.md)
 - [Service](../Runtime/README.md)
 - [Parsing/names](../Compose/README.md)

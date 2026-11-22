@@ -37,7 +37,7 @@ jobs:
       - name: Run .NET tests and render browser fixtures
         run: >-
           dotnet test AutoMate.slnx --no-build --no-restore --configuration Release
-          --logger "trx;LogFileName=automate.trx" --results-directory .artifacts/test-results
+          --logger "trx;LogFilePrefix=automate" --results-directory .artifacts/test-results
       - name: Publish test results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

@@ -3,6 +3,7 @@
     <Project Path="Application/Application.csproj"/>
     <Project Path="Infrastructure/Infrastructure.csproj"/>
     <Project Path="Test/Test.csproj"/>
+    <Project Path="Tests/Tests.csproj"/>
     <Project Path="Web/Web.csproj"/>
     <Project Path="Telemetry/Telemetry.csproj"/>
 </Solution>

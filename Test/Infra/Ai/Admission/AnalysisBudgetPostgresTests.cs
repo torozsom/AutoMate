@@ -39,7 +39,7 @@ public sealed class AnalysisBudgetPostgresTests
         await using var fixture = await Fixture.CreateAsync();
         var firstOwnerForCallbacks = fixture.Owners[0];
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(firstOwnerForCallbacks, tenantLimit: 1);
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(firstOwnerForCallbacks, tenantLimit: 1);
 
         var requests = fixture.Deployments
             .Take(4)
@@ -87,7 +87,7 @@ public sealed class AnalysisBudgetPostgresTests
     {
         await using var fixture = await Fixture.CreateAsync();
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], dailyBudget: 1,
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owners[0], dailyBudget: 1,
             attemptCost: 1);
 
         var work = await fixture.WorkAsync(0, 1, 2, 3);
@@ -113,7 +113,7 @@ public sealed class AnalysisBudgetPostgresTests
         Assert.Equal(AnalysisSkipReason.BudgetExceeded,
             await new AnalysisBudgetGuard(check, fixture.Settings, TimeProvider.System).ReserveAttemptAsync(recovered));
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], dailyBudget: 2,
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owners[0], dailyBudget: 2,
             attemptCost: 1);
 
         Assert.Null(
@@ -140,7 +140,7 @@ public sealed class AnalysisBudgetPostgresTests
         {
             await using var fixture = await Fixture.CreateAsync();
 
-            fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owners[0], tenantConcurrency: 1,
+            fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owners[0], tenantConcurrency: 1,
                 globalConcurrency: global);
 
             var work = await fixture.WorkAsync(0, 1, 4, 5);
@@ -363,8 +363,8 @@ public sealed class AnalysisBudgetPostgresTests
         public Guid[] Deployments { get; private set; } = [];
 
         /// <summary>Explicit synthetic runtime policy.</summary>
-        public AnalysisEgressPolicyTests.Monitor Settings { get; } =
-            new(AnalysisEgressPolicyTests.Approved(Guid.NewGuid()));
+        public AnalysisPolicyTestSupport.Monitor Settings { get; } =
+            new(AnalysisPolicyTestSupport.Approved(Guid.NewGuid()));
 
         /// <summary>Generated identifier shared by creation and strictly scoped cleanup.</summary>
         private string Schema => schema;
@@ -536,7 +536,7 @@ public sealed class AnalysisBudgetPostgresTests
                 await db.SaveChangesAsync();
                 fixture.Owners = [.. owners.Select(owner => owner.Id)];
                 fixture.Deployments = [.. deployments.Select(deployment => deployment.Id)];
-                fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(owners[0].Id);
+                fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(owners[0].Id);
 
                 return fixture;
             }

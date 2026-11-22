@@ -37,6 +37,6 @@ advancing progress. Delivery failure is separate from remote workflow outcome.
 - [Monitor consumer](../../ApplicationServices/Orchestration/Lifecycle/README.md)
 - [Shared DTOs](../../../Domain/DTO/GitHub/README.md)
 - [Cursor models](../../../Domain/Entities/Diagnostics/README.md)
-- [Normalization tests](../../../Test/Infra/GitHub/GitHubWorkflowLogNormalizerTests.cs)
+- [Normalization tests](../../../Tests/GitHub/Workflows/GitHubWorkflowLogNormalizerTests.cs)
 - [Cursor tests](../../../Test/Infra/GitHub/GitHubWorkflowCheckpointStoreTests.cs)
 - [Ordering tests](../../../Test/Infra/GitHub/GitHubWorkflowMonitorTests.cs)

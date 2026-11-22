@@ -39,5 +39,5 @@ depends on browser policy.
 - [Cloud rules](../../../../Application/Orchestration/Cloud/README.md)
 - [Clipboard helper](../../../wwwroot/js/README.md)
 - [Merge tests](../../../../Test/Web/Projects/ConfigurationVariableLoadingTests.cs)
-- [Validation tests](../../../../Test/App/Orchestration/CloudRuntimeConfigurationValidationTests.cs)
+- [Validation tests](../../../../Tests/Orchestration/Cloud/CloudRuntimeConfigurationValidationTests.cs)
 - [Recorded privacy tests](../../../../Test/Web/Projects/DeploymentFailurePrivacyTests.cs)

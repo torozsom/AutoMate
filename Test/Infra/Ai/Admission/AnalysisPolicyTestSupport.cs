@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Application.Abstractions.Ai.Policy;
 using Application.Ai.Policy;
 using Domain.Enums.Ai;
@@ -8,28 +6,10 @@ using Microsoft.Extensions.Options;
 namespace Test.Infra.Ai.Admission;
 
 /// <summary>
-///     Credential-free approval fixtures and fail-closed geography/category policy coverage.
+///     Shared synthetic approvals, reloadable options and authorization fixtures for integration tests.
 /// </summary>
-public sealed class AnalysisEgressPolicyTests
+internal static class AnalysisPolicyTestSupport
 {
-    /// <summary>
-    ///     Explicit null approval lists from configuration deny egress without throwing.
-    /// </summary>
-    /// <param name="property">Approval collection replaced by null in the configuration payload.</param>
-    [Theory]
-    [InlineData("ApprovedRegions")]
-    [InlineData("ApprovedTenantIds")]
-    [InlineData("AllowedDataCategories")]
-    public void Null_approval_collections_fail_closed(string property)
-    {
-        var configuration = JsonNode.Parse(
-            JsonSerializer.Serialize(Approved(Guid.NewGuid())))!.AsObject();
-        configuration[property] = null;
-        var options = JsonSerializer.Deserialize<AiAnalysisOptions>(configuration.ToJsonString())!;
-
-        Assert.False(AnalysisEgressPolicy.IsConfigured(options));
-    }
-
     /// <summary>
     ///     Creates explicit synthetic approvals; these never enable any deployed environment.
     /// </summary>
@@ -90,61 +70,6 @@ public sealed class AnalysisEgressPolicyTests
         };
     }
 
-    /// <summary>
-    ///     Global, mismatched, insecure and credential-bearing routes never qualify for approved
-    ///     egress.
-    /// </summary>
-    /// <param name="endpoint">Parsed HTTP(S) collector endpoint, or null when invalid or absent.</param>
-    [Theory]
-    [InlineData("https://api.openai.com/v1/")]
-    [InlineData("https://us.api.openai.com/v1/")]
-    [InlineData("http://eu.api.openai.com/v1/")]
-    [InlineData("https://eu.api.openai.com:443/v1/")]
-    [InlineData("https://key@eu.api.openai.com/v1/")]
-    [InlineData("https://eu.api.openai.com/v1/?region=eu")]
-    [InlineData("https://eu.api.openai.com/v1/#fragment")]
-    [InlineData("https://example.invalid/v1/")]
-    public void Unapproved_routes_are_denied(string endpoint)
-    {
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), endpoint: endpoint)));
-    }
-
-    /// <summary>
-    ///     Both supported processing geographies require explicit matching configuration.
-    /// </summary>
-    /// <param name="region">Synthetic provider region.</param>
-    [Theory]
-    [InlineData("eu")]
-    [InlineData("us")]
-    public void Explicit_regional_approvals_are_accepted(string region)
-    {
-        Assert.True(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(),
-            endpoint: $"https://{region}.api.openai.com/v1/", region: region)));
-    }
-
-    /// <summary>
-    ///     Default options, empty tenants and incomplete/unknown categories never grant permission.
-    /// </summary>
-    [Fact]
-    public void Defaults_and_missing_approvals_are_denied()
-    {
-        Assert.False(AnalysisEgressPolicy.IsConfigured(new AiAnalysisOptions()));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), model: "password=private-value")));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), model: new string('x', 129))));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), egressEnabled: false)));
-
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), regionalApproval: false)));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), provider: null)));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), provider: "unknown")));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), approvedRegions: [])));
-
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), retentionDays: 91)));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.Empty)));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), false)));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(), categories: ["logs"])));
-        Assert.False(AnalysisEgressPolicy.IsConfigured(Approved(Guid.NewGuid(),
-            categories: ["logs", "metrics", "credentials"])));
-    }
 
     /// <summary>
     ///     Reloadable synthetic options used to test operator kill switches without deployed

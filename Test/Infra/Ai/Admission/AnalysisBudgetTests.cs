@@ -66,7 +66,7 @@ public sealed class AnalysisBudgetTests
         await using var fixture = await Fixture.CreateAsync();
         var ownerForCallbacks = fixture.Owner;
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(ownerForCallbacks, tenantLimit: 1);
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(ownerForCallbacks, tenantLimit: 1);
 
         var results = await fixture.RequestConcurrentlyAsync(ownerForCallbacks,
             fixture.Deployments.Take(4).Select(id => (id, Guid.NewGuid())));
@@ -103,7 +103,7 @@ public sealed class AnalysisBudgetTests
         await using var fixture = await Fixture.CreateAsync();
 
         fixture.Clock.Now = new DateTimeOffset(2026, 10, 5, 23, 59, 40, TimeSpan.Zero);
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner, rateLimit: 1, tenantLimit: 2);
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner, rateLimit: 1, tenantLimit: 2);
 
         await using var db = fixture.Db();
         var request = Guid.NewGuid();
@@ -141,7 +141,7 @@ public sealed class AnalysisBudgetTests
         await using var fixture = await Fixture.CreateAsync();
 
         fixture.Settings.CurrentValue =
-            AnalysisEgressPolicyTests.Approved(fixture.Owner, dailyBudget: 1, attemptCost: 1);
+            AnalysisPolicyTestSupport.Approved(fixture.Owner, dailyBudget: 1, attemptCost: 1);
 
         var work = await fixture.WorkAsync(0, 1, 2, 3);
         var results = await fixture.ReserveConcurrentlyAsync(work);
@@ -188,7 +188,7 @@ public sealed class AnalysisBudgetTests
         await using var fixture = await Fixture.CreateAsync();
         var ownerForCallbacks = fixture.Owner;
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(ownerForCallbacks,
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(ownerForCallbacks,
             tenantConcurrency: 1, globalConcurrency: global ? 1 : 2);
 
         var work = await fixture.WorkAsync(0, 1, 4);
@@ -221,11 +221,11 @@ public sealed class AnalysisBudgetTests
         await using var db = fixture.Db();
         var guard = new AnalysisBudgetGuard(db, fixture.Settings, fixture.Clock);
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner, dailyBudget: 0);
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner, dailyBudget: 0);
 
         Assert.Equal(AnalysisSkipReason.BudgetNotConfigured, await guard.ReserveAttemptAsync(work));
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner, dailyBudget: 2);
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner, dailyBudget: 2);
 
         Assert.Null(await guard.ReserveAttemptAsync(work));
         Assert.Null(await guard.ReserveAttemptAsync(work));
@@ -238,11 +238,11 @@ public sealed class AnalysisBudgetTests
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.LeaseId, next.LeaseId));
 
         fixture.Settings.CurrentValue =
-            AnalysisEgressPolicyTests.Approved(fixture.Owner, dailyBudget: 2, currency: "EUR");
+            AnalysisPolicyTestSupport.Approved(fixture.Owner, dailyBudget: 2, currency: "EUR");
 
         Assert.Equal(AnalysisSkipReason.BudgetCurrencyMismatch, await guard.ReserveAttemptAsync(next));
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner, dailyBudget: 2);
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner, dailyBudget: 2);
 
         Assert.Null(await guard.ReserveAttemptAsync(next));
         Assert.Equal(2, await db.AiAnalysisBudgetEntries.CountAsync());
@@ -267,7 +267,7 @@ public sealed class AnalysisBudgetTests
             .Where(item => item.Id == work[1].DeploymentId)
             .ExecuteUpdateAsync(update => update.SetProperty(item => item.CloudGitHubActionRunId, 123L));
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner,
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner,
             dailyBudget: 50, attemptCost: 0.10m);
         var guard = new AnalysisBudgetGuard(db, fixture.Settings, fixture.Clock);
 
@@ -277,7 +277,7 @@ public sealed class AnalysisBudgetTests
         Assert.Equal(AnalysisBudgetPolicy.Units(0.20m),
             await db.AiAnalysisBudgetEntries.SumAsync(item => item.ReservedCostUnits));
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner,
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner,
             dailyBudget: 0.20m, attemptCost: 0.10m);
 
         Assert.Equal(AnalysisSkipReason.BudgetExceeded, await guard.ReserveAttemptAsync(work[2]));
@@ -302,12 +302,12 @@ public sealed class AnalysisBudgetTests
         await using var db = fixture.Db();
         var guard = new AnalysisBudgetGuard(db, fixture.Settings, fixture.Clock);
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner,
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner,
             dailyBudget: 1, attemptCost: 2);
 
         Assert.Equal(AnalysisSkipReason.BudgetNotConfigured, await guard.ReserveAttemptAsync(work));
 
-        fixture.Settings.CurrentValue = AnalysisEgressPolicyTests.Approved(fixture.Owner,
+        fixture.Settings.CurrentValue = AnalysisPolicyTestSupport.Approved(fixture.Owner,
             dailyBudget: -1);
 
         Assert.Equal(AnalysisSkipReason.BudgetConfigurationInvalid, await guard.ReserveAttemptAsync(work));
@@ -331,7 +331,7 @@ public sealed class AnalysisBudgetTests
         var work = (await fixture.WorkAsync(0))[0];
         var settings = fixture.Settings;
         var reload = new ReloadDuringSum(() => settings.CurrentValue =
-            AnalysisEgressPolicyTests.Approved(ownerForCallbacks));
+            AnalysisPolicyTestSupport.Approved(ownerForCallbacks));
         await using var db = fixture.Db(reload);
 
         Assert.Equal(AnalysisSkipReason.Unavailable,
@@ -385,7 +385,7 @@ public sealed class AnalysisBudgetTests
         public Guid[] Deployments { get; private set; } = [];
 
         /// <summary>Mutable validated policy shared by independent scopes.</summary>
-        public AnalysisEgressPolicyTests.Monitor Settings { get; private set; } = null!;
+        public AnalysisPolicyTestSupport.Monitor Settings { get; private set; } = null!;
 
         /// <summary>Accounting clock independent of audit timestamps.</summary>
         public TestClock Clock { get; } = new();
@@ -531,7 +531,7 @@ public sealed class AnalysisBudgetTests
 
             fixture.Owner = owner.Id;
             fixture.Deployments = [.. deployments.Select(item => item.Id)];
-            fixture.Settings = new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(owner.Id));
+            fixture.Settings = new AnalysisPolicyTestSupport.Monitor(AnalysisPolicyTestSupport.Approved(owner.Id));
 
             return fixture;
         }

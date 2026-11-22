@@ -1,4 +1,3 @@
-using System.Text;
 using Application.Abstractions.Diagnostics.Events;
 using Application.Abstractions.Docker;
 using Docker.DotNet.Models;
@@ -12,58 +11,6 @@ namespace Test.Infra.Diagnostics.Docker;
 /// </summary>
 public sealed class DockerOutputTests
 {
-    /// <summary>
-    ///     Every possible byte split retains Unicode, timestamps, CRLF and an EOF partial line.
-    /// </summary>
-    [Fact]
-    public void Utf8_frame_boundaries_do_not_change_output()
-    {
-        const string stamp = "2026-10-04T08:00:00.123456789Z";
-        var bytes = Encoding.UTF8.GetBytes($"{stamp} árvíz 😀\r\n{stamp} \n{stamp} partial");
-
-        for (var split = 0; split <= bytes.Length; split++)
-        {
-            var decoder = new DockerLogDecoder(true, TimeProvider.System);
-            var lines = decoder.Feed(bytes.AsSpan(0, split)).Concat(decoder.Feed(bytes.AsSpan(split), true)).ToArray();
-
-            Assert.Equal(["árvíz 😀\r\n", "\n", "partial"], lines.Select(e => e.Text));
-            Assert.All(lines, e => Assert.Equal(stamp, e.ProviderTimestamp));
-            Assert.All(lines, e => Assert.False(e.Omitted));
-        }
-    }
-
-    /// <summary>
-    ///     Independent stdout/stderr decoders keep interleaved partial lines apart and retain bare CR.
-    /// </summary>
-    [Fact]
-    public void Separate_streams_preserve_partial_lines_and_carriage_returns()
-    {
-        var stdout = new DockerLogDecoder(false, TimeProvider.System);
-        var stderr = new DockerLogDecoder(false, TimeProvider.System);
-
-        Assert.Empty(stdout.Feed("out"u8));
-        Assert.Empty(stderr.Feed("err"u8));
-        Assert.Equal("output\r\n", Assert.Single(stdout.Feed("put\r\n"u8)).Text);
-        Assert.Equal(["error\r", "next"], stderr.Feed("or\rnext"u8, true).Select(e => e.Text));
-    }
-
-    /// <summary>
-    ///     No prefix of an oversized secret-bearing line escapes before the explicit omission.
-    /// </summary>
-    [Fact]
-    public void Oversized_lines_are_omitted_whole_and_next_line_recovers()
-    {
-        var decoder = new DockerLogDecoder(false, TimeProvider.System);
-
-        Assert.Empty(decoder.Feed(Encoding.UTF8.GetBytes("password=" + new string('s', 9000))));
-
-        var result = decoder.Feed("\r\nok\n"u8);
-
-        Assert.True(result[0].Omitted);
-        Assert.DoesNotContain("password", result[0].Text);
-        Assert.Equal("ok\n", result[1].Text);
-    }
-
     /// <summary>
     ///     Stderr progress remains informational; recognizable failures and identities gain structured
     ///     attributes.

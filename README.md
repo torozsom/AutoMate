@@ -493,6 +493,9 @@ a pre-analysis restore/build, and reassess those additional features before enab
 
 ## Test organization
 
-[Test](Test/README.md) is the solution's single .NET test project, organized into Infra, App and Web modules with
-business submodules. Run `dotnet test Test/Test.csproj` from the repository root.
+[Test](Test/README.md) contains broad regression coverage organized into Infra, App and Web modules.
+[Tests](Tests/README.md) contains unit tests for Docker, Templating, Scanning, AI policy, GitHub logs, text redaction,
+cloud orchestration and presentation state, with 162 discovered cases across the project, including independently reported theory rows.
+The original three modules retain ten test files each; all migrated input scenarios and assertions are retained.
+Run `dotnet test AutoMate.slnx` for both projects or `dotnet test Tests/Tests.csproj` for isolated unit tests only.
 The root `docs/` directory is local-only and ignored by Git; project and module READMEs remain versioned.

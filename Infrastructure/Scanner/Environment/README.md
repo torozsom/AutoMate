@@ -34,3 +34,4 @@ and must not be logged.
 - [Port](../../../Application/Abstractions/Scanning/README.md)
 - [Loading tests](../../../Test/Web/Projects/ConfigurationVariableLoadingTests.cs)
 - [Environment destination](../../../Domain/DTO/Deployment/README.md)
+- [Isolated parsing tests](../../../Tests/Scanning/Environment/README.md)

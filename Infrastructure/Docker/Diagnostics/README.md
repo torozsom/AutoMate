@@ -38,6 +38,8 @@ rather than detached task failures.
 
 ## Related documentation
 
+- [Isolated unit tests](../../../Tests/Docker/Diagnostics/README.md)
+
 - [Parent module](../README.md)
 - [Supervisor](../../ApplicationServices/Orchestration/Local/README.md)
 - [Source/target ports](../../../Application/Abstractions/Docker/README.md)

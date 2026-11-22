@@ -4,13 +4,14 @@ Assembly-level metadata that supports internal adapter regression coverage.
 
 ## Contents
 
-| File                               | Types or asset      | Responsibility                                                                     |
-|------------------------------------|---------------------|------------------------------------------------------------------------------------|
-| [AssemblyInfo.cs](AssemblyInfo.cs) | Assembly attributes | Grants the Test assembly access to internal adapters without widening public APIs. |
+| File                               | Types or asset      | Responsibility                                                                  |
+|------------------------------------|---------------------|---------------------------------------------------------------------------------|
+| [AssemblyInfo.cs](AssemblyInfo.cs) | Assembly attributes | Grants Test and Tests access to internal adapters without widening public APIs. |
 
 ## Usage and integration
 
-AssemblyInfo grants InternalsVisibleTo to the Test assembly. Tests can exercise internal adapters without making
+AssemblyInfo grants InternalsVisibleTo to the Test and Tests assemblies. Tests can exercise internal adapters without
+making
 implementation helpers public or changing Application contracts.
 
 ## Contracts and lifecycle
@@ -23,5 +24,6 @@ or provider configuration.
 
 - [Parent module](../README.md)
 - [Friend assembly](../../Test/Test.csproj)
+- [Isolated unit tests](../../Tests/README.md)
 - [Assembly project](../Infrastructure.csproj)
 - [Adapter tests](../../Test/Infra/README.md)

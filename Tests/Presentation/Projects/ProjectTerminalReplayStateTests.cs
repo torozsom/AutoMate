@@ -1,6 +1,7 @@
 using Web.Services;
+using Xunit;
 
-namespace Test.Web.Projects;
+namespace Tests.Presentation.Projects;
 
 /// <summary>
 ///     Characterizes replay acceptance at the extracted state boundary without inspecting component fields.

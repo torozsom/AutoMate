@@ -36,7 +36,7 @@ public sealed class AnalysisProviderSelectionTests
     [InlineData("openai", true, "https://api.openai.com/v1/")]
     public async Task Unavailable_selection_never_resolves_an_adapter(string? name, bool enabled, string endpoint)
     {
-        var settings = AnalysisEgressPolicyTests.Approved(Guid.NewGuid(), provider: name, egressEnabled: enabled,
+        var settings = AnalysisPolicyTestSupport.Approved(Guid.NewGuid(), provider: name, egressEnabled: enabled,
             endpoint: endpoint);
         var resolutions = 0;
         await using var services = new ServiceCollection().AddTransient<Stub>(_ =>
@@ -46,7 +46,7 @@ public sealed class AnalysisProviderSelectionTests
             return new Stub("openai");
         }).BuildServiceProvider();
         var catalog = new AnalysisProviderCatalog([Registration("openai")]);
-        var router = new ConfiguredAnalysisProvider(services, catalog, new AnalysisEgressPolicyTests.Monitor(settings));
+        var router = new ConfiguredAnalysisProvider(services, catalog, new AnalysisPolicyTestSupport.Monitor(settings));
 
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
@@ -64,7 +64,7 @@ public sealed class AnalysisProviderSelectionTests
     {
         var owner = Guid.NewGuid();
         var monitor =
-            new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(owner, provider: "synthetic"));
+            new AnalysisPolicyTestSupport.Monitor(AnalysisPolicyTestSupport.Approved(owner, provider: "synthetic"));
         await using var services = new ServiceCollection().AddTransient<Stub>(_ => new Stub("synthetic"))
             .BuildServiceProvider();
         var catalog = new AnalysisProviderCatalog([Registration("openai"), Registration("synthetic")]);
@@ -72,7 +72,7 @@ public sealed class AnalysisProviderSelectionTests
 
         Assert.Equal("synthetic", (await router.AnalyzeAsync(new LlmAnalysisRequest("safe"))).Provider);
 
-        monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(owner, provider: "unknown");
+        monitor.CurrentValue = AnalysisPolicyTestSupport.Approved(owner, provider: "unknown");
         await Assert.ThrowsAsync<AnalysisProviderUnavailableException>(() =>
             router.AnalyzeAsync(new LlmAnalysisRequest("safe")));
     }
@@ -85,11 +85,11 @@ public sealed class AnalysisProviderSelectionTests
     public async Task Reload_during_resolution_denies_invocation()
     {
         var owner = Guid.NewGuid();
-        var monitor = new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(owner));
+        var monitor = new AnalysisPolicyTestSupport.Monitor(AnalysisPolicyTestSupport.Approved(owner));
         var stub = new Stub("openai");
         await using var services = new ServiceCollection().AddTransient<Stub>(_ =>
         {
-            monitor.CurrentValue = AnalysisEgressPolicyTests.Approved(owner, egressEnabled: false);
+            monitor.CurrentValue = AnalysisPolicyTestSupport.Approved(owner, egressEnabled: false);
 
             return stub;
         }).BuildServiceProvider();
@@ -109,7 +109,7 @@ public sealed class AnalysisProviderSelectionTests
     [Fact]
     public async Task Mismatched_provider_provenance_is_rejected()
     {
-        var monitor = new AnalysisEgressPolicyTests.Monitor(AnalysisEgressPolicyTests.Approved(Guid.NewGuid()));
+        var monitor = new AnalysisPolicyTestSupport.Monitor(AnalysisPolicyTestSupport.Approved(Guid.NewGuid()));
         await using var services = new ServiceCollection().AddTransient<Stub>(_ => new Stub("different"))
             .BuildServiceProvider();
         var router =

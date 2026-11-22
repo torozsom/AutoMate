@@ -195,7 +195,7 @@ public sealed class AnalysisQueueLeaseTests
         public TestClock Clock { get; } = new();
 
         /// <summary>Reloadable synthetic lease settings.</summary>
-        public AnalysisEgressPolicyTests.Monitor Options { get; } = new(new AiAnalysisOptions());
+        public AnalysisPolicyTestSupport.Monitor Options { get; } = new(new AiAnalysisOptions());
 
         /// <summary>Seeded deployment identity.</summary>
         public Guid DeploymentId { get; private set; }
@@ -231,7 +231,7 @@ public sealed class AnalysisQueueLeaseTests
             {
                 await using var db = NewDb();
                 var service = new DeploymentAnalysisService(db, Options, AnalysisResultTests.Validator(), Clock,
-                    new AnalysisEgressPolicyTests.Authorizer(), NullLogger<DeploymentAnalysisService>.Instance);
+                    new AnalysisPolicyTestSupport.Authorizer(), NullLogger<DeploymentAnalysisService>.Instance);
                 return await service.CancelAsync(owner, deployment, analysis);
             })));
         }
