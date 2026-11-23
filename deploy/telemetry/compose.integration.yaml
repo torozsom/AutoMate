@@ -6,7 +6,7 @@ services:
     ports: [ "127.0.0.1:${TEST_MIMIR_PORT:-24909}:9009" ]
   postgres:
     container_name: test-postgres
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     pull_policy: always
     profiles: [ telemetry ]
     environment:
