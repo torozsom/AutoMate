@@ -3,7 +3,7 @@ name: automate-app
 services:
   dependencies:
     container_name: dependencies
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     pull_policy: always
     restart: on-failure
     # Cross-project dependencies must be ready before Web applies its migrations.
