@@ -3,7 +3,7 @@ name: automate-infrastructure
 services:
   postgres:
     container_name: postgres
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     pull_policy: always
     restart: unless-stopped
     environment:
